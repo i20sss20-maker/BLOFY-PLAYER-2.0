@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 
 const source=readFileSync(new URL('../media-worker.ts',import.meta.url),'utf8');
 const start=source.indexOf('function touchHls(session){');
@@ -192,4 +193,41 @@ test('source-preserving live H264 TS probe keeps ALL incoming bytes and chooses 
  assert.equal(hevc.detected,'needs_transcode');
  const raw=await select(new ReadableStream({start(c){c.enqueue(new Uint8Array([1,2,3]));c.close()}}),false);
  assert.equal(raw.copyVideo,false)
+});
+
+
+test('source H264 and forced VIDAA compatibility HLS use isolated subscriber session keys',()=>{
+ const begin=source.indexOf('function hlsKey(');
+ const end=source.indexOf('\nfunction touchHls(',begin);
+ assert.ok(begin>0&&end>begin);
+ const {createHmac}=crypto;
+ const key=vm.runInNewContext(source.slice(begin,end)+';\nhlsKey',
+  {createHmac,SECRET:'a'.repeat(64)});
+ const original=key('Bearer customer-A','live','31','ts','0');
+ const legacy=key('Bearer customer-A','live','31','ts','0',false);
+ const compatible=key('Bearer customer-A','live','31','ts','0',true);
+ assert.equal(original,legacy,'existing original-video sessions preserve their key');
+ assert.notEqual(original,compatible,'transcoder may not share the source-copy segment files');
+ assert.notEqual(compatible,key('Bearer customer-B','live','31','ts','0',true));
+ assert.equal(original.length,40);
+ assert.equal(compatible.length,40);
+});
+
+
+test('stopping a live HLS session closes the upstream stream after fetch headers arrived',()=>{
+ const begin=source.indexOf('function stopHls(session,reason){');
+ const end=source.indexOf('\nconst nap=',begin);
+ const code=source.slice(begin,end);
+ const map=new Map(),ctx={
+  hlsSessions:map,active:1,clearTimeout(){},rmSync(){},console:{info(){}}
+ };
+ const stop=vm.runInNewContext(code+';\nstopHls',ctx);
+ const upstream=new AbortController(),worker=new AbortController(),key='active-h264';
+ const session={key,kind:'live',dir:'/fake',abort:worker,sourceController:upstream,released:false};
+ map.set(key,session);
+ stop(session,'viewer_stopped');
+ assert.equal(upstream.signal.aborted,true,'provider must disconnect even after its response headers');
+ assert.equal(worker.signal.aborted,true,'encoding must also stop');
+ assert.equal(map.has(key),false);
+ assert.equal(ctx.active,0);
 });
