@@ -226,8 +226,8 @@ test('gateway emits sanitized upstream drop category, distinct from successful r
 });
 
 
-test('after live EOF a transient 500/502/503/504 gets one bounded recovery retry, then valid TS',async()=>{
- for(const status of [500,502,503,504]){
+test('after live EOF a transient 408/500/502/503/504 gets one bounded recovery retry, then valid TS',async()=>{
+ for(const status of [408,500,502,503,504]){
   const initial=failingResponse(),reader=initial.body.getReader();
   const first=(await reader.read()).value;
   let calls=0;
