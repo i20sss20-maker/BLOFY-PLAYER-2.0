@@ -428,7 +428,15 @@ function loadShortEpg(id){
    var target=document.getElementById('live-epg');if(!target)return;
    var html=st===200?formatEpg(data):'<span class="epg-empty">تعذر تحميل دليل البرامج الآن.</span>';
    target.innerHTML=html;
-   if(st===200)S.epgCache[id]={time:Date.now(),html:html}
+   if(st===200){
+    S.epgCache[id]={time:Date.now(),html:html};
+    // Keep the TV's memory bounded when browsing hundreds of channels.
+    var keys=Object.keys(S.epgCache);
+    if(keys.length>80){
+     keys.sort(function(a,b){return S.epgCache[a].time-S.epgCache[b].time});
+     for(var i=0;i<keys.length-80;i++)delete S.epgCache[keys[i]]
+    }
+   }
   })
  },450)
 }
