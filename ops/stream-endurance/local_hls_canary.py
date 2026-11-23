@@ -29,6 +29,8 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
     def do_GET(self):
         if self.outage and self.outage.get("active") and self.path.split("?",1)[0].endswith((".m3u8", ".ts")):
+            with self.outage["lock"]:
+                self.outage["blockedRequests"] += 1
             self.send_error(503, "Synthetic transport blackout")
             return
         super().do_GET()
@@ -61,6 +63,21 @@ async def writer(root):
     ]
     return await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.DEVNULL,
                                                 stderr=asyncio.subprocess.DEVNULL)
+
+def newest_segment(root):
+    segments = sorted(root.glob('part_*.ts'))
+    return segments[-1].name if segments else None
+
+
+async def wait_new_segment(root, before, timeout=12):
+    until = time.monotonic() + timeout
+    while time.monotonic() < until:
+        new = newest_segment(root)
+        if new and new != before:
+            return new
+        await asyncio.sleep(.25)
+    raise RuntimeError('Synthetic HLS encoder failed to publish a new segment after restart')
+
 
 async def wait_ready(root, timeout=13):
     until = time.monotonic() + timeout
@@ -152,7 +169,7 @@ async def canary(args):
         raise RuntimeError('Install ffmpeg before running synthetic QA')
     with tempfile.TemporaryDirectory(prefix='blofy_local_canary_') as d:
         root = pathlib.Path(d)
-        outage = {}
+        outage = {"lock": threading.Lock(), "blockedRequests": 0, "mode": args.outage_mode, "publisherRestarted": False}
         QuietHandler.outage = outage
         server = CanaryServer(('127.0.0.1', 0), partial(QuietHandler, directory=d))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -169,9 +186,19 @@ async def canary(args):
             if args.outage_at:
                 await asyncio.sleep(args.outage_at)
                 outage['stoppedAt'] = time.monotonic()
-                outage['active'] = True
-                await asyncio.sleep(args.outage_seconds)
-                outage['active'] = False
+                if args.outage_mode == 'transport':
+                    outage['active'] = True
+                    await asyncio.sleep(args.outage_seconds)
+                    outage['active'] = False
+                else:
+                    # An actual encoder stop/restart, restricted to this synthetic fixture.
+                    before = newest_segment(root)
+                    await stop(source)
+                    source = None
+                    await asyncio.sleep(args.outage_seconds)
+                    source = await writer(root)
+                    new = await wait_new_segment(root, before)
+                    outage['publisherRestarted'] = (new != before)
                 outage['resumedAt'] = time.monotonic()
             reports = await asyncio.gather(*watching)
         finally:
@@ -181,8 +208,11 @@ async def canary(args):
     starts = [r['firstVideoMs'] for r in reports if r['firstVideoMs'] is not None]
     rtts = [r['postResumeVideoMs'] for r in reports if r['postResumeVideoMs'] is not None]
     ready = len(starts)==args.viewers and all(r['firstAudioMs'] is not None for r in reports)
+    blocked = outage.get('blockedRequests', 0)
+    injection_verified = (blocked > 0 if args.outage_mode == 'transport'
+                          else outage.get('publisherRestarted', False))
     if args.outage_at:
-        passed = (ready and len(rtts)==args.viewers and
+        passed = (ready and injection_verified and len(rtts)==args.viewers and
                   all(r['postResumeAudioMs'] is not None for r in reports) and
                   percentile(rtts, .95) <= args.max_recovery_ms)
     else:
@@ -194,15 +224,18 @@ async def canary(args):
         'kind': 'isolated_synthetic_hls_only',
         'decodedOn': 'CI_runner_not_customer_device',
         'passed': passed, 'viewers': args.viewers, 'durationSeconds': args.duration,
-        'syntheticTransportOutageSeconds': args.outage_seconds if args.outage_at else 0,
+        'outageMode': args.outage_mode if args.outage_at else 'none',
+        'syntheticOutageSeconds': args.outage_seconds if args.outage_at else 0,
+        'injectionVerified': injection_verified if args.outage_at else None,
+        'http503DuringBlackout': blocked,
         'firstVideoP95Ms': percentile(starts, .95),
-        'postTransportResumeVideoP95Ms': percentile(rtts, .95),
+        'postResumeVideoP95Ms': percentile(rtts, .95),
         'decodedVideoFrames': sum(r['videoFrames'] for r in reports),
         'decodedAudioFrames': sum(r['audioFrames'] for r in reports),
         'videoGaps3s': sum(len(r['videoGaps']) for r in reports),
         'audioGaps3s': sum(len(r['audioGaps']) for r in reports),
         'processRestarts': sum(r['forcedRestarts'] for r in reports),
-        'viewersReceivingAfterTransportRestored': len(rtts),
+        'viewersReceivingAfterRestored': len(rtts),
         'limits': 'Validates local ffmpeg decoders; does not prove BLOFY client recovery or quality on real streams.'
     }, 'viewers': reports}
     if args.report:
@@ -216,6 +249,7 @@ def main():
     p.add_argument('--viewers', type=int, default=2)
     p.add_argument('--outage-at', type=int, default=0)
     p.add_argument('--outage-seconds', type=int, default=3)
+    p.add_argument('--outage-mode', choices=['transport', 'source'], default='transport')
     p.add_argument('--max-startup-ms', type=int, default=10000)
     p.add_argument('--max-recovery-ms', type=int, default=12000)
     p.add_argument('--report')
