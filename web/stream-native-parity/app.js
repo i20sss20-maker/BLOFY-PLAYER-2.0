@@ -9,6 +9,7 @@ var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
  watch:{},favoriteItems:{},lastPlaybackDiag:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
+var browserDepth=0,handlingBrowserPop=false;
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -158,6 +159,14 @@ function shell(pageTitle,markup){
  // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
 function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
+function pushBrowserStep(route,opts){
+ if(handlingBrowserPop)return;
+ try{
+  var next=browserDepth+1;
+  window.history.pushState({blofyStreamWeb:true,depth:next,route:route,opts:opts||{}},'',window.location.href);
+  browserDepth=next
+ }catch(e){}
+}
 function navigate(route,opts,replace){
  if(S.route==='search'&&route!=='search')cancelSearch();
  if(route!==S.route)rememberView();
@@ -174,7 +183,8 @@ function navigate(route,opts,replace){
   if(S.route==='detail'&&S.item)options={kind:S.item.kind,id:S.item.id};
   else if(S.route==='episodes'&&S.item)options={id:S.item.id};
   S.history.push({route:S.route,opts:options});
-  if(S.history.length>30)S.history.shift()
+  if(S.history.length>30)S.history.shift();
+  pushBrowserStep(route,opts||{})
  }
  S.route=route;
  if(route==='home')home();
@@ -189,11 +199,27 @@ function navigate(route,opts,replace){
  else home()
 }
 function back(){
+ if(!handlingBrowserPop&&browserDepth>0){
+  try{window.history.back();return}catch(e){}
+ }
  if(S.route==='player'){closePlayer();return}
  var prev=S.history.pop();
  if(prev&&prev.route&&prev.route!=='boot'&&prev.route!=='login'){navigate(prev.route,prev.opts||{},true);return}
  navigate('home',{},true)
 }
+window.addEventListener('popstate',function(event){
+ if(!S.userVerified)return;
+ var next=event.state&&event.state.blofyStreamWeb?Number(event.state.depth)||0:0;
+ var forward=next>browserDepth,entry=event.state||{};
+ browserDepth=next;handlingBrowserPop=true;
+ try{
+  if(forward&&entry.route==='player'&&entry.opts){
+   var p=entry.opts;openPlayer(p.kind,p.id,p.extension,p.name,p.from)
+  }else if(forward&&entry.route&&entry.route!=='boot'&&entry.route!=='login'){
+   navigate(entry.route,entry.opts||{})
+  }else back()
+ }finally{handlingBrowserPop=false}
+});
 function categories(kind,done){
  if(S.cats[kind]){done(S.cats[kind]);return}
  if(S.catsInflight[kind]){S.catsInflight[kind].push(done);return}
@@ -605,7 +631,9 @@ function details(o){
  shell(title(item),'<div id="detail-root">'+loading('تفاصيل المحتوى')+'</div>');
  function show(extra){
   if(S.route!=='detail'||!S.item||S.item.id!==id)return;
-  var info=(extra&&extra.info)||{},artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
+  var info=(extra&&extra.info)||{};
+  if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
+  var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
   var plot=info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM';
   var gen=info.genre||info.genres||'',year=info.releaseDate||info.release_date||item.release_date||'',rating=info.rating||item.rating||'';
   var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
@@ -1441,12 +1469,18 @@ function openPlayer(kind,id,extension,name,from){
  var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
  if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
  var explicitStart=from!==undefined&&from!==null&&from!=='';var initial=Math.max(0,Number(from)||0),isLive=kind==='live',prior=getResume(kind,id),resume=explicitStart?initial:(prior&&prior.position||0);
+ var detail=S.detailInfo&&S.detailInfo.kind===kind&&S.detailInfo.id===id?S.detailInfo.info:
+  (kind==='series'&&S.episodes&&S.episodes.info||null);
+ var overview=String(detail&&(detail.plot||detail.description)||item&&(item.plot||item.description)||'').trim().slice(0,950);
+ var attributes=detail?[detail.genre||detail.genres||'',detail.releaseDate||detail.release_date||'',detail.rating||''].filter(Boolean).join(' • '):'';
  var nextEpisode=null;
  if(kind==='series'&&S.episodes&&S.episodes.episodes){
   var episodeList=parseEpisodes(S.episodes).sort(function(a,b){return Number(a.__season)-Number(b.__season)||Number(a.episode_num||0)-Number(b.episode_num||0)});
   for(var ix=0;ix<episodeList.length-1;ix++)if(String(episodeList[ix].id)===String(id)){nextEpisode=episodeList[ix+1];break}
  }
- rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};S.route='player';
+ rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};
+ pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
+ S.route='player';
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" '+(isLive?'controls':'')+' autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
  '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+' <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار فحص وضع التشغيل')+'</span></div>'+
@@ -1458,7 +1492,10 @@ function openPlayer(kind,id,extension,name,from){
  (isLive?'':'<button class="btn secondary" id="player-subtitles" aria-label="خيارات الترجمة">CC الترجمة</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
  '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
  '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
- '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">📊 حالة التشغيل</button></div>'+
+ '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">📊 حالة التشغيل</button>'+ 
+ (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات الفيلم / الحلقة</button>')+'</div>'+ 
+ (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+ 
+ (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
  '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section>'+
  (isLive?'':'<form class="player-jump-panel" id="player-jump-panel" hidden><label for="player-jump-minute">الانتقال إلى الدقيقة (0–359)</label>'+
  '<input id="player-jump-minute" type="number" inputmode="numeric" min="0" max="359" step="1" required placeholder="مثلاً 10">'+
@@ -1470,6 +1507,20 @@ function openPlayer(kind,id,extension,name,from){
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
+ var toggle=document.getElementById('player-toggle');
+ function syncToggle(){
+  if(!toggle)return;
+  toggle.textContent=video.paused?'▶ تشغيل':'❚❚ إيقاف مؤقت';
+  toggle.setAttribute('aria-label',video.paused?'استئناف التشغيل':'إيقاف التشغيل مؤقتًا')
+ }
+ video.addEventListener('play',syncToggle);
+ video.addEventListener('pause',syncToggle);
+ syncToggle();
+ var infoToggle=document.getElementById('player-info-toggle');
+ if(infoToggle)infoToggle.onclick=function(){
+  var panel=document.getElementById('player-info-panel');if(!panel)return;
+  panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
+ };
  function renderPlayerHealth(){
   if(S.route!=='player'||S.playerView!==state)return;
   var box=document.getElementById('player-health-panel');
@@ -1987,7 +2038,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.mode==='direct'&&!isLive)state.recoverDirect();
   else playerStatus('تعذّر تشغيل هذا المصدر.',true)
  };
- document.getElementById('player-back').onclick=closePlayer;
+ document.getElementById('player-back').onclick=back;
  document.getElementById('player-toggle').onclick=state.toggle;
  document.getElementById('player-retry').onclick=function(){
   diagnose(kind,'vod_retry',state.mode,0);
@@ -2258,6 +2309,7 @@ document.addEventListener('visibilitychange',function(){
   if(S.playerView&&S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
  }else if(S.playerView&&S.playerView.acquireWakeLock)S.playerView.acquireWakeLock()
 });
+try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
 api('GET','/api/session',null,function(st,json){
  if(st===200&&json.active&&useProfile(json.profileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
  else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
