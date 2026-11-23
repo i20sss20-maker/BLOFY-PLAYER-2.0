@@ -55,6 +55,7 @@ import {verifiedVodResumePlan,resumeVerifiedVodBytes,allowedVodResumePilot} from
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
+import { xtreamMediaReadIdleMs } from './xtream-media-read-deadline.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
   from './xtream-distributor-customer-catalog.mjs';
@@ -1724,7 +1725,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           try {
             if(vodPlan&&sent===vodPlan.total)return;
             for(;;){
-              const chunk=await readChunk(45000);
+              const chunk=await readChunk(xtreamMediaReadIdleMs(kind));
               if(chunk.done){
                 if(vodPlan&&sent!==vodPlan.total)
                   throw Error('vod_resume_original_truncated');

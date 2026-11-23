@@ -10,6 +10,8 @@ COPY web ./web
 COPY test/xtream-minute-catalog-watch.test.mjs ./test/xtream-minute-catalog-watch.test.mjs
 COPY test/xtream-live-ts-recovery.test.mjs ./test/xtream-live-ts-recovery.test.mjs
 COPY test/xtream-hls-playback.test.mjs ./test/xtream-hls-playback.test.mjs
+COPY test/xtream-media-read-deadline.test.mjs ./test/xtream-media-read-deadline.test.mjs
+RUN node --check src/xtream-media-read-deadline.mjs && node --test test/xtream-media-read-deadline.test.mjs
 RUN node --check src/xtream-hls-playback.mjs && node --test test/xtream-hls-playback.test.mjs
 COPY test/xtream-live-stability-summary.test.mjs ./test/xtream-live-stability-summary.test.mjs
 RUN node --check src/xtream-live-stability-summary.mjs && node --check src/xtream-live-ts-recovery.mjs && node --test test/xtream-live-ts-recovery.test.mjs test/xtream-live-stability-summary.test.mjs
