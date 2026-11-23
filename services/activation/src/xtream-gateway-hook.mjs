@@ -1693,6 +1693,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           requestRange:headers.range||null,usingIndependentRelay,
           format:resumeFormat,headers:response.headers
         });
+        if(vodResumeEvidence==='source_contract_verified')
+          vodResumeEvidence=vodPlan?'resume_enabled':'resume_disabled_by_policy';
         if(vodPlan&&first.value.byteLength>vodPlan.total)
           throw Error('vod_resume_initial_payload_overrun');
         // Operator-controlled pilot only. MPEG-TS over an open-ended direct
@@ -1846,9 +1848,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           sourceId:row.server_id,
           phase:res.headersSent?'media_body':response?'media_prestart':'connection',
           route:usingIndependentRelay?'independent_relay':'direct',
-          vodResume:kind==='live'?null:
-            (vodResumeEvidence==='source_contract_verified'?
-              'contract_verified_policy_may_be_disabled':vodResumeEvidence)
+          vodResume:kind==='live'?null:vodResumeEvidence
         }));
         // Switch egress ONLY if the original connection failed before
         // headers/media; never on a provider 403/404/456 or after bytes begin.
