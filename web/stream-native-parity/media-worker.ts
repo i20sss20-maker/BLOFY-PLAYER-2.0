@@ -108,7 +108,7 @@ async function startHls({bearer,kind,id,ext,track,key}){
   }
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
   const videoArgs=compatibleVideoArgs(kind);
-  const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts',...(kind==='live'?['-re']:[]),'-i','pipe:0',
+  const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
    '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
   if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
@@ -640,9 +640,8 @@ function hlsSelfTest(){
  try{
   mkdirSync(dir,{recursive:true});
   const args=['-hide_banner','-loglevel','error','-nostdin','-f','lavfi','-i','testsrc=size=320x180:rate=25','-f','lavfi','-i','sine=frequency=440:sample_rate=48000',
-   '-t','4','-map','0:v:0','-map','1:a:0','-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
-   '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','50','-keyint_min','50','-sc_threshold','0',
-   '-c:a','aac','-b:a','96k','-ac','2','-ar','48000','-f','hls','-hls_time','2','-hls_list_size','0','-hls_playlist_type','vod',
+   '-t','4','-map','0:v:0','-map','1:a:0',...compatibleVideoArgs('live',2),
+   '-c:a','aac','-b:a','160k','-ac','2','-ar','48000','-f','hls','-hls_time','2','-hls_list_size','0','-hls_playlist_type','vod',
    '-hls_segment_filename',join(dir,'seg-%06d.ts'),join(dir,'index.m3u8')];
   const proc=Bun.spawnSync([FFMPEG,...args],{stdout:'pipe',stderr:'pipe',timeout:20000});
   if(proc.exitCode!==0)return {ok:false,stage:'encoding',exit:proc.exitCode};
