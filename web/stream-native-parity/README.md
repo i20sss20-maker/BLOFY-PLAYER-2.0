@@ -49,7 +49,7 @@ Home hero + horizontally scrolling shelves; sidebar/DPAD; live categories on rig
 - Real-world MKV seeking and resumption require upstream Range support and have not passed an actual subscriber playback test. Seeking past the buffered range may fail for sources that ignore Range; do not claim this is fixed based on synthetic test files.
 - Real live TV and audio playback in VIDAA U3 must be verified on the Toshiba (a browser that lacks HLS/MSE still cannot play all sources).
 - Resume/favorites currently save **locally in the browser**, not synced to the native Android account.
-- AI chat is now wired through the **existing first-party native STREAM AI interpretation gateway**, with search-link suggestions. Subscriber-authorized AI behavior is not yet verified end to end. Offline downloads, subtitle tracks, EPG/catch-up, profiles and parental restrictions remain unported; audio selection works only where the browser supplies real additional tracks.
+- AI chat is now wired through the **existing first-party native STREAM AI interpretation gateway**, with search-link suggestions. Subscriber-authorized AI behavior is not yet verified end to end. Offline downloads, EPG catch-up, cloud profiles and parental restrictions remain unported. **Short EPG listings** (when supplied by Xtream) and selection of browser/HLS-exposed subtitle tracks have been added, but provider availability and TV compatibility are not established. Audio selection works only where the browser exposes real additional tracks.
 - Provider metadata image fallback may be incomplete on some series, and catalog first loads may depend on upstream response.
 - The web transcoding pilot is limited to **two concurrent FFmpeg jobs**. It must not be offered publicly until scale tests, rate limiting, licensing checks, and safe caching are complete.
 
@@ -73,7 +73,7 @@ Home hero + horizontally scrolling shelves; sidebar/DPAD; live categories on rig
 
 ### Still not at full Android parity
 
-The web pilot cannot reuse Android's Media3/VLC engines unchanged. Full-resolution 4K playback, native downloads/offline persistence, subtitles and multiple audio streams where the upstream source does not expose them, cloud synchronization with Android, EPG, profiles and strong large-scale concurrency remain outstanding. The VOD pilot is restricted to two concurrent FFmpeg processes and is **not approved for public mass rollout**. Actual title-level seeking requires the authorized source to support random byte access.
+The web pilot cannot reuse Android's Media3/VLC engines unchanged. Full-resolution 4K playback, native downloads/offline persistence, automatic subtitles or alternate audio tracks not exposed by the source, cloud synchronization with Android, complete EPG catch-up, user profiles and large-scale concurrency remain outstanding. The VOD pilot is restricted to two concurrent FFmpeg processes and is **not approved for public mass rollout**. Actual title-level seeking requires the authorized source to support random byte access.
 
 
 ## Deployment & safety
@@ -97,3 +97,25 @@ The web pilot cannot reuse Android's Media3/VLC engines unchanged. Full-resoluti
 Every opened film or episode now has a **new, random 128-bit client playback ID** (SID). The SID is part of the manifest request, every HLS media segment URL, and the stop URL. The internal VOD worker includes the SID in its HMAC-derived session key, in addition to the bearer and title. This means that two independent tabs/devices using the same authorized subscription cannot seek, restart, or terminate each other's active VOD session. Requests without SID remain accepted for previous preview clients; malformed SID is rejected. Authentication remains mandatory and the SID is not a substitute for account authorization.
 
 **Verification:** syntax checks for client, API and worker; unit manifest checks for both legacy and SID-aware media URLs; deployment SUCCESS of web and worker with worker's synthetic seek health check passing. **Not yet proved:** simultaneous playback on two subscribed physical devices for a full movie or shared-network congestion under load. The existing MAX_JOBS capacity (2) still limits parallel transcodes. Do not roll out to public customers without live-source and load tests.
+
+## VOD reliability and release gate — 23 November 2026
+
+**Current architecture:** Direct MP4 with real seekable byte ranges first; for sources not genuinely seekable in the browser, close the direct connection and use the two-slot private H.264/AAC VOD worker. When reliable duration is known, use a complete end-listed 4-second HLS timeline; otherwise clearly label the short streaming EVENT fallback as an **unverified duration**. No physical TV or commercial subscriber content is included in the synthetic worker test.
+
+**Race fixes:** Metadata callbacks and their 4.2-second timeouts carry a playback generation so that an old response cannot restart a previously requested position. D-pad button repeats are debounced to one network seek. Resume progress cannot overwrite a new pending seek with an old MP4 frame, and a last-minute seek is not treated as completed viewing. The original MP4 connection is explicitly closed before opening its HLS fallback, important for providers with connection limits.
+
+**Source failure protections:** The localhost media bridge limits the initial Xtream HTTP header wait to 17 seconds, without imposing a fixed timeout on the video body. The worker serializes adjacent 24-second conversions, bounds FFmpeg at 75 seconds, and temporarily backs off failed requests for absent segments or overstated source duration; deterministic missing positions produce HTTP 422 rather than restarting FFmpeg indefinitely. The browser distinguishes HTTP 416/422/429 and failed authentication, with Arabic status messages. A slow source can still fail and **real random-access byte support is a hard requirement for accurate seeking**.
+
+**Synthetic verification:** The VOD worker now verifies 8 seconds and **24 seconds across the chunk boundary** in a locally generated 32-second media file, and checks H.264/AAC in generated segments. It reports `verified_vod_seek_across_chunks`. This does **not** establish title-level or full-length subscriber playback, real-device buffering performance, subtitle availability or multi-user capacity.
+
+**Required end-to-end checks before any production release:**
+
+1. On an authorized preview account, play a full movie for at least 20 continuous minutes. Note first frame delay, unexpected stops and total buffering.
+2. Seek from 00:00 to 10:00, back to 05:00, then forward to 60:00 on a movie longer than 60 minutes. Verify **actual video frames and audio**, not merely an updated time label.
+3. Repeat on a television using the directional pad, including 12 rapid right-arrow presses (must emit one combined seek after the last press), and on a touch browser.
+4. Close while a seek is buffering, reopen the title, and verify checkpoint restoration. Restart from zero, then test the last minute without incorrectly marking the whole title completed.
+5. Play an episode and move to the next episode; repeat with and without complete Xtream duration metadata, and with a source that rejects HTTP byte-range requests.
+6. With only authorized test subscriptions and media, verify two simultaneous viewers and incremental load beyond two worker jobs; interpret HTTP 429 capacity separately from source errors.
+7. Inspect **Settings > Last actual playback test** for startup time, buffer count/duration, and seek requests/completions/timeouts. The metrics are local to the authenticated web profile, without storing the subscriber token, provider URL or title identifier.
+
+**Release status: NOT production-ready.** Deploy SUCCESS and synthetic checks establish isolated technical function, not compatibility with every Xtream supplier or the real Android application's playback engines. Do not change customer Android builds or shared BLOFY production services to close these preview-only gaps.
