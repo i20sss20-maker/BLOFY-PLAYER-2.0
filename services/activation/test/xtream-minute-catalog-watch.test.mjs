@@ -28,6 +28,11 @@ test('fingerprint is streaming, stable and detects additions and title changes',
  assert.equal(one.hash,repeat.hash);
  assert.notEqual(one.hash,added.hash);
  assert.notEqual(one.hash,renamed.hash);
+ assert.notEqual(one.inventoryHash,added.inventoryHash);
+ assert.equal(one.inventoryHash,renamed.inventoryHash);
+ const shuffled=await fingerprint([...entries].reverse());
+ assert.equal(one.inventoryHash,shuffled.inventoryHash);
+ assert.notEqual(one.hash,shuffled.hash);
  assert.throws(()=>createMinuteCatalogWatcher({}),/dependencies_invalid/);
 });
 test('empty provider result cannot silently replace a published library',async()=>{
@@ -57,4 +62,12 @@ test('manual hidden and custom category order survive automatic provider re-impo
  const sort=admin.slice(admin.indexOf('async function autoSortCategories('),admin.indexOf('async function moveCategory('));
  assert.match(sort,/manual_sort=\$4::boolean/);
  assert.match(sort,/mode!=='provider'/);
+});
+
+test('a live metadata-only change uses the throttled fingerprint, but structural additions sync immediately',async()=>{
+ const watcher=await readFile(new URL('../src/xtream-minute-catalog-watch.mjs',import.meta.url),'utf8');
+ assert.match(watcher,/inventory_fingerprint TEXT/);
+ assert.match(watcher,/inventoryHash:inventory.toString\('hex'\)/);
+ assert.match(watcher,/const structural=!prev/);
+ assert.match(watcher,/Date.now\(\)-new Date\(prev.synced_at\).getTime\(\)>=10\*60_000/);
 });
