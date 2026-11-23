@@ -20,12 +20,16 @@ function fakeClock(){
   stopHls:function(){throw Error('unexpected stop during touch')}
  };
  const touch=vm.runInNewContext(touchDefinition+';\ntouchHls',context);
- return {touch,timers,cleared,advance:function(ms){now+=ms}}
+ return {touch,timers,cleared,advance:function(ms){now+=ms},
+  makeTimer:function(ms){const id=++seq;timers.set(id,{fn:()=>{},ms});return {id,unref(){}}}
+ }
 }
 
 test('active live HLS refreshes the old nine-minute expiry on every playlist or segment request',()=>{
  const c=fakeClock(),session={legacyHls:true,fullVod:false};
+ // startHls installs the initial guard AFTER calling touchHls once.
  c.touch(session);
+ session.hardTimer=c.makeTimer(9*60*1000);
  const first=session.hardTimer,firstIdle=session.idleTimer;
  assert.equal(c.timers.get(first.id).ms,9*60*1000);
  assert.equal(c.timers.get(firstIdle.id).ms,110000);
