@@ -103,3 +103,31 @@ test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops w
  assert.equal(spawnCount,0);
  assert.equal(bodyCancelled,true);
 });
+
+
+test('HD fallback keeps source dimensions without upscaling and has a bounded bitrate',()=>{
+ const begin=source.indexOf('function videoQualityProfile(kind){');
+ const end=source.indexOf('\nconst hlsSessions=',begin);
+ assert.ok(begin>=0&&end>begin,'HD profile helper is part of the worker');
+ const code=source.slice(begin,end);
+ const fakeEnv={};
+ const funcs=vm.runInNewContext(code+';\n({videoQualityProfile,compatibleVideoArgs})',
+  {Bun:{env:fakeEnv}});
+ const hd=funcs.videoQualityProfile('live');
+ assert.equal(hd.name,'720');
+ const args=funcs.compatibleVideoArgs('live');
+ const vf=args[args.indexOf('-vf')+1];
+ assert.match(vf,/min\(iw,1280\)/);
+ assert.match(vf,/min\(ih,720\)/);
+ assert.ok(!vf.includes('fps=25'),'do not distort source frame rate');
+ assert.equal(args[args.indexOf('-maxrate')+1],'3400k');
+ assert.ok(!args.join(' ').includes('900k'));
+ fakeEnv.VIDAA_LIVE_VIDEO_PROFILE='1080';
+ const full=funcs.compatibleVideoArgs('live');
+ assert.match(full[full.indexOf('-vf')+1],/min\(ih,1080\)/);
+ assert.equal(full[full.indexOf('-maxrate')+1],'5800k');
+ fakeEnv.VIDAA_LIVE_VIDEO_PROFILE='invalid';
+ assert.equal(funcs.videoQualityProfile('live').name,'720');
+ fakeEnv.VIDAA_VOD_VIDEO_PROFILE='480';
+ assert.equal(funcs.videoQualityProfile('movie').name,'480');
+});
