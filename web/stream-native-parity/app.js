@@ -1866,7 +1866,13 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var modes={fullvod:'فيلم كامل قابل للتقديم',direct:'MP4 أصلي',vodhls:'HLS مؤقت',
    hls:'بث مباشر',mpegts:'MPEG-TS'};
   var mode=modes[state.mode]||'جار تغيير المحرك',pending=state.pendingSeek;
-  box.textContent='المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
+  var width=Math.max(0,Number(video.videoWidth)||0),height=Math.max(0,Number(video.videoHeight)||0);
+  var screenQuality=width&&height?(width+'×'+height+' (دقة الفيديو المعروضة)'):'بانتظار بيانات الدقة';
+  var frames=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
+  var dropped=frames&&Number.isFinite(frames.droppedVideoFrames)?frames.droppedVideoFrames:null;
+  box.textContent='الدقة: '+screenQuality+
+   (dropped===null?'':' | الإطارات المتساقطة: '+dropped)+
+   ' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
    ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
    ' | التقديم: '+(st.seekReady||0)+' ناجح من '+(st.seekAttempts||0)+
    ' | مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+
@@ -2481,7 +2487,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  };
  if(qualityButton)qualityButton.onclick=function(){
   var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
-  if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو تلقائيًا ولا يتيح دقات متعددة.');return}
+  if(!engine||!levels.length){
+   var width=Number(video.videoWidth)||0,height=Number(video.videoHeight)||0;
+   playerStatus('دقة الفيديو المعروضة: '+(width&&height?width+'×'+height:'بانتظار بيانات المصدر')+'؛ لا تتوفر دقات إضافية للاختيار لهذا التشغيل.');return
+  }
   var options=[{name:'تلقائي',selected:engine.autoLevelEnabled!==false,
    select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
   for(var i=0;i<levels.length;i++)(function(level,index){
