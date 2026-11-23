@@ -300,3 +300,16 @@ test('live FFmpeg maintains the normal audio clock without pitch-shifting the co
  assert.ok(live.includes("'-ar','48000'"),'AAC output is a stable 48kHz clock');
  assert.ok(live.includes("'-b:a','160k'"),'preserve useful speech and broadcast audio bitrate');
 });
+
+
+test('FFmpeg log parsing identifies upstream SD vs FHD without exposing input URLs or credentials',()=>{
+ const start=source.indexOf('function streamInputVideoDimensions(log){');
+ const end=source.indexOf('\nasync function startHls(',start);
+ assert.ok(start>0&&end>start,'source resolution parser must exist');
+ const parse=vm.runInNewContext(source.slice(start,end)+';\nstreamInputVideoDimensions');
+ const sd="Input #0, mpegts, from 'pipe:0':\n    Stream #0:0[0x100]: Video: h264 (High), yuv420p(tv), 854x480 [SAR 1:1 DAR 427:240], 25 fps\nOutput #0, hls, to '/tmp/file':\n    Stream #0:0: Video: h264, yuv420p, 1280x720";
+ assert.equal(parse(sd),'854x480','must report source SD, never transcoded 720p');
+ assert.equal(parse("Input #0, mpegts, from 'pipe:0':\n Stream #0:0: Video: h264, 1920x1080, 50 fps"),'1920x1080');
+ assert.equal(parse("Input #0\n Stream #0:0: Audio: aac, 48000 Hz"),'');
+ assert.equal(parse("Input #0\n Stream #0:0: Video: hevc, 9999x9999"),'','reject implausible dimensions');
+});
