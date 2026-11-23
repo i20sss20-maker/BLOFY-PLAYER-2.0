@@ -56,21 +56,22 @@ test('late stop of an old stream never deletes the replacement session with the 
  const begin=source.indexOf('function stopHls(session,reason){');
  const end=source.indexOf('\nconst nap=',begin);
  assert.ok(begin>=0&&end>begin);
- const map=new Map();
+ const map=new Map(),removed=[];
  const context={
   hlsSessions:map,active:1,
   clearTimeout(){},
-  rmSync(){},
+  rmSync(path){removed.push(path)},
   console:{info(){}}
  };
  const stop=vm.runInNewContext(source.slice(begin,end)+';\nstopHls',context);
- const old={key:'account:channel',abort:{abort(){}},dir:'/fake-old'};
+ const old={key:'account:channel',abort:{abort(){}},dir:'/shared-newer-session'};
  const replacement={key:'account:channel',stopped:false};
  map.set(old.key,replacement);
  stop(old,'viewer_stopped');
  assert.equal(map.get(old.key),replacement);
  assert.equal(old.stopped,true);
  assert.equal(context.active,0);
+ assert.deepEqual(removed,[],'late cleanup cannot erase replacement HLS files');
 });
 
 test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops watching',async()=>{
@@ -272,4 +273,29 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
  assert.equal(stop.status,200);
  assert.deepEqual(stopped,[compatKey]);
  assert.equal(map.has(originalKey),true,'compatibility stop must not terminate original-video playback');
+});
+
+
+test('active live playlist requests survive 12 simulated minutes without the old nine-minute cutoff',()=>{
+ const c=fakeClock(),session={legacyHls:true,fullVod:false};
+ c.touch(session);session.hardTimer=c.makeTimer(540000);
+ for(let minute=1;minute<=12;minute++){
+  const old=session.hardTimer;
+  c.advance(60*1000);
+  c.touch(session);
+  assert.ok(c.cleared.includes(old.id),'the previous hard timer must be cancelled');
+  assert.equal(c.timers.get(session.hardTimer.id).ms,9*60*1000);
+  assert.equal(session.lastAccess,minute*60*1000)
+ }
+});
+
+test('live FFmpeg maintains the normal audio clock without pitch-shifting the commentator',()=>{
+ const start=source.indexOf('async function startHls({');
+ const end=source.indexOf('\nasync function hlsRequest(',start);
+ assert.ok(start>0&&end>start);
+ const live=source.slice(start,end);
+ assert.ok(live.includes("aresample=async=1:min_hard_comp=0.100:first_pts=0"),
+   'audio should correct timestamp gaps by sample insertion/trimming rather than speed stretch');
+ assert.ok(live.includes("'-ar','48000'"),'AAC output is a stable 48kHz clock');
+ assert.ok(live.includes("'-b:a','160k'"),'preserve useful speech and broadcast audio bitrate');
 });
