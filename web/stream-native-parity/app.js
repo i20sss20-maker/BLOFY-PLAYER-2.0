@@ -1802,7 +1802,8 @@ function openPlayer(kind,id,extension,name,from){
   diagnose(kind,'vod_retry',state.mode,0);
   playerStatus('جار إعادة اتصال المشغّل…');
   if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);
-  else startVod(Math.round(checkpointPosition(state)))
+  else startVod(Math.round(state.seekIncomplete&&state.lastSeekTarget!==undefined&&state.lastSeekTarget!==null?
+   state.lastSeekTarget:checkpointPosition(state)))
  };
  var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
   if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
