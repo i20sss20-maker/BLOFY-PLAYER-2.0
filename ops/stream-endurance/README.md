@@ -24,3 +24,14 @@ Measure video first-decoded-frame p50/p95, >3-second video/audio frame gaps, pre
 **Limitations:** This command proves frames on its own FFmpeg runner, not hardware/device playback. `recoveryMs` measures a probe restart, not the BLOFY player reconnect algorithm. Controlled outage injection must use **a test-owned stream only**, never a real provider or customer source. For rollout pin existing production config and previous deployment, gate 1% -> 5% -> 20% -> 100%, with automatic rollback on sustained errors.
 
 The script excludes media URLs, IP addresses, account credentials and FFmpeg stderr from its report.
+
+### Automated isolated live-HLS tests
+
+The CI workflow now also runs `local_hls_canary.py` using a locally generated 320×180 H.264/AAC HLS stream on `127.0.0.1`. Its stages are:
+
+- Clean synthetic HLS: two concurrent FFmpeg decoders for 13 seconds; checks both tracks and no >3s decoded-frame gaps.
+- Transport interruption: four concurrent decoders for 26 seconds; deliberately returns HTTP 503 for local media requests during a six-second interruption, confirms audio/video frames after delivery resumes, and reports recovery duration and >3s gaps.
+
+All sources/clients are synthetic and remain on the test runner; **no Railway or customer playback is changed**. Startup times in this local test begin from a primed HLS playlist, so they do not establish genuine cold-start TTFF on a device. A 503 transport interruption is not identical to killing a remote upstream encoder, and an FFmpeg process restart is not proof of BLOFY in-app recovery. Reports are sanitized and uploaded as CI artifacts for seven days.
+
+The transport-blackout test **allows the expected frame gaps during the injected outage** and requires successful frames after recovery. Production acceptance must separately bound the duration/frequency of gaps and test full source interruption on approved feeds and on real client hardware.
