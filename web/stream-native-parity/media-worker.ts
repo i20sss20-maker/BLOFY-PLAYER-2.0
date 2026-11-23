@@ -524,7 +524,7 @@ function fullVodSeekSelfTest(){
    '-t','32','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p',
    '-c:a','aac','-b:a','96k',input],{stdout:'pipe',stderr:'pipe',timeout:20000});
   if(seed.exitCode!==0)return {ok:false,stage:'synthetic_source'};
-  for(const start of [0,8,24]){
+  for(const start of [0,8,20,24]){
    const args=['-hide_banner','-loglevel','error','-nostdin','-ss',String(start),'-i',input,
     '-t','4','-map','0:v:0','-map','0:a:0?','-c:v','libx264','-preset','ultrafast',
     '-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
@@ -538,24 +538,31 @@ function fullVodSeekSelfTest(){
    const chunk=Bun.spawnSync([FFMPEG,...args],{stdout:'pipe',stderr:'pipe',timeout:20000});
    if(chunk.exitCode!==0)return {ok:false,stage:'seek_chunk_'+start}
   }
-  const first=join(dir,'seg-000000.ts'),seek=join(dir,'seg-000002.ts'),nextChunk=join(dir,'seg-000006.ts');
-  if(!existsSync(first)||!existsSync(seek)||!existsSync(nextChunk))return {ok:false,stage:'missing_segment'};
+  const first=join(dir,'seg-000000.ts'),seek=join(dir,'seg-000002.ts'),
+   previousChunkLast=join(dir,'seg-000005.ts'),nextChunk=join(dir,'seg-000006.ts');
+  if(!existsSync(first)||!existsSync(seek)||!existsSync(previousChunkLast)||!existsSync(nextChunk))
+   return {ok:false,stage:'missing_segment'};
   const readTimestamp=file=>{
    const pr=Bun.spawnSync(['/usr/bin/ffprobe','-v','error','-show_entries',
     'format=start_time','-of','default=noprint_wrappers=1:nokey=1',file],
     {stdout:'pipe',stderr:'ignore',timeout:8000});
    return pr.exitCode===0?Number(new TextDecoder().decode(pr.stdout).trim()):NaN
   };
-  const startTime=readTimestamp(first),seekTime=readTimestamp(seek),crossChunkTime=readTimestamp(nextChunk);
+  const startTime=readTimestamp(first),seekTime=readTimestamp(seek),
+   previousChunkTime=readTimestamp(previousChunkLast),crossChunkTime=readTimestamp(nextChunk);
   const manifest=fullVodManifest(32);
-  const correct=Number.isFinite(startTime)&&Number.isFinite(seekTime)&&Number.isFinite(crossChunkTime)&&
+  const correct=Number.isFinite(startTime)&&Number.isFinite(seekTime)&&
+   Number.isFinite(previousChunkTime)&&Number.isFinite(crossChunkTime)&&
    Math.abs((seekTime-startTime)-8)<2&&Math.abs((crossChunkTime-startTime)-24)<2&&
+   Math.abs((crossChunkTime-previousChunkTime)-4)<1.5&&
    manifest.includes('#EXT-X-ENDLIST')&&(manifest.match(/#EXTINF:/g)||[]).length===8&&
    tsCodecs(readFileSync(first)).video&&tsCodecs(readFileSync(seek)).audio&&
+   tsCodecs(readFileSync(previousChunkLast)).video&&tsCodecs(readFileSync(previousChunkLast)).audio&&
    tsCodecs(readFileSync(nextChunk)).video&&tsCodecs(readFileSync(nextChunk)).audio;
   return {ok:correct,stage:correct?'verified_vod_seek_across_chunks':'timeline_error',
    segments:8,offsetSeconds:Number((seekTime-startTime).toFixed(1)),
-   crossChunkOffsetSeconds:Number((crossChunkTime-startTime).toFixed(1))}
+   crossChunkOffsetSeconds:Number((crossChunkTime-startTime).toFixed(1)),
+   adjacentGapSeconds:Number((crossChunkTime-previousChunkTime).toFixed(1))}
  }catch{return {ok:false,stage:'synthetic_test_failed'}}
  finally{try{rmSync(dir,{recursive:true,force:true})}catch{}}
 }
