@@ -294,6 +294,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 .epg-program em{display:inline-block;color:#0c252e;background:#a2f9d6;
  font-style:normal;font-weight:700;border-radius:5px;padding:0 5px;margin-inline-end:4px;font-size:10px}
 .epg-empty{display:block;color:#a5c5c6;line-height:1.7;padding:5px 0}
-@media(max-width:730px){.catalog .preview:has(.epg-panel){height:auto;min-height:440px}
+@media(max-width:730px){.catalog .preview{height:auto;min-height:440px}
  .catalog .preview .preview-video-wrap{min-height:200px;height:210px;flex:none}
  .epg-content{max-height:120px}}
