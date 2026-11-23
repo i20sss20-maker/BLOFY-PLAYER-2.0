@@ -512,7 +512,7 @@ function recordPlaybackQuality(p){
   seekAttempts:Math.max(0,Math.min(999,st.seekAttempts||0)),
   seekReady:Math.max(0,Math.min(999,st.seekReady||0)),
   seekTimeouts:Math.max(0,Math.min(999,st.seekTimeouts||0)),
-  lastSeekMs:isFinite(st.lastSeekMs)?Math.max(0,Math.min(120000,st.lastSeekMs)):null,
+  lastSeekMs:st.lastSeekMs!==null&&st.lastSeekMs!==undefined&&isFinite(Number(st.lastSeekMs))?Math.max(0,Math.min(120000,Number(st.lastSeekMs))):null,
   errors:Math.max(0,Math.min(99,st.errors||0)),
   stoppedAt:now};
  S.lastPlaybackDiag=result;
