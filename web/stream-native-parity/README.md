@@ -119,3 +119,14 @@ Every opened film or episode now has a **new, random 128-bit client playback ID*
 7. Inspect **Settings > Last actual playback test** for startup time, buffer count/duration, and seek requests/completions/timeouts. The metrics are local to the authenticated web profile, without storing the subscriber token, provider URL or title identifier.
 
 **Release status: NOT production-ready.** Deploy SUCCESS and synthetic checks establish isolated technical function, not compatibility with every Xtream supplier or the real Android application's playback engines. Do not change customer Android builds or shared BLOFY production services to close these preview-only gaps.
+
+
+### Boundaries, prefetch and in-player status
+
+The VOD worker now initiates a **single adjacent 24-second chunk in advance** once Hls.js has requested one of the previous group's final two segments and the previous FFmpeg process has finished. It never intentionally opens two simultaneous source connections for the same playback session. The prefetch respects the global two-job capacity, aborts when seeking to another position, and does not run past the movie's duration. This is bounded, on-demand playback buffering, not an offline download.
+
+The synthetic startup media check includes the last four-second segment before a 24-second boundary and the first segment after it; Railway reported `adjacentGapSeconds: 4` and `verified_vod_seek_across_chunks`, with MPEG-TS video and audio tracks present. This establishes synthetic timestamp continuity but **not** real Xtream playback stability.
+
+The player also has an optional **📊 حالة التشغيل** button (hidden panel by default) which shows first frame delay, accumulated buffering, seek outcomes, playback engine and media errors. The panel updates only while open and is cleared when leaving the player. It does not expose subscriber tokens or upstream media URLs.
+
+**Mandatory before customer rollout:** Verify a full movie and episode against a subscribed authorized Xtream source, including forward/backward seeks, actual decoded frames and audio, 20 minutes of continuous playback, restart/resume and two simultaneous viewers. The preview remains separate from the Android customers.
