@@ -364,6 +364,15 @@ test('source H264 and forced VIDAA compatibility HLS use isolated subscriber ses
  assert.equal(original,legacy,'existing original-video sessions preserve their key');
  assert.notEqual(original,compatible,'transcoder may not share the source-copy segment files');
  assert.notEqual(compatible,key('Bearer customer-B','live','31','ts','0',true));
+ const sidA='a'.repeat(32),sidB='b'.repeat(32);
+ const firstViewer=key('Bearer customer-A','live','31','ts','0',false,false,sidA);
+ const secondViewer=key('Bearer customer-A','live','31','ts','0',false,false,sidB);
+ assert.notEqual(firstViewer,secondViewer,'two viewers sharing one activation cannot terminate each other');
+ assert.notEqual(firstViewer,original,'new scoped viewers cannot kill a legacy connection');
+ assert.notEqual(firstViewer,key('Bearer customer-A','live','31','ts','0',true,false,sidA),
+  'original and compatible mode must be distinct for the same viewer');
+ assert.equal(key('Bearer customer-A','live','31','ts','0',false,false,''),original,
+  'old links with no SID continue to work');
  assert.equal(original.length,40);
  assert.equal(compatible.length,40);
 });
@@ -427,6 +436,27 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
  assert.equal(stop.status,200);
  assert.deepEqual(stopped,[compatKey]);
  assert.equal(map.has(originalKey),true,'compatibility stop must not terminate original-video playback');
+ const sidA='a'.repeat(32),sidB='b'.repeat(32);
+ const viewerA=hmac(bearer,'live','31','ts','0',false,false,sidA);
+ const viewerB=hmac(bearer,'live','31','ts','0',false,false,sidB);
+ map.set(viewerA,{key:viewerA,kind:'live',dir:'/userA',videoMode:'source_copy'});
+ map.set(viewerB,{key:viewerB,kind:'live',dir:'/userB',videoMode:'source_copy'});
+ const stopA=await worker({method:'POST',headers},
+  new URL('http://worker/hls/live/31/ts/0/sid-'+sidA+'/stop'));
+ assert.equal(stopA.status,200);
+ assert.equal(map.has(viewerA),false);
+ assert.equal(map.has(viewerB),true,'stopping viewer A must preserve concurrent viewer B');
+ assert.equal(map.has(originalKey),true,'scoped stop must not kill a legacy viewer');
+ const getB=await worker({method:'GET',headers},
+  new URL('http://worker/hls/live/31/ts/0/sid-'+sidB+'/index.m3u8'));
+ assert.equal(getB.status,200,'viewer B continues playing');
+ assert.equal(started.length,1,'viewer B already has a live session and does not start another FFmpeg');
+ const fakeResource=await worker({method:'GET',headers},
+  new URL('http://worker/hls/live/31/ts/0/sid-'+sidA+'/seg-000001.ts'));
+ assert.equal(fakeResource.status,404,'a stopped viewer cannot download a different viewers segment');
+ const invalid=await worker({method:'GET',headers},
+  new URL('http://worker/hls/live/31/ts/0/sid-not-a-valid-sid/index.m3u8'));
+ assert.equal(invalid.status,404,'malformed playback identifiers are rejected');
 });
 
 
