@@ -329,3 +329,21 @@ test('gateway logs rounded media gap and never includes account, credential or U
  const logPayload=segment.slice(logStart,logEnd+4);
  assert.doesNotMatch(logPayload,/password|username|accountId|credentials|target\.href|clientIp/);
 });
+
+test('clean TS EOF uses a shorter first retry without weakening other retries',async()=>{
+ const {mediaRetryDelayMs}=await import('../src/xtream-media-retry-backoff.mjs');
+ assert.equal(mediaRetryDelayMs(1,()=>0.5,{firstAttemptBaseMs:300}),300);
+ assert.equal(mediaRetryDelayMs(1,()=>0.5),700);
+ assert.equal(mediaRetryDelayMs(2,()=>0.5,{firstAttemptBaseMs:300}),1400);
+ const initial=response(),reader=initial.body.getReader(),first=(await reader.read()).value;
+ const waits=[];
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,
+  waitRetry:async options=>{waits.push(options);return true;},
+  fetchImpl:async()=>response()
+ });
+ assert.equal((await iter.next()).value.length,564);
+ assert.equal((await iter.next()).value.length,564);
+ await iter.return();
+ assert.equal(waits[0].firstAttemptBaseMs,300);
+});
