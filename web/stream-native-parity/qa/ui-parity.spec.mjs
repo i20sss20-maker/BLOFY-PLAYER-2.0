@@ -383,3 +383,61 @@ test('remote OK opens in-player channel browser and Back dismisses it without st
  await expect(page.locator('#player-audio')).toBeFocused();
  expect(errors).toEqual([]);
 });
+
+
+test('fullscreen is visible without More and VIDAA browser fallback can enter and exit with Back',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect(page.locator('#player-more-panel')).toBeHidden();
+ await expect(page.locator('#player-fullscreen')).toBeVisible();
+ await expect(page.locator('#player-fullscreen')).toHaveText('⛶ ملء الشاشة');
+ // Simulate legacy TV browsers that do not implement Element.requestFullscreen.
+ await page.evaluate(()=>{
+  const root=document.getElementById('player-root'),video=document.getElementById('player-media');
+  root.requestFullscreen=undefined;
+  root.webkitRequestFullscreen=undefined;
+  root.mozRequestFullScreen=undefined;
+  root.msRequestFullscreen=undefined;
+  video.webkitEnterFullscreen=undefined
+ });
+ await page.locator('#player-fullscreen').click();
+ await expect(page.locator('#player-root')).toHaveClass(/tv-immersive/);
+ await expect(page.locator('#player-fullscreen')).toHaveAttribute('aria-pressed','true');
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect(page.locator('#player-root')).not.toHaveClass(/tv-immersive/);
+ await expect(page.locator('#player-fullscreen')).toHaveAttribute('aria-pressed','false');
+ await page.locator('#player-fullscreen').click();
+ await expect(page.locator('#player-root')).toHaveClass(/tv-immersive/);
+ await page.locator('#player-fullscreen').click();
+ await expect(page.locator('#player-root')).not.toHaveClass(/tv-immersive/);
+ expect(errors).toEqual([]);
+});
+
+test('VIDAA Back key exits immersive first, then returns to details, with fullscreen keyboard shortcut',async({page})=>{
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await page.evaluate(()=>{
+  const root=document.getElementById('player-root'),video=document.getElementById('player-media');
+  root.requestFullscreen=undefined;root.webkitRequestFullscreen=undefined;
+  root.mozRequestFullScreen=undefined;root.msRequestFullscreen=undefined;
+  video.webkitEnterFullscreen=undefined
+ });
+ await page.keyboard.press('f');
+ await expect(page.locator('#player-root')).toHaveClass(/tv-immersive/);
+ await page.evaluate(()=>{
+  const e=new Event('keydown',{bubbles:true,cancelable:true});
+  Object.defineProperty(e,'keyCode',{value:461});
+  document.dispatchEvent(e)
+ });
+ await expect(page.locator('#player-root')).not.toHaveClass(/tv-immersive/);
+ await expect(page.locator('#player-root')).toBeVisible();
+ await page.locator('#player-back').click();
+ await expect(page.locator('.detail-title')).toHaveText('فيلم تجريبي');
+});
