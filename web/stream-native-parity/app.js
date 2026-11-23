@@ -1331,6 +1331,17 @@ function livePlaybackProgress(record,video,now){
  }
  return {advanced:false,idleMs:Math.max(0,now-(record.lastProgressAt||record.started||now))}
 }
+/* Stop a silent ended/paused live decoder from requiring a full page reload.
+ * Only act after the video was playing; honor explicit user Pause and a hidden
+ * browser tab. On a TV the player can become paused after a fatal decoder error.
+ */
+function liveUnexpectedPause(record,video,userPaused,hidden,now){
+ if(userPaused||hidden||video.seeking||(!video.paused&&!video.ended)){
+  record.unexpectedPauseAt=0;return false
+ }
+ if(!record.unexpectedPauseAt){record.unexpectedPauseAt=now;return false}
+ return now-record.unexpectedPauseAt>=10000
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
@@ -1516,6 +1527,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(!alive())return;
   record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;
   record.lastProgressAt=Date.now();
+  record.unexpectedPauseAt=0;
   record.lastMediaTime=Number(video.currentTime)||0;
   record.lastVideoFrames=null;
   if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
@@ -1561,10 +1573,16 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(!alive()||!record.ready||!video.isConnected)return;
    if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
    if(!preview&&S.route!=='player')return;
-   if(video.paused||video.ended||video.seeking||document.hidden){
-    record.lastProgressAt=Date.now();return
+   var now=Date.now();
+   var intentionalPause=!preview&&S.playerView&&S.playerView.video===video&&S.playerView.userPaused;
+   if(liveUnexpectedPause(record,video,!!intentionalPause,document.hidden,now)){
+    status('توقف مشغّل الفيديو دون طلب؛ جار إعادة اتصال القناة…');
+    recoverConnection();return
    }
-   var progress=livePlaybackProgress(record,video,Date.now());
+   if(video.paused||video.ended||video.seeking||document.hidden){
+    record.lastProgressAt=now;return
+   }
+   var progress=livePlaybackProgress(record,video,now);
    if(progress.advanced)return;
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
