@@ -386,7 +386,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 .native-player-topline{display:flex;gap:12px;justify-content:space-between;align-items:center;min-height:37px}
 .native-player-eyebrow{color:var(--accent);font-size:11px;font-weight:850;letter-spacing:.13em;direction:ltr}
 .native-player-back,.native-player-more{color:var(--white);background:#123340e0;border:1px solid #7abeb86b;
- border-radius:13px;min-height:38px;padding:6px 13px;font:700 12px inherit;cursor:pointer}
+ border-radius:13px;min-height:38px;padding:6px 13px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer}
 .native-player-more{font-size:22px;font-weight:800;line-height:1;padding:0 13px}
 .native-stream-hud .player-title{font-size:clamp(15px,1.65vw,20px);font-weight:800;line-height:1.45;
  overflow-wrap:anywhere}
