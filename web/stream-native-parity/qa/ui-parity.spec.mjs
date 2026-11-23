@@ -95,8 +95,10 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  });
  await page.goto('http://127.0.0.1:3000/');
  await page.locator('[data-go="live"]').first().click();
- await page.locator('[data-channel="31"]').click();
+ // The selected channel must start the muted preview without pressing Play.
  await expect.poll(()=>requested.length,{timeout:10000}).toBeGreaterThan(0);
+ await expect(page.locator('#live-video')).toHaveJSProperty('muted',true);
+ await expect(page.locator('#live-video')).toHaveJSProperty('controls',false);
  await page.waitForTimeout(4000);
  console.log('BLOFY HLS DIAGNOSTICS',JSON.stringify({
   responses,errors,
@@ -509,4 +511,30 @@ test('Hls.js vendor loader retries after transient TV Wi-Fi script failure',asyn
  await page.locator('[data-channel="32"]').click();
  await expect.poll(()=>loads,{timeout:10000}).toBe(2);
  await expect.poll(()=>page.evaluate(()=>typeof window.Hls),{timeout:10000}).toBe('function');
+});
+
+
+test('fullscreen controls fade after playback starts even when a TV remote button holds focus',async({page})=>{
+ const mp4=readFileSync('/tmp/blofy-qa-test.mp4');
+ await page.route('**/api/media/movie/11.mp4',async route=>{
+  const range=route.request().headers()['range'];let first=0,last=mp4.length-1,status=200;
+  if(range){const match=range.match(/bytes=(\d+)-(\d*)/);
+   if(match){first=Number(match[1]);last=match[2]?Math.min(Number(match[2]),last):last;status=206}}
+  const headers={'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':String(last-first+1)};
+  if(status===206)headers['Content-Range']='bytes '+first+'-'+last+'/'+mp4.length;
+  await route.fulfill({status,headers,body:mp4.subarray(first,last+1)})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:11000}).toBeGreaterThan(1);
+ await page.locator('#player-media').evaluate(v=>{v.loop=true;v.play().catch(()=>{})});
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.paused),{timeout:9000}).toBe(false);
+ await page.locator('#player-toggle').focus();
+ await expect(page.locator('#player-root')).not.toHaveClass(/controls-hidden/);
+ await expect(page.locator('#player-root')).toHaveClass(/controls-hidden/,{timeout:6500});
+ await page.keyboard.press('ArrowUp');
+ await expect(page.locator('#player-root')).not.toHaveClass(/controls-hidden/);
+ await expect(page.locator('#player-audio')).toBeFocused();
 });
