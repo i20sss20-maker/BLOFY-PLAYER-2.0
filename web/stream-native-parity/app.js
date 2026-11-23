@@ -1887,6 +1887,7 @@ function playerIcon(name){
   previous:'<path d="M5 5v14M19 6 9 12l10 6V6Z"/>',
   next:'<path d="M19 5v14M5 6l10 6-10 6V6Z"/>',
   quality:'<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="11" cy="17" r="2"/>',
+  health:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.8"/>',
   favorite:'<path d="M20.8 8.3C20.8 13 12 19 12 19S3.2 13 3.2 8.3a4.6 4.6 0 0 1 8.8-1.8 4.6 4.6 0 0 1 8.8 1.8Z"/>'
  };
  return '<svg class="native-player-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">'+(p[name]||p.play)+'</svg>'
@@ -1968,6 +1969,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?playerControl('player-channel-next','forward','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
  (nextEpisode?playerControl('player-next-episode','next','الحلقة التالية'):'')+
  playerControl('player-quality','quality','جودة الفيديو')+
+ (isLive?playerControl('player-health-shortcut','health','حالة التشغيل الفعلية'):'')+
  (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
  '</div>'+
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
@@ -2075,17 +2077,40 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var sourceQuality=isLive&&S.play&&S.play.video===video?S.play.sourceDimensions||'غير محدد':'غير مطبق';
   var frames=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
   var dropped=frames&&Number.isFinite(frames.droppedVideoFrames)?frames.droppedVideoFrames:null;
-  box.textContent='الدقة: '+screenQuality+
-   ' | سرعة الصوت/الصورة: '+(Number(video.playbackRate)||1).toFixed(2)+'×'+
-   (dropped===null?'':' | الإطارات المتساقطة: '+dropped)+
-   ' | دقة المصدر: '+sourceQuality+' | مسار الفيديو: '+videoPath+' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
-   ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
-   ' | التقديم: '+(st.seekReady||0)+' ناجح من '+(st.seekAttempts||0)+
-   ' | مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+
-   (pending?' | جار الوصول إلى '+formatTime(pending.target):'')+
-   ' | أخطاء المشغل: '+(st.errors||0);
+  var droppedPct=dropped!==null&&frames&&Number(frames.totalVideoFrames)>0?
+   Math.min(100,100*dropped/Number(frames.totalVideoFrames)).toFixed(2)+'٪':null;
+  var estimate=S.play&&S.play.video===video&&S.play.engine?Number(S.play.engine.bandwidthEstimate)||0:0;
+  var bitrate=estimate>100000&&estimate<1e10?(estimate/1000000).toFixed(1)+' Mbps':'غير متوفر';
+  var uptime=formatTime(Math.max(0,(now-st.openedAt)/1000));
+  var status4k=height>=2100&&width>=3800?'4K معروض فعليًا':height>=4300?'8K معروض فعليًا':
+   'الدقة تعتمد على المصدر والجهاز';
+  var metrics=[
+   ['الصورة الفعلية',screenQuality],
+   ['دقة المصدر',sourceQuality],
+   ['مسار الصورة',videoPath],
+   ['زمن تشغيل الجلسة',uptime],
+   ['انتظارات التخزين',(st.bufferEvents||0)+' مرة / '+Math.round(buffering/1000)+' ثانية'],
+   ['إطارات ساقطة',dropped===null?'غير متاح':dropped+(droppedPct?' / '+droppedPct:'')],
+   ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
+   ['سرعة شبكة مقدّرة',bitrate],
+   ['بدء الصورة',startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية'],
+   ['أخطاء المشغل',String(st.errors||0)]
+  ];
+  box.innerHTML='<div class="playback-health-head"><strong>مراقبة جودة BLOFY المباشرة</strong>'+
+   '<small>'+esc(status4k)+' • قياسات حقيقية وليست اسم القناة</small></div>'+
+   '<div class="playback-health-grid">'+metrics.map(function(m){
+    return '<div class="playback-health-metric"><span>'+esc(m[0])+'</span><strong>'+esc(m[1])+'</strong></div>'
+   }).join('')+'</div>'+
+   (!isLive?'<p class="playback-health-note">التقديم: '+(st.seekReady||0)+' من '+(st.seekAttempts||0)+
+   ' • مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+'</p>':'')+
+   (pending?'<p class="playback-health-note">جار الوصول إلى '+esc(formatTime(pending.target))+'</p>':'');
  }
  var healthToggle=document.getElementById('player-health-toggle');
+ var healthShortcut=document.getElementById('player-health-shortcut');
+ if(healthShortcut)healthShortcut.onclick=function(){
+  if(healthToggle)healthToggle.click();
+  root.classList.remove('controls-hidden');
+ };
  if(healthToggle)healthToggle.onclick=function(){
   var box=document.getElementById('player-health-panel');if(!box)return;
   box.hidden=!box.hidden;
