@@ -268,6 +268,8 @@ test('native live dock matches Android controls, favors channels and surfs witho
  await expect(page.locator('#player-audio')).toBeVisible();
  await expect(page.locator('#player-subtitles')).toBeVisible();
  await expect(page.locator('#player-quality')).toBeVisible();
+ await expect(page.locator('#player-speed')).toBeHidden();
+ await expect(page.locator('#player-media')).toHaveJSProperty('playbackRate',1);
  await expect(page.locator('#player-favorite')).toHaveAttribute('aria-pressed','true');
  await page.locator('#player-back').click();
  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
