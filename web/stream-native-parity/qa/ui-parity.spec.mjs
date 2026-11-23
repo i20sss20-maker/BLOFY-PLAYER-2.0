@@ -108,6 +108,8 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
   status:await page.locator('#live-status').textContent()
  }));
  await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:14000}).toBeGreaterThan(1);
+ await expect(page.locator('#live-preview-quality')).toContainText('320×180',{timeout:9000});
+ await expect(page.locator('#live-preview-quality')).toContainText('SD');
  const state=await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code,paused:v.paused}));
  expect(state.error).toBeFalsy();
  await page.locator('[data-preview-full]').click();
