@@ -41,7 +41,6 @@ class PlaybackSessionReleaseTest {
             when (method.name) {
                 "addListener" -> { listener = args!![0] as Player.Listener; Unit }
                 "getCurrentMediaItem" -> MediaItem.fromUri("https://example.test/live/u/p/1.ts")
-                "getCurrentPosition" -> 0L
                 "getPlaybackState" -> state
                 "getCurrentPosition" -> position
                 "seekTo" -> { seeks++; position = args!!.last() as Long; Unit }
