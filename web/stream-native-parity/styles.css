@@ -354,3 +354,21 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  .player-time{font-variant-numeric:tabular-nums}
  .seek-line{min-height:32px;touch-action:pan-x}
 }
+
+
+/* Episode art and controls aligned with the BLOFY STREAM TV library. */
+.episode-art{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;
+ background:linear-gradient(135deg,#14505c,#071d28);border:1px solid #66b3ad4d}
+.episode-art .episode-cover{display:block;width:100%;height:100%;object-fit:cover}
+.episode-placeholder{font-size:34px;color:#7be5d8}
+.episode-copy{display:block;flex:1;min-width:0;line-height:1.55}
+.episode-row{min-height:94px;scroll-margin:100px}
+.episode-row:hover{border-color:var(--accent);background:linear-gradient(100deg,#174d5c,#10303b)}
+.episode-meta{line-height:1.6}
+.player-title #player-title-text{overflow-wrap:anywhere}
+@media(max-width:730px){
+ .episode-art{width:104px;height:72px}
+ .episode-row{min-height:89px}
+ .episode-name{font-size:13px;line-height:1.4}
+ .episode-meta{font-size:11px}
+}
