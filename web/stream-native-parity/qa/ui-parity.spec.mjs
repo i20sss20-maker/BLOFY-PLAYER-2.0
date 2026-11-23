@@ -342,3 +342,30 @@ test('movie player mirrors native 10-second transport and keeps advanced actions
  await page.locator('#player-favorite').click();
  await expect(page.locator('#player-favorite')).toHaveAttribute('aria-pressed','false');
 });
+
+test('remote OK opens in-player channel browser and Back dismisses it without stopping playback',async({page})=>{
+ const errors=[];page.on('pageerror',err=>errors.push(err.message));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await page.locator('[data-preview-full]').click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await page.locator('#player-media').focus();
+ await page.keyboard.press('Enter');
+ await expect(page.locator('#player-channel-panel')).toBeVisible();
+ await expect(page.locator('.native-channel-item')).toHaveCount(2);
+ await expect(page.locator('.native-channel-item.selected')).toContainText('قناة اختبار');
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#player-channel-panel')).toBeHidden();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await page.locator('#player-media').focus();
+ await page.keyboard.press('Enter');
+ await expect(page.locator('#player-channel-panel')).toBeVisible();
+ await page.locator('[data-player-channel="32"]').click();
+ await expect(page.locator('#player-channel-panel')).toBeHidden();
+ await expect(page.locator('#player-title-text')).toHaveText('قناة ثانية');
+ await page.locator('#player-media').focus();
+ await page.keyboard.press('ArrowUp');
+ await expect(page.locator('#player-audio')).toBeFocused();
+ expect(errors).toEqual([]);
+});
