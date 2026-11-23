@@ -61,6 +61,40 @@ test('frame presentation callback is cleaned on playback stop to prevent cross-c
  assert.match(source,/clearTimeout\(old\.retryTimer\)/);
 });
 
+test('persistent live delay catches up once without disrupting a healthy source',()=>{
+ const start=playerSource.indexOf('function liveLatencyCatchup('),
+  end=playerSource.indexOf('\nfunction liveOriginRetryMs(',start);
+ assert.ok(start>0&&end>start,'bounded live latency catch-up helper exists');
+ const catchUp=vm.runInNewContext(playerSource.slice(start,end)+';\nliveLatencyCatchup',{});
+ const events=[],engine={liveSyncPosition:130};
+ const video={currentTime:102,readyState:4,paused:false,ended:false,seeking:false,
+  seekable:{length:1,start:()=>90,end:()=>135}};
+ const record={};
+ assert.equal(catchUp(record,engine,video,10000,false,false),false,'first observation arms delay monitor');
+ assert.equal(catchUp(record,engine,video,17000,false,false),false,'short-lived lag never forces seek');
+ assert.equal(catchUp(record,engine,video,19000,false,false),'sustained 16+ second lag returns to edge');
+ assert.equal(video.currentTime,130,'seek targets HLS.js live sync position');
+ video.currentTime=100;engine.liveSyncPosition=145;video.seekable.end=()=>147;
+ assert.equal(catchUp(record,engine,video,20500,false,false),false);
+ assert.equal(catchUp(record,engine,video,30000,false,false),'90-second cool-down suppresses repeated jumping');
+ assert.equal(video.currentTime,100);
+ assert.equal(catchUp(record,engine,video,109001,false,false),true,'after cool-down, another persistent lag can recover');
+ assert.equal(video.currentTime,145);
+ video.currentTime=100;engine.liveSyncPosition=180;video.seekable.end=()=>140;
+ assert.equal(catchUp(record,engine,video,115000,false,false),false,'out-of-range sync points are ignored');
+ engine.liveSyncPosition=130;video.seekable.end=()=>135;
+ assert.equal(catchUp(record,engine,video,120000,true,false),false,'explicit user Pause never auto-seeks');
+ assert.equal(catchUp(record,engine,video,130000,false,true),false,'background browser never auto-seeks');
+ video.paused=true;
+ assert.equal(catchUp(record,engine,video,140000,false,false),false,'browser paused state never auto-seeks');
+ video.paused=false;record.reconnecting=true;
+ assert.equal(catchUp(record,engine,video,150000,false,false),false,'reconnecting decoder does not jump');
+ record.reconnecting=false;
+ engine.liveSyncPosition=video.currentTime+8;
+ assert.equal(catchUp(record,engine,video,160000,false,false),false,'ordinary live delay is safe');
+ assert.match(playerSource,/recordLiveIncident\('live_catchup',now\)/);
+});
+
 test('HLS 429 capacity retry uses capped backoff and never hammers the shared source',()=>{
  const start=playerSource.indexOf('function liveCapacityRetryMs(');
  const end=playerSource.indexOf('\nfunction liveUnexpectedPause(',start);
