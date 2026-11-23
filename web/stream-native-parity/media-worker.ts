@@ -314,6 +314,13 @@ function liveShareAllowed(kind,viewerSid){
 }
 function attachSharedLiveViewer(group,{key,kind,id,ext,track}){
  if(group.stopping||!group.producer||group.producer.stopped)return {error:'shared_source_unavailable',status:503};
+ // Two concurrent initial manifests for one SID must reuse the same alias.
+ // Replacing it would let its old idle timer evict this newer valid viewer.
+ const existing=hlsSessions.get(key);
+ if(existing&&!existing.stopped&&existing.sharedGroup===group){
+  touchHls(existing);touchHls(group.producer);
+  return {session:existing}
+ }
  if(group.viewers.size>=MAX_SHARED_LIVE_VIEWERS)return {error:'shared_viewers_capacity',status:429};
  const owner=group.producer;
  const session={key,kind,id,ext,track,dir:owner.dir,startedAt:Date.now(),
