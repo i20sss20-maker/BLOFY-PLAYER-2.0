@@ -2609,7 +2609,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  state.toggle=function(){
   if(video.paused){
    state.userPaused=false;
-   var p=video.play();if(p&&p.catch)p.catch(function(){}
+   var p=video.play();if(p&&p.catch)p.catch(function(){})
   }else{
    state.userPaused=true;video.pause()
   }
