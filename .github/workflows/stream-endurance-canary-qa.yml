@@ -15,6 +15,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Validate fail-closed client QoE release gate
+        run: |
+          python3 -m py_compile ops/stream-endurance/qa_release_gate.py
+          python3 -m unittest discover -s ops/stream-endurance -p 'test_*.py' -v
       - name: Create local licensed synthetic video and audio (no upstream traffic)
         run: |
           python3 -m py_compile ops/stream-endurance/endurance_probe.py
