@@ -231,3 +231,45 @@ test('stopping a live HLS session closes the upstream stream after fetch headers
  assert.equal(map.has(key),false);
  assert.equal(ctx.active,0);
 });
+
+
+test('authenticated compatibility HLS GET and STOP stay isolated from source-copy session',async()=>{
+ const begin=source.indexOf('async function hlsRequest(req,url){');
+ const end=source.indexOf('\n/* Web VOD seek experiment',begin);
+ const hashBegin=source.indexOf('function hlsKey('),hashEnd=source.indexOf('\nfunction touchHls(',hashBegin);
+ assert.ok(begin>=0&&end>begin&&hashBegin>=0&&hashEnd>hashBegin);
+ const secret='f'.repeat(64),hmac=vm.runInNewContext(source.slice(hashBegin,hashEnd)+';\nhlsKey',
+  {createHmac:crypto.createHmac,SECRET:secret});
+ const bearer='Bearer v1.00000000-0000-0000-0000-000000000000.'+'A'.repeat(43);
+ const originalKey=hmac(bearer,'live','31','ts','0'),compatKey=hmac(bearer,'live','31','ts','0',true);
+ const map=new Map(),started=[],stopped=[];
+ const ctx={
+  SECRET:secret,hlsSessions:map,hlsKey:hmac,Buffer,Response,
+  secureEquals:()=>true,join:(...args)=>args.join('/'),
+  readFileSync:()=>Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
+  existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,
+  hlsError:(status,error)=>({status,error}),
+  json:(status,value)=>({status,value}),
+  startHls:async args=>{
+   started.push(args);
+   const session={key:args.key,kind:args.kind,dir:'/fake',videoMode:args.forceCompat?'compatibility_transcode':'source_copy'};
+   map.set(session.key,session);
+   return {session}
+  },
+  stopHls:(session)=>{stopped.push(session.key);map.delete(session.key)}
+ };
+ const worker=vm.runInNewContext(source.slice(begin,end)+';\nhlsRequest',ctx);
+ const headers={get(name){if(name==='authorization')return bearer;if(name==='x-compat-secret')return secret;return null}};
+ map.set(originalKey,{key:originalKey,kind:'live',dir:'/fake',videoMode:'source_copy'});
+ const get=await worker({method:'GET',headers},new URL('http://worker/hls/live/31/ts/0/compat/index.m3u8'));
+ assert.equal(get.status,200);
+ assert.equal(get.headers.get('x-blofy-video-mode'),'compatibility_transcode');
+ assert.equal(started.length,1);
+ assert.equal(started[0].forceCompat,true);
+ assert.equal(started[0].key,compatKey);
+ assert.equal(map.has(originalKey),true,'compatibility must not replace original-video session');
+ const stop=await worker({method:'POST',headers},new URL('http://worker/hls/live/31/ts/0/compat/stop'));
+ assert.equal(stop.status,200);
+ assert.deepEqual(stopped,[compatKey]);
+ assert.equal(map.has(originalKey),true,'compatibility stop must not terminate original-video playback');
+});
