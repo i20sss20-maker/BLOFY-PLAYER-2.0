@@ -1233,6 +1233,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  },82000);
  video.onplaying=function(){
   if(!alive())return;
+  if(state.completed&&video.currentTime<5)state.completed=false;
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
   if(rec.startupTimer){clearTimeout(rec.startupTimer);rec.startupTimer=null}
   if(rec.stallTimer){clearTimeout(rec.stallTimer);rec.stallTimer=null}
@@ -1385,7 +1386,11 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  }
  rec.timer=setTimeout(function(){if(alive()&&!rec.ready){diagnose(kind,'startup_timeout','video',video.readyState||0);playerStatus('الفيلم يستغرق وقتًا أطول من المتوقع للتجهيز. جار محاولة تحميل المقاطع الأولى…')}} ,18000);
  video.onerror=function(){if(!alive())return;diagnose(kind,'media_error','video',video.error&&video.error.code);interrupted('media_error')};
- video.onplaying=function(){if(!alive())return;rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready();};
+ video.onplaying=function(){
+  if(!alive())return;
+  if(state.completed&&video.currentTime<5)state.completed=false;
+  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready()
+ };
  video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
  video.onended=function(){
   if(!alive())return;
