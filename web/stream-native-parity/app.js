@@ -559,13 +559,22 @@ function playbackDuration(p){
 }
 function progressKey(k,id){return k+':'+id}
 function getResume(k,id){return S.watch[progressKey(k,id)]||null}
+function finishResume(kind,id){
+ // Only explicitly verified media EOF can mark a title as fully watched.
+ if(kind==='live')return;
+ delete S.watch[progressKey(kind,id)];
+ profileSave('watch',S.watch)
+}
 function saveResume(kind,id,pos,duration,ready){
  if(kind==='live'||!ready||!isFinite(pos)||pos<0)return;
  duration=isFinite(duration)&&duration>0?duration:0;
  var key=progressKey(kind,id),last=S.watch[key];
  // A new player starting at zero must not overwrite a real checkpoint.
  if(pos<5&&(duration===0||(last&&last.position>30)))return;
- if(duration>0&&pos/duration>.96){delete S.watch[key]}else{
+ // Choosing the last minutes of a film does not prove it was watched.
+ // Retain the resume checkpoint until a verified end event fires.
+ if(duration>0)pos=Math.min(pos,Math.max(0,duration-1));
+ {
   var info=S.playerView&&S.playerView.kind===kind&&String(S.playerView.id)===String(id)?S.playerView:null;
   var entry={position:Math.round(pos),duration:Math.round(duration),updated:Date.now()},old=last||{};
   entry.name=String(info&&info.name||old.name||'').slice(0,140);
@@ -1232,7 +1241,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    playerStatus('انتهى مقطع قبل نهاية الفيلم؛ جار استعادة التشغيل من '+formatTime(checkpoint)+'…');
    recoverFilm();return
   }
-  saveResume(kind,id,seconds,seconds,true);
+  finishResume(kind,id);
   playerStatus('اكتملت المشاهدة')
  };
  video.onerror=function(){
@@ -1374,7 +1383,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    // Never claim that unknown-duration EOF equals finished viewing.
    interrupted('early_or_unverified_end');return
   }
-  saveResume(kind,id,duration,duration,true);
+  finishResume(kind,id);
   playerStatus('اكتملت المشاهدة')
  };
  if(shouldUseNativeHls(video)){
