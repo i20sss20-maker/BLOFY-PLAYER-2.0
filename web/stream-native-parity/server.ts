@@ -272,7 +272,16 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
  try{
   const response=await fetch(target,{method:'GET',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret,'Accept':match[7]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t'},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'hls_redirect_denied'});
-  if(!response.ok){let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){};return json(response.status,{error})}
+  if(!response.ok){
+   let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){}
+   const retrySeconds=Number(response.headers.get('retry-after')||0);
+   const headers=noCache({'Content-Type':'application/json'});
+   // Forward only numeric 1–30 second wait hints, never upstream URLs,
+   // subscription data, source headers or untrusted arbitrary retry values.
+   if(Number.isInteger(retrySeconds)&&retrySeconds>=1&&retrySeconds<=30)
+    headers['Retry-After']=String(retrySeconds);
+   return new Response(JSON.stringify({error}),{status:response.status,headers})
+  }
   var mode=response.headers.get('x-blofy-video-mode')||'unknown';
   if(!['source_copy','compatibility_transcode','ultra_transcode'].includes(mode))mode='unknown';
   var originResolution=response.headers.get('x-blofy-source-resolution')||'';
