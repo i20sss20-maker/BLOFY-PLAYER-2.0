@@ -52,6 +52,6 @@ test('manual source button uses same admin session and reports verified media fi
  assert.match(ui,/\/api\/v1\/admin\/xtream\/unavailable-media\/recheck-now/);
  assert.match(ui,/method:'POST',body:JSON\.stringify\(\{sourceId:item\.id\}\)/);
  assert.match(ui,/لا يثبت ذلك تشغيل الصوت والصورة كاملًا/);
- assert.match(ui,/const \[data,unavailable\]=await Promise\.all/);
+ assert.match(ui,/const \[data,unavailable,minuteWatch\]=await Promise\.all/);
  assert.match(ui,/api\('\/api\/v1\/admin\/xtream\/unavailable-media'\)\.catch\(\(\)=>null\)/);
 });
