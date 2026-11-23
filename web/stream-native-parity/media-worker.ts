@@ -81,6 +81,52 @@ async function awaitHlsFile(session,filename,limitMs){
  return false;
 }
 function hlsError(status,error){return json(status,{ok:false,error})}
+/**
+ * Inspect a small, bounded TS prefix without consuming or discarding packets.
+ * H.264 can be repackaged into HLS MPEG-TS without changing a single frame.
+ * Non-TS/HEVC/unknown inputs still take the compatibility transcoder.
+ * The input returned here replays every prefetched byte before continuing.
+ */
+async function selectSourcePreservingInput(body,allowCopy){
+ if(!allowCopy||!body||typeof body.getReader!=='function')
+  return {input:body,copyVideo:false,detected:'not_applicable'};
+ const reader=body.getReader(),prefix=[];
+ let bytes=0,readCount=0,codec={video:false,audio:false},ended=false;
+ try{
+  while(bytes<188*320&&readCount<24){
+   const part=await reader.read();readCount++;
+   if(part.done){ended=true;break}
+   if(part.value&&part.value.byteLength){
+    prefix.push(part.value);bytes+=part.value.byteLength;
+    codec=tsCodecs(concatTsProbe(prefix,bytes));
+    if(codec.video)break
+   }
+  }
+ }catch(e){
+  // Do not discard the prefix even if the upstream stream stops abruptly.
+  ended=true
+ }
+ let next=0;
+ const input=new ReadableStream({
+  async pull(controller){
+   if(next<prefix.length){controller.enqueue(prefix[next++]);return}
+   if(ended){controller.close();return}
+   try{
+    const part=await reader.read();
+    if(part.done){ended=true;controller.close();return}
+    controller.enqueue(part.value)
+   }catch(e){controller.error(e)}
+  },
+  cancel(reason){return reader.cancel(reason).catch(()=>{})}
+ });
+ return {input,copyVideo:!!codec.video,detected:codec.video?'h264_transport':'needs_transcode'}
+}
+function concatTsProbe(chunks,total){
+ const out=new Uint8Array(total);let offset=0;
+ for(const chunk of chunks){out.set(chunk,offset);offset+=chunk.byteLength}
+ return out
+}
+
 async function startHls({bearer,kind,id,ext,track,key}){
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
  active++;
@@ -107,7 +153,16 @@ async function startHls({bearer,kind,id,ext,track,key}){
    return {error:'hls_start_cancelled',status:409}
   }
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
-  const videoArgs=compatibleVideoArgs(kind);
+  const sourceInput=await selectSourcePreservingInput(upstream.body,kind==='live'&&ext==='ts');
+  if(session.stopped||hlsSessions.get(key)!==session){
+   try{await sourceInput.input.cancel()}catch{}
+   return {error:'hls_start_cancelled',status:409}
+  }
+  // Stream-copy genuine H.264 live video; it avoids the 720p ceiling and
+  // removes the lossy second encoding. Only AAC needs compatibility encoding.
+  const losslessVideo=sourceInput.copyVideo;
+  session.videoMode=losslessVideo?'source_copy':'compatibility_transcode';
+  const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind);
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
    '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
@@ -118,7 +173,8 @@ async function startHls({bearer,kind,id,ext,track,key}){
    try{await upstream.body?.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
-  const proc=Bun.spawn([FFMPEG,...args],{stdin:upstream.body,stdout:'ignore',stderr:'pipe',signal:abort.signal});
+  const proc=Bun.spawn([FFMPEG,...args],{stdin:sourceInput.input,stdout:'ignore',stderr:'pipe',signal:abort.signal});
+  console.info('BLOFY_LIVE_VIDEO_MODE',{kind,mode:session.videoMode,sourceCodec:sourceInput.detected});
   session.proc=proc;
   (async()=>{try{
    let err='';const stream=proc.stderr?.getReader?.();if(!stream)return;
@@ -175,7 +231,7 @@ async function hlsRequest(req,url){
   const data=readFileSync(join(sess.dir,filename));
   if(!data.length)return hlsError(503,'hls_file_empty');
   const playlist=filename==='index.m3u8';
-  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'};
+  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','X-Blofy-Video-Mode':sess.videoMode||'unknown'};
   return new Response(data,{status:200,headers});
  }catch{return hlsError(502,'hls_read_failed')}
 }
