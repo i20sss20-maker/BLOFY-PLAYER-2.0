@@ -1,0 +1,39 @@
+name: BLOFY Xtream origin lifetime and transport phase QA
+on:
+  push:
+    branches:
+      - fix/xtream-upstream-lifetime-transport-phases-20261124
+    paths:
+      - 'services/activation/src/xtream-live-ts-recovery.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-source-lifetime-proof.test.mjs'
+      - '.github/workflows/blofy-xtream-lifetime-qa.yml'
+  pull_request:
+    paths:
+      - 'services/activation/src/xtream-live-ts-recovery.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-source-lifetime-proof.test.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  origin-lifetime-and-transport-phases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify syntax, legacy recovery, and new source lifetime evidence
+        run: |
+          node --check services/activation/src/xtream-live-ts-recovery.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+          node --test services/activation/test/xtream-live-ts-recovery.test.mjs services/activation/test/xtream-source-lifetime-proof.test.mjs
+      - name: Explain validation boundary
+        if: always()
+        run: |
+          echo 'Synthetic MPEG-TS only, no subscribers, real Xtream URLs, databases, or credentials queried.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Passing QA cannot certify real TV playback or fix third-party upstream EOF.' >> "$GITHUB_STEP_SUMMARY"

@@ -1724,6 +1724,20 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
                 sourceId:row.server_id,kind:'live'
               }));
             },
+            onSourceLifetime:({reason,sourceUptimeMs,mediaSilenceMs,bytesDelivered})=>{
+              // Distinguish upstream socket lifetime from last-packet silence.
+              // Bucket only; no credentials, client identifier, or media URL.
+              const sourceSeconds=Number.isFinite(sourceUptimeMs)?
+                Math.round(sourceUptimeMs/10000)*10:null;
+              const silenceMs=Number.isFinite(mediaSilenceMs)?
+                Math.round(mediaSilenceMs/500)*500:null;
+              const bytesBand=bytesDelivered<1048576?'under_1mb':
+                bytesDelivered<10485760?'1_to_10mb':'over_10mb';
+              console.info('BLOFY_LIVE_TS_SOURCE_LIFETIME',JSON.stringify({
+                cause:reason,sourceSeconds,silenceMs,bytesBand,
+                sourceId:row.server_id,kind:'live'
+              }));
+            },
             onReconnect:({attempt:reconnection,interruptionMs,
               retriesThisDrop,sourceDropReason})=>{
               // HTTP 200 and reconnect success do not prove frame/audio
@@ -1813,7 +1827,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           'live_ts_reconnect_exhausted','live_ts_reconnect_denied',
           'live_ts_reconnect_rate_limited','live_ts_reconnect_budget_exhausted'].includes(reason)
           ? reason : (networkReason||'upstream_unreachable');
-        console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
+        // Distinguish a failed origin connection, prestart validation, and
+        // an interrupted response after media began. A reset alone does not
+        // prove the origin or our relay initiated it.
+        console.warn('xtream media relay error',JSON.stringify({
+          kind,itemId:gatewayId,reason:safeReason,attempt,
+          sourceId:row.server_id,
+          phase:res.headersSent?'media_body':response?'media_prestart':'connection',
+          route:usingIndependentRelay?'independent_relay':'direct'
+        }));
         // Switch egress ONLY if the original connection failed before
         // headers/media; never on a provider 403/404/456 or after bytes begin.
         // Existing working playback remains on its original direct route.

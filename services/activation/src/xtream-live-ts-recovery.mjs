@@ -111,7 +111,7 @@ export function liveTsSourceDropReason(error,controller){
 export async function* liveTsRecoveryBytes({
  first,reader,controller,fetchImpl,target,headers={},
  clientSignal,maxReconnects=2,waitRetry=waitXtreamMediaRetry,onReconnect=()=>{},
- onSourceDrop=()=>{},now=Date.now,
+ onSourceDrop=()=>{},onSourceLifetime=()=>{},now=Date.now,
  reconnectBudget=createLiveTsReconnectBudget()
 }={}){
  if(!tsPackets(first)||!reader||!controller||typeof fetchImpl!=='function'||
@@ -121,6 +121,7 @@ export async function* liveTsRecoveryBytes({
   throw Error('live_ts_recovery_invalid_args');
  let activeReader=reader,activeController=controller,pending=first,attempts=0;
  let lastValidatedMediaAt=Number(now());
+ let activeConnectionStartedAt=lastValidatedMediaAt,activeConnectionBytes=0;
  try{
   for(;;){
    if(clientSignal?.aborted)throw Error('live_ts_client_closed');
@@ -135,6 +136,7 @@ export async function* liveTsRecoveryBytes({
     // stream startup or an earlier successful reconnect. Keep timestamps
     // refreshed on each non-empty packet without logging viewer details.
     lastValidatedMediaAt=Number(now());
+    activeConnectionBytes+=item.value.byteLength;
     yield item.value;
     continue;
    }catch(error){
@@ -147,6 +149,14 @@ export async function* liveTsRecoveryBytes({
       Math.max(0,Math.min(86_400_000,seenAt-lastValidatedMediaAt)):null;
     try{onSourceDrop({
       reason:sourceDropReason,durationMs
+    })}catch{}
+    // A short media-silence window is NOT the source socket's lifetime.
+    // Report both separately, without a URL, subscriber key or new request.
+    const sourceUptimeMs=Number.isFinite(seenAt)&&Number.isFinite(activeConnectionStartedAt)?
+      Math.max(0,Math.min(86_400_000,seenAt-activeConnectionStartedAt)):null;
+    try{onSourceLifetime({
+      reason:sourceDropReason,sourceUptimeMs,mediaSilenceMs:durationMs,
+      bytesDelivered:activeConnectionBytes
     })}catch{}
     await closeConnection(activeReader,activeController);
     activeReader=null;activeController=null;
@@ -207,6 +217,8 @@ export async function* liveTsRecoveryBytes({
       activeReader=temporaryReader;activeController=ctl;
       temporaryReader=null;pending=validatedFirst;
       lastValidatedMediaAt=Number(now());
+      activeConnectionStartedAt=lastValidatedMediaAt;
+      activeConnectionBytes=0;
       const interruptionMs=Number.isFinite(lastValidatedMediaAt)&&Number.isFinite(seenAt)?
        Math.max(0,Math.min(60000,lastValidatedMediaAt-seenAt)):null;
       // Only bounded, sanitized, non-credential health data leave this helper.
