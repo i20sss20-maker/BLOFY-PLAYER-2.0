@@ -138,6 +138,23 @@ function concatTsProbe(chunks,total){
  return out
 }
 
+/* Source resolution is measured from FFmpeg's input stream declaration,
+ * NOT guessed from a channel label or the transcoded output. Only a numeric,
+ * sanitized width × height is ever forwarded to the browser.
+ */
+function streamInputVideoDimensions(log){
+ const input=String(log||'').split(/Output #0|Stream mapping:/)[0];
+ const lines=input.split(/\r?\n/);
+ for(const line of lines){
+  if(!/Stream #0:\d+.*Video:/i.test(line))continue;
+  const match=line.match(/(?:^|[,\s])(\d{2,4})x(\d{2,4})(?:[\s,\[]|$)/);
+  if(!match)continue;
+  const w=Number(match[1]),h=Number(match[2]);
+  if(w>=160&&w<=8192&&h>=120&&h<=4320)return w+'x'+h
+ }
+ return ''
+}
+
 async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
  active++;
@@ -176,7 +193,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
   const losslessVideo=!forceCompat&&sourceInput.copyVideo;
   session.videoMode=losslessVideo?'source_copy':'compatibility_transcode';
   const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind);
-  const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
+  const args=['-hide_banner','-loglevel','info','-nostats','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
    '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,
    // Correct audio PTS discontinuities by inserting/dropping samples rather
    // than changing playback rate and making speech sound oddly pitched.
@@ -194,9 +211,15 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
   console.info('BLOFY_LIVE_VIDEO_MODE',{kind,mode:session.videoMode,sourceCodec:sourceInput.detected});
   session.proc=proc;
   (async()=>{try{
-   let err='';const stream=proc.stderr?.getReader?.();if(!stream)return;
-   while(true){const part=await stream.read();if(part.done)break;if(err.length<3500)err+=new TextDecoder().decode(part.value).slice(0,1000)}
-   if(err)session.error=/Stream map|matches no streams/i.test(err)?'source_missing_video':/Invalid data/i.test(err)?'invalid_source_data':/encoder/i.test(err)?'encoder_failure':'transcode_error';
+   const stream=proc.stderr?.getReader?.();if(!stream)return;
+   const decoder=new TextDecoder();
+   while(true){
+    const part=await stream.read();if(part.done)break;
+    if(session.ffmpegInfo&&session.ffmpegInfo.length>=18000)continue;
+    session.ffmpegInfo=(session.ffmpegInfo||'')+decoder.decode(part.value,{stream:true});
+    if(session.ffmpegInfo.length>18000)session.ffmpegInfo=session.ffmpegInfo.slice(0,18000);
+    if(!session.sourceDimensions)session.sourceDimensions=streamInputVideoDimensions(session.ffmpegInfo)
+   }
   }catch{}})();
   proc.exited.then(code=>{
    session.abort.signal.removeEventListener('abort',abortSource);
@@ -204,7 +227,11 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
    session.sourceController=null;
    session.finished=true;
    if(session.stopped||hlsSessions.get(key)!==session){releaseHls(session);return}
-   if(code!==0)console.warn('VIDAA_HLS_FFMPEG_EXIT',{kind,code,reason:session.error||'nonzero_exit'});
+   if(code!==0){
+    const err=session.ffmpegInfo||'';
+    session.error=/Stream map|matches no streams/i.test(err)?'source_missing_video':/Invalid data/i.test(err)?'invalid_source_data':/encoder/i.test(err)?'encoder_failure':'transcode_error';
+    console.warn('VIDAA_HLS_FFMPEG_EXIT',{kind,code,reason:session.error})
+   }
    if(!existsSync(join(dir,'index.m3u8'))){session.error=session.error||'ffmpeg_no_playlist';stopHls(session,session.error)}
    else {releaseHls(session);touchHls(session)}
   }).catch(()=>{session.finished=true;session.error='process_crashed';stopHls(session,session.error)});
@@ -252,7 +279,7 @@ async function hlsRequest(req,url){
   const data=readFileSync(join(sess.dir,filename));
   if(!data.length)return hlsError(503,'hls_file_empty');
   const playlist=filename==='index.m3u8';
-  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','X-Blofy-Video-Mode':sess.videoMode||'unknown'};
+  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','X-Blofy-Video-Mode':sess.videoMode||'unknown','X-Blofy-Source-Resolution':sess.sourceDimensions||'unknown'};
   return new Response(data,{status:200,headers});
  }catch{return hlsError(502,'hls_read_failed')}
 }
