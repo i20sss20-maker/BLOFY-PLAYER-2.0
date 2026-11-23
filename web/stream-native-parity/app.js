@@ -1304,10 +1304,14 @@ function playerStatus(message,error){
  }
 }
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
- var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8';
+ var modeKey=kind+':'+id+':'+extension+':'+track;
+ var compat=!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
+ var key=kind+'/'+id+'/'+extension+'/'+track+(compat?'/compat':''),
+     manifest='/api/hls/'+key+'/index.m3u8';
  // An existing session with the same key must stop BEFORE the replacement
  // starts. A delayed stop otherwise kills the newly opened channel on VIDAA.
- if(S.play&&S.play.hlsKey===key){
+ if(S.play&&S.play.hlsKey&&(S.play.hlsKey===key||S.play.video===video)){
+  var oldHlsKey=S.play.hlsKey;
   var token=(S.hlsStopEpoch||0)+1;S.hlsStopEpoch=token;
   stopPlayback(false);
   if(statusElement)statusElement.textContent='جار إعادة تهيئة اتصال القناة…';
@@ -1325,12 +1329,12 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(preview)S.livePreview=String(id);
    playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt)
   }
-  api('POST','/api/hls/'+key+'/stop',{},function(st){finish(st)});
+  api('POST','/api/hls/'+oldHlsKey+'/stop',{},function(st){finish(st)});
   return
  }
  stopPlayback(true);
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
-  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0};
+  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0,compat:compat};
  S.play=record;
  if(preview){
   record.qualityListener=function(){
@@ -1347,6 +1351,21 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
  function alive(){return S.play===record}
+ function setCompatibility(force,automatic){
+  if(!alive()||kind!=='live'||compat===!!force)return false;
+  if(!S.hlsForceCompatibility)S.hlsForceCompatibility={};
+  S.hlsForceCompatibility[modeKey]=!!force;
+  status(automatic?'تعذر فك ترميز الفيديو الأصلي؛ جار تشغيل نسخة متوافقة…':
+    force?'جار التحويل إلى تشغيل متوافق مع التلفزيون…':'جار العودة لجودة المصدر الأصلية…');
+  playHls(video,kind,id,extension,track,statusElement,preview,0);
+  return true
+ }
+ if(!preview&&S.playerView&&S.playerView.video===video){
+  S.playerView.setHlsCompatibility=function(force){
+   if(S.route==='player'&&S.playerView&&S.playerView.video===video)
+    setCompatibility(force,false)
+  }
+ }
  function recoverConnection(){
   if(!alive()||record.reconnecting||preview)return;
   var state=S.playerView;
@@ -1390,7 +1409,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   else playerStatus(text)
  }
  video.onerror=function(){if(alive()){
-  var unsupported=video.error&&video.error.code===4;
+  var unsupported=video.error&&(video.error.code===4||video.error.code===3);
+  if(unsupported&&setCompatibility(true,true))return;
   if(unsupported&&window.MediaSource&&window.MediaSource.isTypeSupported){
    S.preferMseHls=true;
    status('المشغّل الأصلي لا يدعم الترميز؛ جار التحويل إلى مشغّل HLS المتوافق…')
@@ -1458,6 +1478,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
      record.retries++;status('جار إعادة تهيئة الفيديو…');try{engine.recoverMediaError()}catch(e){};return;
     }
+    if(detail.type===window.Hls.ErrorTypes.MEDIA_ERROR&&setCompatibility(true,true))return;
     recoverConnection()
    });
    engine.attachMedia(video);engine.loadSource(manifest)
@@ -1854,7 +1875,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  // Never send asynchronous /stop for that key after starting fullscreen:
  // late /stop responses would kill the newly opened FFmpeg session.
  var oldPreview=S.play,fullKey='live/'+id+'/ts/0';
- if(isLive&&oldPreview&&oldPreview.preview&&oldPreview.hlsKey===fullKey){
+ if(isLive&&oldPreview&&oldPreview.preview&&(oldPreview.hlsKey===fullKey||oldPreview.hlsKey===fullKey+'/compat')){
   if(S.previewToFullPending)return;
   S.previewToFullPending=true;
   var expectedRoute=S.route,expectedId=String(id);
@@ -2661,6 +2682,19 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   showPlayerChoices('الترجمة',options,this)
  };
  if(qualityButton)qualityButton.onclick=function(){
+  // The native-like TV quality panel can explicitly switch H.264 source-copy
+  // to the bounded compatible encoder when an older VIDAA decoder rejects it.
+  if(isLive&&state.setHlsCompatibility){
+   var modeKey='live:'+state.id+':ts:0';
+   var forced=!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
+   showPlayerChoices('جودة تشغيل البث',[
+    {name:'أصلي • بدون ضغط إضافي (عند دعم الجهاز)',selected:!forced,
+     select:function(){state.setHlsCompatibility(false)}},
+    {name:'متوافق • تحويل الفيديو للتلفزيون (حتى 720p)',selected:forced,
+     select:function(){state.setHlsCompatibility(true)}}
+   ],this);
+   return
+  }
   var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
   if(!engine||!levels.length){
    var width=Number(video.videoWidth)||0,height=Number(video.videoHeight)||0;
