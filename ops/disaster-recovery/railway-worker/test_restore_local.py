@@ -16,7 +16,7 @@ from worker import encrypt_file
 
 def run(argv):
     return subprocess.run(argv, check=True, stdout=subprocess.DEVNULL,
-                          stderr=subprocess.PIPE, timeout=90)
+                          stderr=subprocess.DEVNULL, timeout=90)
 
 
 def main():
