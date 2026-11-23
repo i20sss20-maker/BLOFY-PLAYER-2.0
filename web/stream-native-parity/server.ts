@@ -275,9 +275,12 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
   if(!response.ok){let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){};return json(response.status,{error})}
   var mode=response.headers.get('x-blofy-video-mode')||'unknown';
   if(mode!=='source_copy'&&mode!=='compatibility_transcode')mode='unknown';
+  var originResolution=response.headers.get('x-blofy-source-resolution')||'';
+  if(!/^(?:[1-9][0-9]{1,3})x(?:[1-9][0-9]{1,3})$/.test(originResolution))originResolution='unknown';
   return new Response(response.body,{status:200,headers:noCache({
    'Content-Type':match[6]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t',
-   'Accept-Ranges':'none','X-Blofy-Video-Mode':mode
+   'Accept-Ranges':'none','X-Blofy-Video-Mode':mode,
+   'X-Blofy-Source-Resolution':originResolution
   })});
  }catch(e){return json(502,{error:'hls_worker_unreachable'})}
 }
