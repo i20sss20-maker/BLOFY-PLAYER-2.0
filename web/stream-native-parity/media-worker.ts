@@ -15,6 +15,14 @@ const hardTTL=9*60*1000;
 function hlsKey(bearer,kind,id,ext,track){return createHmac('sha256',SECRET).update([bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40)}
 function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
+ // The old fixed 9-minute timer killed active live streams even as viewers
+ // kept fetching HLS segments. Refresh the guard only for legacy HLS sessions;
+ // idle timeout still releases abandoned sessions after 110 seconds.
+ if(session.legacyHls&&session.hardTimer){
+  clearTimeout(session.hardTimer);
+  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
+  session.hardTimer.unref?.();
+ }
  // Full-duration VOD generates chunks only on demand. Pausing longer than
  // two minutes must not invalidate its segment URL when playback resumes.
  const idleMs=session.fullVod?25*60*1000:110000;
@@ -50,7 +58,7 @@ async function startHls({bearer,kind,id,ext,track,key}){
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
  active++;
  const abort=new AbortController(),dir=join(hlsRoot,key);
- const session={key,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
+ const session={key,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true};
  hlsSessions.set(key,session);
  mkdirSync(dir,{recursive:true});
  touchHls(session);
