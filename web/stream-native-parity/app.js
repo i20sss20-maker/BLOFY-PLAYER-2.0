@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
- watch:{},favoriteItems:{},profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
+ watch:{},favoriteItems:{},lastPlaybackDiag:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -23,6 +23,7 @@ function useProfile(id){
  S.watch=readJson(profileStorageKey('watch'),{});
  S.favoriteItems=readJson(profileStorageKey('favoriteItems'),{});
  S.recentSearches=readJson(profileStorageKey('recentSearches'),[]);
+ S.lastPlaybackDiag=readJson(profileStorageKey('lastPlaybackDiag'),null);
  if(changed){
   if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
   S.epgToken++;S.epgCache={};
@@ -68,7 +69,7 @@ function deviceKey(){
 function login(message){
  S.accountEpoch++;
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
- S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];
+ S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;
  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
@@ -497,6 +498,21 @@ function bindMoreOnScroll(kind){
    if(button&&!button.disabled)loadMore(kind)
   },130)
  },{passive:true})
+}
+function recordPlaybackQuality(p){
+ if(!p||!p.stats||!S.profileKey)return;
+ var st=p.stats,now=Date.now(),bufferMs=st.bufferMs||0;
+ if(st.bufferSince)bufferMs+=Math.max(0,now-st.bufferSince);
+ // No channel ID, access token, customer code or provider URL is retained.
+ var result={kind:p.kind==='live'?'live':p.kind==='series'?'series':'movie',
+  mode:['fullvod','vodhls','direct','hls','mpegts'].indexOf(p.mode)>=0?p.mode:'unknown',
+  startupMs:st.firstFrameAt?Math.max(0,Math.min(120000,st.firstFrameAt-st.openedAt)):null,
+  bufferingEvents:Math.max(0,Math.min(999,st.bufferEvents||0)),
+  bufferingMs:Math.max(0,Math.min(3600000,Math.round(bufferMs))),
+  errors:Math.max(0,Math.min(99,st.errors||0)),
+  stoppedAt:now};
+ S.lastPlaybackDiag=result;
+ profileSave('lastPlaybackDiag',result)
 }
 function playbackDuration(p){
  if(!p)return 0;
@@ -1317,7 +1333,27 @@ function openPlayer(kind,id,extension,name,from){
  '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
-  art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId()};
+  art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
+   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0}};
+ function onBufferEvent(){
+  var stats=state.stats;
+  if(S.route!=='player'||S.playerView!==state||video.paused||!stats.firstFrameAt)return;
+  if(!stats.bufferSince){stats.bufferEvents++;stats.bufferSince=Date.now()}
+ }
+ function onPlayingEvent(){
+  var stats=state.stats,now=Date.now();
+  if(!stats.firstFrameAt)stats.firstFrameAt=now;
+  if(stats.bufferSince){stats.bufferMs+=Math.max(0,now-stats.bufferSince);stats.bufferSince=0}
+ }
+ function onPauseEvent(){
+  var stats=state.stats;
+  if(stats.bufferSince){stats.bufferMs+=Math.max(0,Date.now()-stats.bufferSince);stats.bufferSince=0}
+ }
+ video.addEventListener('waiting',onBufferEvent);
+ video.addEventListener('stalled',onBufferEvent);
+ video.addEventListener('playing',onPlayingEvent);
+ video.addEventListener('pause',onPauseEvent);
+ video.addEventListener('error',function(){state.stats.errors++});
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
  function releaseWakeLock(){
   var lock=state.wakeLock;state.wakeLock=null;
@@ -1663,6 +1699,7 @@ function openPlayer(kind,id,extension,name,from){
  if(nextBtn&&nextEpisode)nextBtn.onclick=function(){
   if(state.ready)saveResume(kind,id,realPos(),totalDuration(),true);
   var previous=S.previousBeforePlayer||{route:'episodes',kind:'series',id:id};
+  recordPlaybackQuality(state);
   cleanupPlayer();S.playerView=null;S.route='episodes';
   var nextId=String(nextEpisode.id),checkpoint=getResume('series',nextId);
   openPlayer('series',nextId,nextEpisode.container_extension||'mp4',nextEpisode.title||'الحلقة '+(nextEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0);
@@ -1703,6 +1740,7 @@ function openPlayer(kind,id,extension,name,from){
 }
 function closePlayer(){
  var state=S.playerView;
+ if(state&&S.route==='player')recordPlaybackQuality(state);
  if(state&&S.route==='player'&&state.kind!=='live'){
   var video=state.video,pos=state.mode==='vodhls'?state.offset+(video.currentTime||0):(video.currentTime||0);
   var duration=playbackDuration(state);
@@ -1829,7 +1867,10 @@ function persistPlaybackCheckpoint(){
  var duration=playbackDuration(p);
  saveResume(p.kind,p.id,pos,duration,true)
 }
-window.addEventListener('beforeunload',persistPlaybackCheckpoint);
+window.addEventListener('beforeunload',function(){
+ persistPlaybackCheckpoint();
+ if(S.playerView)recordPlaybackQuality(S.playerView)
+});
 window.addEventListener('pagehide',persistPlaybackCheckpoint);
 document.addEventListener('visibilitychange',function(){
  if(document.hidden){
