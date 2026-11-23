@@ -1401,6 +1401,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    return response.headers.get('x-blofy-video-mode')||''
   }).then(function(mode){
    if(!alive()||S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
+   record.videoMode=mode;
+   if(S.playerView.refreshVideoResolution)S.playerView.refreshVideoResolution();
    var tag=document.getElementById('player-source-mode');
    if(!tag)return;
    if(mode==='source_copy'){
@@ -2239,7 +2241,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(!w||!h){el.hidden=true;el.textContent='';return}
   var grade=h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD';
   // These are actual decoded pixels, not guessed from the Xtream title.
-  el.textContent='المعروض '+w+'×'+h+' • '+grade;
+  var copyMode=!!(S.play&&S.play.video===video&&S.play.videoMode==='source_copy');
+  el.textContent='المعروض '+w+'×'+h+' • '+grade+
+   (copyMode&&h<690?' • المصدر نفسه SD':'');
   el.title='دقة الصورة التي يعرضها المتصفح، وليس جودة المصدر المعلنة';
   el.hidden=false
  }
