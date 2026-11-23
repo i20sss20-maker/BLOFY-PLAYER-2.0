@@ -55,6 +55,14 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
   const interrupted=events.filter(row=>row.phase==='interrupted');
   const recovered=events.filter(row=>row.phase==='recovered');
   const sourceDropped=events.filter(row=>row.phase==='source_drop'&&row.kind==='live');
+  // Reconnection transport gaps are distinct from upstream socket uptime.
+  // This sample may be missing on old worker versions; never infer zero.
+  const liveRecoveryGaps=recovered.filter(row=>
+    row.kind==='live'&&row.reason==='live_ts_recovered'&&
+    row.durationMs!==null&&Number.isFinite(row.durationMs))
+    .map(row=>row.durationMs).sort((a,b)=>a-b);
+  const recoveryGapPercentile=p=>liveRecoveryGaps.length?
+    liveRecoveryGaps[Math.ceil(p*liveRecoveryGaps.length)-1]:null;
   const ended=events.filter(row=>row.phase==='ended');
   const clientClosed=events.filter(row=>row.phase==='client_closed');
   // Ticket issuance does not prove decoded playback.
@@ -107,6 +115,13 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     recovered:recovered.length,
     liveTsRecoverySuccesses:recovered.filter(row=>row.kind==='live'&&row.reason==='live_ts_recovered').length,
     vodRangeResumeSuccesses:recovered.filter(row=>['movie','series'].includes(row.kind)&&row.reason==='vod_range_resumed').length,
+    // Recovery means new MPEG-TS bytes reached the gateway, not that
+    // a customer decoder displayed error-free video and audio.
+    liveTsRecoveryGapSamples:liveRecoveryGaps.length,
+    medianLiveTsRecoveryGapMs:recoveryGapPercentile(0.5),
+    p95LiveTsRecoveryGapMs:recoveryGapPercentile(0.95),
+    liveTsRecoveryGapsOver3s:liveRecoveryGaps.filter(ms=>ms>=3000).length,
+    liveTsRecoveryGapsOver10s:liveRecoveryGaps.filter(ms=>ms>=10000).length,
     liveTsSourceDrops:sourceDropped.length,
     medianLiveTsSourceUptimeMs,
     sourceDropByReason,
@@ -143,7 +158,9 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
       .slice(0,12).map(row=>({
         at:new Date(row.at).toISOString(),
         kind:row.kind,itemId:row.itemId,reason:row.reason,
-        attempts:row.attempts
+        attempts:row.attempts,
+        // Bounded and rounded gateway reconnect duration, not playback QoE.
+        interruptionMs:row.durationMs
       })),
     recentIssues:[...failed,...interrupted,...ended].sort((a,b)=>b.at-a.at).slice(0,12).map(row=>({
       at:new Date(row.at).toISOString(),
