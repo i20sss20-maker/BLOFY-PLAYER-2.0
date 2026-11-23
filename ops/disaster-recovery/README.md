@@ -54,3 +54,26 @@ Record:
 - Recovery owner and decision to activate rotation / alarms.
 
 Do not enable automatic backup schedules until the first two production backup-and-restore drills pass. Never change customer routing, DNS, credentials, subscription entitlements or production DB contents as part of a backup smoke test.
+
+## Verified bugs corrected by the extended synthetic workflow
+
+The previous manual GitHub backup workflow installed an unspecified PostgreSQL client, which could be older than the **PostgreSQL 18** server. It now installs `postgresql-client-18` explicitly.
+
+The old backup script tried `PGDATABASE="$DATABASE_URL" pg_dump`. In the full backup-chain CI it attempted a local Unix socket rather than connecting through the supplied connection URI. This is corrected via `exec-with-postgres-dsn.py`, which parses the URI into libpq environment variables and execs `pg_dump` without embedding passwords in process arguments. Unknown URI settings fail closed.
+
+The new `test_backup_chain.sh` exercises the actual backup scripts against fake PostgreSQL subscriber rows and a **mock**, not real, AWS object store; it validates a complete scratch restore, rejects altered downloaded bytes, and rejects inconsistent remote hash metadata. CI #45208995548 completed successfully.
+
+### Railway-native backups are a complementary recovery layer
+
+Railway documents snapshots for mounted volumes with separate Daily (6-day retention), Weekly (27-day), and Monthly (89-day) schedules. Configure these **on both** the PostgreSQL volume and the update-distribution /data volume under the Railway service **Backups** tab. A restore swaps the mounted volume and redeploys, and is limited to the same project/environment; it is not a geographically independent off-site backup. The available connected Railway tool API has no volume-backup-schedule action, so this code change does not enable those schedules or prove they already exist.
+
+Railway now documents PostgreSQL point-in-time recovery (PITR), where archived WAL plus base backups support recovery to an earlier time, and an HA PostgreSQL conversion with automatic failover. Each alters production database management and requires separate verified readiness. In particular, Railway notes **active connections are dropped during HA conversion** and endpoints can change. Do not enable live HA/PITR conversion casually while paid customer sessions are active. Start with backups and a rehearsed restore, then evaluate HA in a maintenance window with a tested rollback.
+
+Docs:
+- https://docs.railway.com/volumes/backups
+- https://docs.railway.com/volumes/point-in-time-recovery
+- https://docs.railway.com/databases/postgresql-ha
+
+### CI safety exception / release-blocking status
+
+The production-source base branch was already failing the separate **BLOFY Activation CI** and **BLOFY Device Administration** workflows on 2026-11-23. These failures are unrelated to the synthetic off-site backup job, but they are still release blockers. This draft PR must not be represented as fully green or merge-ready solely because its backup-specific workflow passed.
