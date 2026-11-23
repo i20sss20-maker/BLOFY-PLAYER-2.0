@@ -368,6 +368,7 @@ function buildCatalog(kind,listing){
   '</div><div class="pane-bottom"><button class="btn secondary" data-more="live" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section>'+
   '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
   '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
+  '<p class="live-preview-quality" id="live-preview-quality" aria-live="polite">الدقة المعروضة: جار قراءة معلومات الفيديو…</p>'+
   '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
@@ -1245,7 +1246,8 @@ function stopPlayback(sendStop){
   if(old.timer)clearTimeout(old.timer);
   if(old.stallTimer)clearTimeout(old.stallTimer);
   if(old.startupTimer)clearTimeout(old.startupTimer);
-  if(old.stableTimer)clearTimeout(old.stableTimer)
+  if(old.stableTimer)clearTimeout(old.stableTimer);
+  if(old.qualityListener&&old.video){old.video.removeEventListener('loadedmetadata',old.qualityListener);old.video.removeEventListener('resize',old.qualityListener)}
  }catch(e){}
  if(old.engine){try{old.engine.destroy()}catch(e){}}
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
@@ -1319,6 +1321,19 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
   retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0};
  S.play=record;
+ if(preview){
+  record.qualityListener=function(){
+   if(S.play!==record||S.route!=='live')return;
+   var label=document.getElementById('live-preview-quality');
+   if(!label)return;
+   var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
+   label.textContent=w&&h?'الدقة المعروضة فعليًا: '+w+'×'+h+' • '+(h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD'):
+    'الدقة المعروضة: جار قراءة معلومات الفيديو…'
+  };
+  video.addEventListener('loadedmetadata',record.qualityListener);
+  video.addEventListener('resize',record.qualityListener);
+  record.qualityListener()
+ }
  video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
  function alive(){return S.play===record}
  function recoverConnection(){
