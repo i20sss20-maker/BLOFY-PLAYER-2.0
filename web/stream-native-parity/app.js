@@ -1405,6 +1405,40 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
   return 'resync'
  }catch(e){return 'restart'}
 }
+/* A viewer can fall far behind even while the audio/video clocks continue.
+ * With MSE Hls.js (not the native TV HLS engine), return to a validated live
+ * edge after sustained lag, without restarting its shared source/encoder.
+ * The 90-second cool-down protects decoders and slower Wi-Fi connections.
+ */
+function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
+ if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
+    record.reconnecting||Number(video.readyState)<2){
+  record.liveLagSince=0;return false
+ }
+ var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
+ var gap=edge-at;
+ if(!Number.isFinite(edge)||!Number.isFinite(at)||edge<=0||at<0||
+    !Number.isFinite(gap)||gap<16||gap>180){
+  record.liveLagSince=0;return false
+ }
+ var ranges=video.seekable;
+ if(ranges&&ranges.length){
+  try{
+   var last=ranges.length-1,first=Number(ranges.start(last)),end=Number(ranges.end(last));
+   if(!Number.isFinite(first)||!Number.isFinite(end)||edge<first||edge>end+1){
+    record.liveLagSince=0;return false
+   }
+  }catch(e){record.liveLagSince=0;return false}
+ }
+ if(!record.liveLagSince){record.liveLagSince=now;return false}
+ if(now-record.liveLagSince<8000)return false;
+ if(record.lastLiveCatchupAt&&now-record.lastLiveCatchupAt<90000)return false;
+ try{
+  video.currentTime=edge;
+  record.lastLiveCatchupAt=now;record.liveLagSince=0;
+  return true
+ }catch(e){record.liveLagSince=0;return false}
+}
 function liveOriginRetryMs(attempt){
  // A temporary origin failure should not trigger a tight re-open loop.
  var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
@@ -1425,7 +1459,7 @@ function recordLiveIncident(code,now){
   decoder_paused:'توقف مفاجئ في المشغل',picture_freeze:'تجمد الصورة',
   reconnect:'بدء استعادة اتصال القناة',decoder_error:'خطأ فك ترميز الصورة',
   source_error:'فشل مؤقت في اتصال المصدر',encoder_capacity:'المحرك مشغول',
-  live_edge_resync:'تجاوز مقطع قديم إلى البث الحي',
+  live_edge_resync:'تجاوز مقطع قديم إلى البث الحي',live_catchup:'اللحاق بالبث المباشر',
   channel_switch:'تغيير القناة'
  };
  if(!Object.prototype.hasOwnProperty.call(names,code))return false;
@@ -1717,6 +1751,11 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     record.lastProgressAt=now;return
    }
    var progress=livePlaybackProgress(record,video,now);
+   if(liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
+    if(!preview)recordLiveIncident('live_catchup',now);
+    status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
+    return
+   }
    if(progress.advanced)return;
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
@@ -2457,7 +2496,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
      var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
       picture_freeze:'تجمد الصورة',reconnect:'استعادة الاتصال',decoder_error:'فك الترميز',
       source_error:'المصدر',encoder_capacity:'ازدحام المعالجة',
-      live_edge_resync:'العودة للبث المباشر',channel_switch:'تغيير القناة'};
+      live_edge_resync:'العودة للبث المباشر',live_catchup:'تسريع اللحاق بالبث',channel_switch:'تغيير القناة'};
      return ' '+new Date(item.at).toISOString().slice(11,19)+' '+(labels[item.code]||'تشغيل')
     }).join(' ؛ '):' لا توجد أحداث مسجلة'),
    'النتيجة الأولية: '+assessment,
