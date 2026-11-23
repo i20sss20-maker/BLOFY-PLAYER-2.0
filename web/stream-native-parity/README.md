@@ -140,3 +140,12 @@ For a source that does not expose full runtime metadata, TV and touch users can 
 The unit scenarios cover a 24-second early end on a 120-minute movie; source EOF with unknown duration; plausible completion near the true end; unfinished seeking; minute 60 -> absolute 3600s; invalid input; and a deliberate return to minute 0. These are simulated logic checks, not end-to-end testing with customer video or physical TV hardware.
 
 **Recent Railway traffic observation:** Proxy request metrics for the previous day included real authenticated VOD and live transport requests, not just synthetic FFmpeg health tests. HTTP responses for initial full VOD segments were successful, while prior legacy VOD and live manifests included transient 502/503 responses. The presence of successful segment requests does not prove the browser decoded a full film or that distant random seeks work for every Xtream source.
+
+
+## جودة الصورة وتوافق أجهزة VIDAA (نسخة الويب التجريبية)
+
+- **البث المباشر H.264 / MPEG-TS:** عند تعرف المحرك على ترميز H.264 داخل المصدر ينقل إطارات الفيديو الأصلية إلى HLS دون إعادة ترميزها؛ ويحوّل الصوت إلى AAC لتوافق المتصفحات. لا يمكن رفع جودة مصدر SD ضعيف بهذه الطريقة.
+- **بقية البث المباشر:** يظل مسار H.264 التوافقي بحد افتراضي **720p** للحفاظ على استقرار الأجهزة القديمة. يُرفع اختباريًا عبر `VIDAA_LIVE_VIDEO_PROFILE=1080` بعد اختبار المصدر والتلفزيون والموارد.
+- **الأفلام والمسلسلات التي تحتاج إلى التحويل:** الحد التجريبي الافتراضي حاليًا **1080p** بجودة CRF 18، بحد معدل 8.5 Mbps، وإعداد veryfast / film؛ يستخدم المحرك حجم الصورة الأصلي إذا كان أصغر. يمكن التراجع إلى 720p عبر `VIDAA_VOD_VIDEO_PROFILE=720` دون تغيير ملفات المصدر. تشغيل MP4 المباشر المتوافق لا يمر بإعادة ترميز.
+- **تشخيص الجودة:** يظهر في المشغل قياس دقة الفيديو التي فكّها المتصفح، وهل مسار تشغيل البث مباشر أم أُعيد ضغطه، وفي معاينة القنوات تظهر الأبعاد الحقيقية كذلك. أسماء القنوات مثل 4K و8K وHD ليست دليلًا على الدقة الفعلية.
+- **قيود مهمة:** لا يضمن تحويل 1080p تحقيق 1080p حقيقي إذا كان المصدر أقل جودة. بعض ترميزات HEVC وملفات MKV لا تزال تحتاج تحويلًا وقد تسبب عبئًا على معالج الخادم. الحد الحالي عمليتا FFmpeg متزامنتان فقط. يجب قياس زمن بداية الصورة، وتقطيع البث، وسقوط الإطارات، وقدرة الخادم على مصدر مصرح به وشاشة Toshiba/VIDAA فعلية قبل اعتماد عمومي.
