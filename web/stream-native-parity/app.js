@@ -2022,9 +2022,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(state.hudTimer)clearTimeout(state.hudTimer);
   state.hudTimer=setTimeout(function(){
    state.hudTimer=null;
-   if(S.route!=='player'||S.playerView!==state||!state.ready||video.paused||!root.isConnected)return;
-   var loading=document.getElementById('player-status');
-   if(loading&&loading.style.display!=='none'&&loading.textContent)return;
+   if(S.route!=='player'||S.playerView!==state||!root.isConnected)return;
+   // The buffering notice lives outside the HUD; it remains readable while
+   // transport controls fade, including when decoder events are inconsistent.
+   var retry=document.getElementById('player-retry');
+   if(retry&&retry.style.display!=='none')return;
    // Keep intentional menus visible until the viewer closes them.
    var panels=['player-more-panel','player-info-panel','player-health-panel',
     'player-jump-panel','player-choice-panel','player-channel-panel'];
