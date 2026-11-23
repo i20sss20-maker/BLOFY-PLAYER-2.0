@@ -27,12 +27,15 @@ internal data class PlaybackBufferBudget(
 }
 
 internal object PlaybackBufferPolicy {
-    fun forKind(contentKind: String): PlaybackBufferBudget = when (contentKind) {
+    fun forKind(contentKind: String, resilientStreamLive: Boolean = false): PlaybackBufferBudget = when (contentKind) {
         "live", "live_preview" -> PlaybackBufferBudget(
             minBufferMs = 8_000,
             maxBufferMs = 22_000,
             playbackStartMs = 800,
-            afterRebufferMs = 1_800,
+            // Following a recovered Xtream TS gap, avoid resuming with only
+            // a thin queue that may empty on the very next source hiccup.
+            // Preserve fast initial tuning (800ms) and the same memory cap.
+            afterRebufferMs = if (resilientStreamLive) 3_200 else 1_800,
             maxBufferBytes = 16 * 1024 * 1024
         )
         else -> PlaybackBufferBudget(
