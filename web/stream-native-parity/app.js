@@ -1425,14 +1425,19 @@ function openPlayer(kind,id,extension,name,from){
  '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+' <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار فحص وضع التشغيل')+'</span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
- (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
+ (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ دقيقة محددة</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
  '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
  (isLive?'':'<button class="btn secondary" id="player-subtitles" aria-label="خيارات الترجمة">CC الترجمة</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
  '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
  '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">📊 حالة التشغيل</button></div>'+
- '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section></div></section>';
+ '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section>'+
+ (isLive?'':'<form class="player-jump-panel" id="player-jump-panel" hidden><label for="player-jump-minute">الانتقال إلى الدقيقة (0–359)</label>'+
+ '<input id="player-jump-minute" type="number" inputmode="numeric" min="0" max="359" step="1" required placeholder="مثلاً 10">'+
+ '<button class="btn" type="submit">انتقال</button><button class="btn secondary" type="button" id="player-jump-cancel">إلغاء</button>'+
+ '<small>القفز يعتمد على دعم المصدر للقراءة العشوائية؛ بعض مصادر Xtream قد لا تسمح به.</small></form>')+
+ '</div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
@@ -1758,6 +1763,35 @@ function openPlayer(kind,id,extension,name,from){
   return target
  }
  state.seekTo=seekTo;
+ var jumpToggle=document.getElementById('player-jump-toggle');
+ var jumpPanel=document.getElementById('player-jump-panel');
+ function closeJumpPanel(){
+  if(!jumpPanel)return;
+  jumpPanel.hidden=true;
+  if(jumpToggle)jumpToggle.setAttribute('aria-expanded','false')
+ }
+ if(jumpToggle&&jumpPanel){
+  jumpToggle.onclick=function(){
+   jumpPanel.hidden=!jumpPanel.hidden;
+   jumpToggle.setAttribute('aria-expanded',String(!jumpPanel.hidden));
+   if(!jumpPanel.hidden){
+    var input=document.getElementById('player-jump-minute');
+    if(input){input.value=String(Math.max(0,Math.min(359,Math.floor(realPos()/60))));input.focus()}
+   }
+  };
+  var cancel=document.getElementById('player-jump-cancel');
+  if(cancel)cancel.onclick=function(){closeJumpPanel();jumpToggle.focus()};
+  jumpPanel.onsubmit=function(event){
+   event.preventDefault();
+   var input=document.getElementById('player-jump-minute');
+   var text=input?String(input.value||'').trim():'',minute=Number(text);
+   if(!/^\d{1,3}$/.test(text)||!Number.isInteger(minute)||minute<0||minute>359){
+    playerStatus('أدخل دقيقة صحيحة بين 0 و359.');if(input)input.focus();return
+   }
+   closeJumpPanel();jumpToggle.focus();
+   seekTo(minute*60)
+  }
+ }
  state.seekBy=function(delta){
   // TV key-repeat sends many events in one second. Show immediate preview
   // but issue only ONE network seek after the remote stops repeating,
