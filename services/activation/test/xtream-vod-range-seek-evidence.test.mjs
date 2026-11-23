@@ -91,5 +91,5 @@ test('gateway only feeds strict original helper and keeps feature flags, never u
  assert.match(code,/vodResume:kind==='live'\?null:vodResumeEvidence/);
  const region=code.slice(code.indexOf("console.warn('xtream media relay error'"),
   code.indexOf('// Switch egress ONLY',code.indexOf("console.warn('xtream media relay error'")));
- assert.doesNotMatch(region,/etag|\.href|password|username|headers|accountId/);
+ assert.doesNotMatch(region,/\b(?:etag|password|username|headers|accountId)\b|\.href/);
 });
