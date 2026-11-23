@@ -40,6 +40,6 @@ separately documented full database restore exercise. The archive remains
 inside Railway (different region), not in an independent provider.
 
 Recommended production schedule: writer `0 */6 * * *` UTC; verifier
-`20 * * * *` UTC. Keep both tasks single-replica, no public domains, no
+`*/30 * * * *` UTC. Keep both tasks single-replica, no public domains, no
 persistent storage. Never start manual backups in a loop or extend connection
 limits to diagnose viewer problems.
