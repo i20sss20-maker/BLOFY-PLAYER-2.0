@@ -104,8 +104,8 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  const state=await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code,paused:v.paused}));
  expect(state.error).toBeFalsy();
 });
-test('VOD MKV conversion playlist starts in Chrome and resumes from an explicit offset',async({page})=>{
- movie.container_extension='mkv';movie.duration_secs=240;
+test('unknown-duration MKV VOD fallback decodes a temporary HLS playlist',async({page})=>{
+ movie.container_extension='mkv';delete movie.duration_secs;
  const text=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
  const names=[...new Set(text.match(/seg-[0-9]{6}[.]ts/g)||[])];
  expect(names.length).toBeGreaterThanOrEqual(2);
@@ -137,6 +137,39 @@ test('VOD MKV conversion playlist starts in Chrome and resumes from an explicit 
  console.log('BLOFY VOD HLS STATE',JSON.stringify({state,requests,errors}));
  expect(state.error).toBeFalsy();expect(errors).toEqual([]);
  await page.locator('#player-back').click();
+ movie.container_extension='mp4';delete movie.duration_secs;
+});
+
+test('known-duration MKV uses full VOD HLS rather than a one-minute live-style preview',async({page})=>{
+ movie.container_extension='mkv';movie.duration_secs=240;
+ const raw=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
+ const names=[...new Set(raw.match(/seg-[0-9]{6}[.]ts/g)||[])];
+ expect(names.length).toBeGreaterThanOrEqual(2);
+ const segments={};for(const name of names)segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
+ const requests=[],errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/api/vodfull/movie/11/mkv/0/240/**',async route=>{
+  const name=new URL(route.request().url()).pathname.split('/').pop();
+  requests.push(name);
+  if(name==='stop')return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});
+  if(name==='index.m3u8'){
+   const body='#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n'+
+    names.map(name=>'#EXTINF:1.000,\n'+name+'\n').join('')+'#EXT-X-ENDLIST\n';
+   return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',body});
+  }
+  if(segments[name])return route.fulfill({status:200,contentType:'video/mp2t',body:segments[name]});
+  return route.fulfill({status:404,body:'missing full VOD segment'});
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect(page.locator('#player-mode-badge')).toContainText('VOD');
+ await expect.poll(()=>requests.includes('index.m3u8'),{timeout:12000}).toBe(true);
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:16000}).toBeGreaterThan(1);
+ const state=await page.locator('#player-media').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code}));
+ expect(state.error).toBeFalsy();expect(errors).toEqual([]);
  movie.container_extension='mp4';delete movie.duration_secs;
 });
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
