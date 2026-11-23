@@ -316,6 +316,29 @@ function pruneFullVod(session,near){
   }
  }catch{}
 }
+function scheduleFullVodPrefetch(session,finishedChunk){
+ const next=finishedChunk+FULL_CHUNK_SEGMENTS;
+ if(session.stopped||session.prefetchNext!==next||!session.finished||
+  session.chunkStart!==finishedChunk||session.exitCode!==0||session.error||
+  next*FULL_SEGMENT_SECONDS>=session.duration||active>=MAX_JOBS||
+  session.prefetchScheduled===next)return false;
+ // Avoid speculative source opens while the current encoder is still writing.
+ // Trigger at most one adjacent chunk. The viewer must have requested
+ // segment 4 or 5 to arm prefetch, so paused titles don't keep converting.
+ const last=join(session.dir,'seg-'+String(next-1).padStart(6,'0')+'.ts');
+ if(!existsSync(last))return false;
+ session.prefetchScheduled=next;
+ setTimeout(()=>{
+  if(session.prefetchScheduled!==next)return;
+  session.prefetchScheduled=null;
+  if(session.stopped||session.chunkStart!==finishedChunk||!session.finished||
+   session.exitCode!==0||session.error||active>=MAX_JOBS)return;
+  const started=fullVodChunk(session,next);
+  if(started.error)console.warn('BLOFY_FULL_VOD_PREFETCH_SKIPPED',{kind:session.kind,reason:started.error});
+  else console.info('BLOFY_FULL_VOD_PREFETCH',{kind:session.kind,first:next})
+ },0);
+ return true
+}
 function fullVodChunk(session,first){
  if(session.proc&&!session.finished&&session.chunkStart===first)return {ok:true};
  if(session.proc&&!session.finished){
@@ -328,6 +351,7 @@ function fullVodChunk(session,first){
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
  session.released=false;active++;
  session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;session.chunkFinishedAt=0;
+ session.prefetchNext=null;session.prefetchScheduled=null;
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
  pruneFullVod(session,first);
  session.abort=new AbortController();
@@ -372,7 +396,8 @@ function fullVodChunk(session,first){
    if(code===0&&!existsSync(firstSegment)&&!session.error)session.error='vod_source_position_unavailable';
    releaseHls(session);
    if((code!==0||session.error)&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
-   else if(!session.stopped)console.info('BLOFY_FULL_VOD_CHUNK_OK',{kind:session.kind,first,elapsedMs:Date.now()-began})
+   else if(!session.stopped)console.info('BLOFY_FULL_VOD_CHUNK_OK',{kind:session.kind,first,elapsedMs:Date.now()-began});
+   if(code===0)scheduleFullVodPrefetch(session,first)
   }).catch(()=>{if(session.proc===proc){
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
    session.finished=true;session.chunkFinishedAt=Date.now();session.error='vod_chunk_crashed';releaseHls(session)
@@ -472,6 +497,16 @@ async function fullVodRequest(req,url){
     why==='vod_source_position_unavailable'?422:session.finished?502:504;
    return json(code,{error:why})
   }
+ }
+ // Hls.js normally buffers several fragments in advance. When it reaches
+ // the final two fragments of a group, schedule just the next 24 seconds.
+ // No overlapping FFmpeg connection is opened for a given subscriber.
+ const loadedChunk=Math.floor(index/FULL_CHUNK_SEGMENTS)*FULL_CHUNK_SEGMENTS;
+ const nextChunk=loadedChunk+FULL_CHUNK_SEGMENTS;
+ if(session.chunkStart===loadedChunk&&index>=nextChunk-2&&
+  nextChunk*FULL_SEGMENT_SECONDS<session.duration){
+  session.prefetchNext=nextChunk;
+  if(session.finished)scheduleFullVodPrefetch(session,loadedChunk)
  }
  try{return new Response(readFileSync(filename),{status:200,
   headers:{'Content-Type':'video/mp2t','Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'}})}
