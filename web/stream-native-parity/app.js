@@ -536,6 +536,16 @@ function checkpointPosition(p){
  }
  return base
 }
+function vodEndedAtRealFinish(duration,position,seekIncomplete){
+ // Full-film playback must not be marked complete because a TV decoder
+ // emits "ended" after a single 24-second chunk. Unknown EVENT duration
+ // cannot prove that an arbitrary source EOF was the end of the title.
+ var length=Number(duration),seen=Number(position);
+ if(!(length>=120&&length<=21600&&isFinite(length))||
+  !(seen>=0&&isFinite(seen))||seekIncomplete)return false;
+ var tolerance=Math.min(45,Math.max(8,Math.round(length*.008)));
+ return seen>=length-tolerance
+}
 function playbackDuration(p){
  if(!p)return 0;
  var seconds=Number(p.duration)||0,observed=Number(p.video&&p.video.duration);
@@ -1211,6 +1221,15 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  };
  video.onended=function(){
   if(!alive())return;
+  var observed=Math.max(0,Number(video.currentTime)||0);
+  if(!vodEndedAtRealFinish(seconds,observed,!!state.seekIncomplete)){
+   // A TV HLS decoder sometimes sees only the local 24-second conversion
+   // and emits ended, even though our VOD manifest has a full movie timeline.
+   var checkpoint=Math.max(0,Math.floor(observed)-1);
+   if(state.ready)saveResume(kind,id,checkpoint,seconds,true);
+   playerStatus('انتهى مقطع قبل نهاية الفيلم؛ جار استعادة التشغيل من '+formatTime(checkpoint)+'…');
+   recoverFilm();return
+  }
   saveResume(kind,id,seconds,seconds,true);
   playerStatus('اكتملت المشاهدة')
  };
@@ -1346,13 +1365,15 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
  video.onended=function(){
   if(!alive())return;
-  var absolute=at+Math.max(0,video.currentTime||0),duration=state.duration||0;
-  if(duration>0&&absolute<duration-60){
-   interrupted('unexpected_end');
-  }else{
-   saveResume(kind,id,duration||absolute,duration||absolute,true);
-   playerStatus('اكتملت المشاهدة')
+  var absolute=at+Math.max(0,Number(video.currentTime)||0),
+   duration=Number(state.duration)||0;
+  if(!vodEndedAtRealFinish(duration,absolute,!!state.seekIncomplete)){
+   // The short EVENT fallback is NOT a complete movie timeline.
+   // Never claim that unknown-duration EOF equals finished viewing.
+   interrupted('early_or_unverified_end');return
   }
+  saveResume(kind,id,duration,duration,true);
+  playerStatus('اكتملت المشاهدة')
  };
  if(shouldUseNativeHls(video)){
   video.src=manifest;try{var promise=video.play();if(promise&&promise.catch)promise.catch(function(){fail('اضغط ▶ داخل المشغّل للبدء')})}catch(e){}return
