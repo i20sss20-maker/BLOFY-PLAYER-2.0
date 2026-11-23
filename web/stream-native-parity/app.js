@@ -1133,7 +1133,10 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    return
   }
   rec.pendingRecovery=true;state.fullRecoveryCount++;
-  var resumeAt=Math.max(0,Math.floor(video.currentTime||state.resume||0)-1);
+  // The browser may still report the previous frame while a seek is loading.
+  // Retry at the actual requested timestamp, not that stale video.currentTime.
+  var pending=state.pendingSeek,requested=pending&&Date.now()-pending.startedAt<35000?pending.target:null;
+  var resumeAt=Math.max(0,Math.floor(requested!==null?requested:(video.currentTime||state.resume||0))-1);
   if(state.ready)saveResume(kind,id,resumeAt,seconds,true);
   state.resume=resumeAt;
   diagnose(kind,'vod_retry','fullvod',0);
@@ -1587,6 +1590,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
    try{
     if(state.mode==='direct'){resume=target;state.resume=target;state.requestedSeek=target}
+    if(state.mode==='fullvod')state.resume=target;
     video.currentTime=target;
     if(state.mode==='direct')verifyDirectSeek(target);
     progress();return target
