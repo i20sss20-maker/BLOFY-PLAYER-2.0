@@ -597,3 +597,15 @@ html.blofy-tv-immersive,body.blofy-tv-immersive{
  .catalog-app .catalog-home{display:inline-flex}
  #catalog-update-status:not([hidden]){top:60px;left:16px;right:16px;max-width:none}
 }
+
+
+/* Display the actual decoded resolution; channel labels like "8K" or "LQ"
+ * must not be mistaken for a measurement of pixels delivered to the TV. */
+.player-resolution-badge{
+ display:inline-flex;align-items:center;vertical-align:middle;
+ border:1px solid #53cabf88;background:#0b3943e0;color:#c0f7ef;
+ margin-inline-start:7px;padding:4px 8px;border-radius:9px;
+ font-size:11px;font-weight:750;white-space:nowrap
+}
+.player-resolution-badge[hidden]{display:none!important}
+@media(max-width:730px){.player-resolution-badge{font-size:10px;white-space:normal;line-height:1.45}}
