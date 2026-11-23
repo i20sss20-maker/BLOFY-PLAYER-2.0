@@ -1976,6 +1976,11 @@ async function loadBlofyPlaybackHealth(){
     const stats=[
       ['بدأ التشغيل',m.started??0],
       ['استعادة البث المباشر من المصدر نفسه',m.liveTsRecoverySuccesses??0],
+      ['عينات قياس انقطاع الوسائط عند إعادة الاتصال',m.liveTsRecoveryGapSamples??0],
+      ['وسيط زمن استعادة بيانات TS',asMs(m.medianLiveTsRecoveryGapMs)],
+      ['95% من استعادة بيانات TS خلال',asMs(m.p95LiveTsRecoveryGapMs)],
+      ['انقطاعات إعادة اتصال ≥3 ثوانٍ',m.liveTsRecoveryGapsOver3s??0],
+      ['انقطاعات إعادة اتصال ≥10 ثوانٍ',m.liveTsRecoveryGapsOver10s??0],
       ['استكمال فيلم/حلقة من موضع التوقف',m.vodRangeResumeSuccesses??0],
       ['توقف بيانات المصدر أثناء البث',m.liveTsSourceDrops??0],
       ['متوسط عمر اتصال المصدر الوسيط',asMs(m.medianLiveTsSourceUptimeMs)],
@@ -2068,7 +2073,7 @@ async function loadBlofyPlaybackHealth(){
       issues.append(make('p','muted','لا توجد أخطاء تشغيل أو انقطاعات مصدر مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
-    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. استعادة البث تعني استقبال بيانات TS صالحة من المصدر بعد إعادة الاتصال؛ لا تثبت عدم ظهور شاشة سوداء أو استمرار الصوت على الجهاز. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403). نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. زمن الاستعادة هو مدة توقف نقل TS عند الخادم، وليس مدة الشاشة السوداء على جهاز العميل. وعند عدم وجود عينات سيظهر — بدل صفر. استعادة البث تعني استقبال بيانات TS صالحة من المصدر بعد إعادة الاتصال؛ لا تثبت عدم ظهور شاشة سوداء أو استمرار الصوت على الجهاز. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403). نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
       (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
   }catch(error){
     note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;
