@@ -1294,6 +1294,7 @@ function stopPlayback(sendStop){
   if(old.startupTimer)clearTimeout(old.startupTimer);
   if(old.retryTimer)clearTimeout(old.retryTimer);
   if(old.capacityTimer)clearTimeout(old.capacityTimer);
+  if(old.originTimer)clearTimeout(old.originTimer);
   if(old.stableTimer)clearTimeout(old.stableTimer);
   if(old.qualityListener&&old.video){old.video.removeEventListener('loadedmetadata',old.qualityListener);old.video.removeEventListener('resize',old.qualityListener)}
  }catch(e){}
@@ -1375,6 +1376,11 @@ function livePlaybackProgress(record,video,now){
  * Only act after the video was playing; honor explicit user Pause and a hidden
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
+function liveOriginRetryMs(attempt){
+ // A temporary origin failure should not trigger a tight re-open loop.
+ var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
+ return [0,2400,4100,6900,10900,16800][n]
+}
 function liveCapacityRetryMs(attempt){
  // Shared-source capacity errors must not trigger an immediate request storm.
  var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
@@ -1683,7 +1689,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    engine.on(window.Hls.Events.FRAG_LOADED,function(){
     if(alive()){
      record.lastFragmentAt=Date.now();
-     record.capacityRetries=0
+     record.capacityRetries=0;record.originRetries=0;
+     if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
     }
    });
    engine.on(window.Hls.Events.ERROR,function(event,detail){
@@ -1701,6 +1708,19 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      if(record.capacityTimer)clearTimeout(record.capacityTimer);
      record.capacityTimer=setTimeout(function(){
       record.capacityTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){recoverConnection()}
+     },delay);
+     return
+    }
+    if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     record.originRetries=(record.originRetries||0)+1;
+     if(record.originRetries>5){recoverConnection();return}
+     var delay=liveOriginRetryMs(record.originRetries);
+     status('تعثر اتصال مصدر القناة؛ محاولة تدريجية بعد '+Math.ceil(delay/1000)+' ثوانٍ…');
+     if(record.originTimer)clearTimeout(record.originTimer);
+     record.originTimer=setTimeout(function(){
+      record.originTimer=null;
       if(!alive())return;
       try{engine.startLoad()}catch(e){recoverConnection()}
      },delay);
