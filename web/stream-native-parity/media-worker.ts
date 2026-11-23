@@ -497,7 +497,16 @@ function fullVodChunk(session,first){
    if(code===0&&!existsSync(firstSegment)&&!session.error)session.error='vod_source_position_unavailable';
    releaseHls(session);
    if((code!==0||session.error)&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
-   else if(!session.stopped)console.info('BLOFY_FULL_VOD_CHUNK_OK',{kind:session.kind,first,elapsedMs:Date.now()-began});
+   else if(!session.stopped){
+    const elapsedMs=Math.max(1,Date.now()-began);
+    const outputSeconds=seconds;
+    const mediaSpeed=Math.round(outputSeconds*1000/elapsedMs*100)/100;
+    // Never include source URL, stream ID or subscription credentials.
+    // End-to-end throughput includes source waiting and encoding time.
+    const info={kind:session.kind,profile:videoQualityProfile(session.kind).name,elapsedMs,mediaSeconds:outputSeconds,speed:mediaSpeed};
+    if(mediaSpeed<0.85)console.warn('BLOFY_FULL_VOD_SLOW',info);
+    else console.info('BLOFY_FULL_VOD_CHUNK_OK',info)
+   }
    if(code===0)scheduleFullVodPrefetch(session,first)
   }).catch(()=>{if(session.proc===proc){
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
