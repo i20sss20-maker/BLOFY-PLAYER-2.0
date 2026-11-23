@@ -505,3 +505,50 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 .native-player-choice-item.selected{background:#166577;border-color:#46e4d0}
 .native-player-choice-item:hover,.native-player-choice-item:focus-visible,.native-player-choice-head button:focus-visible{
  background:#177580;outline:2px solid #e8fffc;outline-offset:1px}
+
+
+/* Toshiba/VIDAA-compatible fullscreen entry: visible without opening More.
+ * Legacy viewport properties precede modern safe-area/dvh so old Chromium TVs work. */
+.player-overlay{
+ top:0;right:0;bottom:0;left:0;width:100vw;height:100vh;height:100dvh;
+ overflow:hidden;background:#000
+}
+.player-overlay:fullscreen,.player-overlay:-webkit-full-screen,
+.player-overlay:-moz-full-screen,.player-overlay.tv-immersive{
+ position:fixed!important;top:0!important;right:0!important;bottom:0!important;left:0!important;
+ width:100vw!important;height:100vh!important;height:100dvh!important;
+ margin:0!important;padding:0!important;background:#000!important;z-index:2147483000!important
+}
+.player-overlay:fullscreen>video,.player-overlay:-webkit-full-screen>video,
+.player-overlay.tv-immersive>video{width:100%;height:100%;object-fit:contain}
+html.blofy-tv-immersive,body.blofy-tv-immersive{
+ margin:0!important;padding:0!important;overflow:hidden!important;
+ height:100%!important;width:100%!important
+}
+.native-player-topline{flex-wrap:wrap;justify-content:flex-start}
+.native-player-topline .native-player-eyebrow{margin-inline:auto}
+.native-player-fullscreen{
+ display:inline-flex;align-items:center;justify-content:center;
+ min-height:40px;padding:7px 15px;border:1px solid #70cfc4b0;
+ border-radius:12px;background:linear-gradient(110deg,#0e5e69,#123846);
+ color:#efffff;font:800 13px Arial,sans-serif;cursor:pointer;
+ white-space:nowrap;letter-spacing:0;direction:rtl
+}
+.native-player-fullscreen:hover,.native-player-fullscreen:focus-visible{
+ outline:2px solid #e8fffc;outline-offset:2px;background:#1a7781
+}
+.native-player-fullscreen[aria-pressed="true"]{
+ border-color:#78ebd3;background:#124b55
+}
+.native-stream-hud{max-height:75vh;max-height:75dvh}
+.player-overlay:fullscreen .native-stream-hud,.player-overlay:-webkit-full-screen .native-stream-hud,
+.player-overlay.tv-immersive .native-stream-hud{max-height:80vh;max-height:80dvh}
+@media(max-width:730px){
+ .native-player-fullscreen{min-height:37px;font-size:12px;padding:5px 9px}
+ .native-player-topline{gap:7px}
+ .native-stream-hud .native-player-topline{min-height:37px}
+}
+@media(max-height:540px) and (orientation:landscape){
+ .native-player-fullscreen{min-height:32px;padding:4px 9px;font-size:11px}
+ .native-player-topline{gap:7px}
+}
