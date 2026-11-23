@@ -12,7 +12,7 @@ test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress
  const end=playerSource.indexOf('\nfunction playHls(',start);
  assert.ok(start>0&&end>start,'live progress watchdog helper is present');
  const sample=vm.runInNewContext(playerSource.slice(start,end)+';\nlivePlaybackProgress',{});
- const rec={started:1000,lastProgressAt:1000,lastMediaTime:61,lastVideoFrames:500,bufferSince:2000,stallChecks:2};
+ const rec={started:1000,lastProgressAt:1000,lastMediaTime:61,lastVideoFrames:500,frameCounterObserved:true,bufferSince:2000,stallChecks:2};
  const video={readyState:4,currentTime:61,getVideoPlaybackQuality:()=>({totalVideoFrames:500})};
  assert.equal(sample(rec,video,20000).advanced,false);
  assert.equal(sample(rec,video,20000).idleMs,19000,'readyState=4 does not conceal a frozen frame');
