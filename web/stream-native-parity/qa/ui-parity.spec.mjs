@@ -472,20 +472,28 @@ test('VIDAA Back key exits immersive first, then returns to details, with fullsc
 
 test('preview-to-fullscreen awaits HLS stop acknowledgement before opening a new session',async({page})=>{
  let stopRequests=0,manifestRequests=0,releaseStop;
+ const manifestSids=[],stoppedSids=[];
  const release=new Promise(resolve=>releaseStop=resolve);
  await page.route('**/api/hls/live/31/ts/0/**',async route=>{
-  const last=route.request().url().split('/').pop().split('?')[0];
+  const path=new URL(route.request().url()).pathname;
+  const last=path.split('/').pop();
+  const sid=(path.match(/\/sid-([a-f0-9]{32})\//)||[])[1]||'';
   if(last==='stop'){
-   stopRequests++;
+   stopRequests++;stoppedSids.push(sid);
    await release;
    return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'})
   }
-  if(last==='index.m3u8'){manifestRequests++;return route.fulfill({status:503,contentType:'application/json',body:'{"error":"fixture"}'})}
+  if(last==='index.m3u8'){
+   manifestRequests++;manifestSids.push(sid);
+   return route.fulfill({status:503,contentType:'application/json',body:'{"error":"fixture"}'})
+  }
   return route.fulfill({status:404,body:'missing'})
  });
  await page.goto('http://127.0.0.1:3000/');
  await page.locator('[data-go="live"]').first().click();
  await page.locator('[data-channel="31"]').click();
+ await expect.poll(()=>manifestSids.length,{timeout:10000}).toBeGreaterThan(0);
+ expect(manifestSids[0]).toMatch(/^[a-f0-9]{32}$/);
  await page.locator('[data-preview-full]').click();
  await expect.poll(()=>stopRequests,{timeout:8000}).toBe(1);
  await page.waitForTimeout(250);
@@ -493,6 +501,11 @@ test('preview-to-fullscreen awaits HLS stop acknowledgement before opening a new
  releaseStop();
  await expect(page.locator('#player-root')).toBeVisible({timeout:8000});
  expect(stopRequests).toBe(1);
+ expect(stoppedSids[0]).toBe(manifestSids[0],
+  'preview STOP must address the original viewer SID, not the channel-wide legacy key');
+ await expect.poll(()=>new Set(manifestSids).size,{timeout:10000}).toBeGreaterThan(1);
+ expect(manifestSids.some(x=>x&&x!==stoppedSids[0])).toBe(true,
+  'fullscreen must use a fresh SID even for the same channel');
  // Playback is allowed to fail due to fixture data, but transfer ordering must hold.
 });
 
