@@ -189,6 +189,24 @@ function hlsError(status,error,retryAfterSeconds=0){
  * the next authenticated manifest GET creates a fresh session.
  * Do not affect finite movie/series manifests or healthy live streams.
  */
+/* MPEG-TS HLS has a sliding playlist. Waiting 8 seconds for a segment
+ * which is already older than #EXT-X-MEDIA-SEQUENCE cannot succeed.
+ * Return 410 promptly so the browser can jump to the live edge; don't
+ * confuse this condition with a dead upstream or restart FFmpeg.
+ */
+function expiredLiveSegment(session,filename){
+ if(!session||session.kind!=='live'||session.stopped||!/^seg-[0-9]{6}\.ts$/.test(filename))return false;
+ try{
+  if(existsSync(join(session.dir,filename)))return false;
+  const manifestPath=join(session.dir,'index.m3u8');
+  if(!existsSync(manifestPath))return false;
+  const playlist=String(readFileSync(manifestPath,'utf8'));
+  const seq=playlist.match(/^#EXT-X-MEDIA-SEQUENCE:\s*([0-9]+)\s*$/m);
+  const first=playlist.match(/seg-([0-9]{6})\.ts/);
+  const earliest=seq?Number(seq[1]):first?Number(first[1]):NaN;
+  return Number.isSafeInteger(earliest)&&Number(filename.slice(4,10))<earliest
+ }catch{return false}
+}
 function staleLiveManifest(session,filename,now){
  if(!session||session.kind!=='live'||session.stopped||!filename)return false;
  try{
@@ -491,6 +509,8 @@ async function hlsRequest(req,url){
  touchHls(sess);
  if(owner!==sess)touchHls(owner);
  if(kind==='live')noteLiveSourceHealthy(owner);
+ if(kind==='live'&&expiredLiveSegment(owner,filename))
+  return hlsError(410,'hls_segment_evicted');
  const ready=await awaitHlsFile(owner,filename,filename==='index.m3u8'?25000:8000);
  if(ready&&filename==='index.m3u8'&&kind==='live'){
   // Avoid exposing an initialized playlist before its first segment is committed.
@@ -505,7 +525,11 @@ async function hlsRequest(req,url){
   sess.firstSegmentLogged=true;
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
- if(!ready)return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout');
+ if(!ready){
+  if(kind==='live'&&expiredLiveSegment(owner,filename))
+   return hlsError(410,'hls_segment_evicted');
+  return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout')
+ }
  if(filename==='index.m3u8'&&kind==='live'&&owner.finished){
   stopHls(owner,'live_source_finished');
   return hlsError(503,'hls_source_finished')
