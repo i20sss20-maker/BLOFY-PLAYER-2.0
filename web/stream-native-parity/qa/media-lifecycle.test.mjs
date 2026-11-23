@@ -17,10 +17,11 @@ test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress
  assert.equal(sample(rec,video,20000).advanced,false);
  assert.equal(sample(rec,video,20000).idleMs,19000,'readyState=4 does not conceal a frozen frame');
  video.currentTime=62;
- assert.equal(sample(rec,video,21000).advanced,true);
+ assert.equal(sample(rec,video,21000).advanced,false,'an audio clock without new picture is still frozen');
+ video.getVideoPlaybackQuality=()=>({totalVideoFrames:501});
+ assert.equal(sample(rec,video,22000).advanced,true,'actual decoded frame advancement restores playback');
  assert.equal(rec.bufferSince,0);
  assert.equal(rec.stallChecks,0);
- video.currentTime=62;
  video.getVideoPlaybackQuality=()=>({totalVideoFrames:502});
  assert.equal(sample(rec,video,23200).advanced,true,'decoded frames also count if TV playhead is imprecise');
  video.currentTime=80;
