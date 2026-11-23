@@ -129,6 +129,12 @@ test('HD fallback keeps source dimensions without upscaling and has a bounded bi
  const full=funcs.compatibleVideoArgs('live');
  assert.match(full[full.indexOf('-vf')+1],/min\(ih,1080\)/);
  assert.equal(full[full.indexOf('-maxrate')+1],'8500k');
+ const uhd=funcs.compatibleVideoArgs('live',1,'2160');
+ assert.match(uhd[uhd.indexOf('-vf')+1],/min\(iw,3840\)/);
+ assert.match(uhd[uhd.indexOf('-vf')+1],/min\(ih,2160\)/);
+ assert.equal(uhd[uhd.indexOf('-maxrate')+1],'20000k');
+ assert.equal(uhd[uhd.indexOf('-level')+1],'5.2');
+ assert.ok(!uhd[uhd.indexOf('-vf')+1].includes('scale=3840:2160'),'do not enlarge SD sources to 4K');
  fakeEnv.VIDAA_LIVE_VIDEO_PROFILE='invalid';
  assert.equal(funcs.videoQualityProfile('live').name,'720');
  assert.equal(funcs.videoQualityProfile('movie').name,'1080');
