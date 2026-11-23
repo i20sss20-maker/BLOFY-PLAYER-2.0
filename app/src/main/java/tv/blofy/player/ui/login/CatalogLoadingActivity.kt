@@ -263,7 +263,14 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 }
             }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
-            check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
+            // On first setup a working section should not be held hostage by a
+            // temporarily unavailable Xtream category. Keep the successfully
+            // imported channels/movies/series and let Settings retry later.
+            // Existing libraries still require an all-section refresh so that
+            // promoting a partial staged catalog cannot erase cached sections.
+            check(firstLoad || result.failedSectionCount == 0) {
+                "تعذر تحميل أحد أقسام الباقة؛ تم الاحتفاظ بالمكتبة السابقة"
+            }
 
             render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
             withContext(Dispatchers.IO) {

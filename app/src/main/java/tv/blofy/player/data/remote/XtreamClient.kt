@@ -31,7 +31,10 @@ object XtreamClient {
             chain.proceed(next.build())
         }
         .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        // Large Xtream catalog sections and slower home Wi-Fi connections may
+        // pause between response chunks; do not mistake a short stall for
+        // a dead server. This is metadata-only and does not affect playback.
+        .readTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
