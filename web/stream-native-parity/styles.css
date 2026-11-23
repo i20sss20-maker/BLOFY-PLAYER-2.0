@@ -328,3 +328,29 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 .player-jump-panel small{width:100%;font-size:11px;line-height:1.5;color:#a8d9d6}
 @media(max-width:730px){.player-jump-panel{padding:8px;gap:6px}
  .player-jump-panel .btn{min-height:35px}.player-jump-panel label{font-size:12px}}
+
+
+/* Compact BLOFY STREAM cinematic controls: readable and remote/touch navigable. */
+.player-info-panel{
+ max-width:min(100%,850px);padding:13px 16px;background:rgba(8,30,38,.96);
+ border:1px solid rgba(100,224,205,.6);border-radius:14px;color:var(--soft);
+ font-size:13px;line-height:1.8;max-height:30vh;overflow-y:auto;overscroll-behavior:contain
+}
+.player-info-panel[hidden]{display:none!important}
+.player-info-panel strong{display:block;color:var(--accent);font-weight:800}
+.player-info-panel p{margin:7px 0 0;white-space:pre-wrap}
+.player-info-meta{margin-top:5px;color:var(--muted);font-size:12px}
+.player-actions .btn{white-space:nowrap}
+#player-toggle{min-width:132px}
+@media(max-width:730px){
+ .player-hud{max-height:49dvh;padding:10px 10px max(12px,env(safe-area-inset-bottom));gap:7px}
+ .player-hud .player-title{font-size:15px}
+ .player-actions{display:flex;flex-wrap:nowrap;gap:7px;overflow-x:auto;overflow-y:hidden;
+  padding:3px 2px 9px;scroll-snap-type:x proximity;overscroll-behavior-x:contain;scrollbar-width:thin}
+ .player-actions .btn{flex:0 0 auto;width:auto;min-width:92px;min-height:44px;
+  padding:8px 10px;font-size:12px;scroll-snap-align:start}
+ #player-toggle{min-width:115px}
+ .player-info-panel{max-height:25vh;padding:9px 11px;font-size:12px}
+ .player-time{font-variant-numeric:tabular-nums}
+ .seek-line{min-height:32px;touch-action:pan-x}
+}
