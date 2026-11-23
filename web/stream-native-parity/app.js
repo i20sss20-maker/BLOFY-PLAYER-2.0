@@ -906,6 +906,7 @@ function cleanupPlayer(){
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
   if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
+  if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
  }
@@ -1306,7 +1307,7 @@ function openPlayer(kind,id,extension,name,from){
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" '+(isLive?'controls':'')+' autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
  '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+' <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار فحص وضع التشغيل')+'</span></div>'+
- (isLive?'':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
+ (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
  (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
@@ -1676,7 +1677,29 @@ function openPlayer(kind,id,extension,name,from){
  if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
  else if(ext==='mp4'){startDirect()}
  else{startWithMetadata(Math.round(resume))}
- S.playerView=state
+ S.playerView=state;
+ if(isLive){
+  // Do not poll provider guide continuously; a 10-minute refresh is enough.
+  function refreshLiveGuide(){
+   if(S.route!=='player'||S.playerView!==state||!S.userVerified)return;
+   var el=document.getElementById('player-live-epg');
+   if(!el)return;
+   var cached=S.epgCache[String(id)],fresh=cached&&Date.now()-cached.time<300000;
+   if(fresh)el.innerHTML=cached.html;
+   else{
+    el.textContent='جار قراءة دليل القناة…';
+    api('GET','/api/catalog?action=get_short_epg&stream_id='+enc(id)+'&limit=5',null,function(st,data){
+     if(S.route!=='player'||S.playerView!==state)return;
+     var node=document.getElementById('player-live-epg');if(!node)return;
+     var html=st===200?formatEpg(data):'<span class="epg-empty">دليل البرامج غير متوفر حاليًا.</span>';
+     node.innerHTML=html;
+     if(st===200)S.epgCache[String(id)]={html:html,time:Date.now()}
+    })
+   }
+   state.liveEpgTimer=setTimeout(refreshLiveGuide,10*60*1000)
+  }
+  refreshLiveGuide()
+ }
 }
 function closePlayer(){
  var state=S.playerView;
