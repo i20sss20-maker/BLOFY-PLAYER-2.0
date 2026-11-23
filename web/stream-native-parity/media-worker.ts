@@ -45,8 +45,12 @@ function compatibleVideoArgs(kind,gopSeconds=1,profileOverride){
 const hlsSessions=new Map();
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
-function hlsKey(bearer,kind,id,ext,track,forceCompat,ultra=false){
+function hlsKey(bearer,kind,id,ext,track,forceCompat,ultra=false,viewerSid=''){
  const fields=[bearer,kind,id,ext,track];
+ // Each authorized viewer owns only its own HLS decoder. Without an SID,
+ // stopping one tab with the same subscription kills the other tab's stream.
+ // Empty SID preserves old preview clients without breaking existing URLs.
+ if(viewerSid)fields.push('sid:'+viewerSid);
  if(ultra)fields.push('ultra');
  else if(forceCompat)fields.push('compat');
  return createHmac('sha256',SECRET).update(fields.join('\x00')).digest('hex').slice(0,40)
@@ -262,22 +266,22 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
 }
 async function hlsRequest(req,url){
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
- const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat|ultra)\/)?stop$/);
+ const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:sid-([a-f0-9]{32})\/)?(?:(compat|ultra)\/)?stop$/);
  if(req.method==='POST'&&stop){
   const bearer=req.headers.get('authorization')||'';
   if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
-  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4],!!stop[5],stop[5]==='ultra');
+  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4],!!stop[6],stop[6]==='ultra',stop[5]||'');
   const activeSession=hlsSessions.get(key);if(activeSession)stopHls(activeSession,'viewer_stopped');
   return json(200,{ok:true});
  }
  if(req.method!=='GET')return hlsError(405,'method_not_allowed');
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
- const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat|ultra)\/)?(index\.m3u8|seg-[0-9]{6}\.ts)$/);
+ const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:sid-([a-f0-9]{32})\/)?(?:(compat|ultra)\/)?(index\.m3u8|seg-[0-9]{6}\.ts)$/);
  if(!match)return hlsError(404,'hls_invalid_resource');
  const bearer=req.headers.get('authorization')||'';
  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
- const [whole,kind,id,ext,track,compat,filename]=match;
- const key=hlsKey(bearer,kind,id,ext,track,!!compat,compat==='ultra');
+ const [whole,kind,id,ext,track,viewerSid,compat,filename]=match;
+ const key=hlsKey(bearer,kind,id,ext,track,!!compat,compat==='ultra',viewerSid||'');
  let sess=hlsSessions.get(key);
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
  if(!sess){const start=await startHls({bearer,kind,id,ext,track,key,forceCompat:!!compat,ultra:compat==='ultra'});if(start.error)return hlsError(start.status,start.error);sess=start.session}
