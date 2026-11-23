@@ -449,3 +449,39 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  .native-player-hint{display:none}
 }
 @media(prefers-reduced-motion:reduce){.native-player-control{transition:none!important}}
+
+
+/* STREAM full-screen live channel browser — original player's OK-to-channels flow. */
+.native-player-channels{min-height:36px;padding:5px 14px;font-size:12px;font-weight:800;
+ border:1px solid #7abeb86b;color:var(--white);background:#123340e0;border-radius:13px;
+ cursor:pointer}
+.native-player-channels:focus-visible{outline:2px solid #e8fffc;outline-offset:2px}
+.native-channel-panel{position:absolute;z-index:209;top:0;bottom:0;inset-inline-start:0;
+ width:min(460px,90vw);display:flex;flex-direction:column;gap:10px;
+ background:linear-gradient(120deg,rgba(6,22,29,.98),rgba(9,36,46,.98));
+ border-inline-end:1px solid #64cfc26b;box-shadow:0 0 54px #0009;
+ padding:clamp(13px,3vh,26px);color:var(--white)}
+.native-channel-panel[hidden]{display:none!important}
+.native-channel-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;
+ border-bottom:1px solid #76d4c74a;padding-bottom:11px}
+.native-channel-heading strong{font-size:21px;color:#dbfff8}
+.native-channel-close{cursor:pointer;border-radius:11px;color:#fff;font-size:12px;
+ background:#123642;border:1px solid #6dcbbd7a;padding:9px 12px}
+.native-channel-items{overflow-y:auto;min-height:0;flex:1;display:flex;flex-direction:column;
+ gap:6px;overscroll-behavior:contain;scrollbar-color:#397b7a transparent}
+.native-channel-item{width:100%;min-height:62px;display:flex;align-items:center;gap:11px;
+ border:1px solid #8ccac742;border-radius:12px;background:#10303b;color:var(--white);
+ text-align:start;padding:7px 10px;cursor:pointer;font-size:13px}
+.native-channel-item.selected{background:#175564;border-color:#46e4d0}
+.native-channel-item:hover,.native-channel-item:focus-visible,.native-channel-close:focus-visible{
+ outline:2px solid #e8fffc;outline-offset:0;background:#1b6471}
+.native-channel-item>span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}
+.native-channel-art{width:48px;height:48px;flex:0 0 48px;object-fit:contain;border-radius:8px;background:#09232f}
+.native-channel-empty{display:grid;place-items:center;color:#60d9cc}
+.native-channel-now{font-size:10px;color:#a9f5e6;white-space:nowrap}
+@media(max-width:730px){
+ .native-channel-panel{width:min(360px,93vw);padding:12px}
+ .native-channel-item{min-height:55px}
+ .native-channel-art{width:40px;height:40px;flex-basis:40px}
+ .native-player-channels{font-size:11px;padding:5px 8px;min-height:32px}
+}
