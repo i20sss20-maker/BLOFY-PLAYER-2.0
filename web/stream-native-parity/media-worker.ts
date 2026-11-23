@@ -151,9 +151,24 @@ async function localSource(req,url){
  const target=BASE+session.kind+'/'+session.id+'.'+session.ext;
  const headers={Authorization:session.bearer,'Accept':'*/*','accept-encoding':'identity'};
  const range=req.headers.get('Range');if(range&&/^bytes=\d*-\d*$/.test(range))headers.Range=range;
+ // Some upstream servers stall before responding with headers. Only bound
+ // the header wait; an active 24-second chunk must stream without a fixed
+ // total response deadline.
+ const controller=new AbortController();
+ req.signal.addEventListener('abort',()=>controller.abort(),{once:true});
+ const headerDeadline=setTimeout(()=>controller.abort(),17000);
+ let res;
  try{
-  const res=await fetch(target,{method:req.method,headers,redirect:'manual',signal:req.signal});
-  if(res.status>=300&&res.status<400)return json(502,{error:'upstream_redirect_rejected'});
+  res=await fetch(target,{method:req.method,headers,redirect:'manual',signal:controller.signal});
+ }catch(e){
+  return json(502,{error:controller.signal.aborted&&!req.signal.aborted?'upstream_source_headers_timeout':'upstream_source_unavailable'})
+ }finally{clearTimeout(headerDeadline)}
+ try{
+  if(res.status>=300&&res.status<400){try{await res.body?.cancel()}catch{};return json(502,{error:'upstream_redirect_rejected'})}
+  if(!res.ok){try{await res.body?.cancel()}catch{}
+   return json(res.status===416?416:res.status===401||res.status===403?res.status:502,
+    {error:res.status===416?'vod_source_range_unavailable':res.status===401||res.status===403?'source_authorization_failed':'upstream_source_unavailable'})
+  }
   // Do not pretend a seek succeeded if the source ignored a nonzero byte-range.
   // It would otherwise replay the beginning while the UI shows a later timestamp.
   const offset=range&&/^bytes=(\d+)-/.exec(range);
