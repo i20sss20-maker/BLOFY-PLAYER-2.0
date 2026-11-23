@@ -52,7 +52,8 @@ import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
-import {verifiedVodResumePlan,resumeVerifiedVodBytes,allowedVodResumePilot} from './xtream-vod-range-resume.mjs';
+import {verifiedVodResumePlan,resumeVerifiedVodBytes,allowedVodResumePilot,
+  verifiedSoughtVodFormat,vodResumeContractCode} from './xtream-vod-range-resume.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
@@ -1437,7 +1438,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       const controller = new AbortController();
       const cancel = () => controller.abort();
       client.signal.addEventListener('abort', cancel, { once: true });
-      let reader = null, response = null;
+      let reader = null, response = null, vodResumeEvidence = null;
       try {
         // Allow slow VOD origins more time to send headers without delaying live TV.
         // Retry and client-disconnect budgets remain unchanged.
@@ -1665,6 +1666,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         // Only DIRECT MP4/MKV VOD with strong ETag + exact Content-Length
         // may replace one failed upstream socket from the exact next byte.
         // Never reissues customer auth or restarts a live TS stream.
+        const resumeFormat=verifiedSoughtVodFormat({
+          inspection,requestRange:headers.range||null,status:response.status,
+          containerExtension:mediaExtension,
+          contentType:response.headers.get('content-type')
+        });
+        vodResumeEvidence=vodResumeContractCode({
+          kind,method:req.method,status:response.status,
+          requestRange:headers.range||null,usingIndependentRelay,
+          format:resumeFormat,headers:response.headers
+        });
         const vodPlan=verifiedVodResumePlan({
           enabled:authorizedMediaRecoveryRelease({
             enabled:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_PRODUCTION==='1',
@@ -1680,8 +1691,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }),
           kind,method:req.method,status:response.status,
           requestRange:headers.range||null,usingIndependentRelay,
-          format:inspection.format,headers:response.headers
+          format:resumeFormat,headers:response.headers
         });
+        if(vodResumeEvidence==='source_contract_verified')
+          vodResumeEvidence=vodPlan?'resume_enabled':'resume_disabled_by_policy';
         if(vodPlan&&first.value.byteLength>vodPlan.total)
           throw Error('vod_resume_initial_payload_overrun');
         // Operator-controlled pilot only. MPEG-TS over an open-ended direct
@@ -1834,7 +1847,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           kind,itemId:gatewayId,reason:safeReason,attempt,
           sourceId:row.server_id,
           phase:res.headersSent?'media_body':response?'media_prestart':'connection',
-          route:usingIndependentRelay?'independent_relay':'direct'
+          route:usingIndependentRelay?'independent_relay':'direct',
+          vodResume:kind==='live'?null:vodResumeEvidence
         }));
         // Switch egress ONLY if the original connection failed before
         // headers/media; never on a provider 403/404/456 or after bytes begin.
