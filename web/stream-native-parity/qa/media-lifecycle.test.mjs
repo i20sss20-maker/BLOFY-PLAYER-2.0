@@ -32,6 +32,34 @@ test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress
  assert.equal(sample(rec,video,45100).advanced,true,'visual progress resets the freeze timer');
 });
 
+test('displayed-frame heartbeat detects freeze even when video and audio clocks continue',()=>{
+ const start=playerSource.indexOf('function livePlaybackProgress(');
+ const end=playerSource.indexOf('\nfunction liveUnexpectedPause(',start);
+ assert.ok(start>0&&end>start);
+ const check=vm.runInNewContext(playerSource.slice(start,end)+';\nlivePlaybackProgress',{});
+ const r={started:1000,lastProgressAt:1000,lastMediaTime:45,
+  lastVideoFrames:null,framePresentationObserved:true,lastPresentedFrameAt:19000,lastSampledPresentationAt:0};
+ const v={currentTime:46,getVideoPlaybackQuality:()=>({totalVideoFrames:0})};
+ assert.equal(check(r,v,20000).advanced,true,'first presented callback is evidence of moving picture');
+ v.currentTime=47;
+ assert.equal(check(r,v,22000).advanced,false,'audio clock alone is not visual progress');
+ assert.equal(check(r,v,40000).idleMs,21000,'16-second freeze watchdog may restart this decoder');
+ r.lastPresentedFrameAt=40500;
+ assert.equal(check(r,v,41000).advanced,true,'new displayed frame resets timeout');
+ assert.equal(check(r,v,42000).advanced,false);
+ assert.equal(check(r,v,42000).idleMs,1000);
+});
+
+test('frame presentation callback is cleaned on playback stop to prevent cross-channel races',()=>{
+ const start=playerSource.indexOf('function stopPlayback(sendStop){');
+ const end=playerSource.indexOf('\nfunction cleanupPlayer()',start);
+ assert.ok(start>0&&end>start);
+ const source=playerSource.slice(start,end);
+ assert.match(source,/cancelVideoFrameCallback\(old\.presentedFrameId\)/);
+ assert.match(source,/clearInterval\(old\.progressWatchdog\)/);
+ assert.match(source,/clearTimeout\(old\.retryTimer\)/);
+});
+
 test('unexpected paused/ended TV live decoder recovers without overriding user Pause',()=>{
  const start=playerSource.indexOf('function liveUnexpectedPause(');
  const end=playerSource.indexOf('\nfunction playHls(',start);
