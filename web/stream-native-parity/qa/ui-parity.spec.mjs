@@ -266,3 +266,30 @@ test('series episode rows preserve artwork fallback and back navigation',async({
  await page.keyboard.press('Escape');
  await expect(page.locator('.detail-title')).toHaveText('مسلسل تجريبي');
 });
+
+
+test('series player navigates both directions across available episodes',async({page})=>{
+ const eps=[
+  {id:55,title:'الحلقة الأولى',episode_num:1,container_extension:'mp4',info:{duration_secs:1800}},
+  {id:56,title:'الحلقة الثانية',episode_num:2,container_extension:'mp4',info:{duration_secs:1800}}
+ ];
+ await page.route('**/api/catalog?*',async route=>{
+  const u=new URL(route.request().url());
+  if(u.searchParams.get('action')!=='get_series_info')return route.fallback();
+  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+   info:{cover:'https://example.com/show.jpg',plot:'مسلسل تجريبي'},episodes:{'1':eps}
+  })});
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="series"]').first().click();
+ await page.locator('[data-details="series:21"]').click();
+ await page.locator('[data-episodes="21"]').first().click();
+ await expect(page.locator('.episode-row')).toHaveCount(2);
+ await page.locator('[data-watch="series:55"]').click();
+ await expect(page.locator('#player-title-text')).toContainText('الحلقة الأولى');
+ await page.locator('#player-next-episode').click();
+ await expect(page.locator('#player-title-text')).toContainText('الحلقة الثانية');
+ await expect(page.locator('#player-previous-episode')).toBeVisible();
+ await page.locator('#player-previous-episode').click();
+ await expect(page.locator('#player-title-text')).toContainText('الحلقة الأولى');
+});
