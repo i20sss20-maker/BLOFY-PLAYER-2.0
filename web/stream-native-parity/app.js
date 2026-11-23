@@ -1257,6 +1257,12 @@ function stopPlayback(sendStop){
   if(old.timer)clearTimeout(old.timer);
   if(old.stallTimer)clearTimeout(old.stallTimer);
   if(old.progressWatchdog)clearInterval(old.progressWatchdog);
+  // Cancel the per-frame observer before switching media nodes, or a delayed
+  // callback from an old channel may be mistaken for recovery of the new one.
+  if(old.presentedFrameId!==null&&old.presentedFrameId!==undefined&&old.video&&typeof old.video.cancelVideoFrameCallback==='function'){
+   try{old.video.cancelVideoFrameCallback(old.presentedFrameId)}catch(err){}
+   old.presentedFrameId=null
+  }
   if(old.startupTimer)clearTimeout(old.startupTimer);
   if(old.retryTimer)clearTimeout(old.retryTimer);
   if(old.stableTimer)clearTimeout(old.stableTimer);
@@ -1322,7 +1328,12 @@ function livePlaybackProgress(record,video,now){
  // after seeing that this specific decoder has advanced it at least once.
  if(advancedFrames)record.frameCounterObserved=true;
  var frameCounterUsable=!!record.frameCounterObserved&&frames!==null&&frames>=5;
- var visualProgress=frameCounterUsable?advancedFrames:(advancedTime||advancedFrames);
+ var advancedPresented=!!record.framePresentationObserved&&Number(record.lastPresentedFrameAt)>Number(record.lastSampledPresentationAt||0);
+ // Prefer actual presented video callbacks (not the audio-only currentTime
+ // clock) on browsers supporting requestVideoFrameCallback.
+ var visualProgress=record.framePresentationObserved?advancedPresented:
+  frameCounterUsable?advancedFrames:(advancedTime||advancedFrames);
+ if(record.framePresentationObserved)record.lastSampledPresentationAt=record.lastPresentedFrameAt;
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
  if(visualProgress){
@@ -1377,6 +1388,27 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
   retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),lastProgressAt:0,lastMediaTime:null,lastVideoFrames:null,stallChecks:0,compat:compat,ultra:ultra};
  S.play=record;
+ // requestVideoFrameCallback measures frames actually submitted for display;
+ // on supported VIDAA engines this catches frozen pictures even when an
+ // audio clock keeps advancing or getVideoPlaybackQuality is unreliable.
+ if(typeof video.requestVideoFrameCallback==='function'){
+  record.watchPresentedFrame=function(){
+   if(S.play!==record||!video.isConnected)return;
+   try{
+    record.presentedFrameId=video.requestVideoFrameCallback(function(now,metadata){
+     record.presentedFrameId=null;
+     if(S.play!==record)return;
+     // An invocation itself proves a presented frame, regardless of
+     // metadata formatting differences across legacy TV firmwares.
+     record.framePresentationObserved=true;
+     record.lastPresentedFrameAt=Date.now();
+     record.presentedFrames=(record.presentedFrames||0)+1;
+     record.watchPresentedFrame()
+    })
+   }catch(e){record.presentedFrameId=null}
+  };
+  record.watchPresentedFrame()
+ }
  if(preview){
   record.qualityListener=function(){
    if(S.play!==record||S.route!=='live')return;
