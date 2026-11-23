@@ -1034,6 +1034,7 @@ function cleanupPlayer(){
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
   if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
   if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
+  if(S.playerView.channelSwitchTimer){clearTimeout(S.playerView.channelSwitchTimer);S.playerView.channelSwitchTimer=null}
   if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
   if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
   if(S.playerView.seekFrameId!==null&&S.playerView.seekFrameId!==undefined&&
@@ -2177,8 +2178,15 @@ function openPlayer(kind,id,extension,name,from){
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
    playerStatus('جار التبديل إلى '+state.name+'…');
-   playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);
-   if(state.refreshLiveGuide)state.refreshLiveGuide()
+   // Coalesce rapid remote button repeats into one source connection.
+   // Do not open a new FFmpeg session for every keydown.
+   if(state.channelSwitchTimer)clearTimeout(state.channelSwitchTimer);
+   state.channelSwitchTimer=setTimeout(function(){
+    state.channelSwitchTimer=null;
+    if(S.route!=='player'||S.playerView!==state)return;
+    playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);
+    if(state.refreshLiveGuide)state.refreshLiveGuide()
+   },260)
   }
   state.switchChannel=switchChannel;
   var previousChannel=document.getElementById('player-channel-prev'),nextChannel=document.getElementById('player-channel-next');
