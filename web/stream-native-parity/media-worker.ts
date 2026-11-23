@@ -329,6 +329,11 @@ async function startSharedLiveViewer({bearer,kind,id,ext,track,key,viewerSid,for
  if(!liveShareAllowed(kind,viewerSid))return {error:'sharing_disabled',status:503};
  const groupKey=liveShareGroupKey(bearer,kind,id,ext,track,forceCompat,ultra);
  let group=sharedLiveGroups.get(groupKey);
+ if(group&&group.producer&&(group.producer.finished||group.producer.stopped)){
+  // A detached FFmpeg process must never be inherited by a fresh viewer.
+  stopHls(group.producer,'shared_source_finished');
+  group=null
+ }
  if(!group){
   group={key:groupKey,viewers:new Set(),producer:null,stopping:false,pending:null};
   sharedLiveGroups.set(groupKey,group);
@@ -400,6 +405,10 @@ async function hlsRequest(req,url){
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
  if(!ready)return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout');
+ if(filename==='index.m3u8'&&kind==='live'&&owner.finished){
+  stopHls(owner,'live_source_finished');
+  return hlsError(503,'hls_source_finished')
+ }
  if(filename==='index.m3u8'&&staleLiveManifest(owner,join(owner.dir,filename),Date.now())){
   console.warn('VIDAA_LIVE_MANIFEST_STALLED',{kind:owner.kind,mode:owner.videoMode||'unknown'});
   stopHls(owner,'stale_manifest');
@@ -937,7 +946,10 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
   if(!vodSeekCheck&&status&&hlsCheck?.ok){vodSeekCheck=fullVodSeekSelfTest();console.info('BLOFY_FULL_VOD_SELFTEST',vodSeekCheck)}
   const ok=status&&SECRET.length===64&&!!hlsCheck?.ok&&!!vodSeekCheck?.ok;
   return json(ok?200:503,{ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,
-   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name})
+   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
+   sharedLive:{enabled:String(Bun.env.VIDAA_LIVE_SHARE_SAME_BEARER||'')==='1',
+    groups:sharedLiveGroups.size,viewers:Array.from(sharedLiveGroups.values())
+     .reduce((sum,group)=>sum+group.viewers.size,0),maxPerGroup:MAX_SHARED_LIVE_VIEWERS}})
  }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
