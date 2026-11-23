@@ -1122,6 +1122,9 @@ function settingsScreen(){
  '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
   '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
   '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
+ '<section class="setting-panel"><h3>اتصالات البث ومشاركة المصدر</h3><p>فحص آمن لكفاءة الجلسات وإجمالي المحركات المستخدمة في النسخة التجريبية. لا يعرض حسابات العملاء أو أكواد الاشتراك.</p>'+
+  '<button class="btn secondary" id="check-live-share-health" type="button">فحص اتصالات البث</button>'+
+  '<p class="small muted" id="live-share-health-status" role="status" aria-live="polite">مشاركة المصدر معطلة افتراضيًا، ولن تُفعّل من هذا الزر.</p></section>'+
  '<section class="setting-panel"><h3>آخر اختبار مشاهدة فعلي</h3><p id="last-playback-diagnostic" role="status" aria-live="polite">'+esc(diagText)+'</p>'+
   '<button class="btn secondary" id="clear-playback-diagnostic">مسح بيانات التشخيص</button>'+
   '<p class="small muted">إحصاءات من المشاهدة داخل هذا المتصفح فقط؛ ليست اختبارًا لكل مصادر Xtream. لا نحفظ بيانات الاشتراك أو رابط المصدر.</p></section>'+
@@ -1143,6 +1146,29 @@ function settingsScreen(){
    }else{
     box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
    }
+  })
+ };
+ document.getElementById('check-live-share-health').onclick=function(){
+  var button=this,target=document.getElementById('live-share-health-status');
+  button.disabled=true;
+  if(target)target.textContent='جار فحص الموارد والجلسات دون تشغيل قناة جديدة…';
+  api('GET','/api/compatible/health',null,function(st,data){
+   button.disabled=false;
+   if(!target||!target.isConnected||S.route!=='settings')return;
+   if(st!==200||!data||!data.ok){
+    target.textContent='تعذّر الوصول لمحرك البث التجريبي حاليًا. لن يتأثر اشتراكك بهذا الفحص.';
+    return
+   }
+   var share=data.sharedLive||{},enabled=share.enabled===true,
+    groups=Math.max(0,Math.min(100,Number(share.groups)||0)),
+    viewers=Math.max(0,Math.min(400,Number(share.viewers)||0)),
+    active=Math.max(0,Math.min(100,Number(data.activeJobs)||0)),
+    cap=Math.max(0,Math.min(100,Number(data.capacity)||0));
+   target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة في التجربة':'معطلة لحماية الاستقرار')+
+    ' • مجموعات البث: '+groups+' • المشاهدون المشاركون: '+viewers+
+    ' • محركات الفيديو النشطة: '+active+' من '+cap+
+    (cap&&active>=cap?' • المحركات ممتلئة حاليًا؛ قد يلزم الانتظار عند فتح قناة جديدة.':'')+
+    ' • هذه أرقام حالة المحرك فقط، وليست قياسًا لجودة الصورة على جهازك.'
   })
  };
  document.getElementById('clear-playback-diagnostic').onclick=function(){
