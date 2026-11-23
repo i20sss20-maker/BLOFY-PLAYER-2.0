@@ -255,6 +255,7 @@ function serverCard(item) {
     ['🔎 تشخيص الاتصال الذكي', 'smart-connection', 'button primary'],
     ['فحص الاتصال', 'test', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
+    ['📡 تقرير ثبات البث', 'live-stability', 'button primary'],
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
     ['اختبار بيانات مسلسل', 'probe-series', 'button ghost'],
     ['اختبار تشغيل حلقة', 'probe-episode', 'button ghost'],
@@ -276,6 +277,13 @@ function serverCard(item) {
     if(action==='retry-unavailable'){
       const button=make('button',cls,text);
       button.type='button';button.dataset.action=action;
+      actions.append(button);
+      return;
+    }
+    if(action==='live-stability'){
+      const button=make('button',cls,text);
+      button.type='button';button.dataset.action=action;
+      button.title='مراجعة الانقطاعات المسجلة خلال ساعة وحد اتصال المزود؛ دون تشغيل بث أو تغيير أكواد';
       actions.append(button);
       return;
     }
@@ -1073,6 +1081,30 @@ async function handleServerAction(item, card, button) {
       showMessage(isEnable
         ?(`تم حفظ ${next?'تفعيل':'إيقاف'} المصدر «${item.name}» في قاعدة البيانات، وسيبقى كذلك بعد تحديث الصفحة.`)
         :(`تم حفظ ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'للعملاء':'عن العملاء'}.`));
+    } else if (action === 'live-stability') {
+      writeFeedback('جارٍ قراءة مؤشرات البث وقيود المصدر دون فتح اتصالات فيديو…');
+      const result=await api('/api/v1/admin/xtream-gateway/live-stability?sourceId='+
+        encodeURIComponent(item.id));
+      const m=result.metrics||{};
+      const details=result.findings||[];
+      const messages={
+        source_drops:'المصدر يغلق اتصال البث',
+        short_ends:'انتهاء سريع للبث',
+        client_closures:'انقطاع من جهة العميل أو الوسيط',
+        provider_limit:'حساب المصدر بلغ حد الاتصالات',
+        provider_restreaм_not_confirmed:'إعادة البث الجماعي غير مؤكدة لدى المصدر',
+        provider_denials:'المزود يرفض بعض الاتصالات',
+        insufficient_samples:'البيانات غير كافية لتأكيد الثبات'
+      };
+      const summary='📡 ثبات آخر ساعة (هذه النسخة من السيرفر فقط): '+
+        'بدأ '+Number(m.started||0)+' · انقطاع المصدر '+Number(m.liveTsSourceDrops||0)+
+        ' · استعادة ناجحة '+Number(m.liveTsRecoverySuccesses||0)+
+        ' · إغلاق عميل/وسيط '+Number(m.clientOrProxyClosed||0)+
+        ' · فشل '+Number(m.failed||0)+
+        ' · ملاحظات: '+(details.map(c=>messages[c]||c).join('، ')||'لا توجد حوادث مؤكدة ضمن العينة')+
+        ' · لا يشمل التقرير نسخ Railway الأخرى أو المشغلات المتصلة مباشرة بالمزود.';
+      writeFeedback(summary);
+      showMessage('تم إصدار تقرير ثبات البث للمصدر «'+item.name+'». راجع تفاصيله أسفل بطاقة المصدر.');
     } else if (action === 'retry-unavailable') {
       writeFeedback('جارٍ إعادة فحص الملفات المسجلة والمتاحة لإعادة الفحص في هذا المصدر فقط…');
       const result=await api('/api/v1/admin/xtream/unavailable-media/recheck-now',{

@@ -5,8 +5,10 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
 import {writeGatewayMapWithGuard} from './xtream-gateway-map-serialized.mjs';
 import {authorizedMediaRecoveryRelease} from './xtream-media-recovery-release.mjs';
-import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes}
+import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,
+  createLiveTsReconnectBudget,createLiveTsSourceRetryGate}
   from './xtream-live-ts-recovery.mjs';
+import {summarizeXtreamLiveStability} from './xtream-live-stability-summary.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
 import {
@@ -138,6 +140,10 @@ const distributorCatalog=createDistributorCustomerCatalog({
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
+// One in-process reconnect budget per source in addition to each viewer's
+// retry budget. Prevent many simultaneously interrupted users from flooding
+// a provider that has limited upstream connection capacity.
+const liveSourceRetryGate=createLiveTsSourceRetryGate({maxPerSource:24});
 // Bound metadata refresh attempts for missing movies. Avoid repeatedly
 // querying the provider's catalog for the same broken item across viewers.
 const movieRefreshCooldown=new Map();
@@ -1395,6 +1401,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   req.once('aborted', abort);
   res.once('close', onClose);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
+  // Compressed live TS is unsuitable for reliable first-byte validation and
+  // low-latency transport, and can be buffered by reverse proxies.
+  if(kind==='live')headers['accept-encoding']='identity';
   if (req.headers.range) headers.range = String(req.headers.range);
   // A provider returning 404/416 only for "Range: bytes=0-..." can be
   // rechecked once with plain GET. Never discard a nonzero seek request.
@@ -1411,9 +1420,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     usingIndependentRelay:true,relayFailure:'relay_provider_not_found'
   });
   const maxAttempts=req.method==='HEAD'?1:
-    (initialRange?3:2)+(movieRefreshAllowed||episodeRefreshAllowed?1:0)+
+    (initialRange?3:kind==='live'?3:2)+(movieRefreshAllowed||episodeRefreshAllowed?1:0)+
     (fallbackAllowed?1:0)+(relay404DirectAllowed?1:0);
-  let noRangeRetried=false, transientRetried=false,extensionRefreshTried=false,
+  let noRangeRetried=false, transientRetried=0,extensionRefreshTried=false,
     fallbackTried=false,directCompareTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
@@ -1529,8 +1538,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             delete headers.range;
             continue;
           }
-          if (retryable && !transientRetried && attempt < maxAttempts) {
-            transientRetried=true;
+          if (retryable && transientRetried < (kind==='live'?2:1) && attempt < maxAttempts) {
+            transientRetried++;
             if(!(await waitXtreamMediaRetry({attempt,signal:client.signal})))return;
             continue;
           }
@@ -1560,6 +1569,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if (value) outputHeaders[name] = value;
         }
         outputHeaders['x-content-type-options'] = 'nosniff';
+        if(kind==='live'){
+          outputHeaders['cache-control']='no-store, no-transform';
+          outputHeaders['x-accel-buffering']='no';
+        }
         if (req.method === 'HEAD' || !response.body) {
           res.writeHead(response.status, outputHeaders);
           return res.end();
@@ -1678,10 +1691,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         });
         let resumedVod=false;
         res.writeHead(response.status, outputHeaders);
+        const liveTsSessionBudget=liveTsPilot?createLiveTsReconnectBudget():null;
         const stream=liveTsPilot?
           Readable.from(liveTsRecoveryBytes({
             first:first.value,reader,controller,clientSignal:client.signal,
             fetchImpl:checkedFetch,target:mediaFetchTarget,headers,
+            reconnectBudget:{claim:()=>{
+              const personal=liveTsSessionBudget.claim();
+              return personal||liveSourceRetryGate.claim(row.server_id);
+            }},
             onSourceDrop:({reason,durationMs})=>{
               observe('source_drop',{reason,durationMs});
               console.info('BLOFY_LIVE_TS_SOURCE_DROP',JSON.stringify({
@@ -1795,8 +1813,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             });
           }
         }
-        if (!res.headersSent && !transientRetried && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
-          transientRetried=true;
+        if (!res.headersSent && transientRetried < (kind==='live'?2:1) && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
+          transientRetried++;
           if(!(await waitXtreamMediaRetry({attempt,signal:client.signal})))return;
           continue;
         }
@@ -2780,7 +2798,24 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         }
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
-        return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
+        const sourceId=url.searchParams.get('sourceId');
+        if(sourceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceId))
+          return json(res,400,{error:'xtream_source_id_invalid'});
+        return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot(Date.now(),sourceId||null)});
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/live-stability') {
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceId))
+          return json(res,400,{error:'xtream_source_id_invalid'});
+        const source=(await pool.query(`SELECT account_info FROM blofy_xtream_servers
+          WHERE id=$1 AND deletion_requested_at IS NULL`,[sourceId])).rows[0];
+        if(!source)return json(res,404,{error:'xtream_server_not_found'});
+        const metrics=xtreamPlaybackSnapshot(Date.now(),sourceId);
+        const state=summarizeXtreamLiveStability(metrics,source.account_info);
+        return json(res,200,{ok:true,...state,
+          mediaRecovery:{productionEnabled:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_PRODUCTION==='1',
+            onlyValidatedDirectTs:true,noFanoutEnabledByThisSetting:true},
+          sampledScope:'this_railway_replica_only',multiReplicaAggregate:false});
       }
       // Operator-only aggregate view: no media URLs, credentials, content
       // names, gateway account identities or subscriber permissions.

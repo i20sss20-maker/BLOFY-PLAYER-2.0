@@ -45,6 +45,36 @@ async function readWithin(reader,controller,ms){
 // reconnect must not consume the budget for an unrelated drop minutes later.
 // Explicit limits defend the provider from a true reconnect storm, while a
 // limited number of short clean EOFs can be recovered within one player session.
+// A bounded source-level reconnect quota, separate from per-client limits.
+// No account, credential, URL or channel keys are ever stored.
+export function createLiveTsSourceRetryGate({
+ now=Date.now,windowMs=120000,maxPerSource=24,maxSources=128
+}={}){
+ if(typeof now!=='function'||!Number.isInteger(windowMs)||windowMs<1000||
+   !Number.isInteger(maxPerSource)||maxPerSource<1||maxPerSource>128||
+   !Number.isInteger(maxSources)||maxSources<1||maxSources>1024)
+   throw new Error('live_ts_source_gate_invalid');
+ const recent=new Map();
+ return {claim(sourceId){
+   const key=String(sourceId||'').trim().toLowerCase();
+   if(!UUID.test(key))return 'live_ts_reconnect_rate_limited';
+   const at=Number(now());
+   if(!Number.isFinite(at))return 'live_ts_reconnect_rate_limited';
+   for(const [source,history] of recent){
+     while(history.length&&history[0]<=at-windowMs)history.shift();
+     if(!history.length)recent.delete(source);
+   }
+   let history=recent.get(key);
+   if(!history){
+     if(recent.size>=maxSources)return 'live_ts_reconnect_rate_limited';
+     history=[];recent.set(key,history);
+   }
+   if(history.length>=maxPerSource)return 'live_ts_reconnect_rate_limited';
+   history.push(at);
+   return null;
+ }};
+}
+
 export function createLiveTsReconnectBudget({
  now=Date.now,windowMs=120_000,maxInWindow=8,maxTotal=120,
  stableResetMs=300_000
@@ -95,7 +125,7 @@ export async function* liveTsRecoveryBytes({
    if(clientSignal?.aborted)throw Error('live_ts_client_closed');
    try{
     const item=pending?{done:false,value:pending}:
-      await readWithin(activeReader,activeController,45000);
+      await readWithin(activeReader,activeController,25000);
     pending=null;
     if(item.done)throw Error('live_ts_source_eof');
     if(!(item.value instanceof Uint8Array)||!item.value.byteLength)

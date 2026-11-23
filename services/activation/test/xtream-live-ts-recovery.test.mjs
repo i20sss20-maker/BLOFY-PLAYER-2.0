@@ -26,6 +26,26 @@ function failingResponse(){
 }
 const immediately=async({signal})=>!signal?.aborted;
 
+test('global source reconnect budget limits storms without identifying subscribers',async()=>{
+ const {createLiveTsSourceRetryGate}=await import('../src/xtream-live-ts-recovery.mjs');
+ let time=10000;
+ const gate=createLiveTsSourceRetryGate({now:()=>time,windowMs:120000,maxPerSource:2});
+ for(let n=0;n<2;n++)assert.equal(gate.claim(sourceId),null);
+ assert.equal(gate.claim(sourceId),'live_ts_reconnect_rate_limited');
+ assert.equal(gate.claim(other),null,'a different source does not share the quota');
+ time+=120001;
+ assert.equal(gate.claim(sourceId),null);
+ assert.equal(gate.claim('unknown'),'live_ts_reconnect_rate_limited');
+});
+test('gateway treats first-byte TS as uncompressed low-latency and only retries prestart transport',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ assert.match(gateway,/headers\['accept-encoding'\]='identity'/);
+ assert.match(gateway,/kind==='live'\?3:2/);
+ assert.match(gateway,/liveSourceRetryGate\.claim\(row\.server_id\)/);
+ assert.match(gateway,/no-store, no-transform/);
+ assert.match(gateway,/onlyValidatedDirectTs:true/);
+});
+
 test('reconnection is explicitly bound to one account AND one source',()=>{
  const ok={enabled:true,accountId,sourceId,pilotAccountId:accountId,pilotSourceId:sourceId};
  assert.equal(allowedLiveTsRecoveryPilot(ok),true);
