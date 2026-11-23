@@ -130,6 +130,10 @@ export async function* liveTsRecoveryBytes({
     if(item.done)throw Error('live_ts_source_eof');
     if(!(item.value instanceof Uint8Array)||!item.value.byteLength)
       continue;
+    // A source drop is measured from its last delivered media, not from
+    // stream startup or an earlier successful reconnect. Keep timestamps
+    // refreshed on each non-empty packet without logging viewer details.
+    lastValidatedMediaAt=Number(now());
     yield item.value;
     continue;
    }catch(error){
