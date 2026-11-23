@@ -628,7 +628,7 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
  const events=[];
  await page.route('**/api/hls/live/31/ts/0/**',async route=>{
   const url=route.request().url(),compatible=url.includes('/compat/');
-  const name=url.split('/').pop().split('?')[0],suffix=compatible?'compat':'original';
+  const name=url.split('/').pop().split('?')[0],suffix=compatible?'compat':url.includes('/ultra/')?'ultra':'original';
   if(name==='stop'){
    events.push('stop-'+suffix);
    return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'})
@@ -636,7 +636,7 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
   if(name==='index.m3u8'){
    events.push('manifest-'+suffix);
    return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',
-    headers:{'X-Blofy-Video-Mode':compatible?'compatibility_transcode':'source_copy'},body:manifest})
+    headers:{'X-Blofy-Video-Mode':compatible?'compatibility_transcode':suffix==='ultra'?'ultra_transcode':'source_copy', 'X-Blofy-Source-Resolution':'3840x2160'},body:manifest})
   }
   if(segments[name])return route.fulfill({status:200,contentType:'video/mp2t',body:segments[name]});
   return route.fulfill({status:404,body:'missing'})
@@ -650,17 +650,23 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
  await page.locator('#player-quality').click();
  await expect(page.locator('#player-choice-panel')).toBeVisible();
  await expect(page.locator('[data-choice-index="1"]')).toContainText('متوافق');
+ await expect(page.locator('[data-choice-index="2"]')).toContainText('4K');
  await page.locator('[data-choice-index="1"]').click();
  await expect.poll(()=>events.filter(x=>x==='manifest-compat').length,{timeout:12000}).toBeGreaterThan(0);
  const originalStop=events.indexOf('stop-original'),compatStart=events.indexOf('manifest-compat');
  expect(originalStop).toBeGreaterThan(-1);
  expect(compatStart).toBeGreaterThan(originalStop);
  await expect(page.locator('#player-source-mode')).toContainText('وضع توافق',{timeout:12000});
+ await page.locator('#player-quality').click();
+ await page.locator('[data-choice-index="2"]').click();
+ await expect.poll(()=>events.filter(x=>x==='manifest-ultra').length,{timeout:12000}).toBeGreaterThan(0);
+ expect(events.lastIndexOf('manifest-ultra')).toBeGreaterThan(events.lastIndexOf('stop-compat'));
+ await expect(page.locator('#player-source-mode')).toContainText('4K تجريبي',{timeout:12000});
  const previousOriginalManifests=events.filter(x=>x==='manifest-original').length;
  await page.locator('#player-quality').click();
  await expect(page.locator('[data-choice-index="0"]')).toContainText('أصلي');
  await page.locator('[data-choice-index="0"]').click();
- await expect.poll(()=>events.filter(x=>x==='stop-compat').length,{timeout:12000}).toBeGreaterThan(0);
+ await expect.poll(()=>events.filter(x=>x==='stop-ultra').length,{timeout:12000}).toBeGreaterThan(0);
  await expect.poll(()=>events.filter(x=>x==='manifest-original').length,{timeout:12000}).toBeGreaterThan(previousOriginalManifests);
- expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(events.lastIndexOf('stop-compat'));
+ expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(events.lastIndexOf('stop-ultra'));
 });
