@@ -211,6 +211,8 @@ test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored posi
  console.log('BLOFY QA VIDEO STATE',JSON.stringify(await page.locator('#player-media').evaluate(v=>({src:v.currentSrc,ready:v.readyState,network:v.networkState,error:v.error&&{code:v.error.code,message:v.error.message},duration:v.duration,paused:v.paused,seekable:v.seekable.length}))));
  console.log('BLOFY QA MEDIA REQUESTS',JSON.stringify(network));
  await expect.poll(()=>page.locator('video').evaluate(v=>v.readyState),{timeout:5000}).toBeGreaterThan(0);
+ await expect(page.locator('#player-resolution')).toBeVisible({timeout:5000});
+ await expect(page.locator('#player-resolution')).toContainText('المعروض');
  await page.locator('#player-options-toggle').click();
  await expect(page.locator('#player-more-panel')).toBeVisible();
  await page.locator('#player-restart').click();
