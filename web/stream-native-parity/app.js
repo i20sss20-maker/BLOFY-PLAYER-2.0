@@ -1380,6 +1380,31 @@ function livePlaybackProgress(record,video,now){
  * Only act after the video was playing; honor explicit user Pause and a hidden
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
+function liveExpiredSegmentRecovery(record,engine,video,now){
+ // HLS occasionally requests a sequence that has fallen off the live
+ // playlist while the viewer catches up. Prefer an in-place live-edge
+ // jump before tearing down a healthy source and FFmpeg decoder.
+ if(now-(record.expiredSegmentWindowAt||0)>30000){
+  record.expiredSegmentWindowAt=now;record.expiredSegmentRecoveries=0
+ }
+ if(now-(record.lastExpiredSegmentAt||0)<3500)return 'cooling';
+ record.lastExpiredSegmentAt=now;
+ record.expiredSegmentRecoveries=(record.expiredSegmentRecoveries||0)+1;
+ if(record.expiredSegmentRecoveries>2)return 'restart';
+ try{
+  if(!engine||typeof engine.startLoad!=='function'||typeof engine.stopLoad!=='function')
+   return 'restart';
+  engine.stopLoad();
+  var edge=Number(engine.liveSyncPosition);
+  var current=Number(video.currentTime);
+  if(video.readyState>=1&&Number.isFinite(edge)&&edge>0&&
+     (!Number.isFinite(current)||edge-current>2)){
+   video.currentTime=edge
+  }
+  engine.startLoad(-1);
+  return 'resync'
+ }catch(e){return 'restart'}
+}
 function liveOriginRetryMs(attempt){
  // A temporary origin failure should not trigger a tight re-open loop.
  var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
@@ -1698,9 +1723,16 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     }
    });
    engine.on(window.Hls.Events.ERROR,function(event,detail){
-    if(!alive()||!detail||!detail.fatal)return;
-    diagnose('live','hls_error','video',0);
+    if(!alive()||!detail)return;
     var code=Number(detail.response&&detail.response.code)||0;
+    if(code===410&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());
+     if(edgeAction==='restart')recoverConnection();
+     else if(edgeAction==='resync')status('تأخرت بعض مقاطع البث؛ جار الانتقال إلى البث المباشر…');
+     return
+    }
+    if(!detail.fatal)return;
+    diagnose('live','hls_error','video',0);
     if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
     if(code===429){
      // Only two worker slots exist on the pilot. Back off instead of
