@@ -91,7 +91,11 @@ test('a transient live EOF or socket drop reconnects SAME URI after old socket c
  assert.deepEqual(secondOut.value,ts());
  await iter.return();
  assert.equal(calls,1);
- assert.deepEqual(events,[{attempt:1}]);
+ assert.equal(events.length,1);
+ assert.equal(events[0].attempt,1);
+ assert.equal(events[0].retriesThisDrop,1);
+ assert.equal(events[0].sourceDropReason,'live_ts_source_transport_error');
+ assert.ok(Number.isFinite(events[0].interruptionMs)&&events[0].interruptionMs>=0);
 });
 test('provider refusal 403/429/509 is terminal, never retried after bytes',async()=>{
  for(const status of [403,429,509]){
@@ -219,4 +223,104 @@ test('gateway emits sanitized upstream drop category, distinct from successful r
  assert.match(gateway,/observe\('source_drop',\{reason,durationMs\}\)/);
  assert.match(gateway,/BLOFY_LIVE_TS_SOURCE_DROP/);
  assert.match(gateway,/secondsBucket:Number\.isFinite\(durationMs\)/);
+});
+
+
+test('after live EOF a transient 500/502/503/504 gets one bounded recovery retry, then valid TS',async()=>{
+ for(const status of [500,502,503,504]){
+  const initial=failingResponse(),reader=initial.body.getReader();
+  const first=(await reader.read()).value;
+  let calls=0;
+  const iter=liveTsRecoveryBytes({
+   first,reader,controller:new AbortController(),target:url,
+   waitRetry:immediately,
+   fetchImpl:async()=>{
+    calls++;
+    return calls===1?new Response('upstream temporarily unavailable',{status}):response();
+   }
+  });
+  assert.equal((await iter.next()).value.length,564);
+  assert.deepEqual((await iter.next()).value,ts());
+  assert.equal(calls,2,'only one failed 5xx and one successful retry');
+  await iter.return();
+ }
+});
+
+test('repeated upstream 503 exhausts only two attempts; no reconnect storm',async()=>{
+ const initial=failingResponse(),reader=initial.body.getReader();
+ const first=(await reader.read()).value;
+ let calls=0;
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,waitRetry:immediately,
+  fetchImpl:async()=>{calls++;return new Response('temporary outage',{status:503});}
+ });
+ assert.equal((await iter.next()).value.length,564);
+ await assert.rejects(async()=>await iter.next(),/live_ts_reconnect_exhausted/);
+ assert.equal(calls,2);
+});
+
+test('midstream retry never bypasses HTTP denial or invalid TS response',async()=>{
+ for(const status of [401,403,404,429,456,509]){
+  const initial=failingResponse(),reader=initial.body.getReader();
+  const first=(await reader.read()).value;
+  let calls=0;
+  const iter=liveTsRecoveryBytes({
+   first,reader,controller:new AbortController(),target:url,waitRetry:immediately,
+   fetchImpl:async()=>{calls++;return new Response('provider denied',{status});}
+  });
+  assert.equal((await iter.next()).value.length,564);
+  await assert.rejects(async()=>await iter.next(),/live_ts_reconnect_denied/);
+  assert.equal(calls,1);
+ }
+});
+
+
+test('recovery reports measured media interruption instead of confusing upstream uptime with blackout',async()=>{
+ const initial=failingResponse(),reader=initial.body.getReader();
+ const first=(await reader.read()).value;
+ let t=1000,drop=null,recovered=null,calls=0;
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,
+  now:()=>t,
+  waitRetry:async()=>{t+=650;return true;},
+  onSourceDrop:e=>{drop=e;},
+  onReconnect:e=>{recovered=e;},
+  fetchImpl:async()=>{calls++;t+=250;return response();}
+ });
+ assert.equal((await iter.next()).value.length,564);
+ t+=17000;
+ assert.equal((await iter.next()).value.length,564);
+ assert.equal(calls,1);
+ assert.deepEqual(drop,{reason:'live_ts_source_transport_error',durationMs:17000});
+ assert.deepEqual(recovered,{
+  attempt:1,retriesThisDrop:1,
+  interruptionMs:900,sourceDropReason:'live_ts_source_transport_error'
+ });
+ await iter.return();
+});
+
+test('two transient upstream 503 attempts report a single terminal failure without a fabricated recovery',async()=>{
+ const initial=failingResponse(),reader=initial.body.getReader();
+ const first=(await reader.read()).value;
+ let recoveries=0,attempts=0;
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,
+  waitRetry:immediately,
+  fetchImpl:async()=>{attempts++;return new Response('temporary',{status:503});},
+  onReconnect:()=>recoveries++
+ });
+ assert.equal((await iter.next()).value.length,564);
+ await assert.rejects(async()=>await iter.next(),/live_ts_reconnect_exhausted/);
+ assert.equal(attempts,2);
+ assert.equal(recoveries,0,'a 503 is not restored decoded media');
+});
+
+test('gateway logs rounded media gap and never includes account, credential or URL',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const segment=gateway.slice(gateway.indexOf('onReconnect:({attempt:reconnection,interruptionMs'),
+  gateway.indexOf('})):',gateway.indexOf('onReconnect:({attempt:reconnection,interruptionMs')));
+ assert.match(segment,/gapBucketMs=Number.isFinite\(interruptionMs\)/);
+ assert.match(segment,/Math.round\(interruptionMs\/500\)\*500/);
+ assert.match(segment,/BLOFY_LIVE_TS_RECOVERED/);
+ assert.doesNotMatch(segment,/password|username|accountId|credentials|target\.href|clientIp/);
 });

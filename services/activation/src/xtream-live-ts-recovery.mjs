@@ -135,10 +135,13 @@ export async function* liveTsRecoveryBytes({
    }catch(error){
     if(clientSignal?.aborted)throw Error('live_ts_client_closed');
     const seenAt=Number(now());
+    // Track the actual viewer-side media gap rather than inferring quality
+    // from HTTP 200 or the time the provider was online before EOF.
+    const sourceDropReason=liveTsSourceDropReason(error,activeController);
     const durationMs=Number.isFinite(seenAt)&&Number.isFinite(lastValidatedMediaAt)?
       Math.max(0,Math.min(86_400_000,seenAt-lastValidatedMediaAt)):null;
     try{onSourceDrop({
-      reason:liveTsSourceDropReason(error,activeController),durationMs
+      reason:sourceDropReason,durationMs
     })}catch{}
     await closeConnection(activeReader,activeController);
     activeReader=null;activeController=null;
@@ -169,6 +172,13 @@ export async function* liveTsRecoveryBytes({
         'accept-encoding':'identity'
        },timeoutMs:12000,signal:requestSignal});
       }finally{clearTimeout(timer)}
+      // One transient upstream 5xx must not immediately terminate a paying
+      // viewer's already-open TS response. Retry ONLY this short allowlist,
+      // within the existing two-attempt/client and source-wide rate caps.
+      // Never retry authorization, rate limits, missing media, invalid MIME,
+      // non-open-ended streams or bad MPEG-TS packet probes.
+      if([500,502,503,504].includes(reply?.status))
+       throw Error('live_ts_reconnect_transient_http');
       if(!plainOpenEnded(reply))throw Error('live_ts_reconnect_denied');
       temporaryReader=reply.body.getReader();
       const probe=await readWithin(temporaryReader,ctl,15000);
@@ -177,7 +187,13 @@ export async function* liveTsRecoveryBytes({
       activeReader=temporaryReader;activeController=ctl;
       temporaryReader=null;pending=probe.value;
       lastValidatedMediaAt=Number(now());
-      try{onReconnect({attempt:attempts})}catch{}
+      const interruptionMs=Number.isFinite(lastValidatedMediaAt)&&Number.isFinite(seenAt)?
+       Math.max(0,Math.min(60000,lastValidatedMediaAt-seenAt)):null;
+      // Only bounded, sanitized, non-credential health data leave this helper.
+      try{onReconnect({
+        attempt:attempts,retriesThisDrop:failedThisDrop,
+        interruptionMs,sourceDropReason
+      })}catch{}
       break;
      }catch(e){
       ctl.abort();

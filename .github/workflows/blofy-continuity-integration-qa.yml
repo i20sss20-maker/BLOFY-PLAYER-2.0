@@ -1,0 +1,36 @@
+name: BLOFY live continuity integration QA
+on:
+  push:
+    branches: [qa/stream-continuity-release-candidate-20261123]
+    paths:
+      - 'services/activation/src/xtream-live-ts-recovery.mjs'
+      - 'services/activation/test/xtream-*.test.mjs'
+      - '.github/workflows/blofy-continuity-integration-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reconnect-and-release-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Live TS continuity and seven source-safe regression suites
+        run: |
+          node --test \
+            services/activation/test/xtream-live-ts-recovery.test.mjs \
+            services/activation/test/xtream-media-range.test.mjs \
+            services/activation/test/xtream-media-retry-backoff.test.mjs \
+            services/activation/test/xtream-production-reliability.test.mjs \
+            services/activation/test/xtream-provider-order.test.mjs \
+            services/activation/test/xtream-source-admin-recovery-ui.test.mjs \
+            services/activation/test/xtream-sync-cancel-progress.test.mjs \
+            services/activation/test/xtream-sync-queue.test.mjs
+      - name: Non-production scope note
+        if: always()
+        run: |
+          echo 'Tests use no real customer streams. Synthetic success is not proof of continuous audio/video on TV.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'User subscription and media permissions remain unchanged.' >> "$GITHUB_STEP_SUMMARY"

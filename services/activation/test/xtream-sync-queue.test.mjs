@@ -86,7 +86,7 @@ test('production routes serialize manual and sync-all, support cancellation and 
   assert.match(server,/const syncQueue=createXtreamSyncQueue\(/);
   assert.match(server,/concurrency:1,maxPending:16/);
   assert.match(server,/if\(!daily\)return syncQueue\.enqueue\(id,async\(\)=>\{/);
-  assert.match(server,/const result=await syncServer\(id,types\)/);
+  assert.match(server,/const result=await syncServer\(id,types,options\)/);
   assert.match(server,/result\.partialWarning\?'partial':'completed'/);
   assert.match(server,/await settled\('failed'\)/);
   assert.match(server,/const wasQueued=syncQueue\.cancel\(id\)/);

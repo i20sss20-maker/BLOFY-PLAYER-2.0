@@ -1,0 +1,32 @@
+name: BLOFY live recovery blackout telemetry QA
+on:
+  push:
+    branches:
+      - qa/live-ts-rebuffer-qoe-20261123
+    paths:
+      - 'services/activation/src/xtream-live-ts-recovery.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-live-ts-recovery.test.mjs'
+      - '.github/workflows/blofy-live-qoe-probe-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax and source-safe reconnect telemetry with synthetic bytes
+        run: |
+          node --check services/activation/src/xtream-gateway-hook.mjs
+          node --check services/activation/src/xtream-live-ts-recovery.mjs
+          node --test services/activation/test/xtream-live-ts-recovery.test.mjs
+      - name: Explain evidence boundary
+        if: always()
+        run: |
+          echo 'Synthetic MPEG-TS only. No subscriber sources, credentials, production database, customer channels or real-device codecs.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Recovery duration is a transport gap, not proof of decoded frame continuity.' >> "$GITHUB_STEP_SUMMARY"
