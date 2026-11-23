@@ -14,6 +14,28 @@ class PlaybackBufferPolicyTest {
         assertTrue(live.afterRebufferMs > live.playbackStartMs)
     }
 
+    @Test fun codeOnlyStreamLiveToleratesSourceRecoveryWithoutSlowingFirstFrame() {
+        val normal = PlaybackBufferPolicy.forKind("live")
+        val streamLive = PlaybackBufferPolicy.forKind("live", resilientStreamLive = true)
+        assertEquals(normal.playbackStartMs, streamLive.playbackStartMs)
+        assertEquals(normal.minBufferMs, streamLive.minBufferMs)
+        assertEquals(normal.maxBufferMs, streamLive.maxBufferMs)
+        assertEquals(normal.maxBufferBytes, streamLive.maxBufferBytes)
+        assertTrue(streamLive.afterRebufferMs > normal.afterRebufferMs)
+        assertTrue(streamLive.afterRebufferMs <= streamLive.minBufferMs)
+        assertEquals(streamLive, PlaybackBufferPolicy.forKind(
+            "live_preview", resilientStreamLive = true
+        ))
+    }
+
+    @Test fun streamResilienceDoesNotChangeVodOrOrdinaryPlayerBuffer() {
+        assertEquals(PlaybackBufferPolicy.forKind("movie"),
+            PlaybackBufferPolicy.forKind("movie", resilientStreamLive = true))
+        assertEquals(PlaybackBufferPolicy.forKind("episode"),
+            PlaybackBufferPolicy.forKind("episode", resilientStreamLive = true))
+        assertEquals(1_800, PlaybackBufferPolicy.forKind("live").afterRebufferMs)
+    }
+
     @Test fun onDemandCanAbsorbMoreJitterWithoutUnlimitedMemory() {
         val vod = PlaybackBufferPolicy.forKind("episode")
         assertEquals(vod, PlaybackBufferPolicy.forKind("movie"))
