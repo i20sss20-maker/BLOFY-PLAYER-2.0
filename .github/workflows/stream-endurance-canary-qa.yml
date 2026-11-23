@@ -34,6 +34,29 @@ jobs:
             --source /tmp/blofy-canary-synthetic.mp4 \
             --duration 5 --clients 2 --realtime --require-audio \
             --restarts 0 --report /tmp/blofy-canary-report.json
+
+      - name: Run two real-time HLS clients with synthetic live audio and video
+        run: |
+          python3 ops/stream-endurance/local_hls_canary.py \
+            --duration 13 --viewers 2 \
+            --report /tmp/blofy-hls-clean.json
+      - name: Inject isolated six-second HTTP media blackout, verify four concurrent clients resume
+        run: |
+          python3 ops/stream-endurance/local_hls_canary.py \
+            --duration 26 --viewers 4 \
+            --outage-at 8 --outage-seconds 6 \
+            --report /tmp/blofy-hls-blackout.json
+      - name: Archive sanitized synthetic QoE evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofy-stream-isolated-hls-canary
+          path: |
+            /tmp/blofy-canary-report.json
+            /tmp/blofy-hls-clean.json
+            /tmp/blofy-hls-blackout.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: State explicit validation boundary
         if: always()
         run: |
