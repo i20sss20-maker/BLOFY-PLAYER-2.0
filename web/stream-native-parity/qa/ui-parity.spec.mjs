@@ -178,6 +178,8 @@ test('known-duration MKV uses full VOD HLS rather than a one-minute live-style p
  await page.locator('#player-quality').click();
  await expect(page.locator('#player-choice-panel')).toBeVisible();
  await expect(page.locator('.native-player-choice-item').first()).toContainText('تلقائي');
+ await page.keyboard.press('ArrowDown');
+ await expect(page.locator('.native-player-choice-item').nth(1)).toBeFocused();
  await page.keyboard.press('Escape');
  await expect(page.locator('#player-choice-panel')).toBeHidden();
  await expect(page.locator('#player-root')).toBeVisible();
@@ -371,7 +373,9 @@ test('remote OK opens in-player channel browser and Back dismisses it without st
  await page.locator('#player-media').focus();
  await page.keyboard.press('Enter');
  await expect(page.locator('#player-channel-panel')).toBeVisible();
- await page.locator('[data-player-channel="32"]').click();
+ await page.keyboard.press('ArrowDown');
+ await expect(page.locator('[data-player-channel="32"]')).toBeFocused();
+ await page.keyboard.press('Enter');
  await expect(page.locator('#player-channel-panel')).toBeHidden();
  await expect(page.locator('#player-title-text')).toHaveText('قناة ثانية');
  await page.locator('#player-media').focus();
