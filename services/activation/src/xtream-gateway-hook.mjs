@@ -40,6 +40,7 @@ import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
+import {queryXtreamCatalogPageNoParallel} from './xtream-catalog-low-memory-query.mjs';
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
@@ -711,7 +712,9 @@ async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
   let cursor=null;
   for (;;) {
     const page=gatewayOrderedItemsPageQuery(mediaType,cursor,{filter,sourceId});
-    const rows=(await pool.query(page)).rows;
+    // A scoped read-only transaction avoids parallel shared-memory exhaustion
+    // on large ordered catalogs without restarting or changing Postgres.
+    const rows=await queryXtreamCatalogPageNoParallel(pool,page);
     if (!rows.length) break;
     for (const row of rows) {
       const pending=onRow(row);
