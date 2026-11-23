@@ -1,0 +1,41 @@
+name: BLOFY STREAM Web single-viewer live TS continuity QA
+on:
+  push:
+    branches:
+      - fix/stream-web-authorized-live-ts-continuity-20261124
+    paths:
+      - 'web/stream-native-parity/live-source-continuity.mjs'
+      - 'web/stream-native-parity/media-worker.ts'
+      - 'web/stream-native-parity/Dockerfile.media'
+      - 'web/stream-native-parity/qa/live-source-continuity.test.mjs'
+      - '.github/workflows/qa-blofy-stream-live-continuity.yml'
+  pull_request:
+    branches:
+      - feature/blofy-stream-web-native-parity-20261122
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-live-continuity.yml'
+permissions:
+  contents: read
+jobs:
+  preview-single-viewer-continuity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Syntax and targeted strict origin EOF/abort/authorization regressions
+        run: |
+          node --check web/stream-native-parity/live-source-continuity.mjs
+          node --test web/stream-native-parity/qa/live-source-continuity.test.mjs
+          bun build ./web/stream-native-parity/media-worker.ts --target=bun --outdir=/tmp/blofy-web-worker
+      - name: Existing media worker lifecycle regression
+        run: node --test web/stream-native-parity/qa/media-lifecycle.test.mjs
+      - name: Keep boundaries explicit
+        if: always()
+        run: |
+          echo 'Synthetic authorized transport only; no customer credentials, streams, or source URLs are queried.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Cannot enable without exact channel and exact viewer access ID. Passing does not prove real VIDAA A/V continuity.' >> "$GITHUB_STEP_SUMMARY"
