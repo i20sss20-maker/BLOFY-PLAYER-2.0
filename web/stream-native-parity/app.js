@@ -998,6 +998,11 @@ function cleanupPlayer(){
   if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
   if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
   if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
+  if(S.playerView.seekFrameId!==null&&S.playerView.seekFrameId!==undefined&&
+   S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
+   try{S.playerView.video.cancelVideoFrameCallback(S.playerView.seekFrameId)}catch(e){}
+   S.playerView.seekFrameId=null
+  }
   if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
   if(S.playerView.healthTimer){clearInterval(S.playerView.healthTimer);S.playerView.healthTimer=null}
   S.playerView.pendingSeek=null;
@@ -1490,12 +1495,42 @@ function openPlayer(kind,id,extension,name,from){
   if(S.route!=='player'||S.playerView!==state||video.paused||!stats.firstFrameAt)return;
   if(!stats.bufferSince){stats.bufferEvents++;stats.bufferSince=Date.now()}
  }
+ function stopSeekFrameWatch(){
+  if(state.seekFrameId!==null&&state.seekFrameId!==undefined&&
+   typeof video.cancelVideoFrameCallback==='function'){
+   try{video.cancelVideoFrameCallback(state.seekFrameId)}catch(e){}
+  }
+  state.seekFrameId=null
+ }
+ function watchSeekFrame(pending){
+  if(!pending||!pending.requireDecodedFrame||state.pendingSeek!==pending||
+   typeof video.requestVideoFrameCallback!=='function')return;
+  try{
+   state.seekFrameId=video.requestVideoFrameCallback(function(now,frame){
+    state.seekFrameId=null;
+    if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
+    var frameTime=Number(frame&&frame.mediaTime);
+    var real=state.mode==='vodhls'?state.offset+frameTime:frameTime;
+    if(isFinite(frameTime)&&Math.abs(real-pending.target)<=8&&
+     video.readyState>=2&&!video.seeking){
+     pending.decodedFrame=true;confirmSeek();return
+    }
+    watchSeekFrame(pending)
+   })
+  }catch(e){
+   pending.requireDecodedFrame=false;confirmSeek()
+  }
+ }
  function confirmSeek(){
   var pending=state.pendingSeek;
   if(!pending||S.route!=='player'||S.playerView!==state||video.readyState<2||video.seeking)return;
   var now=Date.now(),actual=state.mode==='vodhls'?
    state.offset+Math.max(0,Number(video.currentTime)||0):Math.max(0,Number(video.currentTime)||0);
   if(Math.abs(actual-pending.target)>8)return;
+  // Some TV decoders update currentTime optimistically before the video
+  // actually jumps. Prefer the presented-frame clock where supported.
+  if(pending.requireDecodedFrame&&!pending.decodedFrame)return;
+  stopSeekFrameWatch();
   if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
   if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
@@ -1516,9 +1551,13 @@ function openPlayer(kind,id,extension,name,from){
   if(!wasPending)state.stats.seekAttempts++;
   if(state.seekWatchdog)clearTimeout(state.seekWatchdog);
   if(state.seekLogTimer)clearTimeout(state.seekLogTimer);
-  var pending={target:target,startedAt:now,logged:false};
+  stopSeekFrameWatch();
+  var canObserveFrames=typeof video.requestVideoFrameCallback==='function'&&!video.paused;
+  var pending={target:target,startedAt:now,logged:false,
+   requireDecodedFrame:canObserveFrames,decodedFrame:false};
   state.pendingSeek=pending;
   state.seekIncomplete=true;
+  watchSeekFrame(pending);
   state.seekLogTimer=setTimeout(function(){
    state.seekLogTimer=null;
    if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
@@ -1529,6 +1568,7 @@ function openPlayer(kind,id,extension,name,from){
    state.seekWatchdog=null;
    if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
    state.pendingSeek=null;
+   stopSeekFrameWatch();
    state.stats.seekTimeouts++;
    if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
    if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
@@ -1951,7 +1991,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
   if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
-  state.pendingSeek=null;state.seekIncomplete=false;state.completed=false;
+  state.pendingSeek=null;stopSeekFrameWatch();state.seekIncomplete=false;state.completed=false;
   state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
   delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;state.resume=0;
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
