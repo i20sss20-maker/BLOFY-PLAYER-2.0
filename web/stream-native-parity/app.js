@@ -2061,6 +2061,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var modes={fullvod:'فيلم كامل قابل للتقديم',direct:'MP4 أصلي',vodhls:'HLS مؤقت',
    hls:'بث مباشر',mpegts:'MPEG-TS'};
   var mode=modes[state.mode]||'جار تغيير المحرك',pending=state.pendingSeek;
+  var liveVideoMode=isLive&&S.play&&S.play.video===video?S.play.videoMode:'';
+  var videoPath=isLive?(liveVideoMode==='source_copy'?'أصلي دون إعادة ترميز':liveVideoMode==='compatibility_transcode'?'توافق مع إعادة ترميز':'جار تحديد المسار'):'غير مطبق';
   var width=Math.max(0,Number(video.videoWidth)||0),height=Math.max(0,Number(video.videoHeight)||0);
   var screenQuality=width&&height?(width+'×'+height+' (دقة الفيديو المعروضة)'):'بانتظار بيانات الدقة';
   var frames=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
@@ -2068,7 +2070,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   box.textContent='الدقة: '+screenQuality+
    ' | سرعة الصوت/الصورة: '+(Number(video.playbackRate)||1).toFixed(2)+'×'+
    (dropped===null?'':' | الإطارات المتساقطة: '+dropped)+
-   ' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
+   ' | مسار الفيديو: '+videoPath+' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
    ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
    ' | التقديم: '+(st.seekReady||0)+' ناجح من '+(st.seekAttempts||0)+
    ' | مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+
