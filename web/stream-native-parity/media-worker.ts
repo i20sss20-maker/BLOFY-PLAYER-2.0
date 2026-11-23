@@ -43,6 +43,11 @@ function compatibleVideoArgs(kind,gopSeconds=1,profileOverride){
 
 
 const hlsSessions=new Map();
+ // Guarded pilot fan-out: only reuse one source/transcode for viewers who
+ // possess exactly the same authenticated bearer, channel, track and mode.
+ // Disabled by default; do not combine distinct subscriber credentials.
+const sharedLiveGroups=new Map();
+const MAX_SHARED_LIVE_VIEWERS=4;
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
 function hlsKey(bearer,kind,id,ext,track,forceCompat,ultra=false,viewerSid=''){
@@ -72,7 +77,36 @@ function touchHls(session){
  session.idleTimer.unref?.();
 }
 function stopHls(session,reason){
- if(!session||session.stopped)return;session.stopped=true;
+ if(!session||session.stopped)return;
+ if(session.sharedAlias){
+  // A viewer-specific stop drops one ref, NEVER another viewer's decoder.
+  session.stopped=true;
+  if(session.idleTimer)clearTimeout(session.idleTimer);
+  if(session.hardTimer)clearTimeout(session.hardTimer);
+  if(hlsSessions.get(session.key)===session)hlsSessions.delete(session.key);
+  const group=session.sharedGroup;
+  if(group){
+   group.viewers.delete(session.key);
+   if(!group.stopping&&group.viewers.size===0&&group.producer){
+    stopHls(group.producer,'last_shared_viewer')
+   }
+  }
+  return
+ }
+ if(session.sharedProducerRoot){
+  const group=session.sharedGroup;
+  if(group){
+   // Stale-source detection / worker exit evicts all aliases exactly once.
+   group.stopping=true;
+   if(sharedLiveGroups.get(group.key)===group)sharedLiveGroups.delete(group.key);
+   for(const viewerKey of Array.from(group.viewers)){
+    const viewer=hlsSessions.get(viewerKey);
+    if(viewer&&viewer.sharedGroup===group)stopHls(viewer,'shared_source_ended')
+   }
+   group.viewers.clear()
+  }
+ }
+ session.stopped=true;
  if(session.idleTimer)clearTimeout(session.idleTimer);
  if(session.hardTimer)clearTimeout(session.hardTimer);
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
@@ -264,6 +298,62 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
   return {session};
  }catch(err){stopHls(session,'fetch_or_spawn_error');return {error:'hls_start_failed',status:502}}
 }
+
+/* Preview-only fan-out with per-bearer authorization boundaries. Each viewer
+ * has an independent HLS URL/SID, idle timer, and STOP, but the same
+ * authorized account/channel/mode can read one shared on-disk HLS producer.
+ * Never share across different bearers, audio tracks or conversion modes.
+ * Opt in explicitly using VIDAA_LIVE_SHARE_SAME_BEARER=1; off by default.
+ */
+function liveShareGroupKey(bearer,kind,id,ext,track,forceCompat,ultra){
+ return hlsKey(bearer,kind,id,ext,track,forceCompat,ultra,'')+'-shared-producer'
+}
+function liveShareAllowed(kind,viewerSid){
+ return kind==='live'&&/^[a-f0-9]{32}$/.test(viewerSid||'')&&
+  String(Bun.env.VIDAA_LIVE_SHARE_SAME_BEARER||'')==='1'
+}
+function attachSharedLiveViewer(group,{key,kind,id,ext,track}){
+ if(group.stopping||!group.producer||group.producer.stopped)return {error:'shared_source_unavailable',status:503};
+ if(group.viewers.size>=MAX_SHARED_LIVE_VIEWERS)return {error:'shared_viewers_capacity',status:429};
+ const owner=group.producer;
+ const session={key,kind,id,ext,track,dir:owner.dir,startedAt:Date.now(),
+  stopped:false,sharedAlias:true,sharedGroup:group,sharedProducer:owner,legacyHls:false,
+  firstSegmentLogged:false,lastAccess:Date.now()};
+ hlsSessions.set(key,session);
+ group.viewers.add(key);
+ touchHls(session);
+ touchHls(owner);
+ return {session}
+}
+async function startSharedLiveViewer({bearer,kind,id,ext,track,key,viewerSid,forceCompat=false,ultra=false}){
+ if(!liveShareAllowed(kind,viewerSid))return {error:'sharing_disabled',status:503};
+ const groupKey=liveShareGroupKey(bearer,kind,id,ext,track,forceCompat,ultra);
+ let group=sharedLiveGroups.get(groupKey);
+ if(!group){
+  group={key:groupKey,viewers:new Set(),producer:null,stopping:false,pending:null};
+  sharedLiveGroups.set(groupKey,group);
+  // Register the pending promise BEFORE awaiting headers from the upstream.
+  // Concurrent viewers must never start two FFmpeg jobs for one group.
+  group.pending=startHls({bearer,kind,id,ext,track,key:groupKey,forceCompat,ultra})
+   .then(result=>{
+    if(result.error||!result.session||result.session.stopped){
+     if(sharedLiveGroups.get(groupKey)===group)sharedLiveGroups.delete(groupKey);
+     return result.error?result:{error:'shared_source_stopped',status:503}
+    }
+    group.producer=result.session;
+    group.producer.sharedProducerRoot=true;
+    group.producer.sharedGroup=group;
+    return result
+   }).catch(()=>{
+    if(sharedLiveGroups.get(groupKey)===group)sharedLiveGroups.delete(groupKey);
+    return {error:'shared_source_failed',status:502}
+   })
+ }
+ const started=await group.pending;
+ if(started.error)return started;
+ return attachSharedLiveViewer(group,{key,kind,id,ext,track})
+}
+
 async function hlsRequest(req,url){
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
  const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:sid-([a-f0-9]{32})\/)?(?:(compat|ultra)\/)?stop$/);
@@ -284,15 +374,24 @@ async function hlsRequest(req,url){
  const key=hlsKey(bearer,kind,id,ext,track,!!compat,compat==='ultra',viewerSid||'');
  let sess=hlsSessions.get(key);
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
- if(!sess){const start=await startHls({bearer,kind,id,ext,track,key,forceCompat:!!compat,ultra:compat==='ultra'});if(start.error)return hlsError(start.status,start.error);sess=start.session}
+ if(!sess){
+  const args={bearer,kind,id,ext,track,key,viewerSid,forceCompat:!!compat,ultra:compat==='ultra'};
+  const start=liveShareAllowed(kind,viewerSid)?await startSharedLiveViewer(args):await startHls(args);
+  if(start.error)return hlsError(start.status,start.error);
+  sess=start.session
+ }
+ // Aliases have their own auth/SID and idle timer; only the producer owns
+ // FFmpeg, its playlist/segment files and source/decoder errors.
+ const owner=sess.sharedProducer||sess;
  touchHls(sess);
- const ready=await awaitHlsFile(sess,filename,filename==='index.m3u8'?25000:8000);
+ if(owner!==sess)touchHls(owner);
+ const ready=await awaitHlsFile(owner,filename,filename==='index.m3u8'?25000:8000);
  if(ready&&filename==='index.m3u8'&&kind==='live'){
   // Avoid exposing an initialized playlist before its first segment is committed.
-  const playlistText=readFileSync(join(sess.dir,filename),'utf8');
+  const playlistText=readFileSync(join(owner.dir,filename),'utf8');
   const firstSegment=(playlistText.match(/seg-\d{6}\.ts/g)||[])[0];
-  if(firstSegment&&!existsSync(join(sess.dir,firstSegment))){
-   const available=await awaitHlsFile(sess,firstSegment,4500);
+  if(firstSegment&&!existsSync(join(owner.dir,firstSegment))){
+   const available=await awaitHlsFile(owner,firstSegment,4500);
    if(!available)return hlsError(503,'hls_playlist_not_ready');
   }
  }
@@ -300,17 +399,17 @@ async function hlsRequest(req,url){
   sess.firstSegmentLogged=true;
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
- if(!ready)return hlsError(sess.error?502:504,sess.error||'hls_segment_timeout');
- if(filename==='index.m3u8'&&staleLiveManifest(sess,join(sess.dir,filename),Date.now())){
-  console.warn('VIDAA_LIVE_MANIFEST_STALLED',{kind:sess.kind,mode:sess.videoMode||'unknown'});
-  stopHls(sess,'stale_manifest');
+ if(!ready)return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout');
+ if(filename==='index.m3u8'&&staleLiveManifest(owner,join(owner.dir,filename),Date.now())){
+  console.warn('VIDAA_LIVE_MANIFEST_STALLED',{kind:owner.kind,mode:owner.videoMode||'unknown'});
+  stopHls(owner,'stale_manifest');
   return hlsError(503,'hls_source_stalled');
  }
  try{
-  const data=readFileSync(join(sess.dir,filename));
+  const data=readFileSync(join(owner.dir,filename));
   if(!data.length)return hlsError(503,'hls_file_empty');
   const playlist=filename==='index.m3u8';
-  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','X-Blofy-Video-Mode':sess.videoMode||'unknown','X-Blofy-Source-Resolution':sess.sourceDimensions||'unknown'};
+  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','X-Blofy-Video-Mode':owner.videoMode||'unknown','X-Blofy-Source-Resolution':owner.sourceDimensions||'unknown'};
   return new Response(data,{status:200,headers});
  }catch{return hlsError(502,'hls_read_failed')}
 }
