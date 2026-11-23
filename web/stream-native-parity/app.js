@@ -905,6 +905,7 @@ function cleanupPlayer(){
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
+  if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
  }
@@ -1380,10 +1381,14 @@ function openPlayer(kind,id,extension,name,from){
  function markReady(){
   if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
+  if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   revealControls();
   acquireWakeLock();
-  if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30&&isFinite(video.duration)&&video.duration>0){
-   var checkpoint=Math.min(resume,Math.max(0,video.duration-5));
+  if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30){
+   // Checkpoints must not be clamped to a misleading 60-second native preview.
+   // Trust the real catalog runtime, or retain the exact saved seek target.
+   var duration=Number(state.duration)||0;
+   var checkpoint=duration>=120?Math.min(resume,Math.max(0,duration-5)):resume;
    state.didResume=true;
    if(nativeCanSeek(checkpoint)){
     try{video.currentTime=checkpoint;verifyDirectSeek(checkpoint)}catch(e){state.recoverDirect()}
@@ -1494,6 +1499,7 @@ function openPlayer(kind,id,extension,name,from){
   state.directFallback=true;
   if(state.directSeekCheck){clearTimeout(state.directSeekCheck);state.directSeekCheck=null}
   if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
+  if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
   var position=Math.max(resume,state.resume||0,video.currentTime||0);
   playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
@@ -1503,6 +1509,17 @@ function openPlayer(kind,id,extension,name,from){
  function startDirect(){
   state.mode='direct';state.offset=0;state.didResume=false;state.ready=false;
   var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='MP4 • جار فحص إمكانية التقديم';
+  if(state.directStartupTimer)clearTimeout(state.directStartupTimer);
+  state.directStartupTimer=setTimeout(function(){
+   state.directStartupTimer=null;
+   if(S.route!=='player'||S.playerView!==state||state.mode!=='direct'||state.directFallback||state.ready)return;
+   if(video.paused){
+    playerStatus('اضغط تشغيل لبدء الفيلم. إذا استمر التعليق استخدم إعادة المحاولة.');
+    return
+   }
+   playerStatus('تأخر فتح الفيديو الأصلي؛ جار استخدام مشغّل الأفلام البديل…');
+   state.recoverDirect()
+  },18000);
   video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
   try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
  }
