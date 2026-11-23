@@ -71,6 +71,63 @@ class PlaybackRecoveryPolicyTest {
         ))
     }
 
+    @Test fun onlyAuthenticatedStreamVodRetriesTransientNetworkErrorsMoreThanOnce() {
+        val eligible = listOf(
+            "ERROR_CODE_IO_NETWORK_CONNECTION_FAILED",
+            "ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT"
+        )
+        for (code in eligible) {
+            assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+                isCodeOnlyGateway = true, contentKind = "episode",
+                errorCodeName = code
+            ) == 3)
+            assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+                isCodeOnlyGateway = true, contentKind = "movie",
+                errorCodeName = code
+            ) == 3)
+            assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+                isCodeOnlyGateway = false, contentKind = "movie",
+                errorCodeName = code
+            ) == 1)
+            assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+                isCodeOnlyGateway = true, contentKind = "live",
+                errorCodeName = code
+            ) == 1)
+        }
+    }
+
+    @Test fun badHttpCredentialsAndCodecErrorsNeverReceiveMoreRetries() {
+        for (status in listOf(401, 403, 404, 416, 429, 456, 509)) {
+            assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+                isCodeOnlyGateway = true, contentKind = "episode",
+                errorCodeName = "ERROR_CODE_IO_BAD_HTTP_STATUS",
+                httpStatus = status
+            ) == 1)
+        }
+        for (status in listOf(408, 500, 502, 503, 504)) {
+            assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+                isCodeOnlyGateway = true, contentKind = "episode",
+                errorCodeName = "ERROR_CODE_IO_BAD_HTTP_STATUS",
+                httpStatus = status
+            ) == 3)
+        }
+        assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+            isCodeOnlyGateway = true, contentKind = "episode",
+            errorCodeName = "ERROR_CODE_DECODING_FAILED"
+        ) == 1)
+        assertTrue(PlaybackRecoveryPolicy.maxErrorRetries(
+            isCodeOnlyGateway = true, contentKind = "episode",
+            errorCodeName = "ERROR_CODE_IO_BAD_HTTP_STATUS"
+        ) == 1)
+    }
+
+    @Test fun streamVodRetryBackoffStaysBoundedAndNormalPlayerIsUnchanged() {
+        assertTrue(PlaybackRecoveryPolicy.errorRetryDelayMs(1, 3) == 800L)
+        assertTrue(PlaybackRecoveryPolicy.errorRetryDelayMs(2, 3) == 1_600L)
+        assertTrue(PlaybackRecoveryPolicy.errorRetryDelayMs(3, 3) == 3_000L)
+        assertTrue(PlaybackRecoveryPolicy.errorRetryDelayMs(1, 1) == 600L)
+    }
+
     @Test fun nextOutageAfterHealthyPlaybackGetsFreshSingleRetry() {
         assertTrue(PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
             lastReadyAtMs = 100_000L, nowMs = 131_000L

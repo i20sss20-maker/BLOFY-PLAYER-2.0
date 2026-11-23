@@ -14,6 +14,34 @@ internal object PlaybackRecoveryPolicy {
     const val RECOVERY_COOLDOWN_MS = 60_000L
     const val MAX_RESTARTS_PER_CHANNEL = 3
     const val HEALTHY_PLAYBACK_FOR_RETRY_RESET_MS = 30_000L
+    // The source may drop a series/movie response mid-body and omit the strong
+    // ETag required for server-side byte stitching. Let Media3 re-open the
+    // *same* authenticated URL at its saved play position instead. Never add
+    // retries for broken credentials, missing media, codec failures or live TV.
+    const val STREAM_VOD_NETWORK_RETRIES = 3
+
+    fun maxErrorRetries(
+        isCodeOnlyGateway: Boolean,
+        contentKind: String,
+        errorCodeName: String,
+        httpStatus: Int? = null
+    ): Int {
+        val isVod = contentKind == "movie" || contentKind == "episode"
+        val networkFailure = errorCodeName == "ERROR_CODE_IO_NETWORK_CONNECTION_FAILED" ||
+            errorCodeName == "ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT"
+        val transientHttp = errorCodeName == "ERROR_CODE_IO_BAD_HTTP_STATUS" &&
+            httpStatus in setOf(408, 500, 502, 503, 504)
+        return if (isCodeOnlyGateway && isVod && (networkFailure || transientHttp))
+            STREAM_VOD_NETWORK_RETRIES else 1
+    }
+
+    fun errorRetryDelayMs(retry: Int, maxRetries: Int): Long =
+        if (maxRetries == STREAM_VOD_NETWORK_RETRIES) when (retry) {
+            1 -> 800L
+            2 -> 1_600L
+            else -> 3_000L
+        } else 600L
+
 
     fun recoveredLongEnoughToResetErrorRetry(
         lastReadyAtMs: Long,
