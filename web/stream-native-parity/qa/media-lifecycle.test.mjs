@@ -382,6 +382,99 @@ test('web HLS proxy validates optional playback SID and preserves legacy URL gro
  assert.match(playerSource,/\/sid-'\+freshPlaybackId\(\)/,'web player generates new live SID');
 });
 
+test('guarded same-bearer live fan-out shares one encoder but isolates each viewer stop',async()=>{
+ const hlsBegin=source.indexOf('function hlsKey('),hlsEnd=source.indexOf('\nfunction touchHls(',hlsBegin);
+ const shareBegin=source.indexOf('function liveShareGroupKey('),shareEnd=source.indexOf('\nasync function hlsRequest(',shareBegin);
+ const stopBegin=source.indexOf('function stopHls('),stopEnd=source.indexOf('\nfunction releaseHls(',stopBegin);
+ assert.ok(hlsBegin>=0&&hlsEnd>hlsBegin&&shareBegin>hlsEnd&&shareEnd>shareBegin&&stopBegin>0&&stopEnd>stopBegin);
+ const secret='f'.repeat(64),hlsSessions=new Map(),sharedLiveGroups=new Map();
+ let started=0,killCount=0,abortCount=0,removed=[];
+ const bearer='Bearer pilot-A',other='Bearer pilot-B';
+ const context={createHmac:crypto.createHmac,SECRET:secret,hlsSessions,sharedLiveGroups,
+  MAX_SHARED_LIVE_VIEWERS:4,
+  Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
+  touchHls(session){session.lastAccess=Date.now()},
+  startHls:async({key,kind})=>{
+   started++;
+   const session={key,kind,dir:'/encoder-'+started,released:false,
+    abort:{abort(){abortCount++}},proc:{kill(){killCount++}}};
+   hlsSessions.set(key,session);
+   return {session}
+  },
+  clearTimeout(){},rmSync(path){removed.push(path)},console:{info(){}},
+  releaseHls(s){s.released=true}
+ };
+ const hash=vm.runInNewContext(source.slice(hlsBegin,hlsEnd)+';\nhlsKey',context);
+ context.hlsKey=hash;
+ const methods=vm.runInNewContext(source.slice(shareBegin,shareEnd)+
+  ';\n({startSharedLiveViewer,liveShareGroupKey,liveShareAllowed})',context);
+ const stop=vm.runInNewContext(source.slice(stopBegin,stopEnd)+';\nstopHls',context);
+ context.stopHls=stop;
+ const a='a'.repeat(32),b='b'.repeat(32);
+ function request(token,sid,track='0',compat=false){
+  return {bearer:token,kind:'live',id:'31',ext:'ts',track,forceCompat:compat,
+   viewerSid:sid,key:hash(token,'live','31','ts',track,compat,false,sid)}
+ }
+ assert.equal(methods.liveShareAllowed('live',a),true);
+ const [first,second]=await Promise.all([
+  methods.startSharedLiveViewer(request(bearer,a)),
+  methods.startSharedLiveViewer(request(bearer,b))
+ ]);
+ assert.equal(started,1,'two same-bearer viewers share exactly one media source and encoder');
+ assert.equal(first.session.dir,second.session.dir);
+ assert.notEqual(first.session.key,second.session.key);
+ assert.equal(sharedLiveGroups.size,1);
+ stop(first.session,'viewer_stopped');
+ assert.equal(abortCount,0,'one STOP must not abort the shared stream');
+ assert.equal(killCount,0);
+ assert.equal(hlsSessions.has(second.session.key),true);
+ assert.equal(hlsSessions.has(first.session.key),false);
+ stop(second.session,'viewer_stopped');
+ assert.equal(abortCount,1,'last viewer releases upstream connection exactly once');
+ assert.equal(killCount,1);
+ assert.equal(sharedLiveGroups.size,0);
+ assert.equal(hlsSessions.size,0);
+ assert.deepEqual(removed,['/encoder-1']);
+ const [differentAccount,differentAudio]=await Promise.all([
+  methods.startSharedLiveViewer(request(other,a)),
+  methods.startSharedLiveViewer(request(bearer,b,'1'))
+ ]);
+ assert.equal(started,3,'different bearer or audio track never shares a producer');
+ assert.notEqual(differentAccount.session.dir,differentAudio.session.dir);
+ const differentMode=await methods.startSharedLiveViewer(request(bearer,a,'1',true));
+ assert.equal(started,4,'compatibility transcoder cannot reuse a source-copy producer');
+ stop(differentAccount.session,'viewer_stopped');
+ stop(differentAudio.session,'viewer_stopped');
+ stop(differentMode.session,'viewer_stopped');
+});
+
+test('same-bearer fan-out is off by default and max four authenticated viewers',async()=>{
+ const begin=source.indexOf('function liveShareGroupKey('),end=source.indexOf('\nasync function hlsRequest(',begin);
+ assert.ok(begin>0&&end>begin);
+ const hlsBegin=source.indexOf('function hlsKey('),hlsEnd=source.indexOf('\nfunction touchHls(',hlsBegin);
+ const map=new Map(),groups=new Map(),env={},ctx={
+  createHmac:crypto.createHmac,SECRET:'d'.repeat(64),Bun:{env},hlsSessions:map,sharedLiveGroups:groups,
+  MAX_SHARED_LIVE_VIEWERS:4,touchHls(){},startHls:async args=>{
+   const producer={key:args.key,kind:'live',dir:'/temp',stopped:false};map.set(args.key,producer);return {session:producer}
+  }
+ };
+ ctx.hlsKey=vm.runInNewContext(source.slice(hlsBegin,hlsEnd)+';\nhlsKey',ctx);
+ const share=vm.runInNewContext(source.slice(begin,end)+';\n({liveShareAllowed,startSharedLiveViewer})',ctx);
+ const sid='a'.repeat(32);
+ assert.equal(share.liveShareAllowed('live',sid),false,'opt-in defaults to disabled');
+ env.VIDAA_LIVE_SHARE_SAME_BEARER='1';
+ assert.equal(share.liveShareAllowed('movie',sid),false,'VOD must not share by this feature');
+ assert.equal(share.liveShareAllowed('live',''),false,'legacy sessions stay isolated');
+ const args={bearer:'Bearer A',kind:'live',id:'31',ext:'ts',track:'0',viewerSid:sid,key:'viewer0'};
+ for(let i=0;i<4;i++){
+  const session=await share.startSharedLiveViewer({...args,key:'viewer'+i,viewerSid:i.toString(16).padStart(32,'0')});
+  assert.ok(session.session)
+ }
+ const overflow=await share.startSharedLiveViewer({...args,key:'viewer5',viewerSid:'f'.repeat(32)});
+ assert.equal(overflow.status,429);
+ assert.equal(map.size,5,'one producer plus four aliases, not five FFmpeg jobs');
+});
+
 test('source H264 and forced VIDAA compatibility HLS use isolated subscriber session keys',()=>{
  const begin=source.indexOf('function hlsKey(');
  const end=source.indexOf('\nfunction touchHls(',begin);
@@ -443,6 +536,7 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
   secureEquals:()=>true,join:(...args)=>args.join('/'),
   readFileSync:(file,encoding)=>encoding==='utf8'?'#EXTM3U\n#EXT-X-VERSION:3\n':Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
   existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,staleLiveManifest:()=>false,
+  liveShareAllowed:()=>false,
   hlsError:(status,error)=>({status,error}),
   json:(status,value)=>({status,value}),
   startHls:async args=>{
