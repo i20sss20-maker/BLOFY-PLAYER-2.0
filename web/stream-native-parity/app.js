@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
- watch:{},favoriteItems:{},profileKey:'',accountEpoch:0,host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
+ watch:{},favoriteItems:{},profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -24,6 +24,8 @@ function useProfile(id){
  S.favoriteItems=readJson(profileStorageKey('favoriteItems'),{});
  S.recentSearches=readJson(profileStorageKey('recentSearches'),[]);
  if(changed){
+  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
+  S.epgToken++;S.epgCache={};
   S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
   S.selected=null;S.livePreview=null;S.listingInflight={};S.catsInflight={}
  }
@@ -69,6 +71,8 @@ function login(message){
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];
  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
+ if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
+ S.epgToken++;S.epgCache={};
  app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
  '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
  '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
@@ -314,7 +318,8 @@ function buildCatalog(kind,listing){
   '</div><div class="pane-bottom"><button class="btn secondary" data-more="live" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section>'+
   '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>اختر قناة لبدء المعاينة</div><video id="live-video" playsinline controls></video></div>'+
   '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">تحرك بين القنوات واضغط OK لتشغيلها.</p>'+
-  '<div class="row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button></div><div class="preview-status" id="live-status"></div></div></section>'+
+  '<div class="row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button></div><div class="preview-status" id="live-status"></div>'+
+   '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
   var selected=findItem('live',S.selected)||source[0];if(selected)selectChannel(itemId(selected,'live'),false)
  }else{
@@ -366,7 +371,66 @@ function selectChannel(id,activate){
  var rows=document.querySelectorAll('[data-channel]');for(var i=0;i<rows.length;i++)rows[i].className='channel-item'+(rows[i].getAttribute('data-channel')===id?' selected':'');
  var name=document.getElementById('live-title'),desc=document.getElementById('live-desc');
  if(name)name.textContent=title(item);if(desc)desc.textContent='معاينة '+title(item)+' • اضغط المعاينة للتشغيل';
+ loadShortEpg(id);
  if(activate)beginPreview(item)
+}
+function decodeEpgField(raw){
+ var source=String(raw==null?'':raw).trim().slice(0,500);
+ if(source.length<8||source.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(source))return source;
+ try{
+  var binary=atob(source),decoded='';
+  if(typeof TextDecoder!=='undefined'){
+   var bytes=new Uint8Array(binary.length);
+   for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+   decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes)
+  }else decoded=decodeURIComponent(escape(binary));
+  if(decoded&&decoded.indexOf('\ufffd')<0&&!/[\x00-\x08\x0e-\x1f]/.test(decoded))return decoded.slice(0,500)
+ }catch(e){}
+ return source
+}
+function epgTime(raw,stamp){
+ var t=String(raw||'');
+ var match=/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/.exec(t);
+ if(match)return (match[1].length===1?'0':'')+match[1]+':'+match[2];
+ var n=Number(stamp||0);
+ if(n>1000000000&&n<4102444800){
+  try{return new Date(n*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Riyadh'})}catch(e){}
+ }
+ return ''
+}
+function formatEpg(value){
+ var list=Array.isArray(value)?value:value&&Array.isArray(value.epg_listings)?value.epg_listings:[];
+ if(!list.length)return '<span class="epg-empty">دليل البرامج غير متوفر لهذه القناة من المصدر.</span>';
+ var seen={},items=[];
+ for(var i=0;i<list.length&&items.length<5;i++){
+  var x=list[i]||{},name=decodeEpgField(x.title||x.name||'');
+  if(!name||seen[name+':'+(x.start||'')])continue;
+  seen[name+':'+(x.start||'')]=true;
+  var from=epgTime(x.start,x.start_timestamp),to=epgTime(x.end||x.stop,x.stop_timestamp);
+  var on=String(x.now_playing||'')==='1';
+  items.push('<div class="epg-entry">'+
+   '<span class="epg-time">'+esc(from&&to?from+' – '+to:from||'الوقت غير متوفر')+'</span>'+
+   '<span class="epg-program">'+(on?'<em>الآن</em> ':'')+esc(name.slice(0,110))+'</span></div>')
+ }
+ return items.length?items.join(''):'<span class="epg-empty">لم يرسل المصدر بيانات برامج قابلة للعرض.</span>'
+}
+function loadShortEpg(id){
+ var box=document.getElementById('live-epg'),now=Date.now(),cached=S.epgCache[id],token=++S.epgToken;
+ if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
+ if(!box||S.route!=='live'||!id)return;
+ if(cached&&now-cached.time<300000){box.innerHTML=cached.html;return}
+ box.textContent='جار تحميل دليل القناة…';
+ S.epgTimer=setTimeout(function(){
+  S.epgTimer=null;
+  if(S.route!=='live'||token!==S.epgToken||S.selected!==id)return;
+  api('GET','/api/catalog?action=get_short_epg&stream_id='+enc(id)+'&limit=5',null,function(st,data){
+   if(S.route!=='live'||token!==S.epgToken||S.selected!==id)return;
+   var target=document.getElementById('live-epg');if(!target)return;
+   var html=st===200?formatEpg(data):'<span class="epg-empty">تعذر تحميل دليل البرامج الآن.</span>';
+   target.innerHTML=html;
+   if(st===200)S.epgCache[id]={time:Date.now(),html:html}
+  })
+ },450)
 }
 function beginPreview(item){
  var video=document.getElementById('live-video'),box=document.getElementById('live-status'),empty=document.getElementById('preview-empty');if(!video)return;
