@@ -280,3 +280,20 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  border-radius:999px;color:#aefff0;background:#0e555bde;
  font:600 11px/1.5 system-ui,sans-serif;letter-spacing:0}
 @media(max-width:730px){.player-mode-badge{font-size:10px;margin-inline-start:4px;padding:3px 6px}}
+
+
+/* Authorized Xtream short EPG – compact guide alongside the live preview. */
+.epg-panel{margin-top:12px;padding-top:10px;border-top:1px solid #86d6d54a;min-width:0}
+.epg-heading{display:block;font-size:13px;color:#e2fff8;margin:0 0 7px}
+.epg-content{max-height:134px;overflow-y:auto;scrollbar-width:thin;font-size:12px;color:#d7eeeb}
+.epg-entry{display:flex;gap:8px;align-items:baseline;border-bottom:1px solid #d7ffff14;
+ padding:6px 1px;line-height:1.5;text-align:right;min-width:0}
+.epg-entry:last-child{border-bottom:0}
+.epg-time{color:#9bcfd2;white-space:nowrap;flex:none;font-size:11px;direction:ltr}
+.epg-program{min-width:0;overflow-wrap:anywhere;flex:1}
+.epg-program em{display:inline-block;color:#0c252e;background:#a2f9d6;
+ font-style:normal;font-weight:700;border-radius:5px;padding:0 5px;margin-inline-end:4px;font-size:10px}
+.epg-empty{display:block;color:#a5c5c6;line-height:1.7;padding:5px 0}
+@media(max-width:730px){.catalog .preview:has(.epg-panel){height:auto;min-height:440px}
+ .catalog .preview .preview-video-wrap{min-height:200px;height:210px;flex:none}
+ .epg-content{max-height:120px}}
