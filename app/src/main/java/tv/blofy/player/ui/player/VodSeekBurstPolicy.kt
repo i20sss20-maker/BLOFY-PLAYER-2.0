@@ -13,7 +13,7 @@ internal object VodSeekBurstPolicy {
         // Saturate instead of overflowing Long for broken duration metadata.
         val moved = when {
             deltaMs > 0 && base > Long.MAX_VALUE - deltaMs -> Long.MAX_VALUE
-            deltaMs < 0 && base < -deltaMs -> 0L
+            deltaMs == Long.MIN_VALUE || deltaMs < 0 && base < -deltaMs -> 0L
             else -> base + deltaMs
         }
         return if (durationMs != null && durationMs > 0L) moved.coerceIn(0L, durationMs)
