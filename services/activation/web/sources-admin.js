@@ -2,6 +2,7 @@ const el = id => document.getElementById(id);
 const state = {
   xtreamServers: [],
   xtreamTotals: {},
+  minuteWatch: null,
   unavailableBySource: new Map(),
   xtreamLoadSequence: 0,
   nativeCsrfToken: '',
@@ -320,6 +321,7 @@ function serverCard(item) {
       '⚠️ سعة Xtream: اتصال واحد معلَن من المزود، ومشترك بين جميع الأكواد. زيادة الأجهزة وحدها لا تزيد سعة المصدر؛ يلزم رفع حد الاتصالات لدى المزود أو ترخيص إعادة بث.'));
   }
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
+  updateMinuteWatchNotice(info,item);
   updateSourceAccountWarnings(info,item);
   if(item.syncProgress){
     const typeNames={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
@@ -410,6 +412,7 @@ function refreshSourceCard(card, item) {
   }
   const info=card.querySelector('.server-info');
   if(info){
+    updateMinuteWatchNotice(info,item);
     updateSourceAccountWarnings(info,item);
     let interrupted=info.querySelector('.sync-interrupted-note');
     if(item.status==='syncing'&&!item.syncing){
@@ -433,6 +436,30 @@ function refreshSourceCard(card, item) {
   }
 }
 
+
+function updateMinuteWatchNotice(parent,item){
+ if(!parent)return;
+ let label=parent.querySelector('.minute-watch-note');
+ const watch=state.minuteWatch;
+ if(!watch?.enabled||watch.sourceId!==item.id){
+  label?.remove();return;
+ }
+ if(!label){label=make('span','sync-progress-note minute-watch-note');parent.append(label);}
+ const types={live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
+ const status={
+  starting:'بداية المراقبة',checking:'جارٍ فحص جديد',importing:'استيراد التغييرات',
+  completed:'اكتمل تحديث المحتوى',unchanged:'المحتوى مطابق للمصدر',
+  partial:'تحذير جزئي',failed:'فشل الفحص',deferred:'الانتظار لانشغال المصدر'
+ }[watch.status]||'مراقبة نشطة';
+ const checked=watch.checkedAt
+   ?' · آخر فحص: '+new Date(watch.checkedAt).toLocaleTimeString('ar-SA')
+   :' · لم يبدأ أول فحص بعد';
+ const changed=Array.isArray(watch.changedTypes)&&watch.changedTypes.length
+   ?' · تغيّرت: '+watch.changedTypes.map(t=>types[t]||t).join('، ')
+   :'';
+ const trouble=watch.lastError?' · يوجد تنبيه في المزامنة':'';
+ label.textContent='🔄 مزامنة ذكية كل دقيقة · '+status+checked+changed+trouble;
+}
 
 function renderHomeMetrics(){
   const totals=state.xtreamTotals||{};
@@ -471,6 +498,19 @@ function renderXtream() {
   el('xtSeries').textContent = Number(totals.series || 0).toLocaleString();
   renderHomeMetrics();
   renderStudioOverview();
+  const watchLine=el('minuteCatalogWatchStatus');
+  if(watchLine){
+    const watch=state.minuteWatch;
+    const statuses={checking:'فحص التغييرات الآن',importing:'جاري استيراد الجديد',
+      completed:'آخر تحديث نجح',unchanged:'محتوى السيرفر مطابق للمكتبة',
+      partial:'بعض فحوصات المصدر لم تكتمل',failed:'فشل فحص، وستتم إعادة المحاولة',
+      starting:'في انتظار أول فحص',deferred:'المصدر مشغول'};
+    watchLine.textContent=watch?.enabled
+      ?'🔄 مراقبة Xtream التلقائية: كل دقيقة عند خلو المصدر · '+
+       (statuses[watch.status]||'تعمل')+
+       (watch.checkedAt?' · آخر فحص '+new Date(watch.checkedAt).toLocaleString('ar-SA'):'')
+      :'المراقبة التلقائية الدقيقة غير مفعلة لهذا المصدر.';
+  }
   const text=el('xtreamTotalsNotice');
   if(text){
     const count=Number(totals.live||0)+Number(totals.movie||0)+Number(totals.series||0);
@@ -590,15 +630,17 @@ async function loadXtream(silent = false, strict = false) {
   const seq=++state.xtreamLoadSequence;
   if (!silent) el('xtreamLoading').hidden = false;
   try {
-    const [data,unavailable]=await Promise.all([
+    const [data,unavailable,minuteWatch]=await Promise.all([
       api('/api/v1/admin/xtream/servers'),
-      api('/api/v1/admin/xtream/unavailable-media').catch(()=>null)
+      api('/api/v1/admin/xtream/unavailable-media').catch(()=>null),
+      api('/api/v1/admin/xtream/minute-watch/status').catch(()=>null)
     ]);
     // Ignore stale requests started before a later refresh or mutation.
     if(seq!==state.xtreamLoadSequence) {
       if(strict)throw new Error('xtream_readback_superseded');
       return null;
     }
+    state.minuteWatch=minuteWatch;
     state.nativeCsrfToken=String(data.csrfToken||'');
     state.xtreamServers = Array.isArray(data.items) ? data.items : [];
     state.xtreamTotals = data.totals || {};

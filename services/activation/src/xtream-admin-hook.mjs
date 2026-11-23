@@ -61,6 +61,7 @@ import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
+import {fingerprintXtreamListing,createMinuteCatalogWatcher} from './xtream-minute-catalog-watch.mjs';
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
@@ -2124,14 +2125,14 @@ function startSync(id, types, options={}) {
       // Scheduled imports used to report only successful QUEUE acceptance.
       // Deliver a sanitized terminal outcome after the actual database
       // import so Studio Pro can retry a partial / failed media type.
-      const settled=async(state)=>{
+      const settled=async(state,result=null)=>{
         if(typeof options?.onSettled!=='function')return;
-        try{await options.onSettled({state});}
+        try{await options.onSettled({state,result});}
         catch{console.warn('BLOFY_STUDIO_CATALOG_OUTCOME',{code:'operator_outcome_record_failed'});}
       };
       try{
         const result=await syncServer(id,types,options);
-        await settled(result.partialWarning?'partial':'completed');
+        await settled(result.partialWarning?'partial':'completed',result);
         return result;
       }catch(error){
         await settled('failed');
@@ -2168,6 +2169,36 @@ async function approvedSalehMirrorSource(){
  return resolveExclusiveApprovedSaleh(controlPool);
 }
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
+const minuteCatalogWatch=createMinuteCatalogWatcher({
+ db:controlPool,sourceById:serverById,
+ approvedSource:approvedSalehMirrorSource,
+ enabled:()=>process.env.BLOFY_XTREAM_MINUTE_SYNC_ENABLED==='1',
+ sourceBusy:id=>syncQueue.has(id)||syncLocks.has(id),
+ startSync,
+ fetchSnapshot:async(source,mediaType)=>{
+  const creds=decryptCredentials(source);
+  return fingerprintXtreamListing({
+   mediaType,load:kind=>checkedFetch(
+    xtreamApiUrl(source.base_url,creds.username,creds.password,
+     TYPE_ACTIONS[mediaType][kind]),{timeoutMs:90000,sourceId:source.id})
+  });
+ },
+ onEvent:event=>console.info('BLOFY_XTREAM_MINUTE_WATCH',JSON.stringify(event))
+});
+// Poll no faster than once per minute. Cross-replica PostgreSQL lease ensures
+// only one worker checks/imports; heavy full imports happen only on changes.
+const minuteWatchTick=()=>{
+ if(process.env.BLOFY_XTREAM_MINUTE_SYNC_ENABLED!=='1')return;
+ void minuteCatalogWatch.tick().catch(error=>console.warn(
+  'BLOFY_XTREAM_MINUTE_WATCH',JSON.stringify({
+   code:'minute_tick_error',reason:redactXtreamError(error)})));
+};
+const minuteWatchTimer=setInterval(minuteWatchTick,60000);
+minuteWatchTimer.unref?.();
+const minuteWatchStartup=setTimeout(minuteWatchTick,45000);
+minuteWatchStartup.unref?.();
+
+
 async function dailyCatalogTick(){
   const selected=await approvedSalehMirrorSource();
   const scheduleEnv={...process.env,
@@ -4755,6 +4786,9 @@ http.createServer = function withBlofyXtream(listener) {
         }catch{
           return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
         }
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/minute-watch/status') {
+        return json(res,200,await minuteCatalogWatch.status());
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
         const items = (await serverRows()).map(adminServer);
