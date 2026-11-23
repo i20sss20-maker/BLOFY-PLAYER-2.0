@@ -46,7 +46,15 @@ jobs:
             assembleStreamCodeDemo
           apk="$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
           test -s "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "name='tv.blofy.player.v2.stream' versionCode='2000119'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "name='tv.blofy.player.v2.stream.qa' versionCode='2000119'"
+      - name: Upload isolated QA APK for Android 9 and TV testing
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-56.0.4-VOD-SEEK-SIDE-BY-SIDE-QA
+          path: app/build/outputs/apk/streamCodeDemo/**/*.apk
+          if-no-files-found: error
+          retention-days: 7
       - name: Test reports (no paid user credentials or APK publication)
         if: always()
         uses: actions/upload-artifact@v4
