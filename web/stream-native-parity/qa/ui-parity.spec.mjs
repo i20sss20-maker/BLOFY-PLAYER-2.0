@@ -648,6 +648,16 @@ test('TV diagnostics show redacted source-vs-decoder evidence without credential
  expect(content).not.toContain('http://');
  expect(content).not.toContain('https://');
  expect(content).not.toContain('api_key=');
+ // Physical VIDAA Back dismisses the report before exiting the channel.
+ await page.evaluate(()=>{
+  const event=new Event('keydown',{bubbles:true,cancelable:true});
+  Object.defineProperty(event,'keyCode',{value:461});
+  document.dispatchEvent(event)
+ });
+ await expect(panel).toBeHidden();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await page.locator('#player-diagnostic-toggle').click();
+ await expect(panel).toBeVisible();
  await page.locator('#player-diagnostic-toggle').click();
  await expect(panel).toBeHidden();
  expect(errors).toEqual([])
