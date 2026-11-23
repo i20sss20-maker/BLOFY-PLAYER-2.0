@@ -471,3 +471,23 @@ test('preview-to-fullscreen awaits HLS stop acknowledgement before opening a new
  expect(stopRequests).toBe(1);
  // Playback is allowed to fail due to fixture data, but transfer ordering must hold.
 });
+
+
+test('VIDAA settings work without browser popup and show local HLS/fullscreen capabilities',async({page})=>{
+ const dialogs=[];page.on('dialog',d=>{dialogs.push(d.type());d.dismiss()});
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="settings"]').first().click();
+ await expect(page.locator('#test-tv-capabilities')).toBeVisible();
+ await page.locator('#test-tv-capabilities').click();
+ await expect(page.locator('#tv-capabilities-result')).toContainText('HLS الأصلي');
+ await expect(page.locator('#tv-capabilities-result')).toContainText('ملء الشاشة');
+ await page.locator('#clear-watch-history').click();
+ await expect(page.locator('#watch-clear-confirm')).toBeVisible();
+ await page.locator('#watch-clear-cancel').click();
+ await expect(page.locator('#watch-clear-confirm')).toHaveCount(0);
+ await page.locator('#clear-watch-history').click();
+ await page.locator('#watch-clear-accept').click();
+ await expect(page.locator('#watch-clear-confirm')).toHaveCount(0);
+ await expect(page.locator('#page-status')).toContainText('تم حذف سجل المشاهدة');
+ expect(dialogs).toEqual([]);
+});
