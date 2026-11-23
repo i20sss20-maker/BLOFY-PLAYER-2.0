@@ -225,7 +225,7 @@ test('web and remote navigation return to the previous screen; player can show r
 });
 
 
-test('live favorites open the channel player; controls surf channels and mute without leaving fullscreen',async({page})=>{
+test('native live dock matches Android controls, favors channels and surfs without mute button',async({page})=>{
  const errors=[];page.on('pageerror',err=>errors.push(err.message));
  await page.goto('http://127.0.0.1:3000/');
  await page.locator('[data-go="live"]').first().click();
@@ -237,8 +237,12 @@ test('live favorites open the channel player; controls surf channels and mute wi
  await page.locator('[data-details="live:31"]').click();
  await expect(page.locator('#player-root')).toBeVisible();
  await expect(page.locator('#player-title-text')).toHaveText('قناة اختبار');
- await page.locator('#player-mute').click();
- await expect(page.locator('#player-mute')).toHaveAttribute('aria-pressed','true');
+ await expect(page.locator('#player-mute')).toHaveCount(0);
+ await expect(page.locator('.native-player-dock .native-player-control')).toHaveCount(7);
+ await expect(page.locator('#player-audio')).toBeVisible();
+ await expect(page.locator('#player-subtitles')).toBeVisible();
+ await expect(page.locator('#player-quality')).toBeVisible();
+ await expect(page.locator('#player-favorite')).toHaveAttribute('aria-pressed','true');
  await page.locator('#player-back').click();
  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
  await page.locator('[data-go="live"]').first().click();
@@ -313,4 +317,28 @@ test('poster loads a valid secondary cover if the primary Xtream icon fails',asy
  await expect.poll(()=>artwork.getAttribute('src'),{timeout:7000}).toContain('alternate-cover.png');
  movie.stream_icon=first;
  if(second===undefined)delete movie.cover;else movie.cover=second;
+});
+
+test('movie player mirrors native 10-second transport and keeps advanced actions behind menu',async({page})=>{
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect(page.locator('#player-mute')).toHaveCount(0);
+ await expect(page.locator('.native-player-eyebrow')).toContainText('BLOFY CINEMA');
+ await expect(page.locator('#player-skip-back')).toHaveAttribute('aria-label','رجوع 10 ثوانٍ');
+ await expect(page.locator('#player-skip-forward')).toHaveAttribute('aria-label','تقديم 10 ثوانٍ');
+ await expect(page.locator('.native-player-icon')).toHaveCount(7);
+ await expect(page.locator('#player-more-panel')).toBeHidden();
+ await page.locator('#player-options-toggle').click();
+ await expect(page.locator('#player-more-panel')).toBeVisible();
+ await expect(page.locator('#player-restart')).toBeVisible();
+ await expect(page.locator('#player-jump-toggle')).toBeVisible();
+ await page.locator('#player-options-toggle').click();
+ await expect(page.locator('#player-more-panel')).toBeHidden();
+ await page.locator('#player-favorite').click();
+ await expect(page.locator('#player-favorite')).toHaveAttribute('aria-pressed','true');
+ await page.locator('#player-favorite').click();
+ await expect(page.locator('#player-favorite')).toHaveAttribute('aria-pressed','false');
 });
