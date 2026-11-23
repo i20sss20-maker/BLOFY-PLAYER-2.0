@@ -49,3 +49,57 @@ test('non-live VOD keeps separate long-lived hard timeout and twenty-five-minute
  assert.equal(c.timers.get(session.idleTimer.id).ms,25*60*1000);
  assert.ok(!c.cleared.includes(manual.id))
 });
+
+
+test('late stop of an old stream never deletes the replacement session with the same key',()=>{
+ const begin=source.indexOf('function stopHls(session,reason){');
+ const end=source.indexOf('\nconst nap=',begin);
+ assert.ok(begin>=0&&end>begin);
+ const map=new Map();
+ const context={
+  hlsSessions:map,active:1,
+  clearTimeout(){},
+  rmSync(){},
+  console:{info(){}}
+ };
+ const stop=vm.runInNewContext(source.slice(begin,end)+';\nstopHls',context);
+ const old={key:'account:channel',abort:{abort(){}},dir:'/fake-old'};
+ const replacement={key:'account:channel',stopped:false};
+ map.set(old.key,replacement);
+ stop(old,'viewer_stopped');
+ assert.equal(map.get(old.key),replacement);
+ assert.equal(old.stopped,true);
+ assert.equal(context.active,0);
+});
+
+test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops watching',async()=>{
+ const begin=source.indexOf('async function startHls({');
+ const end=source.indexOf('\nasync function hlsRequest(',begin);
+ assert.ok(begin>=0&&end>begin);
+ let resolveFetch,spawnCount=0,bodyCancelled=false;
+ const map=new Map();
+ const context={
+  MAX_JOBS:2,active:0,hlsSessions:map,hlsRoot:'/fake',hardTTL:540000,
+  BASE:'https://example.invalid/source/',
+  join:(...args)=>args.join('/'),
+  mkdirSync(){},touchHls(){},clearTimeout(){},
+  setTimeout(){return{unref(){}}},
+  AbortController,
+  fetch:async()=>new Promise(resolve=>{resolveFetch=resolve}),
+  stopHls(session){session.stopped=true;session.abort.abort();if(map.get(session.key)===session)map.delete(session.key)},
+  Bun:{spawn(){spawnCount++;throw Error('decoder must not start')}},
+ };
+ const startHls=vm.runInNewContext(source.slice(begin,end)+';\nstartHls',context);
+ const task=startHls({bearer:'test',kind:'live',id:'12',ext:'ts',track:0,key:'test-key'});
+ await Promise.resolve();
+ const old=map.get('test-key');
+ assert.ok(old);
+ old.stopped=true;old.abort.abort();
+ map.delete('test-key');
+ assert.equal(typeof resolveFetch,'function');
+ resolveFetch({ok:true,body:{cancel:async()=>{bodyCancelled=true}}});
+ const result=await task;
+ assert.equal(result.status,409);
+ assert.equal(spawnCount,0);
+ assert.equal(bodyCancelled,true);
+});
