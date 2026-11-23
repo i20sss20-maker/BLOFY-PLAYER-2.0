@@ -2226,7 +2226,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    state.channelSwitchTimer=setTimeout(function(){
     state.channelSwitchTimer=null;
     if(S.route!=='player'||S.playerView!==state)return;
+    var wasMuted=video.muted;
     playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);
+    video.muted=wasMuted;
     if(state.refreshLiveGuide)state.refreshLiveGuide()
    },260)
   }
@@ -2340,7 +2342,7 @@ function directional(e){
  }
  if(S.route==='player'&&(!editable||document.activeElement&&document.activeElement.id==='seek')){
   var p=S.playerView,active=document.activeElement;
-  if(code===32&&p&&p.toggle&&(!active||active===document.body||active===p.video)){
+  if((code===32||code===13)&&p&&p.toggle&&(!active||active===document.body||active===p.video)){
    e.preventDefault();p.toggle();return
   }
   if(p&&p.kind==='live'&&p.switchChannel&&(code===38||code===40)&&
