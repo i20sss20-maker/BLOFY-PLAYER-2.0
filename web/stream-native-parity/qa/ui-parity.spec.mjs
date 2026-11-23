@@ -611,3 +611,49 @@ test('movie and series categories update posters in-place without an app refresh
   await page.locator('.catalog-home').click()
  }
 });
+
+
+test('TV quality picker changes original source to codec-compatible HLS with stop acknowledgement',async({page})=>{
+ const manifest=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
+ const segments={};
+ for(const name of [...new Set(manifest.match(/seg-[0-9]{6}[.]ts/g)||[])])
+  segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
+ const events=[];
+ await page.route('**/api/hls/live/31/ts/0/**',async route=>{
+  const url=route.request().url(),compatible=url.includes('/compat/');
+  const name=url.split('/').pop().split('?')[0],suffix=compatible?'compat':'original';
+  if(name==='stop'){
+   events.push('stop-'+suffix);
+   return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'})
+  }
+  if(name==='index.m3u8'){
+   events.push('manifest-'+suffix);
+   return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',
+    headers:{'X-Blofy-Video-Mode':compatible?'compatibility_transcode':'source_copy'},body:manifest})
+  }
+  if(segments[name])return route.fulfill({status:200,contentType:'video/mp2t',body:segments[name]});
+  return route.fulfill({status:404,body:'missing'})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:12000}).toBeGreaterThan(1);
+ await page.locator('[data-preview-full]').click();
+ await expect(page.locator('#player-root')).toBeVisible({timeout:10000});
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:12000}).toBeGreaterThan(1);
+ await page.locator('#player-quality').click();
+ await expect(page.locator('#player-choice-panel')).toBeVisible();
+ await expect(page.locator('[data-choice-index="1"]')).toContainText('متوافق');
+ await page.locator('[data-choice-index="1"]').click();
+ await expect.poll(()=>events.filter(x=>x==='manifest-compat').length,{timeout:12000}).toBeGreaterThan(0);
+ const originalStop=events.indexOf('stop-original'),compatStart=events.indexOf('manifest-compat');
+ expect(originalStop).toBeGreaterThan(-1);
+ expect(compatStart).toBeGreaterThan(originalStop);
+ await expect(page.locator('#player-source-mode')).toContainText('وضع توافق',{timeout:12000});
+ await page.locator('#player-quality').click();
+ await expect(page.locator('[data-choice-index="0"]')).toContainText('أصلي');
+ await page.locator('[data-choice-index="0"]').click();
+ await expect.poll(()=>events.filter(x=>x==='stop-compat').length,{timeout:12000}).toBe(1);
+ const compatStop=events.lastIndexOf('stop-compat'),returnOriginal=events.lastIndexOf('manifest-original');
+ await expect.poll(()=>events.filter(x=>x==='manifest-original').length,{timeout:12000}).toBeGreaterThan(2);
+ expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(compatStop);
+});
