@@ -131,8 +131,8 @@ test('same-source TS reconnect accepts split packet reads without losing content
   },
   onReconnect:()=>recoveries++
  });
- assert.deepEqual((await iter.next()).value,ts());
- assert.deepEqual((await iter.next()).value,ts());
+ assert.deepEqual(Buffer.from((await iter.next()).value),Buffer.from(ts()));
+ assert.deepEqual(Buffer.from((await iter.next()).value),Buffer.from(ts()));
  assert.equal(calls,1);
  assert.equal(recoveries,1);
  await iter.return();
