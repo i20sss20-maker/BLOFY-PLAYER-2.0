@@ -25,7 +25,10 @@ test.beforeEach(async({page})=>{
  });
  await page.route('https://example.com/**',async r=>r.fulfill({status:404,body:''}));
  await page.route('**/api/player-diagnostic',async r=>r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
- await page.route('**/api/hls/**',async r=>r.fulfill({status:503,contentType:'application/json',body:'{"error":"qa_fake_stream"}'}));
+ await page.route('**/api/hls/**',async r=>{
+  if(r.request().method()==='POST'&&r.request().url().endsWith('/stop'))return r.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});
+  return r.fulfill({status:503,contentType:'application/json',body:'{"error":"qa_fake_stream"}'})
+ });
 });
 test('home matches STREAM palette and navigation is clickable',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -440,4 +443,31 @@ test('VIDAA Back key exits immersive first, then returns to details, with fullsc
  await expect(page.locator('#player-root')).toBeVisible();
  await page.locator('#player-back').click();
  await expect(page.locator('.detail-title')).toHaveText('فيلم تجريبي');
+});
+
+
+test('preview-to-fullscreen awaits HLS stop acknowledgement before opening a new session',async({page})=>{
+ let stopRequests=0,manifestRequests=0,releaseStop;
+ const release=new Promise(resolve=>releaseStop=resolve);
+ await page.route('**/api/hls/live/31/ts/0/**',async route=>{
+  const last=route.request().url().split('/').pop().split('?')[0];
+  if(last==='stop'){
+   stopRequests++;
+   await release;
+   return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'})
+  }
+  if(last==='index.m3u8'){manifestRequests++;return route.fulfill({status:503,contentType:'application/json',body:'{"error":"fixture"}'})}
+  return route.fulfill({status:404,body:'missing'})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await page.locator('[data-preview-full]').click();
+ await expect.poll(()=>stopRequests,{timeout:8000}).toBe(1);
+ await page.waitForTimeout(250);
+ await expect(page.locator('#player-root')).toHaveCount(0);
+ releaseStop();
+ await expect(page.locator('#player-root')).toBeVisible({timeout:8000});
+ expect(stopRequests).toBe(1);
+ // Playback is allowed to fail due to fixture data, but transfer ordering must hold.
 });
