@@ -1597,6 +1597,60 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('play',syncToggle);
  video.addEventListener('pause',syncToggle);
  syncToggle();
+
+ var moreToggle=document.getElementById('player-options-toggle');
+ if(moreToggle)moreToggle.onclick=function(){
+  var panel=document.getElementById('player-more-panel');
+  if(!panel)return;
+  panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
+ };
+ var controlHint=document.getElementById('player-control-hint'),dock=document.querySelector('.native-player-dock');
+ if(dock&&controlHint){
+  dock.addEventListener('focusin',function(e){
+   var label=e.target&&e.target.getAttribute('aria-label');
+   if(label)controlHint.textContent=label
+  });
+  dock.addEventListener('pointerover',function(e){
+   var button=e.target&&e.target.closest&&e.target.closest('.native-player-control');
+   if(button)controlHint.textContent=button.getAttribute('aria-label')||''
+  },{passive:true})
+ }
+ var favoriteButton=document.getElementById('player-favorite');
+ function refreshFavoriteButton(){
+  if(!favoriteButton)return;
+  var marked=!!S.library[kind+':'+state.id];
+  favoriteButton.classList.toggle('native-player-liked',marked);
+  favoriteButton.setAttribute('aria-pressed',String(marked));
+  favoriteButton.setAttribute('aria-label',marked?'إزالة من المفضلة':'إضافة إلى المفضلة');
+  favoriteButton.title=marked?'إزالة من المفضلة':'إضافة إلى المفضلة'
+ }
+ state.refreshFavoriteButton=refreshFavoriteButton;
+ if(favoriteButton)favoriteButton.onclick=function(){
+  var key=kind+':'+state.id,wasMarked=!!S.library[key],choice=findItem(kind,state.id)||item;
+  if(wasMarked){delete S.library[key];delete S.favoriteItems[key]}
+  else{
+   S.library[key]=true;
+   var record={id:String(state.id),name:String(state.name||title(choice)).slice(0,160),
+    stream_icon:art(choice),container_extension:choice&&choice.container_extension||'mp4'};
+   if(kind==='series')record.series_id=String(state.id);else record.stream_id=String(state.id);
+   S.favoriteItems[key]=record
+  }
+  profileSave('favorites',S.library);
+  profileSave('favoriteItems',S.favoriteItems);
+  refreshFavoriteButton();
+  if(controlHint)controlHint.textContent=wasMarked?'تمت الإزالة من المفضلة':'تمت الإضافة إلى المفضلة'
+ };
+ refreshFavoriteButton();
+ var qualityButton=document.getElementById('player-quality');
+ if(qualityButton)qualityButton.onclick=function(){
+  var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
+  if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو؛ لا توجد دقات متعددة قابلة للاختيار.');return}
+  var current=Number(engine.currentLevel),next=current<0?0:current+1;
+  if(next>=levels.length)next=-1;
+  try{engine.currentLevel=next}catch(err){playerStatus('تعذر تغيير جودة هذا المصدر.');return}
+  var level=next>=0?levels[next]:null,quality=next===-1?'جودة تلقائية':('جودة '+(level.height?level.height+'p':'المستوى '+(next+1)));
+  playerStatus(quality);qualityButton.title=quality
+ };
  var infoToggle=document.getElementById('player-info-toggle');
  if(infoToggle)infoToggle.onclick=function(){
   var panel=document.getElementById('player-info-panel');if(!panel)return;
