@@ -1,0 +1,35 @@
+name: BLOFY Xtream strict VOD range recovery QA
+on:
+  push:
+    branches:
+      - fix/xtream-vod-range-seek-exact-recovery-diagnosis-20261124
+    paths:
+      - 'services/activation/src/xtream-vod-range-resume.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-vod-range-seek-evidence.test.mjs'
+  pull_request:
+    paths:
+      - 'services/activation/src/xtream-vod-range-resume.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-vod-range-seek-evidence.test.mjs'
+permissions:
+  contents: read
+jobs:
+  strict-range:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax, complete existing VOD resume regressions, and nonzero seeks
+        run: |
+          node --check services/activation/src/xtream-gateway-hook.mjs
+          node --check services/activation/src/xtream-vod-range-resume.mjs
+          node --test services/activation/test/xtream-vod-range-resume.test.mjs services/activation/test/xtream-vod-range-seek-evidence.test.mjs
+      - name: Explain QA scope
+        if: always()
+        run: |
+          echo 'No actual subscription, provider URL, media download, or database is accessed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This does not enable VOD resume or certify continuous playback on an actual TV.' >> "$GITHUB_STEP_SUMMARY"
