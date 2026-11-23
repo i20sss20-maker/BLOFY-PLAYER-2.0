@@ -2415,6 +2415,14 @@ function directional(e){
  if(code===27||code===461||code===10009||code===8){
   if(editable&&code===8)return;
   if(S.route==='login')return;
+  if(S.route==='player'){
+   var panel=document.getElementById('player-more-panel');
+   if(panel&&!panel.hidden){panel.hidden=true;var more=document.getElementById('player-options-toggle');if(more)more.setAttribute('aria-expanded','false');e.preventDefault();return}
+   var info=document.getElementById('player-info-panel');
+   if(info&&!info.hidden){info.hidden=true;var infoBtn=document.getElementById('player-info-toggle');if(infoBtn)infoBtn.setAttribute('aria-expanded','false');e.preventDefault();return}
+   var jump=document.getElementById('player-jump-panel');
+   if(jump&&!jump.hidden){jump.hidden=true;e.preventDefault();return}
+  }
   e.preventDefault();back();return
  }
  if(S.route==='player'&&(!editable||document.activeElement&&document.activeElement.id==='seek')){
@@ -2430,7 +2438,7 @@ function directional(e){
    ((!active||active===document.body||active===p.video)||active.id==='seek')){
    // Keep focus on the time slider. Old TV browsers otherwise treat arrows
    // as navigation and jump away instead of seeking.
-   e.preventDefault();p.seekBy(code===37?-30:30);return
+   e.preventDefault();p.seekBy(code===37?-10:10);return
   }
  }
  if(!editable&&S.userVerified&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&code===191&&S.route!=='player'){
