@@ -45,7 +45,12 @@ object TransportFactory {
         val client=OkHttpClient.Builder()
             .followRedirects(true).followSslRedirects(false)
             .connectTimeout(12,java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(30,java.util.concurrent.TimeUnit.SECONDS)
+            // The BLOFY gateway may spend 25s detecting a stalled live TS feed,
+            // then recover the same authorized source before sending more bytes.
+            // A 30s socket idle timeout makes Android abandon a recoverable
+            // stream before the gateway's bounded reconnect can complete.
+            // Playback buffering/recovery decisions remain with Media3.
+            .readTimeout(65,java.util.concurrent.TimeUnit.SECONDS)
             .addNetworkInterceptor { chain ->
                 val req=chain.request()
                 val url=req.url
