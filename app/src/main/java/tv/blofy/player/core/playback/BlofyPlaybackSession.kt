@@ -56,6 +56,7 @@ class BlofyPlaybackSession(
     private var liveEndRecoveryPending = false
     private var liveRecoveryGeneration = 0
     private var seekRecoveryGeneration = 0
+    private var lastSeekStallRestartAtMs = 0L
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
@@ -106,17 +107,6 @@ class BlofyPlaybackSession(
                                 }
                             }, plan.delayMs)
                         }
-                    }
-                }
-
-                override fun onPositionDiscontinuity(
-                    oldPosition: Player.PositionInfo,
-                    newPosition: Player.PositionInfo,
-                    reason: Int
-                ) {
-                    if (closing) return
-                    if (reason == Player.DISCONTINUITY_REASON_SEEK && !contentKind.isLiveContent()) {
-                        scheduleSeekRecovery(newPosition.positionMs.coerceAtLeast(0L))
                     }
                 }
 
@@ -219,6 +209,7 @@ class BlofyPlaybackSession(
         if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
+        lastSeekStallRestartAtMs = 0L
         liveRecoveryGeneration++
         liveQuickEnds = 0
         liveEndRecoveryPending = false
@@ -269,15 +260,33 @@ class BlofyPlaybackSession(
         player.playWhenReady = true
     }
 
+    /**
+     * Only an actual user seek receives a seek-stall recovery timer.
+     * Decoder/internal seeks and the initial resume offset must not trigger
+     * another player reset or duplicate remote Range request.
+     */
+    fun seekFromUser(targetMs: Long) {
+        if (closing || contentKind.isLiveContent() || player.currentMediaItem == null) return
+        val target = targetMs.coerceAtLeast(0L)
+        player.seekTo(target)
+        scheduleSeekRecovery(target)
+    }
+
     private fun scheduleSeekRecovery(targetMs: Long) {
         val generation = ++seekRecoveryGeneration
+        val item = player.currentMediaItem
         retryHandler.postDelayed({
             if (closing || generation != seekRecoveryGeneration || contentKind.isLiveContent()) return@postDelayed
-            if (player.currentMediaItem == null || !player.playWhenReady) return@postDelayed
-            if (player.playbackState == Player.STATE_BUFFERING) {
-                automaticRetries = 0
-                retrySameUrl(targetMs)
-            }
+            if (player.currentMediaItem != item || !player.playWhenReady) return@postDelayed
+            if (player.playbackState != Player.STATE_BUFFERING) return@postDelayed
+            val now = SystemClock.elapsedRealtime()
+            // Do not recycle an MKV session every few seconds if the provider
+            // is slowly seeking or the client is issuing internal cue reads.
+            if (lastSeekStallRestartAtMs > 0L &&
+                now - lastSeekStallRestartAtMs < SEEK_RESTART_COOLDOWN_MS) return@postDelayed
+            lastSeekStallRestartAtMs = now
+            automaticRetries = 0
+            retrySameUrl(targetMs)
         }, SEEK_STALL_RECOVERY_MS)
     }
 
@@ -440,7 +449,8 @@ class BlofyPlaybackSession(
 
     private companion object {
         const val MAX_AUTOMATIC_RETRIES = 1
-        const val SEEK_STALL_RECOVERY_MS = 8_000L
+        const val SEEK_STALL_RECOVERY_MS = 20_000L
+        const val SEEK_RESTART_COOLDOWN_MS = 60_000L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_FIRST_FRAME_TIMEOUT_MS = 16_000L
         const val MAX_NO_FIRST_FRAME_RECOVERIES = 2
