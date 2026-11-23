@@ -32,6 +32,28 @@ test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress
  assert.equal(sample(rec,video,45100).advanced,true,'visual progress resets the freeze timer');
 });
 
+test('unexpected paused/ended TV live decoder recovers without overriding user Pause',()=>{
+ const start=playerSource.indexOf('function liveUnexpectedPause(');
+ const end=playerSource.indexOf('\nfunction playHls(',start);
+ assert.ok(start>=0&&end>start,'paused decoder watchdog is present');
+ const check=vm.runInNewContext(playerSource.slice(start,end)+';\nliveUnexpectedPause',{});
+ const record={},video={paused:true,ended:false,seeking:false};
+ assert.equal(check(record,video,false,false,1000),false,'allow a short transient pause');
+ assert.equal(check(record,video,false,false,10999),false);
+ assert.equal(check(record,video,false,false,11000),true,'recover paused decoder after 10 seconds');
+ assert.equal(check(record,video,true,false,14000),false,'user-selected pause must remain paused');
+ assert.equal(record.unexpectedPauseAt,0);
+ assert.equal(check(record,video,false,true,15000),false,'hidden TV browser must not restart playback');
+ assert.equal(check(record,video,false,false,20000),false,'timer starts over on visibility');
+ video.paused=false;video.ended=false;
+ assert.equal(check(record,video,false,false,22000),false,'playback resumes');
+ video.paused=true;video.ended=true;
+ assert.equal(check(record,video,false,false,23000),false,'live EOF starts a new watchdog');
+ assert.equal(check(record,video,false,false,33000),true,'ended channel also restarts');
+ video.seeking=true;
+ assert.equal(check(record,video,false,false,34000),false,'intentional seek suppresses recovery');
+});
+
 test('live previews restart automatically but stop after two tries and never resurrect a changed channel',()=>{
  const start=playerSource.indexOf(' function recoverConnection(){',playerSource.indexOf('function playHls('));
  const end=playerSource.indexOf('\n record.startupTimer=',start);
