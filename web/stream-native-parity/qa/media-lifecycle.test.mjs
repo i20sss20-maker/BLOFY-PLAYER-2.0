@@ -136,6 +136,48 @@ test('live previews restart automatically but stop after two tries and never res
  assert.match(ctx.message,/بعد محاولات الاستعادة/);
 });
 
+test('rapid upstream EOF uses bounded HMAC-keyed cooldown; unrelated channels stay available',()=>{
+ const hashStart=source.indexOf('function hlsKey(');
+ const hashEnd=source.indexOf('\nfunction liveSourceIdentity(',hashStart);
+ const helperStart=source.indexOf('function liveSourceIdentity(',hashEnd);
+ const helperEnd=source.indexOf('\nfunction touchHls(',helperStart);
+ assert.ok(hashStart>0&&hashEnd>hashStart&&helperStart>hashEnd&&helperEnd>helperStart);
+ const windows=new Map();
+ const ctx={createHmac:crypto.createHmac,SECRET:'c'.repeat(64),
+  liveSourceFailureWindows:windows,MAX_LIVE_SOURCE_WINDOWS:256};
+ const api=vm.runInNewContext(source.slice(hashStart,hashEnd)+'\n'+source.slice(helperStart,helperEnd)+
+  ';\n({liveSourceIdentity,liveSourceRetryMs,recordLiveSourceFailure,noteLiveSourceHealthy})',ctx);
+ const token='Bearer synthetic-A';
+ const key=api.liveSourceIdentity(token,'live','31','ts','0',false,false);
+ const otherChannel=api.liveSourceIdentity(token,'live','32','ts','0',false,false);
+ const otherAccount=api.liveSourceIdentity('Bearer synthetic-B','live','31','ts','0',false,false);
+ const otherMode=api.liveSourceIdentity(token,'live','31','ts','0',true,false);
+ assert.notEqual(key,otherChannel);
+ assert.notEqual(key,otherAccount);
+ assert.notEqual(key,otherMode);
+ const t=50000;
+ for(let n=1;n<=6;n++){
+  const at=t+(n-1)*10000;
+  api.recordLiveSourceFailure({kind:'live',startedAt:at-3200,sourceIdentity:key},'live_source_finished',at);
+  assert.equal(api.liveSourceRetryMs(key,at),Math.min(30000,1600*Math.pow(2,n-1)));
+ }
+ assert.equal(api.liveSourceRetryMs(key,t+50000),30000);
+ assert.equal(api.liveSourceRetryMs(otherChannel,t+50000),0);
+ assert.equal(api.liveSourceRetryMs(otherAccount,t+50000),0);
+ assert.equal(api.liveSourceRetryMs(otherMode,t+50000),0);
+ api.recordLiveSourceFailure({kind:'live',startedAt:t+50000-2000,sourceIdentity:key},'viewer_stopped',t+50000);
+ assert.equal(api.liveSourceRetryMs(key,t+50000),30000,'intentional viewer stop must not escalate origin penalty');
+ api.noteLiveSourceHealthy({kind:'live',sourceIdentity:key,startedAt:t},t+96000);
+ assert.equal(api.liveSourceRetryMs(key,t+96000),0,'healthy ninety-second live stream clears previous failure history');
+ api.recordLiveSourceFailure({kind:'movie',startedAt:t,sourceIdentity:otherChannel},'stale_manifest',t+100000);
+ assert.equal(api.liveSourceRetryMs(otherChannel,t+100000),0,'VOD is unaffected');
+ for(let i=0;i<300;i++)api.recordLiveSourceFailure({kind:'live',startedAt:t+100000,sourceIdentity:'synthetic-'+i},'live_source_finished',t+100050);
+ assert.equal(windows.size,256,'source failure memory is bounded');
+ assert.equal(api.liveSourceRetryMs('synthetic-299',t+100050),1600);
+ assert.equal(api.liveSourceRetryMs('synthetic-0',t+100050),0,'oldest origin record gets evicted');
+ assert.equal(api.liveSourceRetryMs('synthetic-299',t+240051),0,'origin record expires after two minutes');
+});
+
 test('worker identifies stale live manifests but never expires VOD or healthy live files',()=>{
  const begin=source.indexOf('function staleLiveManifest(');
  const end=source.indexOf('\n/**',begin);
