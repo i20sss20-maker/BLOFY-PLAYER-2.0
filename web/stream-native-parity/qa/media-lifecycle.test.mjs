@@ -423,7 +423,14 @@ test('guarded same-bearer live fan-out shares one encoder but isolates each view
  assert.equal(started,1,'two same-bearer viewers share exactly one media source and encoder');
  assert.equal(first.session.dir,second.session.dir);
  assert.notEqual(first.session.key,second.session.key);
+ const [sameFirst,sameSecond]=await Promise.all([
+  methods.startSharedLiveViewer(request(bearer,a)),
+  methods.startSharedLiveViewer(request(bearer,a))
+ ]);
+ assert.strictEqual(sameFirst.session,first.session,'repeat same SID must reuse the existing viewer');
+ assert.strictEqual(sameSecond.session,first.session,'concurrent duplicate SID joins are idempotent');
  assert.equal(sharedLiveGroups.size,1);
+ assert.equal(hlsSessions.size,3,'duplicate manifests do not introduce orphan viewer timers');
  stop(first.session,'viewer_stopped');
  assert.equal(abortCount,0,'one STOP must not abort the shared stream');
  assert.equal(killCount,0);
