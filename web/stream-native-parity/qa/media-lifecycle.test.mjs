@@ -465,6 +465,66 @@ test('guarded same-bearer live fan-out shares one encoder but isolates each view
  stop(differentMode.session,'viewer_stopped');
 });
 
+test('stop during slow upstream startup cancels only that SID and closes final orphan immediately',async()=>{
+ const hashBegin=source.indexOf('function hlsKey('),hashEnd=source.indexOf('\nfunction touchHls(',hashBegin);
+ const stopBegin=source.indexOf('function stopHls('),stopEnd=source.indexOf('\nfunction releaseHls(',stopBegin);
+ const shareBegin=source.indexOf('function liveShareGroupKey('),shareEnd=source.indexOf('\nasync function hlsRequest(',shareBegin);
+ assert.ok(hashBegin>0&&hashEnd>hashBegin&&stopBegin>0&&stopEnd>stopBegin&&shareBegin>0&&shareEnd>shareBegin);
+ const hlsSessions=new Map(),sharedLiveGroups=new Map(),pendingSharedLiveViewers=new Map();
+ const starts=[],closed=[];
+ const ctx={
+  createHmac:crypto.createHmac,SECRET:'a'.repeat(64),
+  hlsSessions,sharedLiveGroups,pendingSharedLiveViewers,
+  MAX_SHARED_LIVE_VIEWERS:4,
+  Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
+  clearTimeout(){},rmSync(){},console:{info(){}},touchHls(){},
+  releaseHls(owner){owner.released=true},
+  startHls({key,kind}){
+   let resolve;
+   const promise=new Promise(r=>{resolve=r});
+   const owner={key,kind,dir:'/test-source-'+starts.length,stopped:false,released:false,
+    abort:{abort(){closed.push(key)}},proc:{kill(){}}};
+   hlsSessions.set(key,owner);
+   starts.push({resolve,owner});
+   return promise
+  }
+ };
+ ctx.hlsKey=vm.runInNewContext(source.slice(hashBegin,hashEnd)+';\nhlsKey',ctx);
+ const api=vm.runInNewContext(source.slice(stopBegin,stopEnd)+'\n'+source.slice(shareBegin,shareEnd)+
+   ';\n({startSharedLiveViewer,cancelPendingSharedLiveViewer})',ctx);
+ ctx.stopHls=vm.runInNewContext(source.slice(stopBegin,stopEnd)+';\nstopHls',ctx);
+ const bearer='Bearer same-authorized-account',id='31',mode=false;
+ const sidA='a'.repeat(32),sidB='b'.repeat(32),sidC='c'.repeat(32);
+ const make=(sid)=>({bearer,kind:'live',id,ext:'ts',track:'0',forceCompat:mode,
+   viewerSid:sid,key:ctx.hlsKey(bearer,'live',id,'ts','0',mode,false,sid)});
+ const a=make(sidA),b=make(sidB),c=make(sidC);
+ const first=api.startSharedLiveViewer(a),second=api.startSharedLiveViewer(b);
+ assert.equal(starts.length,1,'only one pending upstream connection is opened');
+ assert.equal(pendingSharedLiveViewers.size,2);
+ assert.equal(api.cancelPendingSharedLiveViewer(a.key),true);
+ assert.equal(closed.length,0,'cancelled viewer cannot disrupt another pending viewer');
+ starts[0].resolve({session:starts[0].owner});
+ const [resultA,resultB]=await Promise.all([first,second]);
+ assert.equal(resultA.status,409,'stopped viewer cannot resurrect after slow startup');
+ assert.ok(resultB.session,'another viewer is admitted normally');
+ assert.equal(hlsSessions.has(a.key),false);
+ assert.equal(hlsSessions.has(b.key),true);
+ assert.equal(pendingSharedLiveViewers.size,0,'no pending-registration memory leaks');
+ ctx.stopHls(resultB.session,'viewer_stopped');
+ assert.equal(closed.length,1,'final viewer closes producer');
+ assert.equal(hlsSessions.size,0);
+ const orphan=api.startSharedLiveViewer(c);
+ assert.equal(starts.length,2);
+ assert.equal(api.cancelPendingSharedLiveViewer(c.key),true);
+ assert.equal(closed.length,2,'last pending cancellation aborts upstream immediately');
+ starts[1].resolve({session:starts[1].owner});
+ const cancelled=await orphan;
+ assert.equal(cancelled.status,409);
+ assert.equal(sharedLiveGroups.size,0);
+ assert.equal(hlsSessions.size,0,'aborted session cannot create a ghost stream');
+ assert.equal(pendingSharedLiveViewers.size,0);
+});
+
 test('authenticated HLS manifest and segments fan out to two SID viewers using one real session keyspace',async()=>{
  const b=source.indexOf('function hlsKey('),e=source.indexOf('\nfunction touchHls(',b),
   st=source.indexOf('function stopHls('),stEnd=source.indexOf('\nfunction releaseHls(',st),
