@@ -972,6 +972,7 @@ function cleanupPlayer(){
   if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
   if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
   if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
+  if(S.playerView.healthTimer){clearInterval(S.playerView.healthTimer);S.playerView.healthTimer=null}
   S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
@@ -1406,12 +1407,41 @@ function openPlayer(kind,id,extension,name,from){
  '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
  (isLive?'':'<button class="btn secondary" id="player-subtitles" aria-label="خيارات الترجمة">CC الترجمة</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
  '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
- '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button></div></div></section>';
+ '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
+ '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">📊 حالة التشغيل</button></div>'+
+ '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,
     seekAttempts:0,seekReady:0,seekTimeouts:0,lastSeekMs:null}};
+ function renderPlayerHealth(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  var box=document.getElementById('player-health-panel');
+  if(!box||box.hidden)return;
+  var st=state.stats,now=Date.now();
+  var startup=st.firstFrameAt?Math.max(0,st.firstFrameAt-st.openedAt):null;
+  var buffering=(st.bufferMs||0)+(st.bufferSince?Math.max(0,now-st.bufferSince):0);
+  var modes={fullvod:'فيلم كامل قابل للتقديم',direct:'MP4 أصلي',vodhls:'HLS مؤقت',
+   hls:'بث مباشر',mpegts:'MPEG-TS'};
+  var mode=modes[state.mode]||'جار تغيير المحرك',pending=state.pendingSeek;
+  box.textContent='المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
+   ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
+   ' | التقديم: '+(st.seekReady||0)+' ناجح من '+(st.seekAttempts||0)+
+   (pending?' | جار الوصول إلى '+formatTime(pending.target):'')+
+   ' | أخطاء المشغل: '+(st.errors||0);
+ }
+ var healthToggle=document.getElementById('player-health-toggle');
+ if(healthToggle)healthToggle.onclick=function(){
+  var box=document.getElementById('player-health-panel');if(!box)return;
+  box.hidden=!box.hidden;
+  this.setAttribute('aria-expanded',String(!box.hidden));
+  if(state.healthTimer){clearInterval(state.healthTimer);state.healthTimer=null}
+  if(!box.hidden){
+   renderPlayerHealth();
+   state.healthTimer=setInterval(renderPlayerHealth,1700)
+  }
+ };
  function onBufferEvent(){
   var stats=state.stats;
   if(S.route!=='player'||S.playerView!==state||video.paused||!stats.firstFrameAt)return;
