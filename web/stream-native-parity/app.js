@@ -2082,7 +2082,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var estimate=S.play&&S.play.video===video&&S.play.engine?Number(S.play.engine.bandwidthEstimate)||0:0;
   var bitrate=estimate>100000&&estimate<1e10?(estimate/1000000).toFixed(1)+' Mbps':'غير متوفر';
   var uptime=formatTime(Math.max(0,(now-st.openedAt)/1000));
-  var status4k=height>=2100&&width>=3800?'4K معروض فعليًا':height>=4300?'8K معروض فعليًا':
+  var status4k=height>=4300&&width>=7600?'8K معروض فعليًا':height>=2100&&width>=3800?'4K معروض فعليًا':
    'الدقة تعتمد على المصدر والجهاز';
   var metrics=[
    ['الصورة الفعلية',screenQuality],
