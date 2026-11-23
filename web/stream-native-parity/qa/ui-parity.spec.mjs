@@ -538,3 +538,67 @@ test('fullscreen controls fade after playback starts even when a TV remote butto
  await expect(page.locator('#player-root')).not.toHaveClass(/controls-hidden/);
  await expect(page.locator('#player-audio')).toBeFocused();
 });
+
+
+test('live, films and series each use one full-screen library without global right sidebar',async({page})=>{
+ await page.goto('http://127.0.0.1:3000/');
+ await expect(page.locator('.app:not(.catalog-app) .rail')).toBeVisible();
+ for(const kind of ['live','movie','series']){
+  await page.locator('[data-go="'+kind+'"]').first().click();
+  await expect(page.locator('.app.catalog-app')).toBeVisible();
+  await expect(page.locator('.app.catalog-app .rail')).toHaveCount(0);
+  await expect(page.locator('.catalog .cat-rail')).toHaveCount(1);
+  await expect(page.locator('.catalog-home')).toBeVisible();
+  await expect(page.locator('.catalog')).toBeVisible();
+  await page.locator('.catalog-home').click();
+  await expect(page.locator('.app:not(.catalog-app) .rail')).toBeVisible()
+ }
+});
+
+test('selecting a live category changes channel rows without rebuilding the preview or workspace',async({page})=>{
+ const liveRequests=[];
+ await page.route('**/api/page?*',async route=>{
+  const url=new URL(route.request().url()),kind=url.searchParams.get('kind');
+  if(kind!=='live')return route.fallback();
+  const cat=url.searchParams.get('category_id')||'all';
+  liveRequests.push(cat);
+  const items=cat==='4'?[channel2]:[channel,channel2];
+  await route.fulfill({status:200,contentType:'application/json',
+   body:JSON.stringify({kind:'live',items,hasMore:false,nextOffset:items.length})})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await expect(page.locator('#channel-list [data-channel]')).toHaveCount(2);
+ await page.evaluate(()=>{
+  window.__savedCatalogWorkspace=document.getElementById('workspace');
+  window.__savedLiveVideo=document.getElementById('live-video');
+ });
+ await page.locator('[data-cat="live:4"]').click();
+ await expect(page.locator('#channel-list [data-channel]')).toHaveCount(1);
+ await expect(page.locator('#channel-list [data-channel="32"]')).toBeVisible();
+ expect(await page.evaluate(()=>document.getElementById('workspace')===window.__savedCatalogWorkspace)).toBe(true);
+ expect(await page.evaluate(()=>document.getElementById('live-video')===window.__savedLiveVideo)).toBe(true);
+ await expect(page.locator('[data-cat="live:4"]')).toHaveClass(/selected/);
+ await expect(page.locator('#live-title')).toHaveText('قناة ثانية');
+ await page.locator('[data-cat="live:all"]').click();
+ await expect(page.locator('#channel-list [data-channel]')).toHaveCount(2);
+ expect(liveRequests.filter(x=>x==='all').length).toBe(1);
+ expect(await page.evaluate(()=>document.getElementById('live-video')===window.__savedLiveVideo)).toBe(true);
+});
+
+test('movie and series categories update posters in-place without an app refresh',async({page})=>{
+ await page.goto('http://127.0.0.1:3000/');
+ for(const [kind,cat] of [['movie','1'],['series','3']]){
+  await page.locator('[data-go="'+kind+'"]').first().click();
+  await expect(page.locator('.app.catalog-app .rail')).toHaveCount(0);
+  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+  await page.evaluate(()=>{window.__catalogWorkspace=document.getElementById('workspace')});
+  await page.locator('[data-cat="'+kind+':'+cat+'"]').click();
+  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+  await expect(page.locator('[data-cat="'+kind+':'+cat+'"]')).toHaveClass(/selected/);
+  expect(await page.evaluate(()=>document.getElementById('workspace')===window.__catalogWorkspace)).toBe(true);
+  await page.locator('[data-sort]').click();
+  expect(await page.evaluate(()=>document.getElementById('workspace')===window.__catalogWorkspace)).toBe(true);
+  await page.locator('.catalog-home').click()
+ }
+});
