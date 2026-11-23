@@ -22,6 +22,9 @@ jobs:
       - name: Build isolated non-root PostgreSQL 18 worker image
         run: |
           docker build --pull -f ops/disaster-recovery/railway-worker/Dockerfile ops/disaster-recovery/railway-worker -t blofy-dr-worker:synthetic
+      - name: Perform full isolated restore exercise from fake encrypted S3 object
+        run: |
+          docker run --rm blofy-dr-worker:synthetic python3 /app/test_restore_local.py
       - name: Verify worker fails closed without secrets
         run: |
           if docker run --rm blofy-dr-worker:synthetic > /tmp/blofy-dr-no-secret.log 2>&1; then
