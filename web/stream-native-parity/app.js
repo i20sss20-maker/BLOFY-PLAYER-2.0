@@ -2515,6 +2515,22 @@ function directional(e){
   }
   e.preventDefault();back();return
  }
+ if(S.route==='player'&&!editable&&(code===37||code===38||code===39||code===40)){
+  var activePanel=document.getElementById('player-choice-panel');
+  if(!activePanel||activePanel.hidden)activePanel=document.getElementById('player-channel-panel');
+  if(activePanel&&!activePanel.hidden){
+   var panelButtons=Array.prototype.slice.call(activePanel.querySelectorAll('button:not([disabled])'));
+   if(panelButtons.length){
+    var currentIndex=panelButtons.indexOf(document.activeElement);
+    var step=code===38||code===37?-1:1;
+    var targetIndex=currentIndex<0?0:(currentIndex+step+panelButtons.length)%panelButtons.length;
+    e.preventDefault();
+    panelButtons[targetIndex].focus();
+    panelButtons[targetIndex].scrollIntoView({block:'nearest'});
+    return
+   }
+  }
+ }
  if(S.route==='player'&&(!editable||document.activeElement&&document.activeElement.id==='seek')){
   var p=S.playerView,active=document.activeElement;
   if(code===13&&p&&p.kind==='live'&&p.openChannels&&(!active||active===document.body||active===p.video)){
