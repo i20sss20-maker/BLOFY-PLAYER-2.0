@@ -80,6 +80,52 @@ export function verifiedVodResumePlan({
  }
  return Object.freeze({total,etag,format,rangeStart,rangeEnd,fileTotal});
 }
+
+// Nonzero HTTP Range bodies start inside a file, so MPEG-TS/MP4/MKV magic
+// bytes cannot be required at offset N. An already-authorized source's exact
+// MKV/MP4 extension AND explicit matching media MIME can establish the
+// container hint only for a 206 single-range seek, while the separate resume
+// plan still requires a STRONG ETag, identity encoding and exact byte span.
+// This does not affect initial media validation, HTTP responses, or auth.
+export function verifiedSoughtVodFormat({
+ inspection,requestRange,status,containerExtension,contentType
+}={}){
+ const existing=inspection?.format;
+ if(existing==='mkv'||existing==='mp4')return existing;
+ if(inspection?.valid!==true||existing!=='unknown'||status!==206)
+  return existing||'unknown';
+ const span=/^bytes=([1-9][0-9]{0,14})-(?:[0-9]{1,15})?$/.exec(
+  String(requestRange||''));
+ if(!span||!Number.isSafeInteger(Number(span[1])))return 'unknown';
+ const extension=String(containerExtension||'').replace(/^\./,'').toLowerCase();
+ const mime=String(contentType||'').split(';')[0].trim().toLowerCase();
+ if(extension==='mkv'&&['video/x-matroska','video/matroska',
+   'application/x-matroska'].includes(mime))return 'mkv';
+ if(extension==='mp4'&&mime==='video/mp4')return 'mp4';
+ return 'unknown';
+}
+
+// Read-only, strictly allowlisted diagnostics: this function neither grants
+// a resume nor opens another source connection. It intentionally never returns
+// raw headers, account IDs, URLs, ETags, or byte offsets.
+export function vodResumeContractCode(input={}){
+ const {kind,method='GET',status,requestRange,usingIndependentRelay,
+   format,headers}=input;
+ if(!['movie','series'].includes(kind)||method!=='GET')return 'not_vod';
+ if(usingIndependentRelay)return 'independent_relay';
+ if(!['mkv','mp4'].includes(format))return 'container_unverified';
+ if(status!==200&&status!==206)return 'not_media_success';
+ if(status===206&&!requestedByteSpan(requestRange))return 'seek_range_unverified';
+ if(status===200&&requestRange)return 'range_ignored';
+ if(!strongEtag(headers?.get?.('etag')))return 'strong_etag_missing';
+ if(String(headers?.get?.('accept-ranges')||'').toLowerCase().trim()!=='bytes')
+   return 'byte_ranges_unadvertised';
+ if(!positiveInteger(headers?.get?.('content-length')))
+   return 'content_length_missing';
+ return verifiedVodResumePlan({...input,enabled:true})?
+   'source_contract_verified':'source_range_contract_mismatch';
+}
+
 // Only a single targeted replacement connection; never retry 403/404/429,
 // redirects, a 200/full replay, a wrong byte span, or a changed ETag.
 // No URL/header/body data is logged. Caller supplies previously checked
