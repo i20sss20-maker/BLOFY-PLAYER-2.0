@@ -218,3 +218,46 @@ test('web and remote navigation return to the previous screen; player can show r
  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
  expect(errors).toEqual([]);
 });
+
+
+test('live favorites open the channel player; controls surf channels and mute without leaving fullscreen',async({page})=>{
+ const errors=[];page.on('pageerror',err=>errors.push(err.message));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await page.locator('#live-favorite').click();
+ await expect(page.locator('#live-favorite')).toContainText('إزالة');
+ await page.locator('[data-go="favorites"]').click();
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+ await page.locator('[data-details="live:31"]').click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect(page.locator('#player-title-text')).toHaveText('قناة اختبار');
+ await page.locator('#player-mute').click();
+ await expect(page.locator('#player-mute')).toHaveAttribute('aria-pressed','true');
+ await page.locator('#player-back').click();
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await page.locator('[data-preview-full]').click();
+ await expect(page.locator('#player-channel-next')).toBeVisible();
+ await page.locator('#player-channel-next').click();
+ await expect(page.locator('#player-title-text')).toHaveText('قناة ثانية');
+ await page.locator('#player-channel-prev').click();
+ await expect(page.locator('#player-title-text')).toHaveText('قناة اختبار');
+ await page.locator('#player-back').click();
+ await expect(page.locator('.cat-rail')).toBeVisible();
+ expect(errors).toEqual([]);
+});
+
+test('series episode rows preserve artwork fallback and back navigation',async({page})=>{
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="series"]').first().click();
+ await page.locator('[data-details="series:21"]').click();
+ await page.locator('[data-episodes="21"]').first().click();
+ await expect(page.locator('.episode-row')).toHaveCount(1);
+ await expect(page.locator('.episode-art .episode-cover')).toHaveCount(1);
+ await expect(page.locator('.episode-art .episode-placeholder')).toHaveCount(1);
+ await page.locator('.episode-row').first().focus();
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.detail-title')).toHaveText('مسلسل تجريبي');
+});
