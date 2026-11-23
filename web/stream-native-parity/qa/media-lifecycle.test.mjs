@@ -582,6 +582,7 @@ test('authenticated HLS manifest and segments fan out to two SID viewers using o
  const auth='Bearer v1.00000000-0000-0000-0000-000000000000.'+'B'.repeat(43);
  const ctx={
   SECRET:secret,createHmac:crypto.createHmac,hlsSessions,sharedLiveGroups,pendingSharedLiveViewers,MAX_SHARED_LIVE_VIEWERS:4,
+  liveSourceFailureWindows:new Map(),MAX_LIVE_SOURCE_WINDOWS:256,
   Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
   Response,Buffer,Date,console:{info(){},warn(){}},
   clearTimeout(){},rmSync(){},recordLiveSourceFailure(){},
