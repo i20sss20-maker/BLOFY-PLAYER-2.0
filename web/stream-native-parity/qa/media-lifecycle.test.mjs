@@ -246,7 +246,7 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
  const ctx={
   SECRET:secret,hlsSessions:map,hlsKey:hmac,Buffer,Response,
   secureEquals:()=>true,join:(...args)=>args.join('/'),
-  readFileSync:()=>Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
+  readFileSync:(file,encoding)=>encoding==='utf8'?'#EXTM3U\n#EXT-X-VERSION:3\n':Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
   existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,
   hlsError:(status,error)=>({status,error}),
   json:(status,value)=>({status,value}),
