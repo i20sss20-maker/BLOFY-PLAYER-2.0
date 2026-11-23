@@ -1574,7 +1574,22 @@ function openPlayer(kind,id,extension,name,from){
   }
  }
  state.onDuration=progress;
+ function releaseDirectSource(){
+  if(isLive||state.mode!=='direct')return;
+  // Some Xtream accounts permit a single active source connection.
+  // The old HTML5 MP4 fetch otherwise continues while the HLS worker opens
+  // the same movie, causing the provider to reset the new connection.
+  state.mode='switching';state.ready=false;
+  for(var i=0;i<4;i++){
+   var key=['directTimer','directSeekCheck','directSeekVerify','directStartupTimer'][i];
+   if(state[key]){clearTimeout(state[key]);state[key]=null}
+  }
+  video.onplaying=null;video.onwaiting=null;video.onstalled=null;
+  video.onerror=null;video.onloadedmetadata=null;video.onended=null;
+  try{video.pause();video.removeAttribute('src');video.load()}catch(e){}
+ }
  function startVod(at){
+  releaseDirectSource();
   if(state.duration>=120&&state.duration<=21600){
    state.resume=Math.max(0,Math.round(at||0));
    playFullVod(video,kind,id,ext,state.track,state.duration,state,markReady)
@@ -1584,6 +1599,7 @@ function openPlayer(kind,id,extension,name,from){
  }
  function startWithMetadata(at){
   if(state.duration>=120||kind==='live'){startVod(at);return}
+  releaseDirectSource();
   var settled=false;
   function launch(){if(settled||S.route!=='player'||S.playerView!==state)return;settled=true;startVod(at)}
   var timeout=setTimeout(launch,4200);
@@ -1661,7 +1677,7 @@ function openPlayer(kind,id,extension,name,from){
   // Resolve Xtream metadata before converting MP4 to the temporary EVENT
   // playlist. Previously direct-MP4 failures bypassed metadata entirely,
   // leaving episodes looking like one-minute live television.
-  if(state.ready)saveResume(kind,id,realPos(),duration,true);
+  if(state.ready&&target>=5)saveResume(kind,id,target,duration,true);
   if(state.mode==='direct'&&!(state.duration>=120))startWithMetadata(target);
   else startVod(target);
   playerStatus('جار فتح المقطع عند '+formatTime(target)+'…');
@@ -1786,7 +1802,7 @@ function openPlayer(kind,id,extension,name,from){
   diagnose(kind,'vod_retry',state.mode,0);
   playerStatus('جار إعادة اتصال المشغّل…');
   if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);
-  else startVod(Math.round(realPos()))
+  else startVod(Math.round(checkpointPosition(state)))
  };
  var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
   if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
