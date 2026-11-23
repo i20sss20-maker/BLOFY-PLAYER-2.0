@@ -1011,6 +1011,7 @@ function diagnose(kind,phase,mode,code){
 }
 
 function shouldUseNativeHls(video){
+ if(S.preferMseHls&&window.MediaSource&&window.MediaSource.isTypeSupported)return false;
  if(!video||!video.canPlayType||!video.canPlayType('application/vnd.apple.mpegurl'))return false;
  // Chrome and Edge sometimes report "maybe" here yet fail to decode MPEG-TS
  // with MEDIA_ERR_SRC_NOT_SUPPORTED (4). Use Hls.js/MSE on these browsers.
@@ -1137,7 +1138,14 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
   else playerStatus(text)
  }
- video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)recoverConnection()}};
+ video.onerror=function(){if(alive()){
+  var unsupported=video.error&&video.error.code===4;
+  if(unsupported&&window.MediaSource&&window.MediaSource.isTypeSupported){
+   S.preferMseHls=true;
+   status('المشغّل الأصلي لا يدعم الترميز؛ جار التحويل إلى مشغّل HLS المتوافق…')
+  }else status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');
+  if(!preview)recoverConnection()
+ }};
  video.onplaying=function(){
   if(!alive())return;
   record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;
