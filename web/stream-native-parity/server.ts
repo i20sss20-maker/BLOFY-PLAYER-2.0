@@ -253,30 +253,30 @@ if(p.startsWith('/api/vod/')&&(method==='GET'||method==='POST')){
 }
 if(p.startsWith('/api/hls/')&&method==='POST'){
  if(!h)return json(401,{error:'activation_required'});
- const m=p.match(/^\/api\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/stop$/);
+ const m=p.match(/^\/api\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat)\/)?stop$/);
  if(!m)return json(400,{error:'invalid_hls_stop'});
  const host=String(Bun.env.VIDAA_COMPAT_URL||''),secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
  if(!/^http:\/\/blofy-vidaa-(?:media-compat-pilot|hls-dynamic)\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/.test(secret))return json(503,{error:'hls_worker_not_configured'});
  try{
-  const r=await fetch(host+'/hls/'+m[1]+'/'+m[2]+'/'+m[3]+'/'+m[4]+'/stop',{method:'POST',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:AbortSignal.timeout(3000)});
+  const r=await fetch(host+'/hls/'+m[1]+'/'+m[2]+'/'+m[3]+'/'+m[4]+'/'+(m[5]?'compat/':'')+'stop',{method:'POST',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:AbortSignal.timeout(3000)});
   return json(r.ok?200:502,{ok:r.ok});
  }catch{return json(502,{error:'hls_stop_failed'})}
 }
 if(p.startsWith('/api/hls/')&&method==='GET'){
  if(!h)return json(401,{error:'activation_required'});
- const match=p.match(/^\/api\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(index\.m3u8|seg-[0-9]{6}\.ts)$/);
+ const match=p.match(/^\/api\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat)\/)?(index\.m3u8|seg-[0-9]{6}\.ts)$/);
  if(!match)return json(400,{error:'invalid_hls_path'});
  const host=String(Bun.env.VIDAA_COMPAT_URL||''),secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
  if(!/^http:\/\/blofy-vidaa-(?:media-compat-pilot|hls-dynamic)\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/.test(secret))return json(503,{error:'hls_worker_not_configured'});
- const target=host+'/hls/'+match[1]+'/'+match[2]+'/'+match[3]+'/'+match[4]+'/'+match[5];
+ const target=host+'/hls/'+match[1]+'/'+match[2]+'/'+match[3]+'/'+match[4]+'/'+(match[5]?'compat/':'')+match[6];
  try{
-  const response=await fetch(target,{method:'GET',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret,'Accept':match[5]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t'},redirect:'manual',signal:req.signal});
+  const response=await fetch(target,{method:'GET',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret,'Accept':match[6]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t'},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'hls_redirect_denied'});
   if(!response.ok){let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){};return json(response.status,{error})}
   var mode=response.headers.get('x-blofy-video-mode')||'unknown';
   if(mode!=='source_copy'&&mode!=='compatibility_transcode')mode='unknown';
   return new Response(response.body,{status:200,headers:noCache({
-   'Content-Type':match[5]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t',
+   'Content-Type':match[6]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t',
    'Accept-Ranges':'none','X-Blofy-Video-Mode':mode
   })});
  }catch(e){return json(502,{error:'hls_worker_unreachable'})}
