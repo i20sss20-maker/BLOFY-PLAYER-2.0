@@ -1364,7 +1364,11 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  // Thumbnail previews must never start an expensive UHD software encoder.
  var ultra=!preview&&!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
  var compat=ultra||!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
- var key=kind+'/'+id+'/'+extension+'/'+track+(ultra?'/ultra':compat?'/compat':''),
+ // Each opening gets an independent, non-authentication playback SID.
+ // A viewer sharing an activation code can no longer stop a different
+ // viewer's same-channel feed while restarting or switching engines.
+ var key=kind+'/'+id+'/'+extension+'/'+track+'/sid-'+freshPlaybackId()+
+     (ultra?'/ultra':compat?'/compat':''),
      manifest='/api/hls/'+key+'/index.m3u8';
  // An existing session with the same key must stop BEFORE the replacement
  // starts. A delayed stop otherwise kills the newly opened channel on VIDAA.
@@ -2078,10 +2082,13 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  // Never send asynchronous /stop for that key after starting fullscreen:
  // late /stop responses would kill the newly opened FFmpeg session.
  var oldPreview=S.play,fullKey='live/'+id+'/ts/0';
- if(isLive&&oldPreview&&oldPreview.preview&&(oldPreview.hlsKey===fullKey||oldPreview.hlsKey===fullKey+'/compat')){
+ if(isLive&&oldPreview&&oldPreview.preview&&(
+  oldPreview.hlsKey===fullKey||oldPreview.hlsKey===fullKey+'/compat'||
+  (oldPreview.hlsKey||'').indexOf(fullKey+'/sid-')===0)){
   if(S.previewToFullPending)return;
   S.previewToFullPending=true;
   var expectedRoute=S.route,expectedId=String(id);
+  var previewStopKey=oldPreview.hlsKey;
   var previewStatus=document.getElementById('live-status');
   if(previewStatus)previewStatus.textContent='جار نقل القناة إلى المشغّل الكامل…';
   stopPlayback(false);
@@ -2099,7 +2106,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    }
   }
   promotionTimer=setTimeout(function(){promotionComplete(0)},6500);
-  api('POST','/api/hls/'+fullKey+'/stop',{},function(status){promotionComplete(status)});
+  api('POST','/api/hls/'+previewStopKey+'/stop',{},function(status){promotionComplete(status)});
   return
  }
  var detail=S.detailInfo&&S.detailInfo.kind===kind&&S.detailInfo.id===id?S.detailInfo.info:
