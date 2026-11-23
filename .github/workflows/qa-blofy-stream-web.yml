@@ -29,6 +29,8 @@ jobs:
         run: cd web/stream-native-parity && npx playwright install chrome
       - name: Install FFmpeg for deterministic sample playback
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Verify 11-minute live audio keeps natural commentator pitch
+        run: cd web/stream-native-parity && node --test qa/audio-11min.test.mjs
       - name: Make video fixture
         run: ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=size=320x180:rate=25 -f lavfi -i sine=frequency=400:sample_rate=44100 -t 4 -c:v libx264 -preset ultrafast -g 25 -keyint_min 25 -sc_threshold 0 -pix_fmt yuv420p -c:a aac -movflags +faststart -y /tmp/blofy-qa-test.mp4
       - name: Generate real browser-decodable HLS fixtures
