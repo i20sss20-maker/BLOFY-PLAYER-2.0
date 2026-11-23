@@ -18,7 +18,11 @@ jobs:
       - name: Create local licensed synthetic video and audio (no upstream traffic)
         run: |
           python3 -m py_compile ops/stream-endurance/endurance_probe.py
-          command -v ffmpeg
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -version | head -n 1
           ffmpeg -y -hide_banner -loglevel error \
             -f lavfi -i testsrc=size=320x180:rate=12 \
             -f lavfi -i sine=frequency=500:sample_rate=44100 \
