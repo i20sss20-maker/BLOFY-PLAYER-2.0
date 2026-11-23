@@ -1,6 +1,6 @@
 
 import { timingSafeEqual, createHmac, randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const FFMPEG='/usr/bin/ffmpeg';
@@ -97,6 +97,19 @@ async function awaitHlsFile(session,filename,limitMs){
  return false;
 }
 function hlsError(status,error){return json(status,{ok:false,error})}
+/* An FFmpeg pipe can stay open after upstream stops emitting packets.
+ * The previous playlist keeps returning 200 and fools a TV into waiting
+ * indefinitely. Detect stale LIVE output, then close its source and encoder;
+ * the next authenticated manifest GET creates a fresh session.
+ * Do not affect finite movie/series manifests or healthy live streams.
+ */
+function staleLiveManifest(session,filename,now){
+ if(!session||session.kind!=='live'||session.stopped||!filename)return false;
+ try{
+  const timestamp=statSync(filename).mtimeMs;
+  return Number.isFinite(timestamp)&&now-Math.max(timestamp,session.startedAt)>23000
+ }catch{return false}
+}
 /**
  * Inspect a small, bounded TS prefix without consuming or discarding packets.
  * H.264 can be repackaged into HLS MPEG-TS without changing a single frame.
@@ -284,6 +297,11 @@ async function hlsRequest(req,url){
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
  if(!ready)return hlsError(sess.error?502:504,sess.error||'hls_segment_timeout');
+ if(filename==='index.m3u8'&&staleLiveManifest(sess,join(sess.dir,filename),Date.now())){
+  console.warn('VIDAA_LIVE_MANIFEST_STALLED',{kind:sess.kind,mode:sess.videoMode||'unknown'});
+  stopHls(sess,'stale_manifest');
+  return hlsError(503,'hls_source_stalled');
+ }
  try{
   const data=readFileSync(join(sess.dir,filename));
   if(!data.length)return hlsError(503,'hls_file_empty');
