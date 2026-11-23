@@ -41,7 +41,11 @@ class BlofyPlaybackSession(
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
-    private val bufferBudget = PlaybackBufferPolicy.forKind(contentKind)
+    private val bufferBudget = PlaybackBufferPolicy.forKind(
+        contentKind,
+        resilientStreamLive = BuildConfig.CODE_ONLY_LOGIN &&
+            profile.providerKey == StreamCodeSession.providerId
+    )
 
     private val liveStallWatchdog = object : Runnable {
         override fun run() {
