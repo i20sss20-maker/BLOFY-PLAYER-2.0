@@ -2324,12 +2324,18 @@ async function operatorHideRemovedLiveCategory(){
     FROM blofy_xtream_categories
     WHERE server_id=$1 AND media_type='live'
       AND lower(btrim(name))=lower($2)`,[sourceId,requested]);
+  // A visibility-only change needs a catalog version bump, otherwise app
+  // clients may continue showing a cached copy even for newly issued codes.
+  // The source and customer credentials remain unchanged.
+  const catalogRevision=before.rows.length
+    ?await bumpXtreamCatalogRevision(controlPool,sourceId,'operator_category_visibility')
+    :null;
   console.info('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
     code:'category_reconciled',sourceId,category:requested,
     localMatched:before.rows.length,localWasVisible:before.rows.filter(x=>x.enabled).length,
     localItemCount:before.rows.reduce((n,x)=>n+Number(x.item_count||0),0),
     updated,remainingVisible:Number(after.rows[0]?.still_visible||0),
-    upstream,nearbyLocalCount:nearby.rows.length,
+    catalogRevision,upstream,nearbyLocalCount:nearby.rows.length,
     nearbyNames:nearby.rows.map(x=>({name:x.name,visible:x.enabled})),
     sourceCredentialsUnchanged:true,subscriptionCodesUnchanged:true
   }));
