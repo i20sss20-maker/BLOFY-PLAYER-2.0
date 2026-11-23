@@ -327,10 +327,24 @@ async function streamApkDownload(req, res, sourceUrl, filename, metricKey) {
   observeDownloadCompletion({ req, res, body, status, length, contentRange,
     onComplete: () => recordDownloadCompletion(metricKey === 'blofy' ? 'blofy-verified' : metricKey),
     onError: error => console.error('APK completion metric failed:', error?.message || error) });
-  res.once('close', () => { if (!res.writableFinished) body.destroy(); });
+  // A closed browser/download manager cancels the upstream fetch. That is
+  // expected and must not be reported as an origin failure.
+  let clientDisconnected = false;
+  res.once('close', () => {
+    if (!res.writableFinished) {
+      clientDisconnected = true;
+      body.destroy();
+    }
+  });
   body.on('error', error => {
-    console.error('APK proxy stream failed:', error?.message || error);
-    if (!res.destroyed) res.destroy(error);
+    if (clientDisconnected || res.destroyed) {
+      console.info('APK proxy client disconnected before completion');
+      return;
+    }
+    // Log a bounded classification only: never leak the upstream URL.
+    console.error('APK proxy upstream stream failed:',
+      error?.name === 'AbortError' ? 'upstream_aborted' : 'upstream_stream_error');
+    res.destroy(error);
   });
   body.pipe(res);
 }
