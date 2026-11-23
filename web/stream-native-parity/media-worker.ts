@@ -34,7 +34,9 @@ function stopHls(session,reason){
  if(session.idleTimer)clearTimeout(session.idleTimer);
  if(session.hardTimer)clearTimeout(session.hardTimer);
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
- hlsSessions.delete(session.key);
+ // A stale decoder/stop callback must never remove a newer session on the
+ // same subscriber+channel key.
+ if(hlsSessions.get(session.key)===session)hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
  try{session.proc?.kill()}catch{}
  releaseHls(session);
@@ -67,10 +69,18 @@ async function startHls({bearer,kind,id,ext,track,key}){
  const target=BASE+kind+'/'+id+'.'+ext;
  try{
   const controller=new AbortController();
+  // A stop during the upstream header wait must cancel that fetch as well.
+  // Without this, a late response can spawn FFmpeg after the viewer leaves.
+  const abortSource=()=>controller.abort();
+  session.abort.signal.addEventListener('abort',abortSource,{once:true});
   const timeout=setTimeout(()=>controller.abort(),16000);
   let upstream;
   try{upstream=await fetch(target,{method:'GET',headers:{Authorization:bearer,Accept:'*/*','accept-encoding':'identity'},redirect:'manual',signal:controller.signal})}
-  finally{clearTimeout(timeout)}
+  finally{clearTimeout(timeout);session.abort.signal.removeEventListener('abort',abortSource)}
+  if(session.stopped||hlsSessions.get(key)!==session){
+   try{await upstream.body?.cancel()}catch{}
+   return {error:'hls_start_cancelled',status:409}
+  }
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
   const videoArgs=['-c:v','libx264','-preset','ultrafast','-tune','zerolatency','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p','-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','25','-keyint_min','25','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k'];
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts',...(kind==='live'?['-re']:[]),'-i','pipe:0',
@@ -79,6 +89,10 @@ async function startHls({bearer,kind,id,ext,track,key}){
   if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
   else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
   args.push(join(dir,'index.m3u8'));
+  if(session.stopped||hlsSessions.get(key)!==session){
+   try{await upstream.body?.cancel()}catch{}
+   return {error:'hls_start_cancelled',status:409}
+  }
   const proc=Bun.spawn([FFMPEG,...args],{stdin:upstream.body,stdout:'ignore',stderr:'pipe',signal:abort.signal});
   session.proc=proc;
   (async()=>{try{
