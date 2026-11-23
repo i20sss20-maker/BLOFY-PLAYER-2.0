@@ -1342,7 +1342,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    var label=document.getElementById('live-preview-quality');
    if(!label)return;
    var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
-   label.textContent=w&&h?'الدقة المعروضة فعليًا: '+w+'×'+h+' • '+(h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD'):
+   label.textContent=w&&h?'الدقة المعروضة فعليًا: '+w+'×'+h+' • '+(h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD')+
+    (record.sourceDimensions?' • المصدر '+record.sourceDimensions:''):
     'الدقة المعروضة: جار قراءة معلومات الفيديو…'
   };
   video.addEventListener('loadedmetadata',record.qualityListener);
@@ -1394,20 +1395,29 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  },50000);
 
  function probeSourceVideoMode(){
-  if(preview||record.videoModeProbed||!alive()||typeof fetch!=='function')return;
+  if(record.videoModeProbed||!alive()||typeof fetch!=='function')return;
   record.videoModeProbed=true;
   fetch(manifest,{method:'GET',credentials:'same-origin',cache:'no-store'}).then(function(response){
-   if(!response.ok)return '';
-   return response.headers.get('x-blofy-video-mode')||''
-  }).then(function(mode){
-   if(!alive()||S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
-   record.videoMode=mode;
+   if(!response.ok)return null;
+   return {
+    mode:response.headers.get('x-blofy-video-mode')||'',
+    source:response.headers.get('x-blofy-source-resolution')||''
+   }
+  }).then(function(info){
+   if(!info||!alive())return;
+   record.videoMode=info.mode;
+   record.sourceDimensions=/^[1-9][0-9]{1,3}x[1-9][0-9]{1,3}$/.test(info.source)?info.source:'';
+   if(preview){
+    if(record.qualityListener)record.qualityListener();
+    return
+   }
+   if(S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
    if(S.playerView.refreshVideoResolution)S.playerView.refreshVideoResolution();
    var tag=document.getElementById('player-source-mode');
    if(!tag)return;
-   if(mode==='source_copy'){
+   if(info.mode==='source_copy'){
     tag.textContent='الفيديو الأصلي • بدون ضغط إضافي';tag.hidden=false
-   }else if(mode==='compatibility_transcode'){
+   }else if(info.mode==='compatibility_transcode'){
     tag.textContent='وضع توافق • تحويل الصورة';tag.hidden=false
    }else tag.hidden=true
   }).catch(function(){})
@@ -1478,7 +1488,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
+   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
@@ -2243,8 +2253,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var grade=h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD';
   // These are actual decoded pixels, not guessed from the Xtream title.
   var copyMode=!!(S.play&&S.play.video===video&&S.play.videoMode==='source_copy');
+  var src=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
+  var srcH=src?Number(src.split('x')[1])||0:0;
   el.textContent='المعروض '+w+'×'+h+' • '+grade+
-   (copyMode&&h<690?' • المصدر نفسه SD':'');
+   (src?' • المصدر '+src:(copyMode&&h<690?' • المصدر نفسه SD':''))+
+   (srcH>=690&&h<690?' • تحويل خفّض الدقة':'');
   el.title='دقة الصورة التي يعرضها المتصفح، وليس جودة المصدر المعلنة';
   el.hidden=false
  }
@@ -2724,7 +2737,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   showPlayerChoices('جودة الفيديو',options,this)
  };
  var speeds=[1,1.25,1.5,2,0.75],speedBtn=document.getElementById('player-speed');
- if(speedBtn)speedBtn.onclick=function(){
+ if(isLive){
+  // Broadcast must stay at 1.00x: a TV remote speed toggle would distort
+  // a commentator's voice after several minutes of viewing.
+  if(speedBtn){speedBtn.hidden=true;speedBtn.disabled=true}
+  video.addEventListener('ratechange',function(){
+   if(S.route==='player'&&S.playerView===state&&Math.abs(video.playbackRate-1)>0.001){
+    video.defaultPlaybackRate=1;video.playbackRate=1
+   }
+  });
+ }else if(speedBtn)speedBtn.onclick=function(){
   var idx=speeds.indexOf(video.playbackRate),next=speeds[(idx+1)%speeds.length];
   video.playbackRate=next;this.textContent='السرعة '+next+'×'
  };
