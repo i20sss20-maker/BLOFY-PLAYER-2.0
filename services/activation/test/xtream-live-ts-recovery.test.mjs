@@ -111,6 +111,33 @@ test('provider refusal 403/429/509 is terminal, never retried after bytes',async
   assert.equal(calls,1);
  }
 });
+test('same-source TS reconnect accepts split packet reads without losing content',async()=>{
+ const initial=failingResponse(),reader=initial.body.getReader();
+ const first=(await reader.read()).value,original=ts();
+ let calls=0,recoveries=0;
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,
+  waitRetry:immediately,
+  fetchImpl:async()=>{
+   calls++;
+   return new Response(new ReadableStream({
+    start(c){
+     c.enqueue(original.subarray(0,90));
+     c.enqueue(original.subarray(90,230));
+     c.enqueue(original.subarray(230));
+     c.close();
+    }
+   }),{status:200,headers:{'content-type':'video/mp2t'}});
+  },
+  onReconnect:()=>recoveries++
+ });
+ assert.deepEqual((await iter.next()).value,ts());
+ assert.deepEqual((await iter.next()).value,ts());
+ assert.equal(calls,1);
+ assert.equal(recoveries,1);
+ await iter.return();
+});
+
 test('network reconnects are capped at two, no infinite retry storm',async()=>{
  const initial=failingResponse(),reader=initial.body.getReader();
  const first=(await reader.read()).value;
