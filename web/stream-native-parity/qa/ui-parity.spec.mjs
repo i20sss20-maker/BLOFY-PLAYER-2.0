@@ -626,6 +626,33 @@ test('movie and series categories update posters in-place without an app refresh
 });
 
 
+test('TV diagnostics show redacted source-vs-decoder evidence without credentials',async({page})=>{
+ const errors=[];page.on('pageerror',err=>errors.push(err.message));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await page.locator('[data-preview-full]').click();
+ await expect(page.locator('#player-root')).toBeVisible({timeout:10000});
+ await page.locator('#player-options-toggle').click();
+ await expect(page.locator('#player-diagnostic-toggle')).toBeVisible();
+ await page.locator('#player-diagnostic-toggle').click();
+ const panel=page.locator('#player-diagnostic-panel');
+ await expect(panel).toBeVisible();
+ await expect(panel).toContainText('BLOFY STREAM');
+ await expect(panel).toContainText('دقة المصدر');
+ await expect(panel).toContainText('آخر مقطع HLS');
+ await expect(panel).toContainText('النتيجة الأولية');
+ const content=await panel.textContent();
+ expect(content).not.toContain('Authorization');
+ expect(content).not.toContain('Bearer ');
+ expect(content).not.toContain('http://');
+ expect(content).not.toContain('https://');
+ expect(content).not.toContain('api_key=');
+ await page.locator('#player-diagnostic-toggle').click();
+ await expect(panel).toBeHidden();
+ expect(errors).toEqual([])
+});
+
 test('TV quality picker changes original source to codec-compatible HLS with stop acknowledgement',async({page})=>{
  const manifest=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
  const segments={};
