@@ -91,7 +91,7 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push('console:'+m.text().slice(0,250))});
  await page.route('**/api/hls/live/31/ts/0/**',async route=>{
   const name=route.request().url().split('/').pop().split('?')[0];
-  if(name==='index.m3u8')return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',body:manifest});
+  if(name==='index.m3u8')return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',headers:{'X-Blofy-Video-Mode':'source_copy'},body:manifest});
   if(segments[name])return route.fulfill({status:200,contentType:'video/mp2t',body:segments[name]});
   return route.fulfill({status:404,body:'not_found'});
  });
@@ -115,6 +115,8 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:14000}).toBeGreaterThan(1);
  await expect(page.locator('#player-status')).toBeHidden({timeout:10000});
  await expect(page.locator('#player-toggle')).toBeVisible();
+ await expect(page.locator('#player-source-mode')).toContainText('الفيديو الأصلي',{timeout:10000});
+ await expect(page.locator('#player-source-mode')).toBeVisible();
 });
 test('unknown-duration MKV VOD fallback decodes a temporary HLS playlist',async({page})=>{
  movie.container_extension='mkv';delete movie.duration_secs;
