@@ -109,7 +109,7 @@ test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops w
 
 
 test('HD fallback keeps source dimensions without upscaling and has a bounded bitrate',()=>{
- const begin=source.indexOf('function videoQualityProfile(kind){');
+ const begin=source.indexOf('function videoQualityProfile(');
  const end=source.indexOf('\nconst hlsSessions=',begin);
  assert.ok(begin>=0&&end>begin,'HD profile helper is part of the worker');
  const code=source.slice(begin,end);
