@@ -733,10 +733,12 @@ async function writeStreamChunk(res,chunk) {
 }
 
 async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null,distributorScope=null) {
+  // Resolve category maps first: cold-start requests otherwise can reject
+  // legitimate category IDs before the catalog mapping is initialized.
+  await ensureCategoryMaps(mediaType,sourceId);
   const filter=await categoryFilter(mediaType,categoryId,sourceId);
   const hidden=await distributorCatalog.hiddenIds(distributorScope,mediaType);
-  // Prepare source mappings before committing a successful response.
-  await ensureCategoryMaps(mediaType,sourceId);
+  // Prepare item mappings before committing a successful response.
   await ensureItemMaps(mediaType,sourceId);
   const gzipEnabled=acceptsXtreamGzip(req.headers['accept-encoding']);
   const headers={
