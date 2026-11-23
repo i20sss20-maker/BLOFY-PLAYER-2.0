@@ -1305,7 +1305,8 @@ function playerStatus(message,error){
 }
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
- var ultra=!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
+ // Thumbnail previews must never start an expensive UHD software encoder.
+ var ultra=!preview&&!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
  var compat=ultra||!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
  var key=kind+'/'+id+'/'+extension+'/'+track+(ultra?'/ultra':compat?'/compat':''),
      manifest='/api/hls/'+key+'/index.m3u8';
@@ -1383,6 +1384,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   var state=S.playerView;
   if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
   record.reconnecting=true;
+  // An unstable UHD conversion degrades to the stable 1080p path.
+  if(record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
   if(record.startupTimer)clearTimeout(record.startupTimer);
   if(record.stallTimer)clearTimeout(record.stallTimer);
   if(record.stableTimer)clearTimeout(record.stableTimer);
@@ -1500,6 +1503,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
     diagnose('live','hls_error','video',0);
+    var code=Number(detail.response&&detail.response.code)||0;
+    if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
     if(record.retries<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
      record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
     }
