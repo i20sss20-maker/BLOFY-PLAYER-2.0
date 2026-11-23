@@ -1528,6 +1528,34 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
  if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
  var explicitStart=from!==undefined&&from!==null&&from!=='';var initial=Math.max(0,Number(from)||0),isLive=kind==='live',prior=getResume(kind,id),resume=explicitStart?initial:(prior&&prior.position||0);
+ // The preview and fullscreen player share one upstream media-worker HLS key.
+ // Never send asynchronous /stop for that key after starting fullscreen:
+ // late /stop responses would kill the newly opened FFmpeg session.
+ var oldPreview=S.play,fullKey='live/'+id+'/ts/0';
+ if(isLive&&oldPreview&&oldPreview.preview&&oldPreview.hlsKey===fullKey){
+  if(S.previewToFullPending)return;
+  S.previewToFullPending=true;
+  var expectedRoute=S.route,expectedId=String(id);
+  var previewStatus=document.getElementById('live-status');
+  if(previewStatus)previewStatus.textContent='جار نقل القناة إلى المشغّل الكامل…';
+  stopPlayback(false);
+  var promotionSettled=false,promotionTimer=null;
+  function promotionComplete(status){
+   if(promotionSettled)return;
+   promotionSettled=true;
+   if(promotionTimer)clearTimeout(promotionTimer);
+   S.previewToFullPending=false;
+   if(S.route!==expectedRoute||!S.userVerified||String(S.selected)!==expectedId)return;
+   if(status===200||status===404){
+    openPlayer(kind,id,extension,name,from,replacePlayerHistory)
+   }else{
+    if(previewStatus)previewStatus.textContent='تعذر إغلاق المعاينة السابقة بأمان؛ أعد محاولة فتح القناة.'
+   }
+  }
+  promotionTimer=setTimeout(function(){promotionComplete(0)},6500);
+  api('POST','/api/hls/'+fullKey+'/stop',{},function(status){promotionComplete(status)});
+  return
+ }
  var detail=S.detailInfo&&S.detailInfo.kind===kind&&S.detailInfo.id===id?S.detailInfo.info:
   (kind==='series'&&S.episodes&&S.episodes.info||null);
  var overview=String(detail&&(detail.plot||detail.description)||item&&(item.plot||item.description)||'').trim().slice(0,950);
