@@ -130,3 +130,13 @@ The synthetic startup media check includes the last four-second segment before a
 The player also has an optional **📊 حالة التشغيل** button (hidden panel by default) which shows first frame delay, accumulated buffering, seek outcomes, playback engine and media errors. The panel updates only while open and is cleared when leaving the player. It does not expose subscriber tokens or upstream media URLs.
 
 **Mandatory before customer rollout:** Verify a full movie and episode against a subscribed authorized Xtream source, including forward/backward seeks, actual decoded frames and audio, 20 minutes of continuous playback, restart/resume and two simultaneous viewers. The preview remains separate from the Android customers.
+
+### VOD end detection and absolute-time jump control
+
+The web player now requires observed, plausible **end-of-title playback time** before marking a VOD complete. Native TV decoders sometimes emit `ended` at a short ~24-second chunk boundary despite a two-hour `#EXT-X-ENDLIST` manifest, and unknown-duration EVENT streams may end early. These cases trigger bounded recovery rather than a false 100%-watched checkpoint. Seek-in-progress can never establish completion on its own. Ordinary progress saving is suppressed while an unresolved seek is waiting; pause/exit retains its target for later resumption instead of reporting buffered timestamps as played frames.
+
+For a source that does not expose full runtime metadata, TV and touch users can select **↪ دقيقة محددة**, enter a minute from 0 to 359, and press **انتقال**. This performs a real player seek/reopen request at the chosen absolute time (it is not merely a new label), with input validation, D-pad focus handling and an explicit warning that the source must support random byte seeking. A manual minute jump is not a guarantee that the upstream server supports it.
+
+The unit scenarios cover a 24-second early end on a 120-minute movie; source EOF with unknown duration; plausible completion near the true end; unfinished seeking; minute 60 -> absolute 3600s; invalid input; and a deliberate return to minute 0. These are simulated logic checks, not end-to-end testing with customer video or physical TV hardware.
+
+**Recent Railway traffic observation:** Proxy request metrics for the previous day included real authenticated VOD and live transport requests, not just synthetic FFmpeg health tests. HTTP responses for initial full VOD segments were successful, while prior legacy VOD and live manifests included transient 502/503 responses. The presence of successful segment requests does not prove the browser decoded a full film or that distant random seeks work for every Xtream source.
