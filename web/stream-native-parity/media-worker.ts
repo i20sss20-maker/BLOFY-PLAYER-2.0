@@ -41,7 +41,11 @@ function compatibleVideoArgs(kind,gopSeconds=1){
 const hlsSessions=new Map();
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
-function hlsKey(bearer,kind,id,ext,track){return createHmac('sha256',SECRET).update([bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40)}
+function hlsKey(bearer,kind,id,ext,track,forceCompat){
+ const fields=[bearer,kind,id,ext,track];
+ if(forceCompat)fields.push('compat');
+ return createHmac('sha256',SECRET).update(fields.join('\x00')).digest('hex').slice(0,40)
+}
 function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
  // The old fixed 9-minute timer killed active live streams even as viewers
@@ -67,6 +71,7 @@ function stopHls(session,reason){
  // same subscriber+channel key.
  if(hlsSessions.get(session.key)===session)hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
+ try{session.sourceController?.abort()}catch{}
  try{session.proc?.kill()}catch{}
  releaseHls(session);
  try{rmSync(session.dir,{recursive:true,force:true})}catch{}
@@ -131,7 +136,7 @@ function concatTsProbe(chunks,total){
  return out
 }
 
-async function startHls({bearer,kind,id,ext,track,key}){
+async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
  active++;
  const abort=new AbortController(),dir=join(hlsRoot,key);
@@ -143,7 +148,7 @@ async function startHls({bearer,kind,id,ext,track,key}){
  session.hardTimer.unref?.();
  const target=BASE+kind+'/'+id+'.'+ext;
  try{
-  const controller=new AbortController();
+  const controller=new AbortController();session.sourceController=controller;
   // A stop during the upstream header wait must cancel that fetch as well.
   // Without this, a late response can spawn FFmpeg after the viewer leaves.
   const abortSource=()=>controller.abort();
@@ -151,20 +156,20 @@ async function startHls({bearer,kind,id,ext,track,key}){
   const timeout=setTimeout(()=>controller.abort(),16000);
   let upstream;
   try{upstream=await fetch(target,{method:'GET',headers:{Authorization:bearer,Accept:'*/*','accept-encoding':'identity'},redirect:'manual',signal:controller.signal})}
-  finally{clearTimeout(timeout);session.abort.signal.removeEventListener('abort',abortSource)}
+  finally{clearTimeout(timeout)}
   if(session.stopped||hlsSessions.get(key)!==session){
    try{await upstream.body?.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
-  const sourceInput=await selectSourcePreservingInput(upstream.body,kind==='live'&&ext==='ts');
+  const sourceInput=await selectSourcePreservingInput(upstream.body,!forceCompat&&kind==='live'&&ext==='ts');
   if(session.stopped||hlsSessions.get(key)!==session){
    try{await sourceInput.input.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
   // Stream-copy genuine H.264 live video; it avoids the 720p ceiling and
   // removes the lossy second encoding. Only AAC needs compatibility encoding.
-  const losslessVideo=sourceInput.copyVideo;
+  const losslessVideo=!forceCompat&&sourceInput.copyVideo;
   session.videoMode=losslessVideo?'source_copy':'compatibility_transcode';
   const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind);
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
@@ -186,6 +191,9 @@ async function startHls({bearer,kind,id,ext,track,key}){
    if(err)session.error=/Stream map|matches no streams/i.test(err)?'source_missing_video':/Invalid data/i.test(err)?'invalid_source_data':/encoder/i.test(err)?'encoder_failure':'transcode_error';
   }catch{}})();
   proc.exited.then(code=>{
+   session.abort.signal.removeEventListener('abort',abortSource);
+   try{controller.abort()}catch{}
+   session.sourceController=null;
    session.finished=true;
    if(code!==0&&!session.stopped)console.warn('VIDAA_HLS_FFMPEG_EXIT',{kind,code,reason:session.error||'nonzero_exit'});
    if(!existsSync(join(dir,'index.m3u8'))){session.error=session.error||'ffmpeg_no_playlist';stopHls(session,session.error)}
@@ -196,25 +204,25 @@ async function startHls({bearer,kind,id,ext,track,key}){
 }
 async function hlsRequest(req,url){
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
- const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/stop$/);
+ const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat)\/)?stop$/);
  if(req.method==='POST'&&stop){
   const bearer=req.headers.get('authorization')||'';
   if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
-  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4]);
+  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4],stop[5]==='compat');
   const activeSession=hlsSessions.get(key);if(activeSession)stopHls(activeSession,'viewer_stopped');
   return json(200,{ok:true});
  }
  if(req.method!=='GET')return hlsError(405,'method_not_allowed');
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
- const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(index\.m3u8|seg-[0-9]{6}\.ts)$/);
+ const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat)\/)?(index\.m3u8|seg-[0-9]{6}\.ts)$/);
  if(!match)return hlsError(404,'hls_invalid_resource');
  const bearer=req.headers.get('authorization')||'';
  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
- const [whole,kind,id,ext,track,filename]=match;
- const key=hlsKey(bearer,kind,id,ext,track);
+ const [whole,kind,id,ext,track,compat,filename]=match;
+ const key=hlsKey(bearer,kind,id,ext,track,compat==='compat');
  let sess=hlsSessions.get(key);
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
- if(!sess){const start=await startHls({bearer,kind,id,ext,track,key});if(start.error)return hlsError(start.status,start.error);sess=start.session}
+ if(!sess){const start=await startHls({bearer,kind,id,ext,track,key,forceCompat:compat==='compat'});if(start.error)return hlsError(start.status,start.error);sess=start.session}
  touchHls(sess);
  const ready=await awaitHlsFile(sess,filename,filename==='index.m3u8'?25000:8000);
  if(ready&&filename==='index.m3u8'&&kind==='live'){
