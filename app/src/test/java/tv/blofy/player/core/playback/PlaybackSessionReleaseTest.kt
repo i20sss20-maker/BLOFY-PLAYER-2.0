@@ -31,6 +31,9 @@ class PlaybackSessionReleaseTest {
         lateinit var listener: Player.Listener
         var releases = 0
         var prepares = 0
+        var seeks = 0
+        var position = 0L
+        var state = Player.STATE_IDLE
         var playReady = false
         var releaseError = false
         var throwOnRelease = false
@@ -38,8 +41,9 @@ class PlaybackSessionReleaseTest {
             when (method.name) {
                 "addListener" -> { listener = args!![0] as Player.Listener; Unit }
                 "getCurrentMediaItem" -> MediaItem.fromUri("https://example.test/live/u/p/1.ts")
-                "getCurrentPosition" -> 0L
-                "getPlaybackState" -> Player.STATE_IDLE
+                "getPlaybackState" -> state
+                "getCurrentPosition" -> position
+                "seekTo" -> { seeks++; position = args!!.last() as Long; Unit }
                 "getPlayWhenReady" -> playReady
                 "getVideoFormat" -> null
                 "prepare" -> { prepares++; Unit }
@@ -160,6 +164,45 @@ class PlaybackSessionReleaseTest {
         var detached = false
         assertTrue(runCatching { session.release { detached = true } }.isFailure)
         assertTrue(detached)
+        assertEquals(1, fake.releases)
+    }
+
+
+    private fun vodSession(fake: FakePlayer) = BlofyPlaybackSession(
+        RuntimeEnvironment.getApplication(), ProviderProfile("vod-seek-test"), "episode",
+        playerFactory = { _, _ -> fake.player }
+    )
+
+    @Test fun explicitSeekWaitsForGenuineStallAndDoesNotCauseRepeatedRangeResets() {
+        val fake = FakePlayer().apply {
+            playReady = true
+            state = Player.STATE_BUFFERING
+        }
+        val session = vodSession(fake)
+        try {
+            session.seekFromUser(20_000L)
+            session.seekFromUser(50_000L)
+            assertEquals(2, fake.seeks)
+            shadowOf(Looper.getMainLooper()).idleFor(19, TimeUnit.SECONDS)
+            assertEquals(0, fake.prepares)
+            shadowOf(Looper.getMainLooper()).idleFor(2, TimeUnit.SECONDS)
+            assertEquals(1, fake.prepares)
+            assertEquals(50_000L, fake.position)
+            shadowOf(Looper.getMainLooper()).idleFor(60, TimeUnit.SECONDS)
+            assertEquals(1, fake.prepares)
+        } finally { session.release() }
+    }
+
+    @Test fun releasingVodPlayerCancelsPendingSeekRestart() {
+        val fake = FakePlayer().apply {
+            playReady = true
+            state = Player.STATE_BUFFERING
+        }
+        val session = vodSession(fake)
+        session.seekFromUser(90_000L)
+        session.release()
+        shadowOf(Looper.getMainLooper()).idleFor(25, TimeUnit.SECONDS)
+        assertEquals(0, fake.prepares)
         assertEquals(1, fake.releases)
     }
 

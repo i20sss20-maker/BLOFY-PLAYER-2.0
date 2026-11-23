@@ -96,6 +96,24 @@ open class PlayerActivity : ContentAccessActivity() {
     private var touchPlaybackControls: LinearLayout? = null
     private var controlInsets = Insets.NONE
     private var seeking = false
+    // Commit only the final TV remote seek after a short burst. This prevents
+    // many superseded MKV HTTP Range requests from being immediately aborted.
+    private var pendingVodSeekMs: Long? = null
+    private var pendingVodSeekContentKey: String? = null
+    private val commitVodSeek = Runnable {
+        val targetMs = pendingVodSeekMs
+        val expectedKey = pendingVodSeekContentKey
+        pendingVodSeekMs = null
+        pendingVodSeekContentKey = null
+        if (targetMs != null && !sessionReleased && kind != KIND_LIVE &&
+            currentContentKey == expectedKey && session.player.currentMediaItem != null
+        ) session.seekFromUser(targetMs)
+    }
+    private fun cancelPendingVodSeek() {
+        pendingVodSeekMs = null
+        pendingVodSeekContentKey = null
+        if (::hud.isInitialized) hud.removeCallbacks(commitVodSeek)
+    }
     private val checkpoint = ResumeCheckpoint()
     private val subtitlePolicy = ArabicSubtitlePolicy()
     private var lastCheckpointAt = 0L
@@ -392,6 +410,7 @@ open class PlayerActivity : ContentAccessActivity() {
     }
 
     private fun releasePlaybackSession() {
+        cancelPendingVodSeek()
         if (!::session.isInitialized || sessionReleased) return
         saveResume()
         suspendedPlayback = session.resumeState()?.let { state ->
@@ -569,7 +588,10 @@ open class PlayerActivity : ContentAccessActivity() {
                     override fun onStopTrackingTouch(seekBar: SeekBar) {
                         seeking = false
                         val duration = session.player.duration
-                        if (duration > 0) session.player.seekTo(duration * seekBar.progress / seekBar.max)
+                        if (duration > 0) {
+                            cancelPendingVodSeek()
+                            session.seekFromUser(duration * seekBar.progress / seekBar.max)
+                        }
                         showHudBriefly()
                     }
                 })
@@ -860,9 +882,21 @@ open class PlayerActivity : ContentAccessActivity() {
             else "Seeking is unavailable for this source"
             return
         }
+        if (deltaMs == 0L) return
         val duration = session.player.duration.takeIf { it > 0L }
-        val target = (session.player.currentPosition + deltaMs).coerceAtLeast(0L)
-        session.player.seekTo(if (duration != null) target.coerceAtMost(duration) else target)
+        val target = VodSeekBurstPolicy.target(
+            session.player.currentPosition,
+            if (kind == KIND_LIVE) null else pendingVodSeekMs,
+            deltaMs, duration
+        )
+        if (kind == KIND_LIVE) {
+            session.player.seekTo(target)
+        } else {
+            pendingVodSeekMs = target
+            pendingVodSeekContentKey = currentContentKey
+            hud.removeCallbacks(commitVodSeek)
+            hud.postDelayed(commitVodSeek, VodSeekBurstPolicy.COMMIT_DELAY_MS)
+        }
         controlHint.text = (if (deltaMs >= 0L) "+" else "") + (deltaMs / 1_000L).toString() + "s"
     }
 
@@ -1045,6 +1079,7 @@ open class PlayerActivity : ContentAccessActivity() {
             }
 
             transitionEpisode(automatic, ::saveResume, ::markCurrentCompleted) {
+                cancelPendingVodSeek()
                 checkpoint.reset()
                 subtitlePolicy.reset()
                 session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon()
@@ -2221,10 +2256,13 @@ open class PlayerActivity : ContentAccessActivity() {
             showConnectionNotice(getString(R.string.player_offline))
             return
         }
+        cancelPendingVodSeek()
         saveResume()
         val playWhenReady = session.player.playWhenReady
-        session.retrySameUrl()
-        if (kind != KIND_LIVE && checkpoint.positionMs > 0L) session.player.seekTo(checkpoint.positionMs)
+        // One Media3 seek after prepare, not an immediate duplicate Range
+        // opened by retrySameUrl followed by a second seekTo.
+        val resumeTarget = checkpoint.positionMs.takeIf { kind != KIND_LIVE && it > 0L }
+        session.retrySameUrl(resumeTarget)
         session.player.playWhenReady = playWhenReady
         showConnectionNotice(getString(R.string.player_reconnecting))
     }
