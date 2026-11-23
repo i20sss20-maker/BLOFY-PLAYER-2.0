@@ -839,10 +839,21 @@ function checkCatalogVersion(){
  })
 }
 function settingsScreen(){
+ var diag=S.lastPlaybackDiag,mode=diag&&({fullvod:'VOD كامل',vodhls:'HLS مؤقت',direct:'MP4 مباشر',hls:'بث HLS',mpegts:'MPEG-TS'}[diag.mode]||'غير معروف');
+ var diagText=!diag?'لا توجد مشاهدة مسجلة بعد. شغّل محتوى، ثم ارجع إلى الإعدادات لمعرفة أداء المشغّل.':
+  'آخر مشاهدة: '+(diag.kind==='live'?'بث مباشر':diag.kind==='series'?'حلقة':'فيلم')+
+  ' • المحرك: '+mode+
+  ' • بداية التشغيل: '+(diag.startupMs===null?'لم تبدأ':(diag.startupMs/1000).toFixed(1)+' ث')+
+  ' • مرات الانتظار: '+(diag.bufferingEvents||0)+
+  ' • زمن الانتظار: '+Math.round((diag.bufferingMs||0)/1000)+' ث'+
+  ' • أخطاء الوسائط: '+(diag.errors||0)+'.';
  shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button><p id="refresh-progress" role="status" aria-live="polite">فهرس المحتوى يُراجع تلقائيًا عند توفر رقم إصدار جديد.</p></section>'+
  '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
   '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
   '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
+ '<section class="setting-panel"><h3>آخر اختبار مشاهدة فعلي</h3><p id="last-playback-diagnostic" role="status" aria-live="polite">'+esc(diagText)+'</p>'+
+  '<button class="btn secondary" id="clear-playback-diagnostic">مسح بيانات التشخيص</button>'+
+  '<p class="small muted">إحصاءات من المشاهدة داخل هذا المتصفح فقط؛ ليست اختبارًا لكل مصادر Xtream. لا نحفظ بيانات الاشتراك أو رابط المصدر.</p></section>'+
  '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
   '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
   '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
@@ -861,6 +872,11 @@ function settingsScreen(){
     box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
    }
   })
+ };
+ document.getElementById('clear-playback-diagnostic').onclick=function(){
+  S.lastPlaybackDiag=null;profileSave('lastPlaybackDiag',null);
+  var box=document.getElementById('last-playback-diagnostic');
+  if(box)box.textContent='تم حذف بيانات التشخيص لهذا الاشتراك من المتصفح.'
  };
  document.getElementById('clear-watch-history').onclick=function(){
   if(!window.confirm('حذف سجل المشاهدة وعمليات البحث لهذا الاشتراك من هذا المتصفح فقط؟ لن تُحذف المفضلة أو الاشتراك.'))return;
