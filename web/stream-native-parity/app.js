@@ -2056,6 +2056,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var frames=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
   var dropped=frames&&Number.isFinite(frames.droppedVideoFrames)?frames.droppedVideoFrames:null;
   box.textContent='الدقة: '+screenQuality+
+   ' | سرعة الصوت/الصورة: '+(Number(video.playbackRate)||1).toFixed(2)+'×'+
    (dropped===null?'':' | الإطارات المتساقطة: '+dropped)+
    ' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
    ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
