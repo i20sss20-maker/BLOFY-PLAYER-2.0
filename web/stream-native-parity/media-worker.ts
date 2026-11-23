@@ -1,5 +1,5 @@
 
-import { timingSafeEqual, createHmac } from 'node:crypto';
+import { timingSafeEqual, createHmac, randomBytes } from 'node:crypto';
 import { mkdirSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -67,15 +67,16 @@ function stopHls(session,reason){
  if(session.idleTimer)clearTimeout(session.idleTimer);
  if(session.hardTimer)clearTimeout(session.hardTimer);
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
- // A delayed stop can race a new session with the SAME key and directory.
- // Never delete the replacement session's playlist or segments.
- const ownsFiles=hlsSessions.get(session.key)===session;
- if(ownsFiles)hlsSessions.delete(session.key);
+ // A delayed stop can race a newer same-key session. The map belongs to
+ // the newer session, while this session's uniquely named temp dir remains
+ // safe to clean independently.
+ const ownsKey=hlsSessions.get(session.key)===session;
+ if(ownsKey)hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
  try{session.sourceController?.abort()}catch{}
  try{session.proc?.kill()}catch{}
  releaseHls(session);
- if(ownsFiles)try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ try{rmSync(session.dir,{recursive:true,force:true})}catch{}
  if(reason!=='idle_timeout'&&reason!=='session_expired')console.info('VIDAA_HLS_SESSION_END',{kind:session.kind,reason})
 }
 function releaseHls(session){if(!session.released){session.released=true;active=Math.max(0,active-1)}}
@@ -140,7 +141,9 @@ function concatTsProbe(chunks,total){
 async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
  active++;
- const abort=new AbortController(),dir=join(hlsRoot,key);
+ // One unique directory per decoder instance; a retired FFmpeg process
+ // cannot overwrite a fresh channel playlist while it is shutting down.
+ const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
  const session={key,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true};
  hlsSessions.set(key,session);
  mkdirSync(dir,{recursive:true});
