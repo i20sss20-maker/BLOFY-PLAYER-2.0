@@ -292,8 +292,14 @@ if(p==='/api/compatible/health'&&method==='GET'){
   const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(5000)});
   if(!r.ok)return json(503,{error:'compat_worker_unavailable'});
   const data=await r.json();return json(data.ok?200:503,{ok:!!data.ok,ffmpegAvailable:!!data.ffmpegAvailable,activeJobs:data.activeJobs,capacity:data.limit,
-   liveQuality:['480','720','1080'].includes(String(data.liveQuality))?String(data.liveQuality):'unknown',
-   vodQuality:['480','720','1080'].includes(String(data.vodQuality))?String(data.vodQuality):'unknown'});
+   liveQuality:['480','720','1080','2160'].includes(String(data.liveQuality))?String(data.liveQuality):'unknown',
+   vodQuality:['480','720','1080','2160'].includes(String(data.vodQuality))?String(data.vodQuality):'unknown',
+   sharedLive:{
+    enabled:data.sharedLive?.enabled===true,
+    groups:Math.max(0,Math.min(100,Number(data.sharedLive?.groups)||0)),
+    viewers:Math.max(0,Math.min(400,Number(data.sharedLive?.viewers)||0)),
+    maxPerGroup:Math.max(0,Math.min(10,Number(data.sharedLive?.maxPerGroup)||0))
+   }});
  }catch(e){return json(503,{error:'compat_worker_unreachable'})}
 }
 if(p.indexOf('/api/compatible/')===0&&method==='GET'){
