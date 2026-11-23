@@ -64,14 +64,14 @@ test('late stop of an old stream never deletes the replacement session with the 
   console:{info(){}}
  };
  const stop=vm.runInNewContext(source.slice(begin,end)+';\nstopHls',context);
- const old={key:'account:channel',abort:{abort(){}},dir:'/shared-newer-session'};
- const replacement={key:'account:channel',stopped:false};
+ const old={key:'account:channel',abort:{abort(){}},dir:'/old-unique-session'};
+ const replacement={key:'account:channel',stopped:false,dir:'/new-unique-session'};
  map.set(old.key,replacement);
  stop(old,'viewer_stopped');
  assert.equal(map.get(old.key),replacement);
  assert.equal(old.stopped,true);
  assert.equal(context.active,0);
- assert.deepEqual(removed,[],'late cleanup cannot erase replacement HLS files');
+ assert.deepEqual(removed,['/old-unique-session'],'late cleanup removes only old decoder directory, not replacement');
 });
 
 test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops watching',async()=>{
@@ -85,6 +85,7 @@ test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops w
   BASE:'https://example.invalid/source/',
   join:(...args)=>args.join('/'),
   mkdirSync(){},touchHls(){},clearTimeout(){},
+  randomBytes:()=>Buffer.from('00bb22cc44dd','hex'),
   setTimeout(){return{unref(){}}},
   AbortController,
   fetch:async()=>new Promise(resolve=>{resolveFetch=resolve}),
