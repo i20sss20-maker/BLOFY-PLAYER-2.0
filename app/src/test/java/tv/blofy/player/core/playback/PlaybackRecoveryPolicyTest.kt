@@ -41,6 +41,36 @@ class PlaybackRecoveryPolicyTest {
         ))
     }
 
+
+    @Test fun streamGatewayWaitsForExistingLiveRecoveryBeforeResettingSurface() {
+        val gatewayGrace = PlaybackRecoveryPolicy.liveBufferGraceMs(
+            isCodeOnlyGateway = true, wasReady = true
+        )
+        assertTrue(gatewayGrace > PlaybackRecoveryPolicy.LIVE_REBUFFER_GRACE_MS)
+        assertFalse(PlaybackRecoveryPolicy.shouldRecoverLiveBuffering(
+            stalledForMs = 25_000L, nowMs = 100_000L,
+            lastRecoveryAtMs = 0L, recoveries = 0, graceMs = gatewayGrace
+        ))
+        assertTrue(PlaybackRecoveryPolicy.shouldRecoverLiveBuffering(
+            stalledForMs = gatewayGrace, nowMs = 100_000L,
+            lastRecoveryAtMs = 0L, recoveries = 0, graceMs = gatewayGrace
+        ))
+    }
+
+    @Test fun initialGatewayLoadAndNormalPlayerRetainFastRecovery() {
+        assertTrue(PlaybackRecoveryPolicy.liveBufferGraceMs(
+            isCodeOnlyGateway = true, wasReady = false
+        ) == PlaybackRecoveryPolicy.LIVE_REBUFFER_GRACE_MS)
+        assertTrue(PlaybackRecoveryPolicy.liveBufferGraceMs(
+            isCodeOnlyGateway = false, wasReady = true
+        ) == PlaybackRecoveryPolicy.LIVE_REBUFFER_GRACE_MS)
+        assertTrue(PlaybackRecoveryPolicy.shouldRecoverLiveBuffering(
+            stalledForMs = 25_000L, nowMs = 25_000L,
+            lastRecoveryAtMs = 0L, recoveries = 0,
+            graceMs = PlaybackRecoveryPolicy.liveBufferGraceMs(true, false)
+        ))
+    }
+
     @Test fun nextOutageAfterHealthyPlaybackGetsFreshSingleRetry() {
         assertTrue(PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
             lastReadyAtMs = 100_000L, nowMs = 131_000L
