@@ -2201,6 +2201,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    Math.min(100,100*dropped/Number(frames.totalVideoFrames)).toFixed(2)+'٪':null;
   var estimate=S.play&&S.play.video===video&&S.play.engine?Number(S.play.engine.bandwidthEstimate)||0:0;
   var bitrate=estimate>100000&&estimate<1e10?(estimate/1000000).toFixed(1)+' Mbps':'غير متوفر';
+  var liveRecord=isLive&&S.play&&S.play.video===video?S.play:null;
+  var recentSegment=liveRecord&&liveRecord.engine?
+   (liveRecord.lastFragmentAt?Math.round((now-liveRecord.lastFragmentAt)/1000)+' ثانية':'بانتظار أول مقطع'):
+   'غير متاح بالمشغل الأصلي';
   var uptime=formatTime(Math.max(0,(now-st.openedAt)/1000));
   var status4k=height>=4300&&width>=7600?'8K معروض فعليًا':height>=2100&&width>=3800?'4K معروض فعليًا':
    'الدقة تعتمد على المصدر والجهاز';
@@ -2213,6 +2217,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['إطارات ساقطة',dropped===null?'غير متاح':dropped+(droppedPct?' / '+droppedPct:'')],
    ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
    ['سرعة شبكة مقدّرة',bitrate],
+   ['آخر مقطع HLS',recentSegment],
    ['بدء الصورة',startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية'],
    ['أخطاء المشغل',String(st.errors||0)],
    ['استعادات تلقائية',String(st.recoveries||0)]
