@@ -45,7 +45,7 @@ jobs:
             assembleStreamCodeDemo
           apk="$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
           test -s "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "name='tv.blofy.player.v2.stream' versionCode='2000119'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "name='tv.blofy.player.v2.stream.qa' versionCode='2000119'"
       - name: Save no-secrets QA reports only
         if: always()
         uses: actions/upload-artifact@v4
