@@ -20,3 +20,27 @@ test('CA configuration is explicit and cannot be disabled through overrides',()=
   assert.deepEqual(options.ssl,{rejectUnauthorized:true,ca});
   assert.throws(()=>databaseOptions('postgres://db.example.test/data',{}, {BLOFY_DATABASE_CA:'invalid'}),/invalid_database_ca/);
 });
+
+test('private Railway DB uses one per-session no-parallel-gather safety setting without a database restart',()=>{
+  const target='postgres://user:secret@Postgres.railway.internal:5432/railway';
+  const cfg=databaseOptions(target,{}, {PGSSLMODE:'disable'});
+  assert.equal(cfg.options,'-c max_parallel_workers_per_gather=0');
+  assert.equal(cfg.max,4);
+  assert.equal(cfg.ssl,false);
+  assert.equal(cfg.statement_timeout,10000);
+  assert.equal(databaseOptions(target,{}, {PGSSLMODE:'disable',
+    BLOFY_POSTGRES_PARALLEL_GATHER_SAFE_MODE:'0'}).options,undefined);
+  assert.equal(databaseOptions('postgres://localhost:5432/test',{}, {PGSSLMODE:'disable'}).options,undefined);
+  assert.equal(databaseOptions('postgres://db.example.test/pg',{}, {}).options,undefined);
+});
+
+test('private Railway URL options cannot silently override the DSM limit',()=>{
+  const cfg=databaseOptions('postgres://Postgres.railway.internal/railway?options=-c%20max_parallel_workers_per_gather%3D8',
+    {}, {PGSSLMODE:'disable'});
+  assert.equal(cfg.options,'-c max_parallel_workers_per_gather=0');
+  assert.equal(new URL(cfg.connectionString).searchParams.has('options'),false);
+  const explicit=databaseOptions('postgres://Postgres.railway.internal/railway',
+    {max:2}, {PGSSLMODE:'disable'});
+  assert.equal(explicit.max,2);
+  assert.equal(explicit.options,'-c max_parallel_workers_per_gather=0');
+});
