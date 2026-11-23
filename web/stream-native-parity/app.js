@@ -1546,7 +1546,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    opts:{kind:kind,id:id,extension:ext,name:name,from:resume}},'',window.location.href)}catch(err){}
  }else pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
  S.route='player';
- app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline></video>'+
+ app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
  '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+
  '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
  '<div class="player-hud native-stream-hud">'+
