@@ -1426,6 +1426,7 @@ function openPlayer(kind,id,extension,name,from){
    if(S.route!=='player'||state.mode!=='direct'||state.directFallback)return;
    if(Math.abs(Math.max(0,Number(video.currentTime)||0)-target)>8){
     state.resume=target;
+    state.requestedSeek=target;
     playerStatus('لم يصل المشغّل الأصلي إلى الموضع المختار؛ جار استخدام مشغّل الفيديو الكامل…');
     state.recoverDirect()
    }
@@ -1444,11 +1445,12 @@ function openPlayer(kind,id,extension,name,from){
    var checkpoint=duration>=120?Math.min(resume,Math.max(0,duration-5)):resume;
    state.didResume=true;
    if(nativeCanSeek(checkpoint)){
-    try{video.currentTime=checkpoint;verifyDirectSeek(checkpoint)}catch(e){state.recoverDirect()}
+    try{video.currentTime=checkpoint;verifyDirectSeek(checkpoint)}catch(e){state.requestedSeek=checkpoint;state.recoverDirect()}
    }else{
     // Never discard a saved checkpoint because a pseudo-live source advertises
     // only the first minute as seekable.
     state.resume=checkpoint;
+    state.requestedSeek=checkpoint;
     state.recoverDirect()
    }
   }
@@ -1526,7 +1528,7 @@ function openPlayer(kind,id,extension,name,from){
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
   if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
    try{
-    if(state.mode==='direct'){resume=target;state.resume=target}
+    if(state.mode==='direct'){resume=target;state.resume=target;state.requestedSeek=target}
     video.currentTime=target;
     if(state.mode==='direct')verifyDirectSeek(target);
     progress();return
@@ -1534,6 +1536,9 @@ function openPlayer(kind,id,extension,name,from){
   }
   if(state.mode==='direct'){
    state.directFallback=true;
+   // The user may deliberately rewind. Never prefer an earlier, larger
+   // checkpoint or the stale MP4 time when switching to VOD.
+   state.requestedSeek=target;state.resume=target;resume=target;
    // A nonseekable MP4 reports untrusted duration. Prefer Xtream metadata.
    playerStatus('هذا المصدر لا يسمح بالتقديم إلى '+formatTime(target)+' مباشرة؛ جار فتح مشغّل الأفلام…')
   }
@@ -1554,7 +1559,13 @@ function openPlayer(kind,id,extension,name,from){
   if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
   if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
-  var position=Math.max(resume,state.resume||0,video.currentTime||0);
+  // A user-specified seek is authoritative, including 0 and backward seeks.
+  // A plain playback stall without a requested seek resumes at the furthest
+  // reliable checkpoint as before.
+  var position=state.requestedSeek!==undefined&&state.requestedSeek!==null?
+   Math.max(0,Number(state.requestedSeek)||0):
+   Math.max(resume,state.resume||0,video.currentTime||0);
+  state.requestedSeek=null;
   playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
   if(state.duration>=120)startVod(position);
   else startWithMetadata(position)
