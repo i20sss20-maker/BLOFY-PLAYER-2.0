@@ -1341,6 +1341,24 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(!alive()||record.ready||video.paused)return;
   recoverConnection()
  },50000);
+
+ function probeSourceVideoMode(){
+  if(preview||record.videoModeProbed||!alive()||typeof fetch!=='function')return;
+  record.videoModeProbed=true;
+  fetch(manifest,{method:'GET',credentials:'same-origin',cache:'no-store'}).then(function(response){
+   if(!response.ok)return '';
+   return response.headers.get('x-blofy-video-mode')||''
+  }).then(function(mode){
+   if(!alive()||S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
+   var tag=document.getElementById('player-source-mode');
+   if(!tag)return;
+   if(mode==='source_copy'){
+    tag.textContent='الفيديو الأصلي • بدون ضغط إضافي';tag.hidden=false
+   }else if(mode==='compatibility_transcode'){
+    tag.textContent='وضع توافق • تحويل الصورة';tag.hidden=false
+   }else tag.hidden=true
+  }).catch(function(){})
+ }
  function status(text){if(!alive())return;
   if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
   else playerStatus(text)
@@ -1364,6 +1382,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(alive()&&record.ready&&video.readyState>=2)record.recoveryAttempt=0
   },120000);
   status(preview?'● المعاينة تعمل':'● تشغيل البث');
+  probeSourceVideoMode();
   if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
    var state=S.playerView,firstPlay=!state.ready;state.ready=true;
    if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
@@ -1859,7 +1878,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="native-player-channels" id="player-channels-toggle" type="button" aria-label="قائمة القنوات">☷ القنوات</button>':'')+
  '<button class="native-player-fullscreen" id="player-fullscreen" type="button" aria-label="ملء الشاشة" aria-pressed="false" title="ملء الشاشة">⛶ ملء الشاشة</button>'+ 
  '<button class="native-player-more" id="player-options-toggle" type="button" aria-expanded="false" aria-controls="player-more-panel" aria-label="المزيد من الخيارات" title="المزيد من الخيارات">⋯</button></div>'+
- '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span><span class="player-resolution-badge" id="player-resolution" aria-live="polite" hidden></span></div>'+
+ '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span><span class="player-resolution-badge" id="player-resolution" aria-live="polite" hidden></span><span class="player-resolution-badge" id="player-source-mode" aria-live="polite" hidden></span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
  '<div class="native-player-timeline" dir="ltr"><span id="now-time">00:00</span><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled aria-label="موضع التشغيل"><span id="total-time">--:--</span></div>')+
  '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+(isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
@@ -2745,6 +2764,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
    if(state.refreshFavoriteButton)state.refreshFavoriteButton();
+   var qualityPath=document.getElementById('player-source-mode');if(qualityPath)qualityPath.hidden=true;
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
