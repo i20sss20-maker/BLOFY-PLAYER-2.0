@@ -2016,13 +2016,23 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(state.hudTimer)clearTimeout(state.hudTimer);
   state.hudTimer=setTimeout(function(){
    state.hudTimer=null;
-   if(S.route!=='player'||!state.ready||video.paused||!root.isConnected)return;
+   if(S.route!=='player'||S.playerView!==state||!state.ready||video.paused||!root.isConnected)return;
    var loading=document.getElementById('player-status');
    if(loading&&loading.style.display!=='none'&&loading.textContent)return;
-   // TV remote users need to see focused controls before seeking.
-   if(hud.contains(document.activeElement))return;
+   // Keep intentional menus visible until the viewer closes them.
+   var panels=['player-more-panel','player-info-panel','player-health-panel',
+    'player-jump-panel','player-choice-panel','player-channel-panel'];
+   for(var i=0;i<panels.length;i++){
+    var open=document.getElementById(panels[i]);
+    if(open&&!open.hidden)return
+   }
+   // Remote controls retain focus after an OK/arrow press. Blurring a
+   // stale control allows the TV HUD to fade after inactivity, and arrows
+   // show/re-focus controls again without requiring a mouse.
+   var focused=document.activeElement;
+   if(focused&&hud.contains(focused)&&typeof focused.blur==='function')focused.blur();
    root.classList.add('controls-hidden')
-  },5500)
+  },3800)
  }
  state.revealControls=revealControls;
  root.addEventListener('pointermove',revealControls,{passive:true});
@@ -2798,6 +2808,15 @@ function directional(e){
     panelButtons[targetIndex].scrollIntoView({block:'nearest'});
     return
    }
+  }
+ }
+ if(S.route==='player'&&!editable&&(code===37||code===38||code===39||code===40)){
+  var hiddenRoot=document.getElementById('player-root');
+  if(hiddenRoot&&hiddenRoot.classList.contains('controls-hidden')&&S.playerView&&S.playerView.revealControls){
+   e.preventDefault();S.playerView.revealControls();
+   var focusTarget=document.getElementById(code===38?'player-audio':'player-toggle');
+   if(focusTarget)focusTarget.focus();
+   return
   }
  }
  if(S.route==='player'&&!editable){
