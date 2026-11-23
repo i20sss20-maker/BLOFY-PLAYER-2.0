@@ -2271,7 +2271,8 @@ if(process.env.BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY){
 async function operatorHideRemovedLiveCategory(){
   const enabled=process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_ENABLED==='1';
   const requested=String(process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_NAME||'').trim();
-  if(!enabled||requested.toLowerCase()!=='bein ss')return;
+  const permittedNames=new Set(['bein ss','ar| bein entertainment ss ▶ الترفيهية']);
+  if(!enabled||!permittedNames.has(requested.toLowerCase()))return;
   const approved=await approvedSalehMirrorSource();
   if(!approved.ok)return console.warn('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
     code:'approved_source_missing'}));
@@ -2299,7 +2300,7 @@ async function operatorHideRemovedLiveCategory(){
       const c=normalizeXtreamCategory('live',raw,'audit');
       if(!c)return;
       const norm=c.name.trim().toLowerCase();
-      if(norm==='bein ss')matching++;
+      if(norm===requested.toLowerCase())matching++;
       if(norm.includes('bein')&&norm.includes('ss'))near++;
     });
     upstream={checked:true,status:response.status,matching,nearby:near};
@@ -2324,7 +2325,7 @@ async function operatorHideRemovedLiveCategory(){
     WHERE server_id=$1 AND media_type='live'
       AND lower(btrim(name))=lower($2)`,[sourceId,requested]);
   console.info('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
-    code:'category_reconciled',sourceId,category:'bein ss',
+    code:'category_reconciled',sourceId,category:requested,
     localMatched:before.rows.length,localWasVisible:before.rows.filter(x=>x.enabled).length,
     localItemCount:before.rows.reduce((n,x)=>n+Number(x.item_count||0),0),
     updated,remainingVisible:Number(after.rows[0]?.still_visible||0),
