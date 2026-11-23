@@ -1071,9 +1071,23 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
  S.play=record;
  video.muted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=true;
  function alive(){return S.play===record}
- function status(text){if(!alive())return;if(statusElement)statusElement.textContent=text;else playerStatus(text)}
+ function status(text){if(!alive())return;
+  if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
+  else playerStatus(text)
+ }
  video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)playerStatus('فشل التشغيل بتنسيق HLS. تأكد من اتصالك أو جرّب مصدر MP4 قابل للتقديم.',true)}};
- video.onplaying=function(){if(!alive())return;record.ready=true;record.retries=0;if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}status(preview?'● المعاينة تعمل':'● تشغيل البث');};
+ video.onplaying=function(){
+  if(!alive())return;
+  record.ready=true;record.retries=0;
+  if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+  status(preview?'● المعاينة تعمل':'● تشغيل البث');
+  if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
+   var state=S.playerView;state.ready=true;
+   if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
+   if(statusElement)statusElement.style.display='none';
+   if(state.revealControls)state.revealControls()
+  }
+ };
  video.onwaiting=video.onstalled=function(){
   if(!alive()||video.paused)return;
   status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
@@ -1709,6 +1723,7 @@ function openPlayer(kind,id,extension,name,from){
    root.classList.add('controls-hidden')
   },5500)
  }
+ state.revealControls=revealControls;
  root.addEventListener('pointermove',revealControls,{passive:true});
  root.addEventListener('pointerdown',revealControls,{passive:true});
  root.addEventListener('keydown',revealControls);
@@ -2173,7 +2188,7 @@ function openPlayer(kind,id,extension,name,from){
    if(current<0){playerStatus('القناة ليست ضمن القائمة الحالية؛ ارجع لاختيار قناة.');return}
    var next=items[(current+step+items.length)%items.length],newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
-   id=newId;state.id=id;state.name=title(next);S.selected=id;S.livePreview=null;
+   id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
