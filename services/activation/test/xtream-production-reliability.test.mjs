@@ -10,7 +10,11 @@ const [gateway,admin,ui,html,css]=await Promise.all([
 
 test('production Xtream gateway waits for real media before responding to clients',()=>{
   const media=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('function playerServerInfo('));
-  assert.match(media,/setTimeout\(\(\) => controller.abort\(new Error\('headers_timeout'\)\), 12000\)/);
+  // Live startup stays fast, but VOD headers get a bounded extra 6 seconds.
+  // Match the real runtime policy rather than a superseded hard-coded timer.
+  assert.match(media,/const headerTimeoutMs = kind === 'live' \\? 12000 : 18000;/);
+  assert.match(media,/setTimeout\\(\\(\\) => controller\\.abort\\(new Error\\('headers_timeout'\\)\\), headerTimeoutMs\\)/);
+  assert.match(media,/timeoutMs: headerTimeoutMs/);
   assert.match(media,/await readChunk\(15000\)/);
   assert.match(media,/await readChunk\(xtreamMediaReadIdleMs\(kind\)\)/);
   assert.match(media,/const first = await readChunk/);
