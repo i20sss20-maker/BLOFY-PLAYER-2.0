@@ -27,7 +27,7 @@ OPTION_MAP = {
 
 
 def build_env(url, environ=None):
-    if not isinstance(url, str) or len(url) > 20000 or any(c in url for c in "\\r\\n\\x00"):
+    if not isinstance(url, str) or len(url) > 20000 or any(ord(c) in (0, 10, 13) for c in url):
         raise ValueError("database_url_invalid")
     try:
         parsed = urlsplit(url)
