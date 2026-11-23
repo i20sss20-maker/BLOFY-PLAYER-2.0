@@ -75,6 +75,8 @@ test('switching channels and leaving live releases the old media worker session'
  await page.locator('[data-channel="31"]').click();
  await page.locator('[data-channel="32"]').click();
  await expect.poll(()=>stops.length).toBeGreaterThanOrEqual(1);
+ // Full-width TV libraries navigate through the home control, not the hidden rail.
+ await page.locator('.catalog-home').click();
  await page.locator('[data-go="movie"]').first().click();
  await expect.poll(()=>stops.length).toBeGreaterThanOrEqual(2);
 });
@@ -249,6 +251,7 @@ test('native live dock matches Android controls, favors channels and surfs witho
  await page.locator('[data-channel="31"]').click();
  await page.locator('#live-favorite').click();
  await expect(page.locator('#live-favorite')).toContainText('إزالة');
+ await page.locator('.catalog-home').click();
  await page.locator('[data-go="favorites"]').click();
  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
  await page.locator('[data-details="live:31"]').click();
