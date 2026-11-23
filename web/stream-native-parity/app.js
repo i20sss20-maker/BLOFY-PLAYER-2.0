@@ -2434,7 +2434,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(retry&&retry.style.display!=='none')return;
    // Keep intentional menus visible until the viewer closes them.
    var panels=['player-more-panel','player-info-panel','player-health-panel',
-    'player-jump-panel','player-choice-panel','player-channel-panel'];
+    'player-diagnostic-panel','player-jump-panel','player-choice-panel','player-channel-panel'];
    for(var i=0;i<panels.length;i++){
     var open=document.getElementById(panels[i]);
     if(open&&!open.hidden)return
@@ -3263,6 +3263,13 @@ function directional(e){
    if(choice&&!choice.hidden&&S.playerView&&S.playerView.closePlayerChoices){S.playerView.closePlayerChoices();e.preventDefault();return}
    var channels=document.getElementById('player-channel-panel');
    if(channels&&!channels.hidden&&S.playerView&&S.playerView.closeChannels){S.playerView.closeChannels();e.preventDefault();return}
+   var report=document.getElementById('player-diagnostic-panel');
+   if(report&&!report.hidden){
+    report.hidden=true;
+    var reportBtn=document.getElementById('player-diagnostic-toggle');
+    if(reportBtn)reportBtn.setAttribute('aria-expanded','false');
+    e.preventDefault();return
+   }
    var panel=document.getElementById('player-more-panel');
    if(panel&&!panel.hidden){panel.hidden=true;var more=document.getElementById('player-options-toggle');if(more)more.setAttribute('aria-expanded','false');e.preventDefault();return}
    var info=document.getElementById('player-info-panel');
