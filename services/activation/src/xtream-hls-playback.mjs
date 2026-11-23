@@ -25,7 +25,7 @@ function validateDestination(raw, base) {
   return url.href;
 }
 export function sealXtreamHlsTicket({url,accountId,gatewayId,sourceId,depth=0,
-  sessionStartedAt=now,now=Date.now(),keyHex}) {
+  now=Date.now(),sessionStartedAt=now,keyHex}) {
   const key = validatedKey(keyHex);
   if (!UUID.test(String(accountId)) || !UUID.test(String(sourceId)) ||
       !ID.test(String(gatewayId)) || !Number.isSafeInteger(depth) ||
