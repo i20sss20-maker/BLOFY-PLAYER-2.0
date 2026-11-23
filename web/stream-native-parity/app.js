@@ -358,12 +358,32 @@ function buildCatalog(kind,listing){
   (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
   '<span class="channel-name"><strong>'+esc(title(x))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'}).join('')+
   '</div><div class="pane-bottom"><button class="btn secondary" data-more="live" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section>'+
-  '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>اختر قناة لبدء المعاينة</div><video id="live-video" playsinline controls></video></div>'+
-  '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">تحرك بين القنوات واضغط OK لتشغيلها.</p>'+
+  '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
+  '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
   '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
-  var selected=findItem('live',S.selected)||source[0];if(selected)selectChannel(itemId(selected,'live'),false)
+  var selected=findItem('live',S.selected)||source[0];
+  if(selected)selectChannel(itemId(selected,'live'),true);
+  // Arrow navigation on a TV changes the highlighted channel as it settles.
+  // A short delay avoids opening one transcoder for every rapid D-pad press.
+  var channelList=document.getElementById('channel-list');
+  if(channelList){
+   channelList.addEventListener('focusin',function(e){
+    var row=e.target&&e.target.closest&&e.target.closest('[data-channel]');
+    if(!row||S.route!=='live')return;
+    var id=row.getAttribute('data-channel');
+    if(S.previewFocusTimer)clearTimeout(S.previewFocusTimer);
+    if(id===S.selected)return;
+    S.previewFocusTimer=setTimeout(function(){
+     S.previewFocusTimer=null;
+     if(S.route==='live'&&channelList.isConnected&&channelList.contains(document.activeElement))selectChannel(id,true)
+    },380)
+   });
+   channelList.addEventListener('focusout',function(){
+    if(S.previewFocusTimer){clearTimeout(S.previewFocusTimer);S.previewFocusTimer=null}
+   })
+  }
  }else{
   var sorted=source.slice();if(S.sort==='alpha')sorted.sort(function(a,b){return title(a).localeCompare(title(b))});
   if(S.sort==='new')sorted.sort(function(a,b){return Number(b.added||0)-Number(a.added||0)});
@@ -412,7 +432,7 @@ function selectChannel(id,activate){
  var item=findItem('live',id);if(!item)return;S.selected=id;
  var rows=document.querySelectorAll('[data-channel]');for(var i=0;i<rows.length;i++)rows[i].className='channel-item'+(rows[i].getAttribute('data-channel')===id?' selected':'');
  var name=document.getElementById('live-title'),desc=document.getElementById('live-desc');
- if(name)name.textContent=title(item);if(desc)desc.textContent='معاينة '+title(item)+' • اضغط المعاينة للتشغيل';
+ if(name)name.textContent=title(item);if(desc)desc.textContent='معاينة '+title(item)+' • التشغيل تلقائي عند التحديد';
  var favorite=document.getElementById('live-favorite');if(favorite){
   favorite.setAttribute('data-favorite','live:'+id);
   favorite.textContent=S.library['live:'+id]?'♥ إزالة من المفضلة':'♡ المفضلة'
@@ -487,12 +507,50 @@ function loadShortEpg(id){
  },450)
 }
 function beginPreview(item){
- var video=document.getElementById('live-video'),box=document.getElementById('live-status'),empty=document.getElementById('preview-empty');if(!video)return;
- var id=itemId(item,'live');if(S.livePreview===id&&S.play&&S.play.preview)return;
- // Always send /stop for the previous preview before acquiring a new FFmpeg slot.
- stopPlayback(true);
- S.livePreview=id;
+ var video=document.getElementById('live-video'),box=document.getElementById('live-status'),empty=document.getElementById('preview-empty');
+ if(!video||!item||S.route!=='live')return;
+ var id=itemId(item,'live'),key='live/'+id+'/ts/0';
+ if(String(S.selected)!==String(id))return;
+ if(S.livePreview===id&&S.play&&S.play.preview&&S.play.video===video){
+  if(video.paused&&S.play.ready){try{var p=video.play();if(p&&p.catch)p.catch(function(){})}catch(e){}}
+  return
+ }
  if(empty)empty.style.display='none';
+ // Never start the next live FFmpeg session until the server confirms
+ // shutdown of the previous preview. We retain only the latest remote choice.
+ if(S.previewStopPending){
+  S.previewPendingItem=item;
+  if(box)box.textContent='جار تبديل المعاينة للقناة المحددة…';
+  return
+ }
+ var previous=S.play;
+ if(previous&&previous.preview&&previous.hlsKey){
+  S.previewStopPending=true;S.previewPendingItem=item;
+  var previousKey=previous.hlsKey,settled=false,guard=null;
+  stopPlayback(false);
+  if(box)box.textContent='جار تبديل القناة…';
+  function finished(st){
+   if(settled)return;
+   settled=true;if(guard)clearTimeout(guard);
+   S.previewStopPending=false;
+   var next=S.previewPendingItem;S.previewPendingItem=null;
+   if(S.route!=='live'||!video.isConnected)return;
+   if(st!==200&&st!==404){
+    if(box)box.textContent='تعذر إنهاء اتصال المعاينة السابقة؛ اضغط المعاينة لإعادة المحاولة.';
+    return
+   }
+   if(next&&String(itemId(next,'live'))===String(S.selected))beginPreview(next)
+  }
+  guard=setTimeout(function(){finished(0)},6500);
+  api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)});
+  return
+ }
+ S.livePreview=id;
+ if(box)box.textContent='جار تشغيل معاينة '+title(item)+' تلقائيًا…';
+ video.muted=true;video.defaultMuted=true;
+ video.setAttribute('muted','');
+ video.autoplay=true;video.setAttribute('autoplay','');
+ video.playsInline=true;video.controls=false;
  playHls(video,'live',id,'ts',0,box,true)
 }
 function loadMore(kind){
@@ -1155,7 +1213,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
   retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0};
  S.play=record;
- video.muted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=!!preview;
+ video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
  function alive(){return S.play===record}
  function recoverConnection(){
   if(!alive()||record.reconnecting||preview)return;
