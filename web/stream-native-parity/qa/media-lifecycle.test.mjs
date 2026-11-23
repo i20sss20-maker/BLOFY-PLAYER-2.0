@@ -72,7 +72,7 @@ test('persistent live delay catches up once without disrupting a healthy source'
  const record={};
  assert.equal(catchUp(record,engine,video,10000,false,false),false,'first observation arms delay monitor');
  assert.equal(catchUp(record,engine,video,17000,false,false),false,'short-lived lag never forces seek');
- assert.equal(catchUp(record,engine,video,19000,false,false),'sustained 16+ second lag returns to edge');
+ assert.equal(catchUp(record,engine,video,19000,false,false),true,'sustained 16+ second lag returns to edge');
  assert.equal(video.currentTime,130,'seek targets HLS.js live sync position');
  video.currentTime=100;engine.liveSyncPosition=145;video.seekable.end=()=>147;
  assert.equal(catchUp(record,engine,video,20500,false,false),false);
