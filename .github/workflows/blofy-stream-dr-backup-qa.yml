@@ -5,6 +5,8 @@ on:
       - qa/blofy-stream-offsite-backup-restore-20261123
     paths:
       - 'services/activation/scripts/backup-to-s3.sh'
+      - 'services/activation/scripts/verify-s3-backup.sh'
+      - 'services/activation/scripts/exec-with-postgres-dsn.py'
       - '.github/workflows/blofy-stream-dr-backup-qa.yml'
       - 'ops/disaster-recovery/**'
   workflow_dispatch:
