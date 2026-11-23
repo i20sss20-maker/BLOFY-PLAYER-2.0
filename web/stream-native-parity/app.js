@@ -2471,7 +2471,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     var p=request.call(root);
     if(p&&p.then){
      p.then(function(){updateFullButton()},function(){
-      if(video.webkitEnterFullscreen){try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}}
+      if(/iPhone|iPad|iPod/i.test(navigator.userAgent||'')&&video.webkitEnterFullscreen){
+       try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}
+      }
       enterViewportMode()
      })
     }else setTimeout(function(){
@@ -2481,7 +2483,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     return
    }catch(err){}
   }
-  if(video.webkitEnterFullscreen){try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}}
+  if(/iPhone|iPad|iPod/i.test(navigator.userAgent||'')&&video.webkitEnterFullscreen){
+   try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}
+  }
   enterViewportMode()
  }
  state.isFullscreen=isFull;state.exitFullscreen=exitFull;state.toggleFullscreen=toggleFull;
@@ -2741,6 +2745,7 @@ function directional(e){
  if(S.route==='player'&&!editable){
   var transport=S.playerView;
   if(code===70&&transport&&transport.toggleFullscreen){e.preventDefault();transport.toggleFullscreen();return}
+  if(code===413){e.preventDefault();back();return}
   if((code===415||code===19||code===179)&&transport){
    e.preventDefault();
    if(code===415&&!transport.video.paused)return;
