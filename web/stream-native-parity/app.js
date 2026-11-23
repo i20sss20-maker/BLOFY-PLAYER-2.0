@@ -518,6 +518,24 @@ function recordPlaybackQuality(p){
  S.lastPlaybackDiag=result;
  profileSave('lastPlaybackDiag',result)
 }
+function checkpointPosition(p){
+ if(!p||!p.video)return 0;
+ var base=(p.mode==='vodhls'?Number(p.offset)||0:0)+Math.max(0,Number(p.video.currentTime)||0);
+ // A pending TV key repeat or an in-flight seek has not updated the video
+ // element playhead yet. Preserve the user's chosen location on close.
+ var pending=p.pendingSeek,now=Date.now(),desired=null;
+ if(p.seekDebounce&&p.lastSeekTarget!==undefined&&p.lastSeekTarget!==null)
+  desired=p.lastSeekTarget;
+ else if(pending&&now-pending.startedAt<55000)desired=pending.target;
+ if(desired!==null&&desired!==undefined&&isFinite(Number(desired))){
+  var runtime=playbackDuration(p),position=Math.max(0,Number(desired));
+  if(runtime>0)position=Math.min(position,Math.max(0,runtime-2));
+  // Never mark a movie watched merely because someone selected its last frame.
+  if(runtime>60&&position>=runtime-60)return Math.min(base,runtime-61);
+  return position
+ }
+ return base
+}
 function playbackDuration(p){
  if(!p)return 0;
  var seconds=Number(p.duration)||0,observed=Number(p.video&&p.video.duration);
@@ -1148,10 +1166,17 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  function checkStall(){
   if(!alive()||video.paused)return;
   if(rec.stallTimer)clearTimeout(rec.stallTimer);
+  // A worker may wait 14s for the previous chunk, then up to 28s for a
+  // requested segment. Restarting the full VOD engine after only 13s
+  // repeatedly aborted healthy encoding in progress.
+  var observed=Number(video.currentTime)||0;
   rec.stallTimer=setTimeout(function(){
    rec.stallTimer=null;
-   if(alive()&&!video.paused&&video.readyState<3)recoverFilm()
-  },13000)
+   if(!alive()||video.paused||video.readyState>=3)return;
+   // Ignore an earlier buffering event if new video frames have arrived.
+   if(Math.abs((Number(video.currentTime)||0)-observed)>0.9)return;
+   recoverFilm()
+  },48000)
  }
  rec.timer=setTimeout(function(){
   if(alive()&&!rec.ready)playerStatus('جار تجهيز الفيديو من المصدر…')
@@ -1199,7 +1224,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   }
   try{
    var hls=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
-    maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:35000,manifestLoadingTimeOut:30000,
+    maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:55000,manifestLoadingTimeOut:30000,
     fragLoadingMaxRetry:2,manifestLoadingMaxRetry:2});
    rec.engine=hls;
    video.onloadedmetadata=function(){
@@ -1526,7 +1551,9 @@ function openPlayer(kind,id,extension,name,from){
    if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'المدة غير متوفرة';
    if(seek){seek.disabled=!(duration>0&&isFinite(duration));
     if(document.activeElement!==seek&&duration>0&&isFinite(duration))seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
-   if(Date.now()-state.lastSaved>5000&&state.ready){saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()}
+   if(!state.pendingSeek&&!state.seekDebounce&&Date.now()-state.lastSaved>5000&&state.ready){
+    saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()
+   }
   }
  }
  state.onDuration=progress;
@@ -1724,7 +1751,7 @@ function openPlayer(kind,id,extension,name,from){
  };
  video.ontimeupdate=progress;video.onpause=function(){
   releaseWakeLock();progress();
-  if(state.ready&&!isLive)saveResume(kind,id,realPos(),totalDuration(),true)
+  if(state.ready&&!isLive)saveResume(kind,id,checkpointPosition(state),totalDuration(),true)
  };
  video.onplaying=function(){if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}markReady()};
  video.onerror=function(){
@@ -1817,7 +1844,7 @@ function openPlayer(kind,id,extension,name,from){
  if(forward5)forward5.onclick=function(){state.seekBy(300)};
  var nextBtn=document.getElementById('player-next-episode');
  if(nextBtn&&nextEpisode)nextBtn.onclick=function(){
-  if(state.ready)saveResume(kind,id,realPos(),totalDuration(),true);
+  if(state.ready)saveResume(kind,id,checkpointPosition(state),totalDuration(),true);
   var previous=S.previousBeforePlayer||{route:'episodes',kind:'series',id:id};
   recordPlaybackQuality(state);
   cleanupPlayer();S.playerView=null;S.route='episodes';
@@ -1862,8 +1889,7 @@ function closePlayer(){
  var state=S.playerView;
  if(state&&S.route==='player')recordPlaybackQuality(state);
  if(state&&S.route==='player'&&state.kind!=='live'){
-  var video=state.video,pos=state.mode==='vodhls'?state.offset+(video.currentTime||0):(video.currentTime||0);
-  var duration=playbackDuration(state);
+  var pos=checkpointPosition(state),duration=playbackDuration(state);
   if(state.ready)saveResume(state.kind,state.id,pos,duration,true)
  }
  cleanupPlayer();
@@ -1987,8 +2013,7 @@ document.addEventListener('keydown',directional,false);
 function persistPlaybackCheckpoint(){
  var p=S.playerView;
  if(!p||!p.ready||p.kind==='live')return;
- var v=p.video,pos=(p.mode==='vodhls'?p.offset:0)+Math.max(0,Number(v.currentTime)||0);
- var duration=playbackDuration(p);
+ var pos=checkpointPosition(p),duration=playbackDuration(p);
  saveResume(p.kind,p.id,pos,duration,true)
 }
 window.addEventListener('beforeunload',function(){
