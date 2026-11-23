@@ -1256,7 +1256,9 @@ function stopPlayback(sendStop){
  try{
   if(old.timer)clearTimeout(old.timer);
   if(old.stallTimer)clearTimeout(old.stallTimer);
+  if(old.progressWatchdog)clearInterval(old.progressWatchdog);
   if(old.startupTimer)clearTimeout(old.startupTimer);
+  if(old.retryTimer)clearTimeout(old.retryTimer);
   if(old.stableTimer)clearTimeout(old.stableTimer);
   if(old.qualityListener&&old.video){old.video.removeEventListener('loadedmetadata',old.qualityListener);old.video.removeEventListener('resize',old.qualityListener)}
  }catch(e){}
@@ -1303,6 +1305,24 @@ function playerStatus(message,error){
   }
  }
 }
+/* A VIDAA decoder can freeze while readyState still equals 4.
+ * Decode/playhead progress is stronger evidence than buffered metadata. */
+function livePlaybackProgress(record,video,now){
+ var time=Number(video&&video.currentTime),frames=null;
+ try{
+  var q=video&&video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
+  if(q&&Number.isFinite(Number(q.totalVideoFrames)))frames=Number(q.totalVideoFrames)
+ }catch(e){}
+ var advancedTime=Number.isFinite(time)&&Number.isFinite(record.lastMediaTime)&&Math.abs(time-record.lastMediaTime)>0.15;
+ var advancedFrames=frames!==null&&record.lastVideoFrames!==null&&record.lastVideoFrames!==undefined&&frames>record.lastVideoFrames;
+ if(Number.isFinite(time))record.lastMediaTime=time;
+ if(frames!==null)record.lastVideoFrames=frames;
+ if(advancedTime||advancedFrames){
+  record.lastProgressAt=now;record.bufferSince=0;record.stallChecks=0;
+  return {advanced:true,idleMs:0}
+ }
+ return {advanced:false,idleMs:Math.max(0,now-(record.lastProgressAt||record.started||now))}
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
@@ -1336,7 +1356,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  stopPlayback(true);
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
-  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0,compat:compat,ultra:ultra};
+  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),lastProgressAt:0,lastMediaTime:null,lastVideoFrames:null,stallChecks:0,compat:compat,ultra:ultra};
  S.play=record;
  if(preview){
   record.qualityListener=function(){
@@ -1388,12 +1408,19 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
   if(record.startupTimer)clearTimeout(record.startupTimer);
   if(record.stallTimer)clearTimeout(record.stallTimer);
+  if(record.progressWatchdog)clearInterval(record.progressWatchdog);
   if(record.stableTimer)clearTimeout(record.stableTimer);
-  if(record.recoveryAttempt>=2){
-   playerStatus('انقطع البث بعد محاولات الاستعادة. اضغط إعادة المحاولة أو غيّر القناة.',true);
+  if(record.recoveryAttempt>=4){
+   // Allow a struggling source to recover without forcing an app exit.
+   playerStatus('انقطع مصدر البث. إعادة محاولة تلقائية بعد 25 ثانية أو اضغط إعادة المحاولة.',true);
+   record.retryTimer=setTimeout(function(){
+    record.retryTimer=null;
+    if(!alive()||S.route!=='player'||!video.isConnected||video.paused)return;
+    playHls(video,kind,id,extension,track,statusElement,false,0)
+   },25000);
    return
   }
-  playerStatus('جار استعادة القناة بعد انقطاع مؤقت… ('+(record.recoveryAttempt+1)+'/2)');
+  playerStatus('جار استعادة القناة تلقائيًا… ('+(record.recoveryAttempt+1)+'/4)');
   playHls(video,kind,id,extension,track,statusElement,false,record.recoveryAttempt+1)
  }
  record.startupTimer=setTimeout(function(){
@@ -1451,6 +1478,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  video.onplaying=function(){
   if(!alive())return;
   record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;
+  record.lastProgressAt=Date.now();
+  record.lastMediaTime=Number(video.currentTime)||0;
+  record.lastVideoFrames=null;
   if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
   if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
   if(record.stableTimer)clearTimeout(record.stableTimer);
@@ -1475,16 +1505,37 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(record.stallTimer)clearTimeout(record.stallTimer);
   record.stallTimer=setTimeout(function(){
    record.stallTimer=null;
-   if(!alive()||video.paused||video.readyState>=3)return;
+   if(!alive()||video.paused)return;
+   // Buffering can freeze with readyState=4: inspect actual progress.
+   var progress=livePlaybackProgress(record,video,Date.now());
+   if(progress.advanced)return;
    record.stallChecks++;
    if(record.stallChecks>=3){recoverConnection();return}
    if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
    record.stallTimer=setTimeout(function(){
     record.stallTimer=null;
-    if(alive()&&!video.paused&&video.readyState<3)recoverConnection()
+    if(alive()&&!video.paused&&Date.now()-(record.lastProgressAt||record.started)>15000)recoverConnection()
    },14000)
   },8500)
  };
+ if(!preview){
+  // Independent timer covers silent stalls with no waiting event.
+  record.progressWatchdog=setInterval(function(){
+   if(!alive()||S.route!=='player'||!record.ready||!video.isConnected)return;
+   if(video.paused||video.ended||video.seeking||document.hidden){
+    record.lastProgressAt=Date.now();return
+   }
+   var progress=livePlaybackProgress(record,video,Date.now());
+   if(progress.advanced)return;
+   if(progress.idleMs>=16000){
+    diagnose('live','startup_timeout','hls',0);
+    recoverConnection()
+   }else if(progress.idleMs>=6500&&!record.bufferSince){
+    record.bufferSince=Date.now();
+    status('تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')
+   }
+  },2200);
+ }
  if(shouldUseNativeHls(video)){
   video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})}catch(e){}return
  }
