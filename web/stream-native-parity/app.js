@@ -2816,10 +2816,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(!(duration>0))return;
   seekTo(target)
  };
+ // Register the player before starting its media engine. The native-like
+ // quality dialog and first-frame callbacks need state during startup.
+ S.playerView=state;
  if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
  else if(ext==='mp4'){startDirect()}
  else{startWithMetadata(Math.round(resume))}
- S.playerView=state;
  if(isLive){
   function liveItems(){
    var listing=S.loaded[keyOf('live',S.cat.live)]||S.loaded['live:all'];
