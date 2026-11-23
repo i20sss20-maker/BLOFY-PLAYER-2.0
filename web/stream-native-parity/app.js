@@ -1859,7 +1859,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="native-player-channels" id="player-channels-toggle" type="button" aria-label="قائمة القنوات">☷ القنوات</button>':'')+
  '<button class="native-player-fullscreen" id="player-fullscreen" type="button" aria-label="ملء الشاشة" aria-pressed="false" title="ملء الشاشة">⛶ ملء الشاشة</button>'+ 
  '<button class="native-player-more" id="player-options-toggle" type="button" aria-expanded="false" aria-controls="player-more-panel" aria-label="المزيد من الخيارات" title="المزيد من الخيارات">⋯</button></div>'+
- '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span></div>'+
+ '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span><span class="player-resolution-badge" id="player-resolution" aria-live="polite" hidden></span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
  '<div class="native-player-timeline" dir="ltr"><span id="now-time">00:00</span><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled aria-label="موضع التشغيل"><span id="total-time">--:--</span></div>')+
  '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+(isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
@@ -2154,6 +2154,22 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  root.addEventListener('keydown',revealControls);
  root.addEventListener('focusin',revealControls);
  video.addEventListener('click',revealControls);
+ function refreshVideoResolution(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
+  var el=document.getElementById('player-resolution');
+  if(!el)return;
+  if(!w||!h){el.hidden=true;el.textContent='';return}
+  var grade=h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD';
+  // These are actual decoded pixels, not guessed from the Xtream title.
+  el.textContent='المعروض '+w+'×'+h+' • '+grade;
+  el.title='دقة الصورة التي يعرضها المتصفح، وليس جودة المصدر المعلنة';
+  el.hidden=false
+ }
+ video.addEventListener('loadedmetadata',refreshVideoResolution);
+ video.addEventListener('resize',refreshVideoResolution);
+ video.addEventListener('playing',refreshVideoResolution);
+ state.refreshVideoResolution=refreshVideoResolution;
  function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
  function totalDuration(){return playbackDuration(state)}
  function nativeCanSeek(target){
