@@ -278,13 +278,14 @@ test('midstream retry never bypasses HTTP denial or invalid TS response',async()
 
 test('source silence is measured since most recent delivered packet rather than stream start',async()=>{
  let now=1000,readIndex=0,drop=null;
- const original=new Response(new ReadableStream({
-  pull(controller){
-   if(readIndex++<2)controller.enqueue(ts());
-   else controller.error(Error('transport reset'));
-  }
- }),{status:200,headers:{'content-type':'video/mp2t'}});
- const reader=original.body.getReader(),first=(await reader.read()).value;
+ const reader={
+  async read(){
+   if(readIndex++===0)return {done:false,value:ts()};
+   throw Error('transport reset');
+  },
+  async cancel(){},releaseLock(){}
+ };
+ const first=ts();
  const iter=liveTsRecoveryBytes({
   first,reader,controller:new AbortController(),target:url,
   now:()=>now,waitRetry:immediately,
