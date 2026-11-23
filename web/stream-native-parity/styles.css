@@ -552,3 +552,10 @@ html.blofy-tv-immersive,body.blofy-tv-immersive{
  .native-player-fullscreen{min-height:32px;padding:4px 9px;font-size:11px}
  .native-player-topline{gap:7px}
 }
+
+
+/* In-app confirmation replaces window.confirm, which is unsuitable for VIDAA apps. */
+.settings-inline-confirm{padding:13px;border:1px solid #61ebd39e;border-radius:12px;background:#0c3541;margin-top:10px}
+.settings-inline-confirm p{color:#e1fff8;margin:0 0 12px;font-size:13px;line-height:1.8}
+.settings-inline-confirm .btn{min-height:39px;margin-bottom:5px}
+#tv-capabilities-result{line-height:1.9;overflow-wrap:anywhere}
