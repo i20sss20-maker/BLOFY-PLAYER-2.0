@@ -573,6 +573,9 @@ async function fetchPublic(url, options = {}) {
     const response = await requestWithTimeout(currentUrl, options);
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
+      // Release each redirect response before opening the next download hop.
+      // Otherwise slow/CDN redirects can leave unused upstream streams open.
+      await response.body?.cancel().catch(() => {});
       if (!location) throw new Error('redirect_without_location');
       currentUrl = httpsUrl(new URL(location, currentUrl).toString());
       continue;
