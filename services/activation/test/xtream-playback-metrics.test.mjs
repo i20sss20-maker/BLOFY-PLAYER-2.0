@@ -202,9 +202,15 @@ test('production telemetry records live reconnects and admin renders them withou
   readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8'),
   readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8')
  ]);
- assert.match(gateway,/observe\('recovered',\{reason:'live_ts_recovered',[\s\S]*?attempts:reconnection,interruptionMs:gapBucketMs\}\)/);
+ assert.match(gateway,/observe\('recovered',\{reason:'live_ts_recovered',[\s\S]*?attempts:reconnection,durationMs:gapBucketMs\}\)/);
  assert.match(gateway,/BLOFY_LIVE_TS_RECOVERED[\s\S]*?gapBucketMs,retriesThisDrop,sourceDropReason/);
  assert.match(ui,/m\.liveTsRecoverySuccesses/);
+ assert.match(ui,/m\.liveTsRecoveryGapSamples/);
+ assert.match(ui,/m\.medianLiveTsRecoveryGapMs/);
+ assert.match(ui,/m\.p95LiveTsRecoveryGapMs/);
+ assert.match(ui,/m\.liveTsRecoveryGapsOver3s/);
+ assert.match(ui,/m\.liveTsRecoveryGapsOver10s/);
+ assert.match(ui,/زمن الاستعادة هو مدة توقف نقل TS عند الخادم/);
  assert.match(ui,/m\.liveTsRecoveryExhausted/);
  assert.match(ui,/m\.liveTsRecoveryRateLimited/);
  assert.match(ui,/m\.liveTsRecoveryBudgetExhausted/);
@@ -266,4 +272,39 @@ test('successful MKV seek recovery is distinct from initial playback and does no
  ]);
  assert.match(gateway,/observe\('recovered',\{reason:'vod_range_resumed'\}\)/);
  assert.match(ui,/m\.vodRangeResumeSuccesses/);
+});
+
+
+test('recovery gaps are retained, grouped by source, and never inferred from HTTP 200',()=>{
+ resetXtreamPlaybackMetricsForTest();
+ const now=Date.now(),source='6cbe3f8e-f14d-4d0d-9f7e-39b4ae34993a',
+ other='f2631a8b-37e4-4b37-ab7b-3f3fe2de912f';
+ const empty=xtreamPlaybackSnapshot(now,source);
+ assert.equal(empty.liveTsRecoveryGapSamples,0);
+ assert.equal(empty.medianLiveTsRecoveryGapMs,null);
+ assert.equal(empty.p95LiveTsRecoveryGapMs,null);
+ for(const [index,gap] of [0,450,3000,12000].entries()){
+  recordXtreamPlayback({kind:'live',phase:'recovered',
+   reason:'live_ts_recovered',sourceId:source,durationMs:gap,
+   providerUrl:'https://secret.example/unused?code=hidden'},now+index);
+ }
+ // A recovery from another source, a VOD resume and missing-duration events
+ // must never distort this source's reconnect gap percentiles.
+ recordXtreamPlayback({kind:'live',phase:'recovered',reason:'live_ts_recovered',
+  sourceId:other,durationMs:25000},now+5);
+ recordXtreamPlayback({kind:'movie',phase:'recovered',reason:'vod_range_resumed',
+  sourceId:source,durationMs:50000},now+6);
+ recordXtreamPlayback({kind:'live',phase:'recovered',
+  reason:'live_ts_recovered',sourceId:source},now+7);
+ const got=xtreamPlaybackSnapshot(now+10,source);
+ assert.equal(got.liveTsRecoverySuccesses,5);
+ assert.equal(got.liveTsRecoveryGapSamples,4);
+ assert.equal(got.medianLiveTsRecoveryGapMs,450);
+ assert.equal(got.p95LiveTsRecoveryGapMs,12000);
+ assert.equal(got.liveTsRecoveryGapsOver3s,2);
+ assert.equal(got.liveTsRecoveryGapsOver10s,1);
+ assert.equal(got.recentRecoveries.length,5);
+ assert.equal(got.recentRecoveries.find(x=>x.interruptionMs===12000)?.interruptionMs,12000);
+ assert.doesNotMatch(JSON.stringify(got),/secret\.example|hidden|providerUrl/);
+ resetXtreamPlaybackMetricsForTest();
 });
