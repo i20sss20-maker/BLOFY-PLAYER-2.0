@@ -2730,7 +2730,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var choices=[
     {name:'جودة المصدر الأصلية • 4K/8K إذا توفرت ودعم الجهاز',selected:!forced,
      select:function(){state.setHlsCompatibility(false)}},
-    {name:'توافق التلفزيون • حتى 1080p دون تكبير الصورة',selected:forced&&!ultra,
+    {name:'متوافق مع التلفزيون • حتى 1080p دون تكبير الصورة',selected:forced&&!ultra,
      select:function(){state.setHlsCompatibility(true)}}
    ];
    if(sourceH>=2100){
