@@ -1084,7 +1084,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
  stopPlayback(true);
  var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8',record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,retries:0,ready:false,started:Date.now()};
  S.play=record;
- video.muted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=true;
+ video.muted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=!!preview;
  function alive(){return S.play===record}
  function status(text){if(!alive())return;
   if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
@@ -1503,6 +1503,26 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
   }catch(e){fail('تعذر فتح محرك الفيلم على هذا المتصفح')}
  })
 }
+
+function playerIcon(name){
+ var p={
+  audio:'<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 9a5 5 0 0 1 0 6M18 6a9 9 0 0 1 0 12"/>',
+  subtitles:'<rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M10 10H7.5a2 2 0 0 0 0 4H10m7-4h-2.5a2 2 0 0 0 0 4H17"/>',
+  rewind:'<path d="m11 6-8 6 8 6V6Zm10 0-8 6 8 6V6Z"/>',
+  forward:'<path d="m3 6 8 6-8 6V6Zm10 0 8 6-8 6V6Z"/>',
+  play:'<path d="m8 5 11 7-11 7V5Z"/>',
+  pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  previous:'<path d="M5 5v14M19 6 9 12l10 6V6Z"/>',
+  next:'<path d="M19 5v14M5 6l10 6-10 6V6Z"/>',
+  quality:'<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="11" cy="17" r="2"/>',
+  favorite:'<path d="M20.8 8.3C20.8 13 12 19 12 19S3.2 13 3.2 8.3a4.6 4.6 0 0 1 8.8-1.8 4.6 4.6 0 0 1 8.8 1.8Z"/>'
+ };
+ return '<svg class="native-player-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">'+(p[name]||p.play)+'</svg>'
+}
+function playerControl(id,icon,label,primary){
+ return '<button class="native-player-control'+(primary?' native-player-primary':'')+'" id="'+id+'" type="button" aria-label="'+label+'" title="'+label+'">'+playerIcon(icon)+'</button>'
+}
+
 function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
  if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
@@ -1526,22 +1546,34 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    opts:{kind:kind,id:id,extension:ext,name:name,from:resume}},'',window.location.href)}catch(err){}
  }else pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
  S.route='player';
- app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" '+(isLive?'controls':'')+' autoplay playsinline webkit-playsinline></video>'+
- '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
- '<div class="player-hud"><div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار فحص وضع التشغيل')+'</span></div>'+
- (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
- '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+ 
- (isLive?'<button class="btn secondary" id="player-channel-prev">⏮ القناة السابقة</button><button class="btn secondary" id="player-channel-next">القناة التالية ⏭</button>':'')+
- (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ دقيقة محددة</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
- (previousEpisode?'<button class="btn secondary" id="player-previous-episode">⏮ الحلقة السابقة</button>':'')+
- (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
- '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
- (isLive?'':'<button class="btn secondary" id="player-subtitles" aria-label="خيارات الترجمة">CC الترجمة</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
+ app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline></video>'+
+ '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+
+ '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
+ '<div class="player-hud native-stream-hud">'+
+ '<div class="native-player-topline"><button class="native-player-back" id="player-back" type="button">↶ رجوع</button>'+
+ '<span class="native-player-eyebrow">BLOFY '+(isLive?'LIVE':kind==='series'?'SERIES':'CINEMA')+'</span>'+
+ '<button class="native-player-more" id="player-options-toggle" type="button" aria-expanded="false" aria-controls="player-more-panel" aria-label="المزيد من الخيارات" title="المزيد من الخيارات">⋯</button></div>'+
+ '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span></div>'+
+ (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
+ '<div class="native-player-timeline" dir="ltr"><span id="now-time">00:00</span><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled aria-label="موضع التشغيل"><span id="total-time">--:--</span></div>')+
+ '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+(isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
+ '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
+ playerControl('player-audio','audio','المسارات الصوتية')+
+ playerControl('player-subtitles','subtitles','الترجمة')+
+ (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
+ (isLive?playerControl('player-channel-prev','rewind','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
+ playerControl('player-toggle','pause','إيقاف مؤقت',true)+
+ (isLive?playerControl('player-channel-next','forward','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
+ (nextEpisode?playerControl('player-next-episode','next','الحلقة التالية'):'')+
+ playerControl('player-quality','quality','جودة الفيديو')+
+ (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
+ '</div>'+
+ '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
+ (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
  '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
- '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
- '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">📊 حالة التشغيل</button>'+ 
- (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات الفيلم / الحلقة</button>')+'</div>'+ 
- (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+ 
+ '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
+ (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
+ (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
  '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section>'+
  (isLive?'':'<form class="player-jump-panel" id="player-jump-panel" hidden><label for="player-jump-minute">الانتقال إلى الدقيقة (0–359)</label>'+
@@ -1557,8 +1589,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var toggle=document.getElementById('player-toggle');
  function syncToggle(){
   if(!toggle)return;
-  toggle.textContent=video.paused?'▶ تشغيل':'❚❚ إيقاف مؤقت';
-  toggle.setAttribute('aria-label',video.paused?'استئناف التشغيل':'إيقاف التشغيل مؤقتًا')
+  var paused=video.paused;
+  toggle.innerHTML=playerIcon(paused?'play':'pause');
+  toggle.setAttribute('aria-label',paused?'تشغيل':'إيقاف مؤقت');
+  toggle.title=paused?'تشغيل':'إيقاف مؤقت'
  }
  video.addEventListener('play',syncToggle);
  video.addEventListener('pause',syncToggle);
@@ -2168,8 +2202,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   else playerStatus('ملء الشاشة غير مدعوم على هذا الجهاز')
  };
  var back30=document.getElementById('player-skip-back'),forward30=document.getElementById('player-skip-forward');
- if(back30)back30.onclick=function(){state.seekBy(-30)};
- if(forward30)forward30.onclick=function(){state.seekBy(30)};
+ if(back30)back30.onclick=function(){state.seekBy(-10)};
+ if(forward30)forward30.onclick=function(){state.seekBy(10)};
  var forward5=document.getElementById('player-skip-forward5');
  if(forward5)forward5.onclick=function(){state.seekBy(300)};
  function jumpEpisode(targetEpisode){
