@@ -47,6 +47,9 @@ const hlsSessions=new Map();
  // possess exactly the same authenticated bearer, channel, track and mode.
  // Disabled by default; do not combine distinct subscriber credentials.
 const sharedLiveGroups=new Map();
+ // Pending registrations are per authorized SID. A viewer leaving during
+ // upstream-header wait must not be resurrected after the delayed fetch.
+const pendingSharedLiveViewers=new Map();
 const MAX_SHARED_LIVE_VIEWERS=4;
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
@@ -87,7 +90,7 @@ function stopHls(session,reason){
   const group=session.sharedGroup;
   if(group){
    group.viewers.delete(session.key);
-   if(!group.stopping&&group.viewers.size===0&&group.producer){
+   if(!group.stopping&&group.viewers.size===0&&(!group.pendingViewers||group.pendingViewers.size===0)&&group.producer){
     stopHls(group.producer,'last_shared_viewer')
    }
   }
@@ -99,6 +102,11 @@ function stopHls(session,reason){
    // Stale-source detection / worker exit evicts all aliases exactly once.
    group.stopping=true;
    if(sharedLiveGroups.get(group.key)===group)sharedLiveGroups.delete(group.key);
+   for(const pending of group.pendingViewers||[]){
+    pending.cancelled=true;
+    if(pendingSharedLiveViewers.get(pending.key)===pending)pendingSharedLiveViewers.delete(pending.key)
+   }
+   if(group.pendingViewers)group.pendingViewers.clear();
    for(const viewerKey of Array.from(group.viewers)){
     const viewer=hlsSessions.get(viewerKey);
     if(viewer&&viewer.sharedGroup===group)stopHls(viewer,'shared_source_ended')
@@ -332,6 +340,23 @@ function attachSharedLiveViewer(group,{key,kind,id,ext,track}){
  touchHls(owner);
  return {session}
 }
+function cancelPendingSharedLiveViewer(key){
+ const registration=pendingSharedLiveViewers.get(key);
+ if(!registration)return false;
+ registration.cancelled=true;
+ pendingSharedLiveViewers.delete(key);
+ const group=registration.group;
+ group.pendingViewers.delete(registration);
+ // Close a pending source immediately if nobody else is still watching
+ // or joining. Abort the upstream-header fetch rather than waiting 16 sec.
+ if(!group.stopping&&group.viewers.size===0&&group.pendingViewers.size===0){
+  group.stopping=true;
+  if(sharedLiveGroups.get(group.key)===group)sharedLiveGroups.delete(group.key);
+  const producer=group.producer||hlsSessions.get(group.key);
+  if(producer)stopHls(producer,'last_pending_viewer')
+ }
+ return true
+}
 async function startSharedLiveViewer({bearer,kind,id,ext,track,key,viewerSid,forceCompat=false,ultra=false}){
  if(!liveShareAllowed(kind,viewerSid))return {error:'sharing_disabled',status:503};
  const groupKey=liveShareGroupKey(bearer,kind,id,ext,track,forceCompat,ultra);
@@ -342,7 +367,7 @@ async function startSharedLiveViewer({bearer,kind,id,ext,track,key,viewerSid,for
   group=null
  }
  if(!group){
-  group={key:groupKey,viewers:new Set(),producer:null,stopping:false,pending:null};
+  group={key:groupKey,viewers:new Set(),pendingViewers:new Set(),producer:null,stopping:false,pending:null};
   sharedLiveGroups.set(groupKey,group);
   // Register the pending promise BEFORE awaiting headers from the upstream.
   // Concurrent viewers must never start two FFmpeg jobs for one group.
@@ -361,8 +386,25 @@ async function startSharedLiveViewer({bearer,kind,id,ext,track,key,viewerSid,for
     return {error:'shared_source_failed',status:502}
    })
  }
+ // Multiple requests by the same SID share one pending cancellation handle.
+ // Cap queued joiners too, not just attached viewers, against request floods.
+ let registration=pendingSharedLiveViewers.get(key);
+ if(!registration||registration.group!==group){
+  if(group.viewers.size+group.pendingViewers.size>=MAX_SHARED_LIVE_VIEWERS)
+   return {error:'shared_viewers_capacity',status:429};
+  registration={key,group,cancelled:false};
+  pendingSharedLiveViewers.set(key,registration);
+  group.pendingViewers.add(registration)
+ }
  const started=await group.pending;
- if(started.error)return started;
+ group.pendingViewers.delete(registration);
+ if(pendingSharedLiveViewers.get(key)===registration)pendingSharedLiveViewers.delete(key);
+ if(registration.cancelled||group.stopping||started.error){
+  if(!group.stopping&&group.viewers.size===0&&group.pendingViewers.size===0&&group.producer)
+   stopHls(group.producer,'no_shared_viewers');
+  return registration.cancelled?{error:'hls_start_cancelled',status:409}:
+   started.error?started:{error:'shared_source_stopped',status:503}
+ }
  return attachSharedLiveViewer(group,{key,kind,id,ext,track})
 }
 
@@ -373,7 +415,9 @@ async function hlsRequest(req,url){
   const bearer=req.headers.get('authorization')||'';
   if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
   const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4],!!stop[6],stop[6]==='ultra',stop[5]||'');
-  const activeSession=hlsSessions.get(key);if(activeSession)stopHls(activeSession,'viewer_stopped');
+  const activeSession=hlsSessions.get(key);
+  if(activeSession)stopHls(activeSession,'viewer_stopped');
+  else cancelPendingSharedLiveViewer(key);
   return json(200,{ok:true});
  }
  if(req.method!=='GET')return hlsError(405,'method_not_allowed');
