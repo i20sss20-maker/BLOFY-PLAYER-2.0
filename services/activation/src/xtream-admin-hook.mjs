@@ -328,6 +328,7 @@ async function ensureReady() {
       await client.query(`INSERT INTO blofy_xtream_studio_branding(id,display_name)
         VALUES(1,'BLOFY STREAM') ON CONFLICT(id) DO NOTHING`);
       await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 100000');
+      await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS manual_sort BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_items_filter ON blofy_xtream_items(server_id,media_type,category_id,enabled,name)');
@@ -1544,7 +1545,9 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
     FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sort_order int,sync_token text)
     ON CONFLICT(server_id,media_type,source_category_id) DO UPDATE SET
       name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,
-      sort_order=EXCLUDED.sort_order,sync_token=EXCLUDED.sync_token,
+      sort_order=CASE WHEN blofy_xtream_categories.manual_sort
+        THEN blofy_xtream_categories.sort_order ELSE EXCLUDED.sort_order END,
+      sync_token=EXCLUDED.sync_token,
        updated_at=CASE WHEN
          (blofy_xtream_categories.name,blofy_xtream_categories.parent_id,
           blofy_xtream_categories.sort_order) IS DISTINCT FROM
@@ -3126,13 +3129,16 @@ async function autoSortCategories(serverId,mediaType,mode){
       ?sortXtreamCategoriesLikeProvider(records.rows,providerOrder)
       :sortXtreamCategories(records.rows,mode);
     const unchanged=current.every((id,index)=>id===ordered[index]);
-    if(!unchanged){
-      await client.query(`UPDATE blofy_xtream_categories c
-        SET sort_order=rank.pos::int,updated_at=NOW()
+    // Keep manual/alphabetical order through later automatic catalog imports.
+    // Restoring the upstream order clears overrides so future upstream changes
+    // flow through naturally. Flags, names and category membership are unchanged.
+    await client.query(`UPDATE blofy_xtream_categories c
+        SET sort_order=rank.pos::int,manual_sort=$4::boolean,updated_at=NOW()
         FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
-        WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
-        [serverId,mediaType,ordered]);
-    }
+        WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id
+          AND (c.sort_order IS DISTINCT FROM rank.pos::int
+               OR c.manual_sort IS DISTINCT FROM $4::boolean)`,
+        [serverId,mediaType,ordered,mode!=='provider']);
     await client.query('COMMIT');
     if(!unchanged)await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
     return{updated:ordered.length,mode,unchanged};
@@ -3159,7 +3165,7 @@ async function moveCategory(serverId, mediaType, categoryId, direction) {
     if(next<0||next>=ids.length||next===at){await client.query('COMMIT');return {moved:false};}
     ids.splice(next,0,...ids.splice(at,1));
     await client.query(`UPDATE blofy_xtream_categories c
-      SET sort_order=rank.pos::int,updated_at=NOW()
+      SET sort_order=rank.pos::int,manual_sort=TRUE,updated_at=NOW()
       FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
       WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
       [serverId,mediaType,ids]);
