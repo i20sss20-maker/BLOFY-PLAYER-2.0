@@ -949,6 +949,7 @@ function cleanupPlayer(){
   if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
   if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
   if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
+  if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
   S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
@@ -1577,6 +1578,7 @@ function openPlayer(kind,id,extension,name,from){
  }
  function seekTo(raw){
   if(isLive)return;
+  if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
   state.recoveries=0;state.recoveryWindow=0;
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
@@ -1609,10 +1611,25 @@ function openPlayer(kind,id,extension,name,from){
  }
  state.seekTo=seekTo;
  state.seekBy=function(delta){
-  // On TV and keyboard, key repeats arrive before the transcoder can
-  // advance video.currentTime. Build on the previous requested time.
-  var recent=Date.now()-(state.lastSeekAt||0)<4500&&isFinite(state.lastSeekTarget);
-  return seekTo((recent?state.lastSeekTarget:realPos())+delta)
+  // TV key-repeat sends many events in one second. Show immediate preview
+  // but issue only ONE network seek after the remote stops repeating,
+  // otherwise each press kills and restarts FFmpeg at the upstream source.
+  var recent=Date.now()-(state.lastSeekAt||0)<4500&&
+   state.lastSeekTarget!==null&&state.lastSeekTarget!==undefined&&isFinite(state.lastSeekTarget);
+  var target=Math.max(0,Math.round((recent?state.lastSeekTarget:realPos())+delta));
+  var duration=totalDuration();
+  if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
+  state.lastSeekTarget=target;state.lastSeekAt=Date.now();
+  if(state.seekDebounce)clearTimeout(state.seekDebounce);
+  var n=document.getElementById('now-time'),bar=document.getElementById('seek');
+  if(n)n.textContent=formatTime(target);
+  if(bar&&duration>0&&isFinite(duration))bar.value=String(Math.max(0,Math.min(1000,Math.round(target/duration*1000))));
+  playerStatus('التقديم إلى '+formatTime(target)+'…');
+  state.seekDebounce=setTimeout(function(){
+   state.seekDebounce=null;
+   if(S.route==='player'&&S.playerView===state)seekTo(target)
+  },360);
+  return target
  };
  state.toggle=function(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){})}else video.pause()};
  state.recoverDirect=function(){
@@ -1714,7 +1731,11 @@ function openPlayer(kind,id,extension,name,from){
   else startVod(Math.round(realPos()))
  };
  var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
-  delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;
+  if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
+  if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
+  if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
+  state.pendingSeek=null;state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
+  delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;state.resume=0;
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
   else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
   else{state.ready=false;startVod(0)}
