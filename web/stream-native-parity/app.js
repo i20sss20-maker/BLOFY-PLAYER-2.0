@@ -1410,6 +1410,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  video.onerror=function(){if(alive()){
   var unsupported=video.error&&(video.error.code===4||video.error.code===3);
+  // Some VIDAA browsers advertise native HLS but cannot actually decode it.
+  // Prefer the verified MSE engine on the codec fallback where available.
+  if(unsupported&&window.MediaSource&&window.MediaSource.isTypeSupported)S.preferMseHls=true;
   if(unsupported&&setCompatibility(true,true))return;
   if(unsupported&&window.MediaSource&&window.MediaSource.isTypeSupported){
    S.preferMseHls=true;
