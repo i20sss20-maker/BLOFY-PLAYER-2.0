@@ -1909,7 +1909,8 @@ function clickHandler(event){
 }
 function directional(e){
  var code=e.keyCode||e.which;
- var editable=e.target&&(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable);
+ var editable=e.target&&((e.target.tagName==='INPUT'&&e.target.type!=='range')||
+  /^(TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable);
  if(code===37||code===38||code===39||code===40||code===13||code===27||code===461||code===10009||code===8)S.keyboardMode=true;
  if(code===27||code===461||code===10009||code===8){
   if(editable&&code===8)return;
