@@ -287,11 +287,16 @@ test('series player navigates both directions across available episodes',async({
  await expect(page.locator('.episode-row')).toHaveCount(2);
  await page.locator('[data-watch="series:55"]').click();
  await expect(page.locator('#player-title-text')).toContainText('الحلقة الأولى');
+ const beforeLength=await page.evaluate(()=>history.length);
  await page.locator('#player-next-episode').click();
  await expect(page.locator('#player-title-text')).toContainText('الحلقة الثانية');
+ expect(await page.evaluate(()=>history.length)).toBe(beforeLength);
  await expect(page.locator('#player-previous-episode')).toBeVisible();
  await page.locator('#player-previous-episode').click();
  await expect(page.locator('#player-title-text')).toContainText('الحلقة الأولى');
+ expect(await page.evaluate(()=>history.length)).toBe(beforeLength);
+ await page.locator('#player-back').click();
+ await expect(page.locator('.episode-row')).toHaveCount(2);
 });
 
 test('poster loads a valid secondary cover if the primary Xtream icon fails',async({page})=>{
