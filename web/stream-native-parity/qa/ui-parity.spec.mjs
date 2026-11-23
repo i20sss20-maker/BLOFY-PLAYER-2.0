@@ -8,7 +8,7 @@ const episode={id:55,title:'الحلقة التجريبية',episode_num:1,conta
 const channel2={stream_id:32,name:'قناة ثانية',category_id:'4',stream_icon:'https://example.com/channel2.jpg'};
 const kinds={movie:[movie],series:[series],live:[channel,channel2]};
 test.beforeEach(async({page})=>{
- await page.route('**/api/session',async route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,active:true})}));
+ await page.route('**/api/session',async route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,active:true,profileKey:'0123456789abcdef01234567'})}));
  await page.route('**/api/page?*',async route=>{
   const u=new URL(route.request().url()),kind=u.searchParams.get('kind'),items=kinds[kind]||[];
   const q=u.searchParams.get('query');const rows=q?items.filter(x=>x.name.includes(q)):items;
@@ -162,5 +162,26 @@ test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored posi
  await expect(page.locator('#player-root')).toBeVisible();
  await page.locator('#player-back').click();
  await expect(page.locator('.detail-title')).toHaveText('فيلم تجريبي');
+ expect(errors).toEqual([]);
+});
+
+test('web and remote navigation return to the previous screen; player can show real description',async({page})=>{
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('http://127.0.0.1:3000/',{waitUntil:'domcontentloaded'});
+ await expect(page.locator('.home-hero')).toBeVisible();
+ await page.locator('[data-go="movie"]').first().click();
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+ await page.locator('[data-details="movie:11"]').click();
+ await expect(page.locator('.detail-title')).toHaveText('فيلم تجريبي');
+ await expect(page.locator('.detail-plot')).toContainText('فيلم اختبار');
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await page.locator('#player-info-toggle').click();
+ await expect(page.locator('#player-info-panel')).toBeVisible();
+ await expect(page.locator('#player-info-panel')).toContainText('فيلم اختبار');
+ await page.goBack({waitUntil:'domcontentloaded'});
+ await expect(page.locator('.detail-title')).toHaveText('فيلم تجريبي');
+ await page.goBack({waitUntil:'domcontentloaded'});
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
  expect(errors).toEqual([]);
 });
