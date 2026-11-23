@@ -60,6 +60,23 @@ test('frame presentation callback is cleaned on playback stop to prevent cross-c
  assert.match(source,/clearTimeout\(old\.retryTimer\)/);
 });
 
+test('HLS 429 capacity retry uses capped backoff and never hammers the shared source',()=>{
+ const start=playerSource.indexOf('function liveCapacityRetryMs(');
+ const end=playerSource.indexOf('\nfunction liveUnexpectedPause(',start);
+ assert.ok(start>0&&end>start,'capacity backoff is present');
+ const delay=vm.runInNewContext(playerSource.slice(start,end)+';\nliveCapacityRetryMs',{});
+ assert.equal(delay(1),4700);
+ assert.equal(delay(2),6900);
+ assert.equal(delay(5),13500);
+ assert.equal(delay(100),13500,'delay stays capped');
+ const oldStart=playerSource.indexOf('function stopPlayback(sendStop){');
+ const oldEnd=playerSource.indexOf('\nfunction cleanupPlayer()',oldStart);
+ assert.ok(oldStart>0&&oldEnd>oldStart);
+ assert.match(playerSource.slice(oldStart,oldEnd),/clearTimeout\(old\.capacityTimer\)/,
+  'a channel change must cancel its delayed capacity retry');
+ assert.match(playerSource,/record\.capacityRetries=0/,'good segments reset the backoff');
+});
+
 test('unexpected paused/ended TV live decoder recovers without overriding user Pause',()=>{
  const start=playerSource.indexOf('function liveUnexpectedPause(');
  const end=playerSource.indexOf('\nfunction playHls(',start);
