@@ -2,6 +2,7 @@
 // This never shares a provider feed, changes a source, replays delivered bytes,
 // retries denied content, or enables a wider customer rollout automatically.
 import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
+import {collectXtreamTsFirstPackets} from './xtream-live-ts-first-packets.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function allowedLiveTsRecoveryPilot({
@@ -190,10 +191,21 @@ export async function* liveTsRecoveryBytes({
       if(!plainOpenEnded(reply))throw Error('live_ts_reconnect_denied');
       temporaryReader=reply.body.getReader();
       const probe=await readWithin(temporaryReader,ctl,15000);
-      if(probe.done||!tsPackets(probe.value))
-       throw Error('live_ts_reconnect_denied');
+      if(probe.done)throw Error('live_ts_reconnect_denied');
+      // Validate two real TS packets even when one HTTP chunk is tiny.
+      // Do not accept invalid media or splice/replay any bytes.
+      let validatedFirst;
+      try{
+       validatedFirst=await collectXtreamTsFirstPackets(
+        probe.value,ms=>readWithin(temporaryReader,ctl,ms));
+      }catch(e){
+       if(e?.message==='upstream_empty_media')
+        throw Error('live_ts_reconnect_denied');
+       throw e;
+      }
+      if(!tsPackets(validatedFirst))throw Error('live_ts_reconnect_denied');
       activeReader=temporaryReader;activeController=ctl;
-      temporaryReader=null;pending=probe.value;
+      temporaryReader=null;pending=validatedFirst;
       lastValidatedMediaAt=Number(now());
       const interruptionMs=Number.isFinite(lastValidatedMediaAt)&&Number.isFinite(seenAt)?
        Math.max(0,Math.min(60000,lastValidatedMediaAt-seenAt)):null;
