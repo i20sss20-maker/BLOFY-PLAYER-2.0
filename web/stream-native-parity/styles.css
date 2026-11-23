@@ -315,3 +315,16 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  overflow-wrap:anywhere;word-break:normal}
 .player-health-panel[hidden]{display:none!important}
 @media(max-width:730px){.player-health-panel{padding:7px 9px;font-size:11px}}
+
+
+/* Numeric seek works without Xtream duration metadata; keyboard and TV remote. */
+.player-jump-panel{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+ border:1px solid #61ebd37a;border-radius:12px;background:rgba(9,36,46,.95);
+ padding:10px 12px;max-width:760px}
+.player-jump-panel[hidden]{display:none!important}
+.player-jump-panel label{color:#e1fff9;font-weight:700;font-size:13px}
+.player-jump-panel input{direction:ltr;text-align:center;width:105px;min-height:40px;
+ background:#071b25;border:1px solid #64d6c998;color:#f2fcfb;border-radius:8px}
+.player-jump-panel small{width:100%;font-size:11px;line-height:1.5;color:#a8d9d6}
+@media(max-width:730px){.player-jump-panel{padding:8px;gap:6px}
+ .player-jump-panel .btn{min-height:35px}.player-jump-panel label{font-size:12px}}
