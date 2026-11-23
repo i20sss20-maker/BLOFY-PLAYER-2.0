@@ -1384,7 +1384,12 @@ function openPlayer(kind,id,extension,name,from){
   state.pendingSeek=null;
   state.stats.seekReady++;
   state.stats.lastSeekMs=Math.max(0,now-pending.startedAt);
-  diagnose(kind,'vod_seek_ready',state.mode,0)
+  diagnose(kind,'vod_seek_ready',state.mode,0);
+  // A seek within an already-buffered range may emit "seeked" without a
+  // fresh "playing" event. Clear the progress overlay in either case.
+  var status=document.getElementById('player-status');
+  if(status&&status.className!=='player-error'&&
+   /التقديم|جار فتح المقطع|جار فتح الفيلم|جار تحميل الجزء المطلوب/.test(status.textContent||''))playerStatus('')
  }
  function startSeekCheck(target){
   if(isLive)return;
