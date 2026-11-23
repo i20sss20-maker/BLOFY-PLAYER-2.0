@@ -131,3 +131,57 @@ test('HD fallback keeps source dimensions without upscaling and has a bounded bi
  fakeEnv.VIDAA_VOD_VIDEO_PROFILE='480';
  assert.equal(funcs.videoQualityProfile('movie').name,'480');
 });
+
+
+test('source-preserving live H264 TS probe keeps ALL incoming bytes and chooses copy',async()=>{
+ const begin=source.indexOf('async function selectSourcePreservingInput(');
+ const end=source.indexOf('\nasync function startHls(',begin);
+ const parse=source.indexOf('function tsCodecs(buffer){');
+ const parseEnd=source.indexOf('\nfunction hlsSelfTest(',parse);
+ assert.ok(begin>0&&end>begin&&parse>0&&parseEnd>parse);
+ const sandbox={ReadableStream,Uint8Array};
+ const select=vm.runInNewContext(source.slice(parse,parseEnd)+'\n'+source.slice(begin,end)+
+  '\nselectSourcePreservingInput',sandbox);
+ const makePacket=(pid,table)=>{
+  const bytes=new Uint8Array(188).fill(255);
+  bytes[0]=0x47;bytes[1]=0x40|((pid>>8)&31);bytes[2]=pid&255;bytes[3]=0x10;
+  bytes[4]=0;bytes.set(table,5);return bytes
+ };
+ function sourceBytes(codec){
+  const pat=makePacket(0,new Uint8Array([0,0xb0,13,0,1,0xc1,0,0,0,1,0xe1,0,0,0,0,0]));
+  const pmt=makePacket(256,new Uint8Array([
+   2,0xb0,23,0,1,0xc1,0,0,0xe1,1,0xf0,0,
+   codec,0xe1,1,0xf0,0,0x0f,0xe1,2,0xf0,0,
+   0,0,0,0
+  ]));
+  const packets=[pat,pmt,new Uint8Array(188).fill(0)];
+  packets[2][0]=0x47;packets[2][1]=0x01;packets[2][2]=0x01;packets[2][3]=0x10;
+  const bytes=new Uint8Array(packets.reduce((a,x)=>a+x.byteLength,0));
+  let o=0;for(const p of packets){bytes.set(p,o);o+=p.length}
+  return bytes
+ }
+ async function run(codec){
+  const bytes=sourceBytes(codec);
+  const src=new ReadableStream({start(ctrl){
+   ctrl.enqueue(bytes.slice(0,188));
+   ctrl.enqueue(bytes.slice(188,376));
+   ctrl.enqueue(bytes.slice(376));
+   ctrl.close()
+  }});
+  const result=await select(src,true);
+  const reader=result.input.getReader(),segments=[];
+  for(;;){const item=await reader.read();if(item.done)break;segments.push(item.value)}
+  const actual=new Uint8Array(segments.reduce((a,x)=>a+x.length,0));
+  let at=0;for(const part of segments){actual.set(part,at);at+=part.length}
+  assert.deepEqual(Array.from(actual),Array.from(bytes),'TS sniff must never discard or reorder source data');
+  return result
+ }
+ const h264=await run(0x1b);
+ assert.equal(h264.copyVideo,true,'H264 from PMT should use original quality without re-encoding');
+ assert.equal(h264.detected,'h264_transport');
+ const hevc=await run(0x24);
+ assert.equal(hevc.copyVideo,false,'HEVC must keep compatibility fallback on unsupported browsers');
+ assert.equal(hevc.detected,'needs_transcode');
+ const raw=await select(new ReadableStream({start(c){c.enqueue(new Uint8Array([1,2,3]));c.close()}}),false);
+ assert.equal(raw.copyVideo,false)
+});
