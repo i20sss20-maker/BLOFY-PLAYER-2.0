@@ -104,7 +104,7 @@ export function liveTsSameSourceContinuity({
     reply=await fetchSameSource(ctl.signal);
     if(!acceptableSource(reply)){
      terminal=!TRANSIENT.has(Number(reply?.status));
-     continue
+     throw Error('untrusted_source_reply')
     }
     probeReader=reply.body.getReader();
     // This timer covers TS packet validation after response headers.
