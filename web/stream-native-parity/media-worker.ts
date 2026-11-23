@@ -327,7 +327,7 @@ function fullVodChunk(session,first){
  const seconds=Math.min(session.duration-begin,FULL_CHUNK_SEGMENTS*FULL_SEGMENT_SECONDS);
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
  session.released=false;active++;
- session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;
+ session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;session.chunkFinishedAt=0;
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
  pruneFullVod(session,first);
  session.abort=new AbortController();
@@ -365,12 +365,17 @@ function fullVodChunk(session,first){
   proc.exited.then(code=>{
    if(session.proc!==proc)return;
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
-   session.finished=true;session.exitCode=code;releaseHls(session);
-   if(code!==0&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
+   session.finished=true;session.exitCode=code;session.chunkFinishedAt=Date.now();
+   // Source metadata can overstate runtime. A seek producing no TS segment
+   // after a successful exit is not a recoverable HTTP buffering condition.
+   const firstSegment=join(session.dir,'seg-'+String(first).padStart(6,'0')+'.ts');
+   if(code===0&&!existsSync(firstSegment)&&!session.error)session.error='vod_source_position_unavailable';
+   releaseHls(session);
+   if((code!==0||session.error)&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
    else if(!session.stopped)console.info('BLOFY_FULL_VOD_CHUNK_OK',{kind:session.kind,first,elapsedMs:Date.now()-began})
   }).catch(()=>{if(session.proc===proc){
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
-   session.finished=true;session.error='vod_chunk_crashed';releaseHls(session)
+   session.finished=true;session.chunkFinishedAt=Date.now();session.error='vod_chunk_crashed';releaseHls(session)
   }});
   return {ok:true}
  }catch{session.finished=true;session.error='vod_chunk_start_failed';releaseHls(session);return {status:502,error:'vod_chunk_start_failed'}}
@@ -423,6 +428,15 @@ async function fullVodRequest(req,url){
  const filename=join(session.dir,file);
  if(!existsSync(filename)){
   const first=Math.floor(index/FULL_CHUNK_SEGMENTS)*FULL_CHUNK_SEGMENTS;
+  // Avoid immediately re-encoding the same missing fragment on each HLS
+  // retry. Cool down until the source may have recovered.
+  if(session.chunkStart===first&&session.finished&&session.chunkFinishedAt&&
+   Date.now()-session.chunkFinishedAt<15000){
+   const reason=session.error||'vod_segment_not_in_source';
+   const status=reason==='vod_source_seek_unsupported'?416:
+    reason==='vod_source_position_unavailable'||reason==='vod_segment_not_in_source'?422:502;
+   return json(status,{error:reason})
+  }
   if(session.chunkStart!==first||session.finished){
    // Hls.js can prefetch next 24 seconds before the previous encoder exits.
    // Never kill a still-encoding adjacent chunk; that can corrupt a segment
@@ -454,7 +468,8 @@ async function fullVodRequest(req,url){
   if(req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
   if(!existsSync(filename)){
    const why=session.chunkStart!==first?'vod_chunk_replaced':session.error||'vod_segment_not_ready';
-   const code=why==='vod_source_seek_unsupported'?416:session.finished?502:504;
+   const code=why==='vod_source_seek_unsupported'?416:
+    why==='vod_source_position_unavailable'?422:session.finished?502:504;
    return json(code,{error:why})
   }
  }
