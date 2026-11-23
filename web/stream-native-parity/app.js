@@ -531,7 +531,7 @@ function checkpointPosition(p){
   var runtime=playbackDuration(p),position=Math.max(0,Number(desired));
   if(runtime>0)position=Math.min(position,Math.max(0,runtime-2));
   // Never mark a movie watched merely because someone selected its last frame.
-  if(runtime>60&&position>=runtime-60)return Math.min(base,runtime-61);
+  if(runtime>60&&position>=runtime-60)return Math.min(base,Math.floor(runtime*.94));
   return position
  }
  return base
@@ -1153,7 +1153,9 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   rec.pendingRecovery=true;state.fullRecoveryCount++;
   // The browser may still report the previous frame while a seek is loading.
   // Retry at the actual requested timestamp, not that stale video.currentTime.
-  var pending=state.pendingSeek,requested=pending&&Date.now()-pending.startedAt<35000?pending.target:null;
+  var pending=state.pendingSeek,requested=pending&&Date.now()-pending.startedAt<55000?pending.target:null;
+  if(requested===null&&state.seekIncomplete&&Date.now()-(state.lastSeekAt||0)<80000)
+   requested=state.lastSeekTarget;
   var resumeAt=Math.max(0,Math.floor(requested!==null?requested:(video.currentTime||state.resume||0))-1);
   if(state.ready)saveResume(kind,id,resumeAt,seconds,true);
   state.resume=resumeAt;
@@ -1407,6 +1409,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
   if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
   state.pendingSeek=null;
+  state.seekIncomplete=false;
   state.stats.seekReady++;
   state.stats.lastSeekMs=Math.max(0,now-pending.startedAt);
   diagnose(kind,'vod_seek_ready',state.mode,0);
@@ -1424,6 +1427,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.seekLogTimer)clearTimeout(state.seekLogTimer);
   var pending={target:target,startedAt:now,logged:false};
   state.pendingSeek=pending;
+  state.seekIncomplete=true;
   state.seekLogTimer=setTimeout(function(){
    state.seekLogTimer=null;
    if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
@@ -1770,7 +1774,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
   if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
-  state.pendingSeek=null;state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
+  state.pendingSeek=null;state.seekIncomplete=false;state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
   delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;state.resume=0;
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
   else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
