@@ -2237,6 +2237,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var recentSegment=liveRecord&&liveRecord.engine?
    (liveRecord.lastFragmentAt?Math.round((now-liveRecord.lastFragmentAt)/1000)+' ثانية':'بانتظار أول مقطع'):
    'غير متاح بالمشغل الأصلي';
+  var lastPresented=liveRecord&&liveRecord.framePresentationObserved?
+   Math.round((now-liveRecord.lastPresentedFrameAt)/1000)+' ثانية':
+   'غير متاح على هذا الجهاز';
   var uptime=formatTime(Math.max(0,(now-st.openedAt)/1000));
   var status4k=height>=4300&&width>=7600?'8K معروض فعليًا':height>=2100&&width>=3800?'4K معروض فعليًا':
    'الدقة تعتمد على المصدر والجهاز';
@@ -2250,6 +2253,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
    ['سرعة شبكة مقدّرة',bitrate],
    ['آخر مقطع HLS',recentSegment],
+   ['آخر إطار معروض',lastPresented],
    ['بدء الصورة',startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية'],
    ['أخطاء المشغل',String(st.errors||0)],
    ['استعادات تلقائية',String(st.recoveries||0)]
@@ -2293,6 +2297,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    'محرك التشغيل: '+(r&&r.engine?'HLS.js':'تشغيل الجهاز الأصلي'),
    'آخر مقطع HLS: '+(r&&r.engine?(ms===null?'غير مرصود':Math.round(ms/1000)+' ثانية'):'غير متوفر في المحرك الأصلي'),
    'آخر تقدم للصورة: '+(idle===null?'غير مرصود':Math.round(idle/1000)+' ثانية'),
+   'آخر إطار معروض على الشاشة: '+(r&&r.framePresentationObserved?Math.round((now-r.lastPresentedFrameAt)/1000)+' ثانية':'غير مدعوم'),
+   'عدد الإطارات المعروضة المرصودة: '+(r&&r.presentedFrames||0),
    'الإطارات: '+(Number.isFinite(frames)?frames:'غير متوفرة')+
     ' • الساقطة: '+(Number.isFinite(drops)?drops:'غير متوفرة'),
    'إعادة الاتصال: '+(st.recoveries||0)+' • أخطاء الفيديو: '+(st.errors||0),
