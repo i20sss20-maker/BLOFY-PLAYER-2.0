@@ -64,6 +64,10 @@ jobs:
           sha256sum /tmp/synthetic.dump | cut -d' ' -f1 > /tmp/synthetic-sha256.txt
           test -s /tmp/synthetic-sha256.txt
           echo 'PASS: local synthetic dump TOC can be read and all 3 synthetic rows restored'
+      - name: Exercise real backup scripts end-to-end using fake private S3 with corruption rejection
+        env:
+          PGPASSWORD: postgres
+        run: bash ops/disaster-recovery/test_backup_chain.sh
       - name: Ensure backup fails closed with no real secrets configured
         run: |
           if env -u DATABASE_URL -u BLOFY_BACKUP_S3_BUCKET -u BLOFY_BACKUP_KMS_KEY_ID -u AWS_REGION bash services/activation/scripts/backup-to-s3.sh > /tmp/backup-missing-secrets.log 2>&1; then
