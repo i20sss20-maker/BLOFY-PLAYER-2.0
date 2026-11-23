@@ -309,6 +309,10 @@ if(p==='/api/compatible/health'&&method==='GET'){
     viewers:Math.max(0,Math.min(400,Number(data.sharedLive?.viewers)||0)),
     pending:Math.max(0,Math.min(400,Number(data.sharedLive?.pending)||0)),
     maxPerGroup:Math.max(0,Math.min(10,Number(data.sharedLive?.maxPerGroup)||0))
+   },
+   originStability:{
+    coolingSources:Math.max(0,Math.min(256,Number(data.originStability?.coolingSources)||0)),
+    recentSources:Math.max(0,Math.min(256,Number(data.originStability?.recentSources)||0))
    }});
  }catch(e){return json(503,{error:'compat_worker_unreachable'})}
 }
