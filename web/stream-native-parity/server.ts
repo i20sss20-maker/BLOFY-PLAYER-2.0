@@ -273,7 +273,12 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
   const response=await fetch(target,{method:'GET',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret,'Accept':match[5]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t'},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'hls_redirect_denied'});
   if(!response.ok){let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){};return json(response.status,{error})}
-  return new Response(response.body,{status:200,headers:noCache({'Content-Type':match[5]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t','Accept-Ranges':'none'})});
+  var mode=response.headers.get('x-blofy-video-mode')||'unknown';
+  if(mode!=='source_copy'&&mode!=='compatibility_transcode')mode='unknown';
+  return new Response(response.body,{status:200,headers:noCache({
+   'Content-Type':match[5]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t',
+   'Accept-Ranges':'none','X-Blofy-Video-Mode':mode
+  })});
  }catch(e){return json(502,{error:'hls_worker_unreachable'})}
 }
 if(p==='/api/compatible/health'&&method==='GET'){
