@@ -562,11 +562,17 @@ function getResume(k,id){return S.watch[progressKey(k,id)]||null}
 function finishResume(kind,id){
  // Only explicitly verified media EOF can mark a title as fully watched.
  if(kind==='live')return;
+ var player=S.playerView;
+ if(player&&player.kind===kind&&String(player.id)===String(id))player.completed=true;
  delete S.watch[progressKey(kind,id)];
  profileSave('watch',S.watch)
 }
 function saveResume(kind,id,pos,duration,ready){
  if(kind==='live'||!ready||!isFinite(pos)||pos<0)return;
+ var player=S.playerView;
+ // timeupdate, pause and pagehide can fire AFTER verified EOF. Without this
+ // guard they immediately recreate a completed title in Continue Watching.
+ if(player&&player.completed&&player.kind===kind&&String(player.id)===String(id))return;
  duration=isFinite(duration)&&duration>0?duration:0;
  var key=progressKey(kind,id),last=S.watch[key];
  // A new player starting at zero must not overwrite a real checkpoint.
@@ -1734,6 +1740,7 @@ function openPlayer(kind,id,extension,name,from){
  }
  function seekTo(raw){
   if(isLive)return;
+  state.completed=false; // Explicitly scrubbing after finish starts a rewatch.
   if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
   state.recoveries=0;state.recoveryWindow=0;
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
@@ -1908,7 +1915,25 @@ function openPlayer(kind,id,extension,name,from){
   releaseWakeLock();progress();
   if(state.ready&&!isLive)saveResume(kind,id,checkpointPosition(state),totalDuration(),true)
  };
- video.onplaying=function(){if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}markReady()};
+ video.onplaying=function(){
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  if(state.completed&&video.currentTime<5)state.completed=false;
+  markReady()
+ };
+ video.onended=function(){
+  if(state.mode!=='direct'||S.route!=='player'||S.playerView!==state)return;
+  var runtime=totalDuration(),observed=Math.max(0,Number(video.currentTime)||0);
+  if(vodEndedAtRealFinish(runtime,observed,!!state.seekIncomplete)){
+   finishResume(kind,id);
+   playerStatus('اكتملت المشاهدة')
+  }else{
+   // An early EOF from an incomplete MP4 range must use the fallback
+   // rather than making the title disappear from Continue Watching.
+   playerStatus('انتهى اتصال الفيلم قبل نهايته؛ جار استخدام مشغّل الفيديو البديل…');
+   state.requestedSeek=observed;state.resume=observed;
+   state.recoverDirect()
+  }
+ };
  video.onerror=function(){
   if(state.mode==='direct'&&!isLive)state.recoverDirect();
   else playerStatus('تعذّر تشغيل هذا المصدر.',true)
@@ -1926,7 +1951,8 @@ function openPlayer(kind,id,extension,name,from){
   if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
   if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
-  state.pendingSeek=null;state.seekIncomplete=false;state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
+  state.pendingSeek=null;state.seekIncomplete=false;state.completed=false;
+  state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
   delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;state.resume=0;
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
   else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
