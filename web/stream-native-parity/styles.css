@@ -485,3 +485,23 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  .native-channel-art{width:40px;height:40px;flex-basis:40px}
  .native-player-channels{font-size:11px;padding:5px 8px;min-height:32px}
 }
+
+
+/* Android-style track-selection dialog with D-pad focus and TV-safe dimensions. */
+.native-player-choice-panel{position:absolute;inset:0;z-index:213;background:rgba(2,9,13,.78);
+ display:grid;place-items:center;padding:16px}
+.native-player-choice-panel[hidden]{display:none!important}
+.native-player-choice-card{width:min(510px,96vw);max-height:85dvh;display:flex;flex-direction:column;
+ background:linear-gradient(145deg,#154250,#071a22);color:var(--white);
+ border:1px solid #78d8cc87;border-radius:21px;padding:15px;box-shadow:0 24px 80px #000a}
+.native-player-choice-head{display:flex;justify-content:space-between;align-items:center;gap:12px;
+ padding:3px 3px 13px;border-bottom:1px solid #73c3b74a}
+.native-player-choice-head strong{font-size:17px}
+.native-player-choice-head button{font-size:14px;border:1px solid #85dfd077;border-radius:11px;
+ min-width:39px;min-height:38px;background:#0c3441;color:var(--white);cursor:pointer}
+.native-player-choice-items{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-top:12px}
+.native-player-choice-item{text-align:start;cursor:pointer;border-radius:12px;border:1px solid #8fdfd04d;
+ padding:12px 15px;min-height:44px;color:var(--white);font-size:14px;background:#0b303c}
+.native-player-choice-item.selected{background:#166577;border-color:#46e4d0}
+.native-player-choice-item:hover,.native-player-choice-item:focus-visible,.native-player-choice-head button:focus-visible{
+ background:#177580;outline:2px solid #e8fffc;outline-offset:1px}
