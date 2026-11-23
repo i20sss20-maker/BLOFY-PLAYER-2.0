@@ -3,6 +3,8 @@ import { timingSafeEqual, createHmac, randomBytes } from 'node:crypto';
 import { mkdirSync, rmSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {allowedSingleViewerLiveTsContinuity,liveTsSameSourceContinuity}
+ from './live-source-continuity.mjs';
 const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
@@ -310,7 +312,27 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    return {error:'hls_start_cancelled',status:409}
   }
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
-  const sourceInput=await selectSourcePreservingInput(upstream.body,!forceCompat&&kind==='live'&&ext==='ts');
+  // Experimental continuity for ONE preapproved channel + bearer access ID.
+  // All subsequent requests use the exact same first-party authorized URL.
+  // Disabled in normal previews; strict guard prevents a single env flag
+  // from turning on extra provider connections for every subscriber.
+  const resumePilot=allowedSingleViewerLiveTsContinuity({
+   enabled:Bun.env.VIDAA_LIVE_TS_CONTINUITY_PILOT==='1',
+   kind,id,ext,bearer,
+   approvedChannelId:Bun.env.VIDAA_LIVE_TS_CONTINUITY_CHANNEL_ID||'',
+   approvedAccessId:Bun.env.VIDAA_LIVE_TS_CONTINUITY_ACCESS_ID||''
+  });
+  const sourceBody=resumePilot?liveTsSameSourceContinuity({
+   firstBody:upstream.body,clientSignal:controller.signal,
+   fetchSameSource:signal=>fetch(target,{method:'GET',headers:{
+    Authorization:bearer,Accept:'*/*','accept-encoding':'identity'
+   },redirect:'manual',signal}),
+   onEvent:event=>console.info('VIDAA_LIVE_TS_CONTINUITY',
+    JSON.stringify({phase:event.phase,cause:event.cause,
+     lifetimeSeconds:event.lifetimeSeconds??null,
+     gapMs:event.gapMs??null,attempt:event.attempt??null}))
+  }):upstream.body;
+  const sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts');
   if(session.stopped||hlsSessions.get(key)!==session){
    try{await sourceInput.input.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
