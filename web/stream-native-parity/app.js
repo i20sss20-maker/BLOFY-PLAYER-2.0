@@ -1404,8 +1404,13 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   var state=S.playerView;
   if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
   record.reconnecting=true;
-  // An unstable UHD conversion degrades to the stable 1080p path.
+  // Recovery order: original-native -> original MSE -> bounded compatibility.
+  // Do not sacrifice upstream 4K on the first TV decoder stall.
   if(record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
+  if(!record.engine&&record.recoveryAttempt>=1&&window.MediaSource&&window.MediaSource.isTypeSupported){
+   S.preferMseHls=true;
+  }
+  if(!record.compat&&record.recoveryAttempt>=2&&setCompatibility(true,true))return;
   if(record.startupTimer)clearTimeout(record.startupTimer);
   if(record.stallTimer)clearTimeout(record.stallTimer);
   if(record.progressWatchdog)clearInterval(record.progressWatchdog);
