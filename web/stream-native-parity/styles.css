@@ -307,3 +307,11 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 .player-live-guide .epg-content{max-height:110px}
 @media(max-width:730px){.player-live-guide{max-height:112px;padding:5px 9px}
  .player-live-guide .epg-entry:nth-of-type(n+4){display:none}}
+
+
+/* Opt-in playback status: hidden until opened by the viewer. */
+.player-health-panel{max-width:100%;padding:9px 13px;border:1px solid #70e6d77a;border-radius:11px;
+ background:rgba(7,32,40,.95);color:#d9fff7;font-size:12px;line-height:1.7;
+ overflow-wrap:anywhere;word-break:normal}
+.player-health-panel[hidden]{display:none!important}
+@media(max-width:730px){.player-health-panel{padding:7px 9px;font-size:11px}}
