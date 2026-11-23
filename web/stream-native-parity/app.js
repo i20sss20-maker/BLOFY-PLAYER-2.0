@@ -1607,6 +1607,12 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   try{
    var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
+   // Network and decoder are separate signals. If HLS fragments arrive while
+   // actual decoded frames remain frozen, the report can flag a TV decoder
+   // problem instead of blaming Railway or the subscriber's source.
+   engine.on(window.Hls.Events.FRAG_LOADED,function(){
+    if(alive())record.lastFragmentAt=Date.now()
+   });
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
     diagnose('live','hls_error','video',0);
@@ -2088,10 +2094,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
+ (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
  '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section>'+
+ (isLive?'<section class="player-diagnostic-panel" id="player-diagnostic-panel" hidden role="status" aria-live="off"></section>':'')+
  (isLive?'':'<form class="player-jump-panel" id="player-jump-panel" hidden><label for="player-jump-minute">الانتقال إلى الدقيقة (0–359)</label>'+
  '<input id="player-jump-minute" type="number" inputmode="numeric" min="0" max="359" step="1" required placeholder="مثلاً 10">'+
  '<button class="btn" type="submit">انتقال</button><button class="btn secondary" type="button" id="player-jump-cancel">إلغاء</button>'+
@@ -2218,6 +2226,54 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ' • مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+'</p>':'')+
    (pending?'<p class="playback-health-note">جار الوصول إلى '+esc(formatTime(pending.target))+'</p>':'');
  }
+ // A redacted diagnostic snapshot that never includes stream URLs, host,
+ // account identifiers, codes or auth tokens. Useful for remote TV screenshots.
+ function playbackDiagnosticSnapshot(){
+  var now=Date.now(),r=S.play&&S.play.video===video?S.play:null,st=state.stats;
+  var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
+  var frames=null,drops=null;
+  try{
+   var q=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
+   if(q){frames=Number(q.totalVideoFrames);drops=Number(q.droppedVideoFrames)}
+  }catch(e){}
+  var ms=r&&r.lastFragmentAt?Math.max(0,now-r.lastFragmentAt):null;
+  var idle=r&&r.lastProgressAt?Math.max(0,now-r.lastProgressAt):null;
+  var assessment='توجد بيانات غير كافية لتحديد سبب الانقطاع.';
+  if(r&&idle!==null&&idle>=8000){
+   if(r.engine&&ms!==null&&ms<6000)assessment='مقاطع البث تصل لكن الصورة لا تتقدم؛ افحص فك الترميز في الجهاز.';
+   else if(r.engine&&ms!==null&&ms>=10000)assessment='مقاطع البث توقفت مؤخرًا؛ افحص المصدر أو الشبكة.';
+   else assessment='توقف تقدم الصورة؛ فحص المحرك أو المصدر مطلوب.';
+  }else if(r&&idle!==null)assessment='الصورة تتقدم مؤخرًا؛ لا يوجد تجمد مثبت الآن.';
+  var mode=r&&r.videoMode==='source_copy'?'أصلي دون إعادة ضغط':r&&r.videoMode==='ultra_transcode'?'تحويل 4K تجريبي':
+   r&&r.videoMode==='compatibility_transcode'?'وضع توافق':'غير معروف';
+  return [
+   'BLOFY STREAM • تقرير فحص آمن',
+   'وقت التقرير: '+new Date(now).toISOString(),
+   'مدة الجلسة: '+formatTime((now-st.openedAt)/1000),
+   'دقة الفيديو المعروضة: '+(w&&h?w+'×'+h:'غير متوفرة'),
+   'دقة المصدر: '+(r&&r.sourceDimensions||'غير متوفرة'),
+   'المعالجة: '+mode,
+   'محرك التشغيل: '+(r&&r.engine?'HLS.js':'تشغيل الجهاز الأصلي'),
+   'آخر مقطع HLS: '+(r&&r.engine?(ms===null?'غير مرصود':Math.round(ms/1000)+' ثانية'):'غير متوفر في المحرك الأصلي'),
+   'آخر تقدم للصورة: '+(idle===null?'غير مرصود':Math.round(idle/1000)+' ثانية'),
+   'الإطارات: '+(Number.isFinite(frames)?frames:'غير متوفرة')+
+    ' • الساقطة: '+(Number.isFinite(drops)?drops:'غير متوفرة'),
+   'إعادة الاتصال: '+(st.recoveries||0)+' • أخطاء الفيديو: '+(st.errors||0),
+   'انتظار التخزين: '+(st.bufferEvents||0)+' مرة',
+   'النتيجة الأولية: '+assessment,
+   'ملاحظة: التقرير يستبعد بيانات الاشتراك والروابط؛ النتيجة تقديرية وليست تشخيصًا قطعيًا.'
+  ].join('\\n')
+ }
+ var diagnosticToggle=document.getElementById('player-diagnostic-toggle');
+ if(diagnosticToggle)diagnosticToggle.onclick=function(){
+  var panel=document.getElementById('player-diagnostic-panel');if(!panel)return;
+  panel.hidden=!panel.hidden;
+  diagnosticToggle.setAttribute('aria-expanded',String(!panel.hidden));
+  if(!panel.hidden){
+   panel.textContent=playbackDiagnosticSnapshot();
+   root.classList.remove('controls-hidden')
+  }
+ };
  var healthToggle=document.getElementById('player-health-toggle');
  var healthShortcut=document.getElementById('player-health-shortcut');
  if(healthShortcut)healthShortcut.onclick=function(){
