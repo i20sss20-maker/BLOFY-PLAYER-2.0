@@ -1503,7 +1503,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
   }catch(e){fail('تعذر فتح محرك الفيلم على هذا المتصفح')}
  })
 }
-function openPlayer(kind,id,extension,name,from){
+function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
  if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
  var explicitStart=from!==undefined&&from!==null&&from!=='';var initial=Math.max(0,Number(from)||0),isLive=kind==='live',prior=getResume(kind,id),resume=explicitStart?initial:(prior&&prior.position||0);
@@ -1521,7 +1521,10 @@ function openPlayer(kind,id,extension,name,from){
   }
  }
  rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};
- pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
+ if(replacePlayerHistory){
+  try{window.history.replaceState({blofyStreamWeb:true,depth:browserDepth,route:'player',
+   opts:{kind:kind,id:id,extension:ext,name:name,from:resume}},'',window.location.href)}catch(err){}
+ }else pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
  S.route='player';
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" '+(isLive?'controls':'')+' autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
@@ -2187,7 +2190,7 @@ function openPlayer(kind,id,extension,name,from){
   cleanupPlayer();S.playerView=null;S.route='episodes';
   var selectedId=String(targetEpisode.id),checkpoint=getResume('series',selectedId);
   openPlayer('series',selectedId,targetEpisode.container_extension||'mp4',
-   targetEpisode.title||'الحلقة '+(targetEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0);
+   targetEpisode.title||'الحلقة '+(targetEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0,true);
   S.previousBeforePlayer=previous;
  }
  var nextBtn=document.getElementById('player-next-episode'),previousBtn=document.getElementById('player-previous-episode');
