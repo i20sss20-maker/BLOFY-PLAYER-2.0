@@ -1530,6 +1530,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:stopUrl,hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;state.didResume=false;
  var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='وضع VOD • مدة كاملة';
+ var pathBadge=document.getElementById('player-source-mode');if(pathBadge){pathBadge.textContent='وضع توافق • إعادة ضغط';pathBadge.hidden=false}
  diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
@@ -1704,6 +1705,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  state.ready=false;stopPlayback(!sameSession);
  state.mode='vodhls';state.offset=at;state.didResume=true;
  var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='HLS مؤقت • مدة غير مؤكدة';
+ var pathBadge=document.getElementById('player-source-mode');if(pathBadge){pathBadge.textContent='وضع توافق • إعادة ضغط';pathBadge.hidden=false}
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
  S.play=rec;
  diagnose(kind,'vod_fallback','vodhls',0);
@@ -2217,6 +2219,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var firstReady=!state.ready;state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
   if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   if(firstReady)revealControls();
+  if(state.mode==='direct'){
+   var sourceLabel=document.getElementById('player-source-mode');
+   if(sourceLabel){sourceLabel.textContent='المصدر الأصلي • بدون تحويل';sourceLabel.hidden=false}
+  }
   acquireWakeLock();
   if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30){
    // Checkpoints must not be clamped to a misleading 60-second native preview.
