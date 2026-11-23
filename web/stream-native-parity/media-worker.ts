@@ -1000,7 +1000,10 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
    hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
    sharedLive:{enabled:String(Bun.env.VIDAA_LIVE_SHARE_SAME_BEARER||'')==='1',
     groups:sharedLiveGroups.size,viewers:Array.from(sharedLiveGroups.values())
-     .reduce((sum,group)=>sum+group.viewers.size,0),maxPerGroup:MAX_SHARED_LIVE_VIEWERS}})
+     .reduce((sum,group)=>sum+group.viewers.size,0),
+    pending:Array.from(sharedLiveGroups.values())
+     .reduce((sum,group)=>sum+(group.pendingViewers?.size||0),0),
+    maxPerGroup:MAX_SHARED_LIVE_VIEWERS}})
  }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
