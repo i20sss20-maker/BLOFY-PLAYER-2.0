@@ -46,6 +46,7 @@ import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { collectXtreamTsFirstPackets } from './xtream-live-ts-first-packets.mjs';
 import { verifiedXtreamMediaContentType } from './xtream-media-response-type.mjs';
 import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
@@ -1593,6 +1594,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         };
         const first = await readChunk(15000);
         if (first.done || !first.value?.byteLength) throw new Error('upstream_empty_media');
+        // A source may split TS packets across HTTP reads. Gather at most
+        // 3s of the first two packets before validation so recovery remains
+        // available instead of failing open after a tiny first chunk.
+        if(kind==='live'){
+          first.value=await collectXtreamTsFirstPackets(first.value,readChunk);
+        }
         const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
         if(!inspection.valid)throw new Error(inspection.reason);
         // The app-only product promises that upstream Xtream URLs and
