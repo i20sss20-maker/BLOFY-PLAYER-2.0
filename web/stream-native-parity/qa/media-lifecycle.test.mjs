@@ -125,9 +125,17 @@ test('HD fallback keeps source dimensions without upscaling and has a bounded bi
  fakeEnv.VIDAA_LIVE_VIDEO_PROFILE='1080';
  const full=funcs.compatibleVideoArgs('live');
  assert.match(full[full.indexOf('-vf')+1],/min\(ih,1080\)/);
- assert.equal(full[full.indexOf('-maxrate')+1],'5800k');
+ assert.equal(full[full.indexOf('-maxrate')+1],'8500k');
  fakeEnv.VIDAA_LIVE_VIDEO_PROFILE='invalid';
  assert.equal(funcs.videoQualityProfile('live').name,'720');
+ assert.equal(funcs.videoQualityProfile('movie').name,'1080');
+ assert.equal(funcs.videoQualityProfile('series').name,'1080');
+ const vod=funcs.compatibleVideoArgs('movie');
+ assert.match(vod[vod.indexOf('-vf')+1],/min\(ih,1080\)/);
+ assert.equal(vod[vod.indexOf('-crf')+1],'18');
+ assert.equal(vod[vod.indexOf('-preset')+1],'veryfast');
+ assert.equal(vod[vod.indexOf('-tune')+1],'film');
+ assert.equal(args[args.indexOf('-tune')+1],'zerolatency');
  fakeEnv.VIDAA_VOD_VIDEO_PROFILE='480';
  assert.equal(funcs.videoQualityProfile('movie').name,'480');
 });
