@@ -2286,13 +2286,15 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  else{startWithMetadata(Math.round(resume))}
  S.playerView=state;
  if(isLive){
-  function switchChannel(step){
+  function liveItems(){
+   var listing=S.loaded[keyOf('live',S.cat.live)]||S.loaded['live:all'];
+   return listing&&Array.isArray(listing.items)?listing.items:[]
+  }
+  function selectFullscreenChannel(requestedId){
    if(S.route!=='player'||S.playerView!==state)return;
-   var listing=S.loaded[keyOf('live',S.cat.live)]||S.loaded['live:all'],items=listing&&listing.items||[];
-   if(!items.length){playerStatus('افتح قائمة القنوات أولًا ثم حاول التبديل.');return}
-   var current=-1;for(var i=0;i<items.length;i++)if(itemId(items[i],'live')===String(id)){current=i;break}
-   if(current<0){playerStatus('القناة ليست ضمن القائمة الحالية؛ ارجع لاختيار قناة.');return}
-   var next=items[(current+step+items.length)%items.length],newId=itemId(next,'live');
+   var items=liveItems(),next=items.find(function(item){return itemId(item,'live')===String(requestedId)});
+   if(!next){playerStatus('هذه القناة ليست في القائمة المحمّلة؛ ارجع للقائمة لعرض المزيد.');return}
+   var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
    if(state.refreshFavoriteButton)state.refreshFavoriteButton();
@@ -2300,8 +2302,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
    playerStatus('جار التبديل إلى '+state.name+'…');
-   // Coalesce rapid remote button repeats into one source connection.
-   // Do not open a new FFmpeg session for every keydown.
    if(state.channelSwitchTimer)clearTimeout(state.channelSwitchTimer);
    state.channelSwitchTimer=setTimeout(function(){
     state.channelSwitchTimer=null;
@@ -2310,7 +2310,54 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     if(state.refreshLiveGuide)state.refreshLiveGuide()
    },260)
   }
+  function switchChannel(step){
+   var items=liveItems(),current=items.findIndex(function(item){return itemId(item,'live')===String(id)});
+   if(current<0||!items.length){playerStatus('افتح قائمة القنوات أولًا ثم حاول التبديل.');return}
+   selectFullscreenChannel(itemId(items[(current+step+items.length)%items.length],'live'))
+  }
+  function closeLiveChannels(){
+   var panel=document.getElementById('player-channel-panel');
+   if(panel)panel.hidden=true;
+   var toggle=document.getElementById('player-channels-toggle');
+   if(toggle)toggle.setAttribute('aria-expanded','false')
+  }
+  function openLiveChannels(){
+   if(S.route!=='player'||S.playerView!==state)return;
+   var panel=document.getElementById('player-channel-panel'),items=liveItems();
+   if(!panel)return;
+   var chosen=String(id);
+   panel.innerHTML='<div class="native-channel-heading"><strong>القنوات</strong>'+
+    '<button class="native-channel-close" id="player-channel-close" type="button">✕ إغلاق</button></div>'+
+    '<div class="native-channel-items">'+(items.length?items.slice(0,150).map(function(ch){
+     var cid=itemId(ch,'live'),selected=cid===chosen;
+     return '<button class="native-channel-item'+(selected?' selected':'')+'" data-player-channel="'+esc(cid)+'">'+
+      (art(ch)?safeImg(ch,'native-channel-art'):'<span class="native-channel-art native-channel-empty">◉</span>')+
+      '<span>'+esc(title(ch))+'</span>'+(selected?'<span class="native-channel-now">يعمل الآن</span>':'')+'</button>'
+    }).join(''):'<div class="info">لا توجد قنوات محمّلة في هذا التصنيف.</div>')+'</div>'+
+    (items.length>150?'<p class="small muted">لعرض بقية القنوات، افتح القائمة الرئيسية.</p>':'');
+   panel.hidden=false;
+   var toggle=document.getElementById('player-channels-toggle');if(toggle)toggle.setAttribute('aria-expanded','true');
+   var root=document.getElementById('player-root');if(root)root.classList.remove('controls-hidden');
+   var close=document.getElementById('player-channel-close');
+   if(close)close.onclick=function(){closeLiveChannels();if(video)video.focus()};
+   Array.prototype.forEach.call(panel.querySelectorAll('[data-player-channel]'),function(button){
+    button.onclick=function(){
+     selectFullscreenChannel(button.getAttribute('data-player-channel'));
+     closeLiveChannels();
+     if(video)video.focus()
+    }
+   });
+   var selectedButton=panel.querySelector('.native-channel-item.selected')||panel.querySelector('.native-channel-item');
+   if(selectedButton){selectedButton.focus();selectedButton.scrollIntoView({block:'nearest'})}
+  }
   state.switchChannel=switchChannel;
+  state.openChannels=openLiveChannels;
+  state.closeChannels=closeLiveChannels;
+  var channelToggle=document.getElementById('player-channels-toggle');
+  if(channelToggle)channelToggle.onclick=function(){
+   var panel=document.getElementById('player-channel-panel');
+   if(panel&&!panel.hidden)closeLiveChannels();else openLiveChannels()
+  };
   var previousChannel=document.getElementById('player-channel-prev'),nextChannel=document.getElementById('player-channel-next');
   if(previousChannel)previousChannel.onclick=function(){switchChannel(-1)};
   if(nextChannel)nextChannel.onclick=function(){switchChannel(1)};
