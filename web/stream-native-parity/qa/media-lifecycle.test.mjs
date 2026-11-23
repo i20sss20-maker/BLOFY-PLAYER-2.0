@@ -178,6 +178,33 @@ test('rapid upstream EOF uses bounded HMAC-keyed cooldown; unrelated channels st
  assert.equal(api.liveSourceRetryMs('synthetic-299',t+240051),0,'origin record expires after two minutes');
 });
 
+test('temporary live origin failures emit bounded HTTP retry hints and gradual web-player recovery',async()=>{
+ const begin=source.indexOf('function hlsError('),end=source.indexOf('\n/* An FFmpeg pipe',begin);
+ assert.ok(begin>0&&end>begin);
+ const err=vm.runInNewContext(source.slice(begin,end)+';\nhlsError',
+  {Response,json:(status,value)=>({status,value})});
+ const response=err(503,'hls_origin_backoff',8);
+ assert.equal(response.status,503);
+ assert.equal(response.headers.get('retry-after'),'8');
+ assert.equal(response.headers.get('cache-control'),'no-store, private');
+ assert.deepEqual(await response.json(),{ok:false,error:'hls_origin_backoff',retryAfterSeconds:8});
+ const normal=err(404,'hls_session_missing');
+ assert.equal(normal.status,404);
+ assert.equal(normal.value.error,'hls_session_missing');
+ const helperStart=playerSource.indexOf('function liveOriginRetryMs('),
+  helperEnd=playerSource.indexOf('\nfunction liveCapacityRetryMs(',helperStart);
+ assert.ok(helperStart>0&&helperEnd>helperStart);
+ const retry=vm.runInNewContext(playerSource.slice(helperStart,helperEnd)+';\nliveOriginRetryMs',{});
+ assert.equal(retry(1),2400);
+ assert.equal(retry(2),4100);
+ assert.equal(retry(5),16800);
+ assert.equal(retry(100),16800,'player origin recovery cannot retry too fast or grow without a limit');
+ assert.match(playerSource,/clearTimeout\(old\.originTimer\)/,'channel change cancels pending origin retry');
+ assert.match(playerSource,/record\.originRetries=0/,'a successful media fragment resets source failure history');
+ assert.match(serverSource,/headers\['Retry-After'\]=String\(retrySeconds\)/,
+  'proxy must preserve worker retry hint without leaking untrusted response headers');
+});
+
 test('worker identifies stale live manifests but never expires VOD or healthy live files',()=>{
  const begin=source.indexOf('function staleLiveManifest(');
  const end=source.indexOf('\n/**',begin);
