@@ -1305,8 +1305,9 @@ function playerStatus(message,error){
 }
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
- var compat=!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
- var key=kind+'/'+id+'/'+extension+'/'+track+(compat?'/compat':''),
+ var ultra=!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
+ var compat=ultra||!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
+ var key=kind+'/'+id+'/'+extension+'/'+track+(ultra?'/ultra':compat?'/compat':''),
      manifest='/api/hls/'+key+'/index.m3u8';
  // An existing session with the same key must stop BEFORE the replacement
  // starts. A delayed stop otherwise kills the newly opened channel on VIDAA.
@@ -1334,7 +1335,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  stopPlayback(true);
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
-  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0,compat:compat};
+  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0,compat:compat,ultra:ultra};
  S.play=record;
  if(preview){
   record.qualityListener=function(){
@@ -1342,7 +1343,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    var label=document.getElementById('live-preview-quality');
    if(!label)return;
    var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
-   label.textContent=w&&h?'الدقة المعروضة فعليًا: '+w+'×'+h+' • '+(h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD')+
+   label.textContent=w&&h?'الدقة المعروضة فعليًا: '+w+'×'+h+' • '+(h>=4300?'8K':h>=2100?'4K':h>=1400?'2K':h>=1000?'FHD':h>=690?'HD':'SD')+
     (record.sourceDimensions?' • المصدر '+record.sourceDimensions:''):
     'الدقة المعروضة: جار قراءة معلومات الفيديو…'
   };
@@ -1358,19 +1359,23 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
  function alive(){return S.play===record}
- function setCompatibility(force,automatic){
-  if(!alive()||kind!=='live'||compat===!!force)return false;
+ function setCompatibility(force,automatic,forceUltra){
+  var nextUltra=!!(force&&forceUltra);
+  if(!alive()||kind!=='live'||(compat===!!force&&ultra===nextUltra))return false;
   if(!S.hlsForceCompatibility)S.hlsForceCompatibility={};
-  S.hlsForceCompatibility[modeKey]=!!force;
-  status(automatic?'تعذر فك ترميز الفيديو الأصلي؛ جار تشغيل نسخة متوافقة…':
+  if(!S.hlsForceUltra)S.hlsForceUltra={};
+  S.hlsForceCompatibility[modeKey]=!!force&&!nextUltra;
+  S.hlsForceUltra[modeKey]=nextUltra;
+  status(automatic?'تعذر فك ترميز الوضع السابق؛ جار تشغيل توافق 1080p…':
+    nextUltra?'جار اختبار 4K من المصدر الحقيقي؛ الأداء يعتمد على الشاشة والاتصال…':
     force?'جار التحويل إلى تشغيل متوافق مع التلفزيون…':'جار العودة لجودة المصدر الأصلية…');
   playHls(video,kind,id,extension,track,statusElement,preview,0);
   return true
  }
  if(!preview&&S.playerView&&S.playerView.video===video){
-  S.playerView.setHlsCompatibility=function(force){
+  S.playerView.setHlsCompatibility=function(force,forceUltra){
    if(S.route==='player'&&S.playerView&&S.playerView.video===video)
-    setCompatibility(force,false)
+    setCompatibility(force,false,forceUltra)
   }
  }
  function recoverConnection(){
@@ -1417,6 +1422,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(!tag)return;
    if(info.mode==='source_copy'){
     tag.textContent='الفيديو الأصلي • بدون ضغط إضافي';tag.hidden=false
+   }else if(info.mode==='ultra_transcode'){
+    tag.textContent='4K تجريبي • إعادة ترميز حتى دقة المصدر';tag.hidden=false
    }else if(info.mode==='compatibility_transcode'){
     tag.textContent='وضع توافق • تحويل الصورة';tag.hidden=false
    }else tag.hidden=true
@@ -2062,15 +2069,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    hls:'بث مباشر',mpegts:'MPEG-TS'};
   var mode=modes[state.mode]||'جار تغيير المحرك',pending=state.pendingSeek;
   var liveVideoMode=isLive&&S.play&&S.play.video===video?S.play.videoMode:'';
-  var videoPath=isLive?(liveVideoMode==='source_copy'?'أصلي دون إعادة ترميز':liveVideoMode==='compatibility_transcode'?'توافق مع إعادة ترميز':'جار تحديد المسار'):'غير مطبق';
+  var videoPath=isLive?(liveVideoMode==='source_copy'?'أصلي دون إعادة ترميز':liveVideoMode==='ultra_transcode'?'تحويل 4K تجريبي':liveVideoMode==='compatibility_transcode'?'توافق مع إعادة ترميز':'جار تحديد المسار'):'غير مطبق';
   var width=Math.max(0,Number(video.videoWidth)||0),height=Math.max(0,Number(video.videoHeight)||0);
   var screenQuality=width&&height?(width+'×'+height+' (دقة الفيديو المعروضة)'):'بانتظار بيانات الدقة';
+  var sourceQuality=isLive&&S.play&&S.play.video===video?S.play.sourceDimensions||'غير محدد':'غير مطبق';
   var frames=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
   var dropped=frames&&Number.isFinite(frames.droppedVideoFrames)?frames.droppedVideoFrames:null;
   box.textContent='الدقة: '+screenQuality+
    ' | سرعة الصوت/الصورة: '+(Number(video.playbackRate)||1).toFixed(2)+'×'+
    (dropped===null?'':' | الإطارات المتساقطة: '+dropped)+
-   ' | مسار الفيديو: '+videoPath+' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
+   ' | دقة المصدر: '+sourceQuality+' | مسار الفيديو: '+videoPath+' | المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
    ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
    ' | التقديم: '+(st.seekReady||0)+' ناجح من '+(st.seekAttempts||0)+
    ' | مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+
@@ -2252,7 +2260,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var el=document.getElementById('player-resolution');
   if(!el)return;
   if(!w||!h){el.hidden=true;el.textContent='';return}
-  var grade=h>=2100?'4K':h>=1000?'FHD':h>=690?'HD':'SD';
+  var grade=h>=4300?'8K':h>=2100?'4K':h>=1400?'2K':h>=1000?'FHD':h>=690?'HD':'SD';
   // These are actual decoded pixels, not guessed from the Xtream title.
   var copyMode=!!(S.play&&S.play.video===video&&S.play.videoMode==='source_copy');
   var src=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
@@ -2715,13 +2723,21 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   // to the bounded compatible encoder when an older VIDAA decoder rejects it.
   if(isLive&&state.setHlsCompatibility){
    var modeKey='live:'+state.id+':ts:0';
-   var forced=!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
-   showPlayerChoices('جودة تشغيل البث',[
-    {name:'أصلي • بدون ضغط إضافي (عند دعم الجهاز)',selected:!forced,
+   var ultra=!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
+   var forced=ultra||!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
+   var source=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
+   var sourceH=source?Number(source.split('x')[1])||0:0;
+   var choices=[
+    {name:'جودة المصدر الأصلية • 4K/8K إذا توفرت ودعم الجهاز',selected:!forced,
      select:function(){state.setHlsCompatibility(false)}},
-    {name:'متوافق • تحويل الفيديو للتلفزيون (حتى 720p)',selected:forced,
+    {name:'توافق التلفزيون • حتى 1080p دون تكبير الصورة',selected:forced&&!ultra,
      select:function(){state.setHlsCompatibility(true)}}
-   ],this);
+   ];
+   if(sourceH>=2100){
+    choices.push({name:'تجربة 4K • تحويل حتى 2160p (محرك واحد، قد يكون أبطأ)',selected:ultra,
+     select:function(){state.setHlsCompatibility(true,true)}})
+   }
+   showPlayerChoices('جودة تشغيل البث • المصدر '+(source||'غير محدد'),choices,this);
    return
   }
   var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
