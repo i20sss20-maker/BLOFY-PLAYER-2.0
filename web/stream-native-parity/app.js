@@ -511,6 +511,7 @@ function recordPlaybackQuality(p){
   bufferingMs:Math.max(0,Math.min(3600000,Math.round(bufferMs))),
   seekAttempts:Math.max(0,Math.min(999,st.seekAttempts||0)),
   seekReady:Math.max(0,Math.min(999,st.seekReady||0)),
+  verifiedSeekFrames:Math.max(0,Math.min(999,st.verifiedSeekFrames||0)),
   seekTimeouts:Math.max(0,Math.min(999,st.seekTimeouts||0)),
   lastSeekMs:st.lastSeekMs!==null&&st.lastSeekMs!==undefined&&isFinite(Number(st.lastSeekMs))?Math.max(0,Math.min(120000,Number(st.lastSeekMs))):null,
   errors:Math.max(0,Math.min(99,st.errors||0)),
@@ -897,6 +898,7 @@ function settingsScreen(){
   ' • زمن الانتظار: '+Math.round((diag.bufferingMs||0)/1000)+' ث'+
   ' • طلبات التقديم: '+(diag.seekAttempts||0)+
   ' • التقديم الذي وصل للمكان المطلوب: '+(diag.seekReady||0)+
+  ' • منها تقديمات مؤكدة بالصورة: '+(diag.verifiedSeekFrames||0)+
   ' • حالات انتظار تجاوزت 30 ثانية: '+(diag.seekTimeouts||0)+
   ' • زمن آخر تقديم ناجح: '+(diag.lastSeekMs===null?'غير متوفر':(diag.lastSeekMs/1000).toFixed(1)+' ث')+
   ' • أخطاء الوسائط: '+(diag.errors||0)+'.';
@@ -1462,7 +1464,7 @@ function openPlayer(kind,id,extension,name,from){
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,
-    seekAttempts:0,seekReady:0,seekTimeouts:0,lastSeekMs:null}};
+    seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
  function renderPlayerHealth(){
   if(S.route!=='player'||S.playerView!==state)return;
   var box=document.getElementById('player-health-panel');
@@ -1476,6 +1478,7 @@ function openPlayer(kind,id,extension,name,from){
   box.textContent='المحرك: '+mode+' | بدء الصورة: '+(startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية')+
    ' | مرات الانتظار: '+(st.bufferEvents||0)+' | إجمالي الانتظار: '+Math.round(buffering/1000)+' ثانية'+
    ' | التقديم: '+(st.seekReady||0)+' ناجح من '+(st.seekAttempts||0)+
+   ' | مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+
    (pending?' | جار الوصول إلى '+formatTime(pending.target):'')+
    ' | أخطاء المشغل: '+(st.errors||0);
  }
@@ -1537,6 +1540,7 @@ function openPlayer(kind,id,extension,name,from){
   state.pendingSeek=null;
   state.seekIncomplete=false;
   state.stats.seekReady++;
+  if(pending.requireDecodedFrame&&pending.decodedFrame)state.stats.verifiedSeekFrames++;
   state.stats.lastSeekMs=Math.max(0,now-pending.startedAt);
   diagnose(kind,'vod_seek_ready',state.mode,0);
   // A seek within an already-buffered range may emit "seeked" without a
