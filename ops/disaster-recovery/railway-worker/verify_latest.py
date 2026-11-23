@@ -20,6 +20,8 @@ ARCHIVE_KEY = re.compile(
 )
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 SCHEMA = "blofy-dr-receipt-v1"
+VERIFIER_STATUS_KEY = "blofy-dr/status/latest-verifier-run.json"
+VERIFIER_STATUS_SCHEMA = "blofy-dr-verifier-status-v1"
 
 
 def inspect_latest_receipt(client, bucket, *, now=None, freshness_hours=8):
@@ -73,6 +75,27 @@ def inspect_latest_receipt(client, bucket, *, now=None, freshness_hours=8):
     }
 
 
+def persist_status(client, bucket, *, ok, code=None, result=None):
+    """Private durable audit marker. Never store credentials or archive keys."""
+    status = {
+        "schema": VERIFIER_STATUS_SCHEMA,
+        "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "ok": bool(ok),
+        "backup_verified": bool(ok),
+        "error_code": code if not ok else None,
+        "last_verified_at": result.get("last_verified_at") if ok else None,
+        "age_seconds": result.get("age_seconds") if ok else None,
+        "archive_present": result.get("archive_present") if ok else False,
+        "archive_metadata_verified": result.get("archive_metadata_verified") if ok else False,
+        "full_database_restore_verified": False,
+    }
+    client.put_object(
+        Bucket=bucket, Key=VERIFIER_STATUS_KEY,
+        Body=json.dumps(status, separators=(",", ":")).encode("utf-8"),
+        ContentType="application/json", CacheControl="no-store",
+    )
+
+
 def main():
     try:
         endpoint = os.environ["BLOFY_BACKUP_ENDPOINT"]
@@ -90,7 +113,12 @@ def main():
                           connect_timeout=10, read_timeout=30,
                           retries={"max_attempts": 3, "mode": "standard"})
         )
-        result = inspect_latest_receipt(client, bucket)
+        try:
+            result = inspect_latest_receipt(client, bucket)
+        except Exception as exc:
+            persist_status(client, bucket, ok=False, code=type(exc).__name__)
+            raise
+        persist_status(client, bucket, ok=True, result=result)
         print(json.dumps(result, separators=(",", ":")), flush=True)
     except Exception as exc:
         # Exception messages might include provider endpoint / secrets.
