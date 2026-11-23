@@ -1239,7 +1239,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   }
   try{
    var hls=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
-    maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:55000,manifestLoadingTimeOut:30000,
+    maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:68000,manifestLoadingTimeOut:30000,
     fragLoadingMaxRetry:2,manifestLoadingMaxRetry:2});
    rec.engine=hls;
    video.onloadedmetadata=function(){
