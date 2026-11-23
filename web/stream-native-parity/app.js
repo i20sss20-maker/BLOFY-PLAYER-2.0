@@ -2195,54 +2195,92 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
   else{state.ready=false;startVod(0)}
  };
+ // Android's audio, subtitles and quality controls open a choice list
+ // rather than silently cycling options or replacing their icon labels.
+ var choicePanel=document.createElement('section');
+ choicePanel.id='player-choice-panel';choicePanel.className='native-player-choice-panel';
+ choicePanel.hidden=true;choicePanel.setAttribute('role','dialog');choicePanel.setAttribute('aria-modal','true');
+ root.appendChild(choicePanel);
+ var choiceOrigin=null;
+ function closePlayerChoices(){
+  choicePanel.hidden=true;choicePanel.innerHTML='';
+  if(choiceOrigin&&choiceOrigin.isConnected)try{choiceOrigin.focus({preventScroll:true})}catch(err){choiceOrigin.focus()}
+ }
+ state.closePlayerChoices=closePlayerChoices;
+ function showPlayerChoices(heading,options,origin){
+  if(!options.length){playerStatus('المصدر الحالي لا يتيح خيارات '+heading+' إضافية.');return}
+  choiceOrigin=origin;
+  choicePanel.innerHTML='<div class="native-player-choice-card">'+
+   '<div class="native-player-choice-head"><strong>'+esc(heading)+'</strong><button type="button" id="player-choice-close" aria-label="إغلاق">✕</button></div>'+
+   '<div class="native-player-choice-items">'+options.map(function(option,index){
+    return '<button class="native-player-choice-item'+(option.selected?' selected':'')+'" type="button" data-choice-index="'+index+'">'+
+      (option.selected?'✓ ':'')+esc(option.name)+'</button>'
+   }).join('')+'</div></div>';
+  choicePanel.hidden=false;root.classList.remove('controls-hidden');
+  choicePanel.querySelector('#player-choice-close').onclick=closePlayerChoices;
+  Array.prototype.forEach.call(choicePanel.querySelectorAll('[data-choice-index]'),function(button){
+   button.onclick=function(){
+    var index=Number(button.getAttribute('data-choice-index')),option=options[index];
+    if(!option)return;
+    try{option.select()}catch(err){playerStatus('لم يتمكن المتصفح من تطبيق الخيار.')}
+    closePlayerChoices()
+   }
+  });
+  var chosen=choicePanel.querySelector('.native-player-choice-item.selected')||choicePanel.querySelector('.native-player-choice-item');
+  if(chosen)chosen.focus()
+ }
  document.getElementById('player-audio').onclick=function(){
-  var tracks=video.audioTracks,engine=S.play&&S.play.engine;
+  var engine=S.play&&S.play.engine,tracks=video.audioTracks,options=[];
   if(tracks&&tracks.length>1){
-   var current=-1;for(var a=0;a<tracks.length;a++)if(tracks[a].enabled){current=a;break}
-   var next=(current+1)%tracks.length;
-   for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===next;
-   playerStatus('تم اختيار المسار الصوتي '+(next+1));
-   this.title='المسار الصوتي '+(next+1);
-   return
+   for(var i=0;i<tracks.length;i++)(function(track,index){
+    options.push({name:track.label||track.language||('المسار الصوتي '+(index+1)),selected:!!track.enabled,
+     select:function(){for(var n=0;n<tracks.length;n++)tracks[n].enabled=n===index;playerStatus('تم اختيار المسار الصوتي '+(index+1))}})
+   })(tracks[i],i)
+  }else if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
+   var list=engine.audioTracks;
+   for(var j=0;j<list.length;j++)(function(track,index){
+    options.push({name:track.name||track.lang||('المسار الصوتي '+(index+1)),selected:engine.audioTrack===index,
+     select:function(){engine.audioTrack=index;playerStatus('تم اختيار المسار الصوتي '+(index+1))}})
+   })(list[j],j)
   }
-  if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
-   engine.audioTrack=(engine.audioTrack+1)%engine.audioTracks.length;
-   this.title='المسار الصوتي '+(engine.audioTrack+1);playerStatus('تم تغيير مسار الصوت');
-   return
-  }
-  this.title='المسار الصوتي الافتراضي';
-  playerStatus('هذا المصدر لا يعرض مسارات صوتية إضافية في المتصفح.')
+  showPlayerChoices('المسارات الصوتية',options,this)
  };
  var subtitleButton=document.getElementById('player-subtitles');
  if(subtitleButton)subtitleButton.onclick=function(){
-  var all=video.textTracks,native=[],engine=S.play&&S.play.engine;
-  if(all&&all.length){
-   for(var i=0;i<all.length;i++)if(all[i].kind==='subtitles'||all[i].kind==='captions')native.push(all[i])
+  var engine=S.play&&S.play.engine,list=[],native=video.textTracks;
+  if(native&&native.length){
+   for(var i=0;i<native.length;i++)if(native[i].kind==='subtitles'||native[i].kind==='captions')list.push(native[i]);
   }
-  if(native.length){
-   var current=-1;
-   for(var j=0;j<native.length;j++)if(native[j].mode==='showing'){current=j;break}
-   var next=current+1<native.length?current+1:-1;
-   for(var k=0;k<native.length;k++)native[k].mode=k===next?'showing':'disabled';
-   var label=next<0?'إيقاف':String(native[next].label||native[next].language||('مسار '+(next+1))).slice(0,26);
-   this.title='الترجمة: '+label;
-   playerStatus(next<0?'تم إيقاف الترجمة':'الترجمة: '+label);
-   return
+  var options=[];
+  if(list.length){
+   options.push({name:'إيقاف الترجمة',selected:list.every(function(track){return track.mode!=='showing'}),
+    select:function(){for(var n=0;n<list.length;n++)list[n].mode='disabled';playerStatus('تم إيقاف الترجمة')}})
+   for(var j=0;j<list.length;j++)(function(track,index){
+    options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
+     select:function(){for(var n=0;n<list.length;n++)list[n].mode=n===index?'showing':'disabled';playerStatus('تم اختيار الترجمة')}})
+   })(list[j],j)
+  }else if(engine&&engine.subtitleTracks&&engine.subtitleTracks.length){
+   var subs=engine.subtitleTracks;
+   options.push({name:'إيقاف الترجمة',selected:engine.subtitleTrack===-1,
+    select:function(){engine.subtitleDisplay=false;engine.subtitleTrack=-1;playerStatus('تم إيقاف الترجمة')}})
+   for(var k=0;k<subs.length;k++)(function(track,index){
+    options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index,
+     select:function(){engine.subtitleDisplay=true;engine.subtitleTrack=index;playerStatus('تم اختيار الترجمة')}})
+   })(subs[k],k)
   }
-  if(engine&&engine.subtitleTracks&&engine.subtitleTracks.length){
-   var tracks=engine.subtitleTracks;
-   var current=Number(engine.subtitleTrack);
-   var next=isFinite(current)&&current>=0?current+1:0;
-   if(next>=tracks.length)next=-1;
-   engine.subtitleDisplay=next>=0;
-   engine.subtitleTrack=next;
-   var label=next<0?'إيقاف':String(tracks[next].name||tracks[next].lang||('مسار '+(next+1))).slice(0,26);
-   this.title='الترجمة: '+label;
-   playerStatus(next<0?'تم إيقاف الترجمة':'الترجمة: '+label);
-   return
-  }
-  this.title='الترجمة غير متوفرة';
-  playerStatus('المصدر الحالي لا يعرض مسارات ترجمة. لا تتوفر ترجمة تلقائية.')
+  showPlayerChoices('الترجمة',options,this)
+ };
+ if(qualityButton)qualityButton.onclick=function(){
+  var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
+  if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو تلقائيًا ولا يتيح دقات متعددة.');return}
+  var options=[{name:'تلقائي',selected:Number(engine.currentLevel)<0,
+   select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
+  for(var i=0;i<levels.length;i++)(function(level,index){
+   var name=level.height?level.height+'p':('الجودة '+(index+1));
+   options.push({name:name,selected:engine.currentLevel===index,
+    select:function(){engine.currentLevel=index;playerStatus('جودة '+name)}})
+  })(levels[i],i);
+  showPlayerChoices('جودة الفيديو',options,this)
  };
  var speeds=[1,1.25,1.5,2,0.75],speedBtn=document.getElementById('player-speed');
  if(speedBtn)speedBtn.onclick=function(){
