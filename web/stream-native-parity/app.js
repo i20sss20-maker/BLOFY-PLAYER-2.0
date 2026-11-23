@@ -1649,17 +1649,21 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    // actual decoded frames remain frozen, the report can flag a TV decoder
    // problem instead of blaming Railway or the subscriber's source.
    engine.on(window.Hls.Events.FRAG_LOADED,function(){
-    if(alive())record.lastFragmentAt=Date.now()
+    if(alive()){
+     record.lastFragmentAt=Date.now();
+     record.capacityRetries=0
+    }
    });
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
     diagnose('live','hls_error','video',0);
     var code=Number(detail.response&&detail.response.code)||0;
     if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
-    if(code===429&&record.capacityRetries<5){
+    if(code===429){
      // Only two worker slots exist on the pilot. Back off instead of
      // burning connection attempts, which could cut off healthy viewers.
      record.capacityRetries=(record.capacityRetries||0)+1;
+     if(record.capacityRetries>5){recoverConnection();return}
      var delay=liveCapacityRetryMs(record.capacityRetries);
      status('المحرك مشغول مؤقتًا؛ إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');
      if(record.capacityTimer)clearTimeout(record.capacityTimer);
