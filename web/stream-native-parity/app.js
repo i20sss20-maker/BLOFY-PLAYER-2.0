@@ -1036,7 +1036,8 @@ function stopPlayback(sendStop){
  try{
   if(old.timer)clearTimeout(old.timer);
   if(old.stallTimer)clearTimeout(old.stallTimer);
-  if(old.startupTimer)clearTimeout(old.startupTimer)
+  if(old.startupTimer)clearTimeout(old.startupTimer);
+  if(old.stableTimer)clearTimeout(old.stableTimer)
  }catch(e){}
  if(old.engine){try{old.engine.destroy()}catch(e){}}
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
@@ -1081,21 +1082,71 @@ function playerStatus(message,error){
   }
  }
 }
-function playHls(video,kind,id,extension,track,statusElement,preview){
+function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
+ var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8';
+ // An existing session with the same key must stop BEFORE the replacement
+ // starts. A delayed stop otherwise kills the newly opened channel on VIDAA.
+ if(S.play&&S.play.hlsKey===key){
+  var token=(S.hlsStopEpoch||0)+1;S.hlsStopEpoch=token;
+  stopPlayback(false);
+  if(statusElement)statusElement.textContent='جار إعادة تهيئة اتصال القناة…';
+  var settled=false,timer=setTimeout(function(){finish(0)},5500);
+  function finish(status){
+   if(settled)return;settled=true;clearTimeout(timer);
+   if(S.hlsStopEpoch!==token||!video.isConnected||!S.userVerified)return;
+   if(preview&&S.livePreview!==String(id))return;
+   if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)))return;
+   if(status!==200&&status!==404){
+    if(!preview)playerStatus('لم يؤكد الخادم إغلاق البث السابق. اضغط إعادة المحاولة.',true);
+    else if(statusElement)statusElement.textContent='تعذر تحديث الاتصال، حاول ثانية.';
+    return
+   }
+   playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt)
+  }
+  api('POST','/api/hls/'+key+'/stop',{},function(st){finish(st)});
+  return
+ }
  stopPlayback(true);
- var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8',record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,retries:0,ready:false,started:Date.now()};
+ var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
+  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),stallChecks:0};
  S.play=record;
  video.muted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=!!preview;
  function alive(){return S.play===record}
+ function recoverConnection(){
+  if(!alive()||record.reconnecting||preview)return;
+  var state=S.playerView;
+  if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
+  record.reconnecting=true;
+  if(record.startupTimer)clearTimeout(record.startupTimer);
+  if(record.stallTimer)clearTimeout(record.stallTimer);
+  if(record.stableTimer)clearTimeout(record.stableTimer);
+  if(record.recoveryAttempt>=2){
+   playerStatus('انقطع البث بعد محاولات الاستعادة. اضغط إعادة المحاولة أو غيّر القناة.',true);
+   return
+  }
+  playerStatus('جار استعادة القناة بعد انقطاع مؤقت… ('+(record.recoveryAttempt+1)+'/2)');
+  playHls(video,kind,id,extension,track,statusElement,false,record.recoveryAttempt+1)
+ }
+ record.startupTimer=setTimeout(function(){
+  record.startupTimer=null;
+  if(!alive()||record.ready||video.paused)return;
+  recoverConnection()
+ },50000);
  function status(text){if(!alive())return;
   if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
   else playerStatus(text)
  }
- video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)playerStatus('فشل التشغيل بتنسيق HLS. تأكد من اتصالك أو جرّب مصدر MP4 قابل للتقديم.',true)}};
+ video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)recoverConnection()}};
  video.onplaying=function(){
   if(!alive())return;
-  record.ready=true;record.retries=0;
+  record.ready=true;record.retries=0;record.stallChecks=0;
+  if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
   if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+  if(record.stableTimer)clearTimeout(record.stableTimer);
+  record.stableTimer=setTimeout(function(){
+   record.stableTimer=null;
+   if(alive()&&record.ready&&video.readyState>=2)record.recoveryAttempt=0
+  },120000);
   status(preview?'● المعاينة تعمل':'● تشغيل البث');
   if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
    var state=S.playerView;state.ready=true;
@@ -1111,7 +1162,13 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
   record.stallTimer=setTimeout(function(){
    record.stallTimer=null;
    if(!alive()||video.paused||video.readyState>=3)return;
+   record.stallChecks++;
+   if(record.stallChecks>=3){recoverConnection();return}
    if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
+   record.stallTimer=setTimeout(function(){
+    record.stallTimer=null;
+    if(alive()&&!video.paused&&video.readyState<3)recoverConnection()
+   },14000)
   },8500)
  };
  if(shouldUseNativeHls(video)){
@@ -1138,7 +1195,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
     if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
      record.retries++;status('جار إعادة تهيئة الفيديو…');try{engine.recoverMediaError()}catch(e){};return;
     }
-    status('تعذر استمرار البث: '+String(detail.details||detail.type).slice(0,55))
+    recoverConnection()
    });
    engine.attachMedia(video);engine.loadSource(manifest)
   }catch(e){status('تعذر إعداد مشغّل HLS')}
