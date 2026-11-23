@@ -1057,10 +1057,21 @@ function shouldUseNativeHls(video){
 function loadHls(done){
  if(window.Hls){done(true);return}
  if(S.hlsState==='loading'){S.hlsCallbacks.push(done);return}
- if(S.hlsState==='error'){done(false);return}
- S.hlsState='loading';S.hlsCallbacks=[done];var script=document.createElement('script');script.src='/vendor/hls.min.js';
- script.onload=function(){S.hlsState=window.Hls?'ready':'error';var a=S.hlsCallbacks;S.hlsCallbacks=[];for(var i=0;i<a.length;i++)a[i](!!window.Hls)};
- script.onerror=function(){S.hlsState='error';var a=S.hlsCallbacks;S.hlsCallbacks=[];for(var i=0;i<a.length;i++)a[i](false)};
+ // A transient failed JS request must not permanently disable HLS after
+ // Wi-Fi recovers. Keep retries bounded: one script request per user attempt.
+ S.hlsState='loading';S.hlsCallbacks=[done];
+ var script=document.createElement('script'),settled=false;
+ script.src='/vendor/hls.min.js';
+ function finish(ok){
+  if(settled)return;settled=true;clearTimeout(timer);
+  S.hlsState=ok?'ready':'error';
+  var callbacks=S.hlsCallbacks||[];S.hlsCallbacks=[];
+  for(var i=0;i<callbacks.length;i++)callbacks[i](ok)
+  if(!ok){script.onload=null;script.onerror=null;if(script.parentNode)script.parentNode.removeChild(script)}
+ }
+ var timer=setTimeout(function(){finish(!!window.Hls)},16000);
+ script.onload=function(){finish(!!window.Hls)};
+ script.onerror=function(){finish(false)};
  document.head.appendChild(script)
 }
 function stopPlayback(sendStop){
