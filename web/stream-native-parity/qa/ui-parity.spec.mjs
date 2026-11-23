@@ -269,7 +269,8 @@ test('native live dock matches Android controls, favors channels and surfs witho
  await expect(page.locator('#player-root')).toBeVisible();
  await expect(page.locator('#player-title-text')).toHaveText('قناة اختبار');
  await expect(page.locator('#player-mute')).toHaveCount(0);
- await expect(page.locator('.native-player-dock .native-player-control')).toHaveCount(7);
+ await expect(page.locator('.native-player-dock .native-player-control')).toHaveCount(8);
+ await expect(page.locator('#player-health-shortcut')).toBeVisible();
  await expect(page.locator('#player-audio')).toBeVisible();
  await expect(page.locator('#player-subtitles')).toBeVisible();
  await expect(page.locator('#player-quality')).toBeVisible();
