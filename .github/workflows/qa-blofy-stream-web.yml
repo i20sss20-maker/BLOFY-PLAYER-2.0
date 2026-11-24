@@ -29,9 +29,19 @@ jobs:
       - run: cd web/stream-native-parity && npm install --no-audit --no-fund
       - name: Verify long-running HLS sessions and safe worker idle expiry
         run: cd web/stream-native-parity && node --test qa/media-lifecycle.test.mjs
-      - run: cd web/stream-native-parity && npx playwright install --with-deps chromium
-      - name: Install full Google Chrome for H.264/AAC codec verification
-        run: cd web/stream-native-parity && npx playwright install chrome
+      # Browser tests explicitly use channel: chrome. Installing Chromium as
+      # well needlessly downloads a second browser and apt packages, and can
+      # block the only UI release gate during installer network outages.
+      - name: Verify installed Google Chrome or install Chrome only
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --version
+          elif command -v google-chrome-stable >/dev/null 2>&1; then
+            google-chrome-stable --version
+          else
+            cd web/stream-native-parity
+            npx playwright install --with-deps chrome
+          fi
       - name: Install FFmpeg only if absent from the runner
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
