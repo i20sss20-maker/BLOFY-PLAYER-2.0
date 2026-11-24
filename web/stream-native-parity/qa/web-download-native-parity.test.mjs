@@ -16,7 +16,7 @@ test('do not treat login pages or provider denials as downloadable media',()=>{
  for(const type of ['text/html','application/json','application/vnd.apple.mpegurl'])
   assert.equal(downloadableResponse(200,type),false);
  assert.equal(downloadableResponse(200,'video/mp4'),true);
- assert.equal(downloadableResponse(206,'application/octet-stream'),true);
+ assert.equal(downloadableResponse(206,'application/octet-stream'),false);
  assert.equal(downloadableResponse(302,'video/mp4'),false);
 });
 test('download pipeline remains authenticated, capped, disabled by default and does not touch LIVE',()=>{
