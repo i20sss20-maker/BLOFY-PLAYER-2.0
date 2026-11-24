@@ -206,6 +206,15 @@ open class PlayerActivity : ContentAccessActivity() {
         }
 
         currentContentKey = savedInstanceState?.getString(EXTRA_CONTENT_KEY) ?: intent.getStringExtra(EXTRA_CONTENT_KEY).orEmpty()
+        if (tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(providerId)) {
+            val uri = android.net.Uri.parse(url)
+            if (uri.scheme !in setOf("https","file") ||
+                (uri.scheme == "file" && !tv.blofy.player.ui.library.NativeExternalDownloadQueue
+                    .isReadyFile(applicationContext,providerId,currentContentKey,uri))) {
+                finish()
+                return
+            }
+        }
         currentStreamId = savedInstanceState?.getString(EXTRA_STREAM_ID) ?: intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
         currentTitle = savedInstanceState?.getString(EXTRA_TITLE) ?: intent.getStringExtra(EXTRA_TITLE).orEmpty()
         currentSeason = savedInstanceState?.getInt(EXTRA_SEASON) ?: intent.getIntExtra(EXTRA_SEASON, 0)
