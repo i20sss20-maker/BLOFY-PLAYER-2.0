@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 
 const code=readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
-const start=code.indexOf('function playbackNoticeProgress(');
+const start=code.indexOf('function activePlaybackNoticeRecord(');
 const end=code.indexOf('function playerStatus(message,error){',start);
 assert.ok(start>0&&end>start,'real video notice controller must exist');
 const helpers=code.slice(start,end);
@@ -29,7 +29,7 @@ function runtime(mode='loading'){
  const context={S,document:doc,Number,Math,Date,
   playerStatus:(message)=>{calls++;events.push(message);status.style.display=message?'block':'none';
    status.textContent=message;retry.style.display='none'}};
- const funcs=vm.runInNewContext(helpers+';({playbackNoticeProgress,playbackNoticeSample,dismissRecoveredPlaybackNotice})',context);
+ const funcs=vm.runInNewContext(helpers+';({activePlaybackNoticeRecord,playbackNoticeProgress,playbackNoticeSample,dismissRecoveredPlaybackNotice})',context);
  return {funcs,state,video,status,retry,S,doc,setFrames:n=>frames=n,
   setTime:n=>mediaTime=n,setQualityEnabled:b=>qualityEnabled=b,events:()=>events,calls:()=>calls}
 }
@@ -102,7 +102,7 @@ test('buffer notices are delayed for both VOD engines and cleaned on stop',()=>{
  assert.match(fallback,/video\.readyState<3\)playerStatus\('جار تحميل المقطع التالي من الفيلم…'\)/);
  const stop=code.slice(code.indexOf('function stopPlayback('),code.indexOf('function cleanupPlayer('));
  assert.match(stop,/old\.bufferNoticeTimer\)clearTimeout\(old\.bufferNoticeTimer\)/);
- const cleanup=code.slice(code.indexOf('function cleanupPlayer('),code.indexOf('function playbackNoticeProgress('));
+ const cleanup=code.slice(code.indexOf('function cleanupPlayer('),code.indexOf('function activePlaybackNoticeRecord('));
  assert.match(cleanup,/noticeObserverTimer\)\{clearInterval/);
  assert.match(cleanup,/noticeFrameRepeatTimer\)\{clearTimeout/);
  assert.match(cleanup,/cancelVideoFrameCallback\(S\.playerView\.noticeFrameId\)/);
@@ -120,7 +120,18 @@ test('real fullscreen overlay layer is bounded and hidden when playback resumes'
  assert.match(code,/modeBadge\.textContent='MP4 • تشغيل مباشر'/,
   'temporary MP4 inspection label changes once real frames appear');
  const status=code.slice(code.indexOf('function playerStatus(message,error){'),code.indexOf('/* A VIDAA decoder',code.indexOf('function playerStatus(message,error){')));
- assert.match(status,/state\.noticeLastProgressRecord===S\.play/);
+ assert.match(status,/state\.noticeLastProgressRecord===activePlaybackNoticeRecord\(state\)/);
  assert.match(status,/state\.noticeRecoveryFrames=0/);
  assert.doesNotMatch(helpers,/\/api\//,'the observer never opens a second upstream session');
+});
+
+
+test('direct MP4 without a media-worker record clears stale movie text on decoded video',()=>{
+ const x=runtime();x.S.play=null;x.state.mode='direct';
+ assert.ok(x.funcs.activePlaybackNoticeRecord(x.state),
+  'direct MP4 uses a local identity, not a second media session');
+ x.setFrames(1);x.funcs.dismissRecoveredPlaybackNotice(x.state,1000);
+ x.setFrames(4);assert.equal(x.funcs.dismissRecoveredPlaybackNotice(x.state,1900),true);
+ assert.equal(x.status.style.display,'none');
+ assert.equal(x.S.play,null,'no HLS producer was created')
 });
