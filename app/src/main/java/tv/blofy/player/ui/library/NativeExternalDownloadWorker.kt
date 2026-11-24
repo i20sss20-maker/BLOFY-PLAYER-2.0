@@ -125,7 +125,8 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
 
 internal object NativeExternalDownloadQueue {
     fun validRoute(provider: String, kind: String, route: String, extension: String): Boolean {
-        if (!NativeExternalMediaTransport.isExternal(provider)) return false
+        if (!NativeExternalMediaTransport.isExternal(provider) || kind !in setOf("movie","episode") ||
+            extension !in OfflineDownloadPolicy.progressiveFormats) return false
         val uri = route.toHttpUrlOrNull() ?: return false
         val parts = uri.pathSegments
         if (parts.size != 4 || parts[0] != "native" || parts[1] != provider ||
@@ -133,6 +134,18 @@ internal object NativeExternalDownloadQueue {
         val remote = parts[3].substringBeforeLast('.')
         return runCatching {
             NativeExternalMediaTransport.route(provider,parts[2],remote,extension) == route
+        }.getOrDefault(false)
+    }
+
+    fun isReadyFile(context: Context,provider: String,contentKey: String,uri: Uri): Boolean {
+        if (!NativeExternalCatalogSession.qaEnabled(context) ||
+            tv.blofy.player.core.identity.StreamCodeSession.isClaimed(context) ||
+            ExternalStreamConnectStore.loadStaged(context)?.providerId != provider) return false
+        val record = OfflineDownloadStore.find(context,contentKey) ?: return false
+        if (record.providerId != provider || record.workerId == null || uri.scheme != "file") return false
+        return runCatching {
+            val file = file(context,UUID.fromString(record.workerId),record.extension)
+            file.isFile && file.length()>0 && Uri.fromFile(file) == uri
         }.getOrDefault(false)
     }
 
