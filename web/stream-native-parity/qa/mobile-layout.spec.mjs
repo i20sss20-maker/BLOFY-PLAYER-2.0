@@ -114,8 +114,9 @@ test('320px phone preserves narrow toolbar, bottom controls and avoids document 
  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth+1);
  await page.locator('[data-go="live"]').first().click();
  await expect(page.locator('.catalog-app .mobile-catalog-nav .rail')).toBeVisible();
- const buttons=await page.locator('.catalog-app .toolbar .btn').evaluateAll(els=>
+ const buttons=await page.locator('.catalog-app .toolbar .btn:visible').evaluateAll(els=>
   els.map(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height})));
+ expect(buttons.length).toBeGreaterThanOrEqual(2);
  expect(buttons.every(x=>x.width>0&&x.height>=42)).toBe(true);
  overflow=await noHorizontalOverflow(page);
  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth+1);
