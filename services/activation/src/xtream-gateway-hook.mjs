@@ -2757,7 +2757,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             },
             connectExists:code=>pairing.exists(code),
             redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true}),
-            redeemConnect:code=>pairing.redeem({code})
+            redeemConnect:(code,deviceKey)=>pairing.redeem({code,deviceKey})
           });
           const input=await readJson(req);
           return json(res,201,await redeem({code:input.code,deviceKey:input.deviceKey,origin:xtreamOrigin(req)}),headers);
