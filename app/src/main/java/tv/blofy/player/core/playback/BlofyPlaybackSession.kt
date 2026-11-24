@@ -453,14 +453,23 @@ class BlofyPlaybackSession(
 }
 
 @OptIn(markerClass = [UnstableApi::class])
-private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer {
+private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer =
+    createPlaybackPlayerWithTransport(context, TransportFactory.create(context, profile))
+
+/** Use the same renderers, FFmpeg preference and device-aware buffer policy for an
+ * isolated external provider transport without first-party authorization or caching. */
+@OptIn(markerClass = [UnstableApi::class])
+internal fun createPlaybackPlayerWithTransport(
+    context: Context,
+    transport: androidx.media3.datasource.DataSource.Factory
+): ExoPlayer {
     val builder = ExoPlayer.Builder(context)
         .setRenderersFactory(
             DefaultRenderersFactory(context)
                 .setEnableDecoderFallback(true)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         )
-        .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(context, profile)))
+        .setMediaSourceFactory(DefaultMediaSourceFactory(transport))
     if (BuildConfig.CODE_ONLY_LOGIN) {
         val device = StreamDeviceCompatibility.current(context)
         builder.setLoadControl(DefaultLoadControl.Builder()
