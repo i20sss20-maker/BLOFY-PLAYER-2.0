@@ -1696,31 +1696,45 @@ function livePlaybackProgress(record,video,now){
  // callback is stronger evidence even on older TVs that omit dimensions.
  var visualProgress=record.framePresentationObserved?advancedPresented:
   pictureDimensions&&(frameCounterUsable?advancedFrames:(advancedTime||advancedFrames));
+ // After browser suspension a 2-second observer might resume minutes later.
+ // Do not charge idle tab time as a video freeze or force an instant recovery.
+ if(record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000){
+  record.lastProgressAt=now;record.visualProgressSeen=false;
+  record.visualOutageReported=false
+ }
+ record.lastVisualSampleAt=now;
  if(record.framePresentationObserved)record.lastSampledPresentationAt=record.lastPresentedFrameAt;
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
  if(visualProgress){
-  // Report visual outages only after an earlier verified picture, not cold
-  // startup. This is a local sample-based estimate; no new fetch or telemetry.
-  // A switched HLS engine has a new record, so do not bridge engine lifetimes.
-  if(record.visualProgressSeen&&record.ready&&typeof S!=='undefined'&&S.route==='player'&&S.playerView&&
-     S.playerView.kind==='live'&&S.playerView.video===video&&
-     !video.paused&&!video.seeking&&!document.hidden){
-   var visualGap=Math.max(0,now-(record.lastProgressAt||now));
-   if(visualGap>=6500){
-    var visualStats=S.playerView.stats;
-    if(visualStats){
-     visualStats.visualOutageCount=(visualStats.visualOutageCount||0)+1;
-     visualStats.visualOutageMs=(visualStats.visualOutageMs||0)+visualGap;
-     visualStats.longestVisualOutageMs=Math.max(visualStats.longestVisualOutageMs||0,visualGap)
-    }
-   }
-  }
+  // A recovered picture can close one measured outage.
+  countVisualOutage(record,video,now);
+  record.visualOutageReported=false;
   record.visualProgressSeen=true;
   record.lastProgressAt=now;record.bufferSince=0;record.stallChecks=0;
   return {advanced:true,idleMs:0}
  }
  return {advanced:false,idleMs:Math.max(0,now-(record.lastProgressAt||record.started||now))}
+}
+function countVisualOutage(record,video,now){
+ // Record only gaps observed after actual picture, never during first play,
+ // an intentional pause/seek, hidden tab, or a channel preview.
+ if(!record.visualProgressSeen||record.visualOutageReported||!record.ready||
+    typeof S==='undefined'||S.route!=='player'||!S.playerView||
+    S.playerView.kind!=='live'||S.playerView.video!==video||
+    S.playerView.userPaused||video.paused||video.seeking||
+    typeof document!=='undefined'&&document.hidden)return false;
+ var gap=Math.max(0,now-(record.lastProgressAt||now));
+ if(gap<6500||!Number.isFinite(gap))return false;
+ // Timers cannot certify a gap if the whole tab was asleep.
+ if(record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000)return false;
+ var stats=S.playerView.stats;
+ if(!stats)return false;
+ stats.visualOutageCount=(stats.visualOutageCount||0)+1;
+ stats.visualOutageMs=(stats.visualOutageMs||0)+gap;
+ stats.longestVisualOutageMs=Math.max(stats.longestVisualOutageMs||0,gap);
+ record.visualOutageReported=true;
+ return true
 }
 /* Stop a silent ended/paused live decoder from requiring a full page reload.
  * Only act after the video was playing; honor explicit user Pause and a hidden
@@ -1884,6 +1898,9 @@ function playDirectMpegts(video,id,statusElement){
  }
  function fallback(msg){
   if(!alive()||record.fallback)return;
+  // Record a sustained picture loss even when the engine must be replaced
+  // before it can present another frame.
+  countVisualOutage(record,video,Date.now());
   record.fallback=true;
   if(state.stats){state.stats.recoveries=(state.stats.recoveries||0)+1;state.stats.lastRecoveryAt=Date.now()}
   recordLiveIncident('reconnect');
@@ -1943,7 +1960,13 @@ function playDirectMpegts(video,id,statusElement){
    // black. Never claim direct TS is healthy based only on onplaying().
    // This uses the same local visual-progress checks as the HLS watchdog.
    record.progressWatchdog=setInterval(function(){
-    if(!alive()||document.hidden||video.paused||state.userPaused||video.seeking)return;
+    if(!alive())return;
+    if(document.hidden||video.paused||state.userPaused||video.seeking){
+     record.lastProgressAt=Date.now();
+     record.lastVisualSampleAt=record.lastProgressAt;
+     record.visualProgressSeen=false;
+     return
+    }
     var now=Date.now();
     if(record.ready&&(!video.videoWidth||!video.videoHeight)){
      if(now-(record.lastProgressAt||record.started)>16000)
@@ -2094,6 +2117,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
   var state=S.playerView;
   if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
+  countVisualOutage(record,video,Date.now());
   record.reconnecting=true;
   if(state.stats){
    state.stats.recoveries=(state.stats.recoveries||0)+1;
@@ -2237,7 +2261,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     recoverConnection();return
    }
    if(video.paused||video.ended||video.seeking||document.hidden){
-    record.lastProgressAt=now;return
+    record.lastProgressAt=now;record.lastVisualSampleAt=now;
+    record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
    if(liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
