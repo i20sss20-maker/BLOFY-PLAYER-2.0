@@ -322,11 +322,12 @@ function shell(pageTitle,markup){
  // This is only visual navigation: no player, account or network changes.
  if(window.innerWidth<=730&&document.documentElement.getAttribute('data-blofy-device')==='touch'){
   var selectedNav=app.querySelector('.rail .rail-link.active');
-  if(selectedNav)setTimeout(function(){
-   if(!selectedNav.isConnected)return;
-   try{selectedNav.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})}
+  if(selectedNav&&selectedNav.isConnected){
+   // Do this immediately after replacing the shell. A deferred scroll may
+   // race the first paint and leave the highlighted tab out of sight.
+   try{selectedNav.scrollIntoView({block:'nearest',inline:'center',behavior:'auto'})}
    catch(err){try{selectedNav.scrollIntoView(false)}catch(ignore){}}
-  },0)
+  }
  }
  // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
