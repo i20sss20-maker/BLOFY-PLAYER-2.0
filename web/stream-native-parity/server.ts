@@ -22,13 +22,13 @@ function safeEncoderCapacity(raw){
  // customer info, hostnames, station identifiers or arbitrary JSON.
  const data=raw&&typeof raw==='object'?raw:{},jobs=data.jobKinds||{};
  return {busy:data.busy===true,
-  freeSlots:boundedEncoderCount(data.freeSlots,2),
+  freeSlots:boundedEncoderCount(data.freeSlots,4),
   deniedLastMinute:boundedEncoderCount(data.deniedLastMinute,100000),
   jobKinds:{
-   live:boundedEncoderCount(jobs.live,2),
-   legacyVod:boundedEncoderCount(jobs.legacyVod,2),
-   fullVod:boundedEncoderCount(jobs.fullVod,2),
-   compatible:boundedEncoderCount(jobs.compatible,2)
+   live:boundedEncoderCount(jobs.live,4),
+   legacyVod:boundedEncoderCount(jobs.legacyVod,4),
+   fullVod:boundedEncoderCount(jobs.fullVod,4),
+   compatible:boundedEncoderCount(jobs.compatible,4)
   }}
 }
 function verifiedWorkerRetryHeaders(headers){
