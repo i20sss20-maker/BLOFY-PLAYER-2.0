@@ -85,6 +85,14 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
   return {ok:true,code,expiresAt,oneTime:true,providerVerified:false};
  }
+ // Only for internal unified redemption dispatch. Does not return credentials.
+ async function exists(code){
+  const key=gate();
+  if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))return false;
+  await ensureSchema();
+  const result=await pool.query('SELECT 1 FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() LIMIT 1',[hash(code,key)]);
+  return result.rows.length===1;
+ }
  async function redeem({code}={}){
   const key=gate();
   if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
@@ -104,7 +112,7 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   return {ok:true,type:'external_xtream',credentials,providerVerified:false};
  }
  async function purgeExpired(){await ensureSchema();const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');return {removed:Number(result.rowCount||0)};}
- return {issue,redeem,ensureSchema,purgeExpired};
+ return {issue,redeem,exists,ensureSchema,purgeExpired};
 }
 
 
