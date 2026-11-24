@@ -201,7 +201,13 @@ export async function* liveTsRecoveryBytes({
       if(!plainOpenEnded(reply))throw Error('live_ts_reconnect_denied');
       temporaryReader=reply.body.getReader();
       const probe=await readWithin(temporaryReader,ctl,15000);
-      if(probe.done)throw Error('live_ts_reconnect_denied');
+      // An explicitly typed TS response that closes before sending any bytes
+      // is a transient empty socket, not an authentication rejection.
+      // Keep the existing per-event and source quotas; unknown MIME is terminal.
+      if(probe.done){
+       const mime=String(reply.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+       throw Error(mime==='video/mp2t'?'live_ts_reconnect_transient_empty':'live_ts_reconnect_denied');
+      }
       // Validate two real TS packets even when one HTTP chunk is tiny.
       // Do not accept invalid media or splice/replay any bytes.
       let validatedFirst;
