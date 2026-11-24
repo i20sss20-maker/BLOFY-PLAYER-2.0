@@ -33,7 +33,10 @@ function harness(){
   staleLiveManifest:()=>false,
   noteLiveSourceHealthy:()=>healthy++,
   touchHls(){},
-  awaitHlsFile:async()=>true,
+  awaitHlsFile:async(owner,file,limit)=>{
+   if(present.has('/live/'+file))return true;
+   now+=limit;return false
+  },
   streamMediaFile:async()=>new Response('TS',{status:200,headers:{'Content-Type':'video/mp2t'}}),
   join:(...paths)=>paths.join('/'),
   existsSync:path=>present.has(path),
@@ -116,6 +119,29 @@ test('a permanently empty live index returns 503 and closes one stuck source; ne
  assert.equal(denied.status,503);
  assert.equal(denied.error,'hls_origin_backoff');
  assert.equal(h.starts(),1,'origin backoff prevents repeated new FFmpeg on a dead source');
+});
+
+test('a live source that never creates index.m3u8 is stopped after the same bounded startup deadline',async()=>{
+ const h=harness();
+ h.remove('/live/index.m3u8');
+ const response=await h.runner.hlsRequest(h.request(),h.url('index.m3u8'));
+ assert.equal(response.status,503);
+ assert.equal(response.error,'hls_live_segment_not_ready');
+ assert.equal(response.retrySeconds,2);
+ assert.equal(h.starts(),1);
+ assert.equal(h.stops(),1,'a source with no HLS index cannot pin a worker forever');
+ assert.equal(h.owner().stopReason,'live_no_initial_segment');
+ assert.equal(h.time(),127500,'no second startup timeout after the first 27.5s budget')
+});
+
+test('viewer abort while waiting for missing index does not kill another viewer source',async()=>{
+ const h=harness();
+ h.remove('/live/index.m3u8');
+ h.signal.aborted=true;
+ const result=await h.runner.hlsRequest(h.request(),h.url('index.m3u8'));
+ assert.equal(result.status,410);
+ assert.equal(result.error,'hls_request_cancelled');
+ assert.equal(h.stops(),0,'request cancellation should not retire live producer')
 });
 
 test('a source that exited before producing TS gives 503 immediately without a 27s stall',async()=>{
