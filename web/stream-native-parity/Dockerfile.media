@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
 WORKDIR /app
 COPY media-worker.ts /app/media-worker.ts
 COPY live-source-continuity.mjs /app/live-source-continuity.mjs
+COPY stream-media-file.mjs /app/stream-media-file.mjs
 ENV PORT=8080
 EXPOSE 8080
 USER bun
