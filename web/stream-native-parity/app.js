@@ -4531,7 +4531,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var trackId=state.commentary.current(),recent=S.profileKey?readJson(profileStorageKey('commentatorRecent'),{}):{};
    if(/^anis-[a-z0-9-]{1,54}$/.test(trackId)&&recent&&typeof recent==='object'&&!Array.isArray(recent)){
     recent[String(state.id)]=trackId;
-    if(Object.keys(recent).length>100)recent={[String(state.id)]:trackId};
+    if(Object.keys(recent).length>100){recent={};recent[String(state.id)]=trackId}
     profileSave('commentatorRecent',recent)
    }
   }
