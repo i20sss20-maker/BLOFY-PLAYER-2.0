@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import {stableAccountProfileKey,legacyTokenProfileKey} from '../web-profile-key.mjs';
 const k=Buffer.from('a'.repeat(64),'hex');
 const id='937ba740-b1dd-44cf-9ff4-55b99e4ca15a',other='4e0ce9b3-1b26-4405-af70-86be533e2ffc';
@@ -43,14 +44,35 @@ test('web server issues stable opaque ID only after upstream auth and includes o
  assert.match(docker,/COPY server\.ts web-profile-key\.mjs/);
  assert.doesNotMatch(code,/accountId:v\.account|accessToken:v\.accessToken[,}]/);
 });
-test('migrator copies only current legacy partition without overwriting a newer stable key',()=>{
+test('migrator only copies current legacy profile keys and never overwrites newer saved profile',()=>{
  const code=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  const begin=code.indexOf('function migrateLegacyProfile('),end=code.indexOf('\nfunction useProfile(',begin);
  assert.ok(begin>0&&end>begin);
  const source=code.slice(begin,end);
- const store=Object.create(null),newKey='blofy_web_profile_v1:new:favorites';
- store['blofy_web_profile_v1:old:favorites']='{"movie:11":true}';
+ const stable='1'.repeat(24),legacy='2'.repeat(24),
+  newKey='blofy_web_profile_v1:'+stable+':favorites',
+  oldKey='blofy_web_profile_v1:'+legacy+':favorites',
+  oldWatchKey='blofy_web_profile_v1:'+legacy+':watch',
+  newWatchKey='blofy_web_profile_v1:'+stable+':watch',
+  store=Object.create(null);
+ store[oldKey]='{"movie:11":true}';
  store[newKey]='{"movie:22":true}';
- // Re-use pure migration body in a local VM; browser storage stays isolated.
- const {runInNewContext}=await import('node:vm');
+ store[oldWatchKey]='{"movie:11":{"position":500,"duration":7200,"updated":1000}}';
+ const mockStorage={
+  getItem:key=>Object.prototype.hasOwnProperty.call(store,key)?store[key]:null,
+  setItem:(key,value)=>{store[key]=String(value)}
+ };
+ const migrate=runInNewContext(source+';migrateLegacyProfile',{localStorage:mockStorage});
+ migrate(stable,legacy);
+ assert.equal(store[newKey],'{"movie:22":true}','newer current favorite must survive');
+ assert.equal(store[newWatchKey],store[oldWatchKey],'missing checkpoint recovered');
+ assert.equal(store[oldKey],'{"movie:11":true}','legacy remains available for rollback');
+ migrate('3'.repeat(24),'bad!!');
+ assert.equal(Object.keys(store).length,4,'malformed legacy marker cannot be migrated');
+});
+test('session and redeem frontend use verified legacy migration pointer only for same-account profile',()=>{
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ assert.match(app,/useProfile\(r\.profileKey,r\.legacyProfileKey\)/);
+ assert.match(app,/useProfile\(json\.profileKey,json\.legacyProfileKey\)/);
+ assert.match(app,/migrateLegacyProfile\(id,legacy\)/);
 });
