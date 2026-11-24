@@ -3753,13 +3753,14 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,201,await streamDistributors.createAdmin(await readJson(req)),
       {'cache-control':'no-store'});
   const distributorAdminAction=p.match(
-    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits|bonus|bonus-policy)$/i);
+    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits|bonus|bonus-policy|permissions|report)$/i);
   if(req.method==='POST'&&distributorAdminAction){
     const id=distributorAdminAction[1],cmd=distributorAdminAction[2];
     const payload=await readJson(req);
+    if(cmd==='report')return json(res,200,await streamDistributors.adminReport(id),{'cache-control':'no-store'});
     const settings=cmd==='credits'?{credits:payload.credits}:
       cmd==='status'?{enabled:payload.enabled===true}:
-      cmd==='limits'?{dailyLimit:payload.dailyLimit}:cmd==='bonus'?{bonusQuarters:payload.bonusQuarters,requestId:payload.requestId,reason:payload.reason}:cmd==='bonus-policy'?{bonusRates:payload.bonusRates}:{resetPassword:true};
+      cmd==='limits'?{dailyLimit:payload.dailyLimit}:cmd==='bonus'?{bonusQuarters:payload.bonusQuarters,requestId:payload.requestId,reason:payload.reason}:cmd==='bonus-policy'?{bonusRates:payload.bonusRates}:cmd==='permissions'?{permissionSettings:payload.permissionSettings}:{resetPassword:true};
     return json(res,200,await streamDistributors.setAdmin(id,settings),
       {'cache-control':'no-store'});
   }
