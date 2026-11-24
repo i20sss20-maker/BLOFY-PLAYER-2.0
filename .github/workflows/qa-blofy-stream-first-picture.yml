@@ -1,0 +1,30 @@
+name: BLOFY STREAM Fast First Picture QA
+on:
+  push:
+    branches: [feat/stream-web-fast-cold-start-actual-frame-qoe-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-first-picture.yml'
+  pull_request:
+    branches: [release/blofy-stream-web-1-0-0-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-first-picture.yml'
+permissions:
+  contents: read
+jobs:
+  first-picture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Check ES5 browser-compatible syntax
+        run: node --check web/stream-native-parity/app.js
+      - name: Test auth-gated HLS idle warmup and real decoded frame metrics
+        run: node --test web/stream-native-parity/qa/fast-start-first-picture.test.mjs
+      - name: Check official web server compilation
+        run: bun build web/stream-native-parity/server.ts --target=bun --outdir=/tmp/blofy-first-frame
