@@ -22,7 +22,7 @@ SHA256 = re.compile(r"^[a-f0-9]{64}$")
 SCHEMA = "blofy-dr-receipt-v1"
 
 
-def inspect_latest_receipt(client, bucket, *, now=None, freshness_hours=8):
+def inspect_latest_receipt(client, bucket, *, now=None, freshness_hours=8, include_archive=False):
     now = now or datetime.now(timezone.utc)
     doc = client.get_object(Bucket=bucket, Key=LATEST_RECEIPT_KEY)
     if not (50 < int(doc.get("ContentLength", -1)) <= 4096):
@@ -70,6 +70,7 @@ def inspect_latest_receipt(client, bucket, *, now=None, freshness_hours=8):
         "archive_present": True,
         "archive_metadata_verified": True,
         "full_database_restore_verified": False,
+        **({"archive_key": archive_key, "encrypted_sha256": sha256} if include_archive else {}),
     }
 
 
