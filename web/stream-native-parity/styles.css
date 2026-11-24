@@ -1642,7 +1642,7 @@ body{
   font-size:17px
  }
  html[data-blofy-device="touch"] .app .toolbar .btn{
-  padding:7px 7px;font-size:10px
+  min-height:44px;padding:7px 7px;font-size:10px
  }
  html[data-blofy-device="touch"] .preview-action-row{
   grid-template-columns:repeat(2,minmax(0,1fr))
