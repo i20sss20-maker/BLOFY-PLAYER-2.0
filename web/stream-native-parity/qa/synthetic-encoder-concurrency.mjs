@@ -43,15 +43,17 @@ function rssMb(pid){
 }
 function one(spec,id){
  const folder=join(base,'job-'+id);mkdirSync(folder);
+ const vod=spec.kind!=='live';
  const args=[
   '-hide_banner','-loglevel','error','-nostdin',
   '-f','lavfi','-i','testsrc2=size='+spec.size+':rate=25',
   '-f','lavfi','-i','sine=frequency='+spec.frequency+':sample_rate=48000',
   '-t',String(duration),'-map','0:v:0','-map','1:a:0',
-  ...profiles.compatibleVideoArgs(spec.kind,1),
+  ...profiles.compatibleVideoArgs(spec.kind,vod?4:1),
+  ...(vod?['-force_key_frames','expr:gte(t,n_forced*4)']:[]),
   '-af','aresample=async=1:min_hard_comp=0.100:first_pts=0',
   '-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
-  '-f','hls','-hls_time','1','-hls_list_size','0','-hls_flags','independent_segments+temp_file',
+  '-f','hls','-hls_time',vod?'4':'1','-hls_list_size','0','-hls_flags','independent_segments+temp_file',
   '-hls_segment_filename',join(folder,'seg-%06d.ts'),join(folder,'index.m3u8')
  ];
  const child=spawn(ffmpeg,args,{stdio:['ignore','ignore','pipe']});
