@@ -115,6 +115,10 @@ test('real fullscreen overlay layer is bounded and hidden when playback resumes'
  assert.match(code,/dismissRecoveredPlaybackNotice\(state,Date\.now\(\)\)/);
  assert.match(code,/state\.noticeObserverTimer=setInterval/);
  assert.match(code,/state\.noticeFrameRepeatTimer=setTimeout/);
+ assert.match(code,/if\(iosPrompt\&\&!iosPrompt\.hidden\)iosPrompt\.hidden=true/,
+  'iOS touch-start overlay must not survive decoded video');
+ assert.match(code,/modeBadge\.textContent='MP4 • تشغيل مباشر'/,
+  'temporary MP4 inspection label changes once real frames appear');
  const status=code.slice(code.indexOf('function playerStatus(message,error){'),code.indexOf('/* A VIDAA decoder',code.indexOf('function playerStatus(message,error){')));
  assert.match(status,/state\.noticeLastProgressRecord===S\.play/);
  assert.match(status,/state\.noticeRecoveryFrames=0/);
