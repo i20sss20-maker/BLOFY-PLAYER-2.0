@@ -274,6 +274,26 @@ test('known-duration MKV uses full VOD HLS rather than a one-minute live-style p
  await expect(page.locator('#player-root')).toBeVisible();
  movie.container_extension='mp4';delete movie.duration_secs;
 });
+test('audio-only playing cannot claim a video first frame in the health panel',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/api/media/movie/11.mp4',async route=>route.fulfill({
+  status:503,contentType:'application/json',body:'{"error":"no_video_fixture"}'
+ }));
+ await page.goto('http://127.0.0.1:3000/',{waitUntil:'domcontentloaded'});
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await page.locator('#player-media').evaluate(video=>{
+  video.dispatchEvent(new Event('playing'));
+ });
+ await page.locator('#player-options-toggle').click();
+ await page.locator('#player-health-toggle').click();
+ await expect(page.locator('#player-health-panel')).toContainText('لم يؤكد الجهاز أول إطار');
+ await expect(page.locator('#player-health-panel')).not.toContainText('0.0 ثانية • معروض');
+ expect(errors).toEqual([]);
+});
+
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const mp4=readFileSync('/tmp/blofy-qa-test.mp4');
