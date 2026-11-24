@@ -15,8 +15,32 @@ function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
 function profileStorageKey(name){return 'blofy_web_profile_v1:'+S.profileKey+':'+name}
 function profileSave(name,value){if(S.profileKey)writeJson(profileStorageKey(name),value)}
-function useProfile(id){
+// Existing preview clients partitioned their favorites by the full MAC of
+// the code-bound access token. Renewing that same account changes the token,
+// hiding those local favorites. The authenticated server now returns an opaque
+// stable account partition plus this exact old-token legacy partition only
+// for one-time same-device local migration. Nothing is uploaded to the server.
+function migrateLegacyProfile(id,legacy){
+ if(!/^[a-f0-9]{24}$/.test(String(id||''))||
+  !/^[a-f0-9]{24}$/.test(String(legacy||''))||id===legacy)return;
+ var names=['favorites','favoriteItems','watch','recentSearches','lastPlaybackDiag','lastLongPlaybackTest'];
+ for(var i=0;i<names.length;i++){
+  var newKey='blofy_web_profile_v1:'+id+':'+names[i];
+  var oldKey='blofy_web_profile_v1:'+legacy+':'+names[i];
+  try{
+   // Never erase a newer stable-account value or remove legacy backups.
+   // Malformed huge old entries are ignored instead of filling TV storage.
+   if(localStorage.getItem(newKey)!==null)continue;
+   var oldValue=localStorage.getItem(oldKey);
+   if(oldValue===null||oldValue.length>220000)continue;
+   JSON.parse(oldValue);
+   localStorage.setItem(newKey,oldValue)
+  }catch(e){}
+ }
+}
+function useProfile(id,legacy){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
+ migrateLegacyProfile(id,legacy);
  var changed=S.profileKey!==id;
  if(changed)S.accountEpoch++;
  S.profileKey=id;
@@ -100,7 +124,7 @@ function redeem(){
  var btn=document.getElementById('redeem');btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
-  if(st===200&&r.ok&&useProfile(r.profileKey)){S.userVerified=true;navigate('home',{},true)}
+  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true)}
    else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
  })
@@ -3846,7 +3870,7 @@ document.addEventListener('visibilitychange',function(){
 });
 try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
 api('GET','/api/session',null,function(st,json){
- if(st===200&&json.active&&useProfile(json.profileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
+ if(st===200&&json.active&&useProfile(json.profileKey,json.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
  else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
 });
 setInterval(checkCatalogVersion,10*60*1000);
