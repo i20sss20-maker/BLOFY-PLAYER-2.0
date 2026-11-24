@@ -30,6 +30,7 @@ try{
  const used=await call('redeem',{code:second.body.code});assert.equal(used.status,200);assert.deepEqual(used.body.credentials,input);
  assert.equal((await call('redeem',{code:second.body.code})).status,404);
  const numeric=await call('issue',{...input,numericCode:true},true);assert.equal(numeric.status,201);assert.match(numeric.body.code,/^[0-9]{12}$/);assert.deepEqual((await b.redeem({code:numeric.body.code})).credentials,input);
+ const short=await call('issue',{...input,shortCode:true},true);assert.equal(short.status,201);assert.match(short.body.code,/^[0-9]{8}$/);assert.deepEqual((await b.redeem({code:short.body.code})).credentials,input);for(let i=0;i<19;i++)await assert.rejects(a.redeem({code:short.body.code}),/connect_code_expired_or_used/);await assert.rejects(b.redeem({code:short.body.code}),/connect_rate_limited/);
  const expired=await a.issue(input);await pool.query("UPDATE blofy_connect_pairings SET expires_at=NOW()-INTERVAL '1 minute'");
  assert.equal((await call('redeem',{code:expired.code})).status,404);
  assert.equal((await a.purgeExpired()).removed,1);
