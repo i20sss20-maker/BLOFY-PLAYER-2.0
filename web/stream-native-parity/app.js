@@ -3454,7 +3454,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button><button class="btn secondary" id="player-direct-ts" type="button" title="تشغيل نفس مصدر القناة مباشرة على الأجهزة التي تدعم H.264/AAC؛ العودة تلقائيًا إلى HLS عند عدم الدعم">⚡ تشغيل MPEG-TS المباشر (بديل)</button>':'')+
  '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
  '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
- (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">🎙 المعلقين</button><p class="small muted" id="player-commentary-status" role="status" aria-live="polite">صوت القناة الأصلي</p>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">🎙 المعلقين</button><button class="btn secondary" id="player-commentary-favorite" type="button">☆ حفظ المعلق الحالي</button><p class="small muted" id="player-commentary-status" role="status" aria-live="polite">صوت القناة الأصلي</p>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button><button class="btn secondary" id="player-download-file" type="button">↓ تنزيل الملف</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4517,10 +4517,24 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   else{state.ready=false;startVod(0)}
  };
  // Independent companion voice player: never replace the LIVE video URL.
+ function commentatorFavorites(){
+  var saved=S.profileKey?readJson(profileStorageKey('commentatorFavorites'),[]):[];
+  return Array.isArray(saved)?saved.filter(function(x){return /^anis-[a-z0-9-]{1,54}$/.test(x)}).slice(0,12):[]
+ }
  function commentaryMessage(message){
   if(S.route!=='player'||S.playerView!==state)return;
   var status=document.getElementById('player-commentary-status');
   if(status)status.textContent=String(message||'');
+  // Save only a successfully PLAYING track id per channel, not URLs or
+  // provider data. A failed audio request cannot become a quick-pick.
+  if(String(message||'').indexOf('المعلق: ')===0&&state.commentary&&state.commentary.current()){
+   var trackId=state.commentary.current(),recent=S.profileKey?readJson(profileStorageKey('commentatorRecent'),{}):{};
+   if(/^anis-[a-z0-9-]{1,54}$/.test(trackId)&&recent&&typeof recent==='object'&&!Array.isArray(recent)){
+    recent[String(state.id)]=trackId;
+    if(Object.keys(recent).length>100)recent={[String(state.id)]:trackId};
+    profileSave('commentatorRecent',recent)
+   }
+  }
  }
  function newCommentary(channelId){
   return window.BlofyCommentary&&isLive?
@@ -4574,8 +4588,15 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
       String(state.id)!==expected)return;
    if(!tracks.length){commentaryMessage('لا توجد صوتيات متاحة حاليًا؛ صوت القناة الأصلي مستمر');return}
    var options=[{name:orig.name,selected:!manager.current(),select:orig.select}];
+   var favorites=commentatorFavorites(),recent=S.profileKey?readJson(profileStorageKey('commentatorRecent'),{}):{};
+   var lastId=recent&&typeof recent==='object'?recent[expected]:'';
+   tracks=tracks.slice().sort(function(a,b){
+    var aa=favorites.indexOf(a.id)>=0?0:a.id===lastId?1:2;
+    var bb=favorites.indexOf(b.id)>=0?0:b.id===lastId?1:2;
+    return aa-bb
+   });
    tracks.forEach(function(track){
-    options.push({name:track.label+(track.format==='hls'?' • يحتاج توافق HLS':''),
+    options.push({name:(favorites.indexOf(track.id)>=0?'★ ':'')+track.label+(track.format==='hls'?' • يحتاج توافق HLS':''),
       selected:manager.current()===track.id,
       select:function(){manager.select(track.id)}});
    });
@@ -4587,6 +4608,18 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  if(commentaryButton)commentaryButton.onclick=function(){showCommentators(this)};
  var commentaryMore=document.getElementById('player-commentary-more');
  if(commentaryMore)commentaryMore.onclick=function(){showCommentators(this)};
+ var commentaryFav=document.getElementById('player-commentary-favorite');
+ if(commentaryFav)commentaryFav.onclick=function(){
+  var active=state.commentary&&state.commentary.current();
+  if(!active||!/^anis-[a-z0-9-]{1,54}$/.test(active)){
+   commentaryMessage('شغّل المعلق أولًا، ثم احفظه في المفضلة');return}
+  var favorites=commentatorFavorites(),index=favorites.indexOf(active);
+  if(index>=0){favorites.splice(index,1);profileSave('commentatorFavorites',favorites);
+   commentaryMessage('أُزيل المعلق من المفضلة');return}
+  if(favorites.length>=12){commentaryMessage('الحد الأعلى 12 معلقًا مفضلًا');return}
+  favorites.push(active);profileSave('commentatorFavorites',favorites);
+  commentaryMessage('تم حفظ المعلق في المفضلة')
+ };
 
  document.getElementById('player-audio').onclick=function(){
   var engine=S.play&&S.play.engine,tracks=video.audioTracks,options=[];
