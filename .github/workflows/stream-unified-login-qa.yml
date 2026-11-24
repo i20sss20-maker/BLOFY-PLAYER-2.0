@@ -196,7 +196,7 @@ jobs:
           mkdir -p build/unified-owner-qa
           cp "$apk" build/unified-owner-qa/BLOFY-STREAM-UNIFIED-QA.apk
           (cd build/unified-owner-qa && sha256sum BLOFY-STREAM-UNIFIED-QA.apk > SHA256SUMS && sha256sum -c SHA256SUMS)
-          printf 'package=tv.blofy.player.v2.stream.qa\nsource_commit=%s\nchannel=private-qa-debug-signed\nactivation=requires separately enabled QA endpoint\nproduction_release=false\n' "$(git rev-parse HEAD)" > build/unified-owner-qa/BUILD-IDENTITY.txt
+          printf 'package=tv.blofy.player.v2.stream.qa\nsource_commit=%s\nchannel=private-qa-debug-signed\nactivation=synthetic public test code 00000000 only; customer redemption requires separate live endpoint\nproduction_release=false\n' "$(git rev-parse HEAD)" > build/unified-owner-qa/BUILD-IDENTITY.txt
           cp "$RUNNER_TEMP/qa-cert.txt" build/unified-owner-qa/SIGNATURE.txt
       - name: Upload isolated QA APK, never publish or replace customer version
         uses: actions/upload-artifact@v4
