@@ -1,3 +1,4 @@
+import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
@@ -179,43 +180,10 @@ if(p==='/api/page'&&method==='GET'){
   upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal:controller.signal});
   if(!upstream.ok||!upstream.body)return json(upstream.status>=400?upstream.status:502,{error:'catalog_unavailable'});
   reader=upstream.body.getReader();
-  const decoder=new TextDecoder(),matches=[];
-  let textBuffer='',depth=0,inString=false,escapeNext=false,capturing=false,matched=0,hasMore=false,done=false,bytes=0;
-  while(!done){
-   const packet=await reader.read();
-   if(packet.done)break;
-   bytes+=packet.value.byteLength;if(bytes>100*1024*1024)break;
-   const piece=decoder.decode(packet.value,{stream:true});
-   for(let i=0;i<piece.length;i++){
-    const ch=piece[i];
-    if(!capturing){
-     if(ch==='{'){capturing=true;depth=1;inString=false;escapeNext=false;textBuffer='{'}
-     else if(ch===']')done=true;
-     continue;
-    }
-    textBuffer+=ch;
-    if(textBuffer.length>200000)throw new Error('catalog_item_too_large');
-    if(escapeNext){escapeNext=false;continue}
-    if(ch==='\\'&&inString){escapeNext=true;continue}
-    if(ch==='"'){inString=!inString;continue}
-    if(!inString){if(ch==='{')depth++;else if(ch==='}')depth--}
-    if(depth!==0)continue;
-    capturing=false;
-    try{
-     const item=JSON.parse(textBuffer);
-     if((!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))){
-      if(matched>=offset){
-       if(matches.length>=limit){hasMore=true;done=true;break}
-       matches.push(item);
-      }
-      matched++;
-     }
-    }catch(e){}
-    textBuffer='';
-   }
-  }
-  try{await reader.cancel()}catch(e){}
-  const result={items:matches,hasMore,nextOffset:offset+matches.length,kind:k};
+  const page=await readCatalogPage(reader,{offset,limit,match:item=>
+   (!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))});
+  try{await reader.cancel()}catch{}
+  const result={...page,kind:k};
   if(pageCacheKey&&!req.signal.aborted)catalogPageCache.put(pageCacheKey,result);
   return json(200,result,{'X-Blofy-Catalog-Cache':'MISS'});
  }catch(e){try{await reader?.cancel()}catch{};return json(502,{error:'catalog_page_failed'})}
