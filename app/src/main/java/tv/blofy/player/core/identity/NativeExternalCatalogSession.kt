@@ -65,6 +65,7 @@ internal object NativeExternalCatalogSession {
         withContext(Dispatchers.IO) {
             val profile = ExternalStreamConnectStore.loadStaged(context)
             ExternalStreamConnectStore.clearStaged(context)
+            tv.blofy.player.data.NativeExternalCatalogRefreshWorker.cancel(context)
             if (profile != null) {
                 val dao = BlofyDatabase.get(context.applicationContext).dao()
                 val row = dao.provider(profile.providerId)
