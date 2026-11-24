@@ -51,6 +51,33 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     private lateinit var submitButton: Button
     private lateinit var statusText: TextView
     private var busy = false
+    private var importPercent = 0
+    private var importStage: tv.blofy.player.data.PlaylistSyncStage? = null
+    private var importItems = 0
+
+    private fun showCatalogProgress(p: tv.blofy.player.data.PlaylistSyncProgress) {
+        if (importStage != p.stage) {
+            importStage = p.stage
+            importItems = 0
+        }
+        if (p.retryAttempt > 0) importItems = 0
+        importPercent = maxOf(importPercent, p.percent.coerceAtMost(95))
+        p.processedItems?.let { importItems = it }
+        val arabic = ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar"
+        val section = when (p.stage) {
+            tv.blofy.player.data.PlaylistSyncStage.LIVE -> if (arabic) "القنوات" else "Live TV"
+            tv.blofy.player.data.PlaylistSyncStage.MOVIES -> if (arabic) "الأفلام" else "Movies"
+            tv.blofy.player.data.PlaylistSyncStage.SERIES -> if (arabic) "المسلسلات" else "Series"
+            else -> if (arabic) "المحتوى" else "Content"
+        }
+        val detail = if (p.retryAttempt > 0) {
+            if (arabic) "إعادة الاتصال (${p.retryAttempt})" else "Retrying (${p.retryAttempt})"
+        } else if (importItems > 0) {
+            if (arabic) "تم قراءة $importItems عنصر" else "$importItems items read"
+        } else if (arabic) "جاري انتظار بيانات المزود" else "Waiting for provider data"
+        statusText.text = "$section • $importPercent%\n$detail"
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -323,7 +350,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                             val prepared = NativeExternalCatalogSession.prepare(applicationContext, unified,
                                 onSaved = { withContext(Dispatchers.Main.immediate) { codeInput.text?.clear() } }) { p ->
                                 withContext(Dispatchers.Main.immediate) {
-                                    statusText.text = "${getString(R.string.stream_ui_activating)} • ${p.percent}%"
+                                    showCatalogProgress(p)
                                 }
                             }
                             NativeExternalCatalogSession.activatePrepared(applicationContext,prepared)
@@ -411,7 +438,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             try {
                 val prepared = NativeExternalCatalogSession.resume(applicationContext) { p ->
                     withContext(Dispatchers.Main.immediate) {
-                        statusText.text = "${getString(R.string.stream_ui_restoring)} • ${p.percent}%"
+                        showCatalogProgress(p)
                     }
                 }
                 if (prepared != null) {
