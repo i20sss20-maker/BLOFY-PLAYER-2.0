@@ -1184,7 +1184,7 @@ function requestWebDownload(kind,id,ext,name){
  if(!url){if(message)message.textContent='صيغة هذا الملف لا تدعم التنزيل المباشر على الويب.';return}
  if(!S.userVerified){if(message)message.textContent='فعّل اشتراكك أولًا.';return}
  var epoch=S.accountEpoch;
- if(message)message.textContent='جار التحقق من توفر ملف التنزيل…';
+ if(message)message.textContent='جار التحقق من صلاحية طلب التنزيل…';
  fetch(url,{method:'HEAD',credentials:'same-origin',cache:'no-store'}).then(function(res){
   if(epoch!==S.accountEpoch||!S.userVerified)return;
   if(!res.ok){if(message)message.textContent=res.status===503?'التنزيلات غير مفعلة على هذا السيرفر حاليًا.':res.status===429?'التنزيلات مشغولة حاليًا، حاول لاحقًا.':'هذا الملف غير متوفر للتنزيل المباشر حاليًا.';return}
