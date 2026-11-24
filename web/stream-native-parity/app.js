@@ -272,10 +272,11 @@ function categories(kind,done){
   for(var i=0;i<waiting.length;i++)waiting[i](S.cats[kind]||[])
  })
 }
-function pageRequest(kind,cat,offset,limit,cb,query){
+function pageRequest(kind,cat,offset,limit,cb,query,fresh){
  var endpoint='/api/page?kind='+enc(kind)+'&offset='+enc(offset||0)+'&limit='+enc(limit||30);
  if(cat&&cat!=='all')endpoint+='&category_id='+enc(cat);
  if(query)endpoint+='&query='+enc(query);
+ if(fresh)endpoint+='&fresh=1';
  return api('GET',endpoint,null,function(st,result){
   if(st===401){login('انتهت جلسة الاشتراك');return}
   cb(st,result&&Array.isArray(result.items)?result:null)
@@ -292,7 +293,7 @@ function getListing(kind,cat,cb,force){
   if(!force)delete S.listingInflight[key];
   if(st===200&&r)S.loaded[key]=r;
   for(var i=0;i<waiting.length;i++)waiting[i](st,st===200?r:null)
- })
+ },null,!!force)
 }
 function safeImg(pic,cls){
  var alternatives=[];
@@ -312,11 +313,10 @@ function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).m
 function home(){
  shell('الرئيسية','<div id="home-content">'+loading('الواجهة الرئيسية')+'</div>');
  var movies=S.loaded['movie:all'],series=S.loaded['series:all'];
- var pending=0;
  function draw(){
   if(S.route!=='home')return;
   var film=(movies&&movies.items)||[],show=(series&&series.items)||[],combined=film.concat(show),candidate=combined.length?combined[S.heroIndex%combined.length]:null;
-  var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art')+'<div class="hero-shade"></div><div class="hero-copy">'+
+  var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art').replace('loading="lazy"','loading="eager" fetchpriority="high"')+'<div class="hero-shade"></div><div class="hero-copy">'+
   '<div class="hero-kicker">'+esc(candidate.series_id?'مسلسل جديد':'أحدث العناوين')+'</div><h2 class="hero-title">'+esc(title(candidate))+'</h2>'+
   '<div class="hero-description">اكتشف أحدث ما أضيف إلى مكتبة BLOFY STREAM، مع تفاصيل ومواسم ومتابعة مشاهدة.</div>'+
   '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل والمشاهدة</button>'+
@@ -342,11 +342,23 @@ function home(){
    '<span class="poster-art">'+safeImg(r.poster)+'<span class="no-poster">'+esc(r.name)+'</span></span>'+
    '<span class="poster-caption"><strong>'+esc(r.name)+'</strong><span>متابعة من '+formatTime(r.pos.position)+(pct?' • '+pct+'٪':'')+'</span></span></button>'
   }).join('')+'</div></section>':'';
-  var target=document.getElementById('home-content');if(target){target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;restoreView('home')}
+  var target=document.getElementById('home-content');
+  if(target){
+   // Returning a slow series listing must not steal TV remote focus, reset
+   // scroll, or blank movie cards already visible.
+   var hadScreen=!!target.querySelector('.story-row');
+   var focus=hadScreen&&S.keyboardMode&&target.contains(document.activeElement)?
+    focusIdentity(document.activeElement):null;
+   if(hadScreen)rememberView();
+   target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;
+   restoreView('home',focus)
+  }
  }
- if(!movies){pending++;getListing('movie','all',function(st,d){movies=d||{items:[]};pending--;if(!pending)draw()})}
- if(!series){pending++;getListing('series','all',function(st,d){series=d||{items:[]};pending--;if(!pending)draw()})}
- if(!pending)draw()
+ // Render navigation and recent watched items instantly. Movie and series
+ // shelves arrive independently; a slow source cannot hold home hostage.
+ draw();
+ if(!movies)getListing('movie','all',function(st,d){movies=d||{items:[]};draw()});
+ if(!series)getListing('series','all',function(st,d){series=d||{items:[]};draw()})
 }
 function catalog(kind){
  S.kind=kind;var cat=S.cat[kind]||'all';
@@ -1110,7 +1122,7 @@ function refreshCatalog(manual){
     for(var i=0;i<keys.length;i++)if(keys[i].indexOf(kind+':')===0&&keys[i]!==kind+':all')delete S.loaded[keys[i]];
    }else errors.push(label);
    done++;next()
-  })
+  },null,true)
  }
  next()
 }
