@@ -35,6 +35,10 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/local-engine-qoe.test.mjs
       - name: Verify privacy-safe local playback cause hints
         run: cd web/stream-native-parity && node --test qa/live-cause-hints.test.mjs
+      - name: Verify native iPhone HLS live-start margins and no cross-device modification
+        run: cd web/stream-native-parity && node --test qa/hls-ios-live-profile.test.mjs
+      - name: Verify native iPhone recovery and PWA controls without extra upstream sessions
+        run: cd web/stream-native-parity && node --test qa/ios-native-playback-stability.test.mjs
       - name: Verify live buffer UI recovery and Android-inspired READY parity
         run: cd web/stream-native-parity && node --test qa/live-buffer-ready-parity.test.mjs
       - name: Verify standalone device web-app installation and safe icon route
