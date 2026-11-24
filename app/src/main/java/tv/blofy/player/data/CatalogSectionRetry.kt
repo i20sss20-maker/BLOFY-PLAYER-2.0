@@ -19,6 +19,7 @@ internal object CatalogSectionRetry {
     suspend fun <T> run(
         onRetry: suspend (Int) -> Unit = {},
         pause: suspend (Long) -> Unit = { delay(it) },
+        preferSegmentation: Boolean = false,
         block: suspend () -> T
     ): T {
         var attempt = 1
@@ -30,6 +31,7 @@ internal object CatalogSectionRetry {
                 throw cancelled
             } catch (failure: Exception) {
                 currentCoroutineContext().ensureActive()
+                if (preferSegmentation && isRecoverableForSegmentation(failure)) throw failure
                 if (attempt >= MAX_ATTEMPTS || !isTransient(failure)) throw failure
                 attempt += 1
                 onRetry(attempt)
