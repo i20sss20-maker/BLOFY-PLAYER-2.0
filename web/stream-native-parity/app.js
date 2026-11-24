@@ -283,15 +283,32 @@ function pageRequest(kind,cat,offset,limit,cb,query,fresh){
  })
 }
 function keyOf(kind,cat){return kind+':'+(cat||'all')}
+var listingAccessSeq=0;
+function touchListing(listing){listing.cacheAccess=++listingAccessSeq;return listing}
+function pruneInactiveListings(){
+ // Preserve home shelves, search results, and each selected category.
+ // Only inactive categories participate in this bounded LRU cache.
+ var keys=Object.keys(S.loaded),inactive=[],items=0;
+ for(var i=0;i<keys.length;i++){
+  var key=keys[i],split=key.indexOf(':'),kind=key.slice(0,split),cat=key.slice(split+1),row=S.loaded[key];
+  if(cat==='all'||cat==='search'||cat===(S.cat[kind]||'all')||row.loadingMore||S.listingInflight[key])continue;
+  var count=(row.items||[]).length;items+=count;
+  inactive.push({key:key,count:count,access:row.cacheAccess||0})
+ }
+ inactive.sort(function(a,b){return a.access-b.access});
+ while(inactive.length>8||items>576){
+  var victim=inactive.shift();items-=victim.count;delete S.loaded[victim.key]
+ }
+}
 function getListing(kind,cat,cb,force){
  var key=keyOf(kind,cat);
- if(!force&&S.loaded[key]){cb(200,S.loaded[key]);return}
+ if(!force&&S.loaded[key]){var hit=touchListing(S.loaded[key]);pruneInactiveListings();cb(200,hit);return}
  if(!force&&S.listingInflight[key]){S.listingInflight[key].push(cb);return}
  if(!force)S.listingInflight[key]=[cb];
  pageRequest(kind,cat,0,36,function(st,r){
   var waiting=force?[cb]:(S.listingInflight[key]||[cb]);
   if(!force)delete S.listingInflight[key];
-  if(st===200&&r)S.loaded[key]=r;
+  if(st===200&&r){S.loaded[key]=touchListing(r);pruneInactiveListings()}
   for(var i=0;i<waiting.length;i++)waiting[i](st,st===200?r:null)
  },null,!!force)
 }
@@ -741,13 +758,16 @@ function loadMore(kind){
  if(btn){btn.disabled=true;btn.textContent='جار تحميل المزيد…'}
  pageRequest(kind,cat,listing.nextOffset||listing.items.length,36,function(st,result){
   listing.loadingMore=false;
+  if(S.loaded[key]!==listing){pruneInactiveListings();return}
   if(st!==200||!result||S.route!==kind||(S.cat[kind]||'all')!==cat){
+   pruneInactiveListings();
    if(btn&&S.route===kind){btn.disabled=false;btn.textContent='تعذر التحميل، حاول مرة أخرى'}
    return
   }
   var seen={};for(var i=0;i<listing.items.length;i++)seen[itemId(listing.items[i],kind)]=true;
   var next=result.items.filter(function(item){var id=itemId(item,kind);if(seen[id])return false;seen[id]=true;return true});
   listing.items=listing.items.concat(next);listing.nextOffset=result.nextOffset;
+  touchListing(listing);pruneInactiveListings();
   listing.hasMore=!!result.hasMore&&next.length>0;
   var list=kind==='live'?document.getElementById('channel-list'):(S.sort==='source'?document.querySelector('.poster-panel .poster-grid'):null);
   if(!list){buildCatalog(kind,listing);return}
