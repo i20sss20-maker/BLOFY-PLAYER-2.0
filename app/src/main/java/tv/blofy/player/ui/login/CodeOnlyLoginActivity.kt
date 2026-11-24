@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
+import tv.blofy.player.core.identity.ExternalStreamConnectClient
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.CatalogSyncState
@@ -156,7 +157,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
 
         submitButton = Button(this).apply {
             id = View.generateViewId()
-            text = getString(R.string.stream_ui_start)
+            text = if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") "تفعيل اشتراك BLOFY" else "Activate BLOFY subscription"
             isAllCaps = false
             textSize = if (isTv) 20f else 18f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
@@ -217,13 +218,16 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             })
         val connectButton = Button(this).apply {
             id = View.generateViewId()
-            text = "BLOFY CONNECT"
+            text = if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") "ربط كود الموقع • BLOFY CONNECT" else "Use website code • BLOFY CONNECT"
             isAllCaps = false
             isFocusable = true
             setTextColor(BlofyTvDesign.TextPrimary)
             background = BlofyTvDesign.secondaryButton(dp(14).toFloat())
             setOnClickListener {
-                startActivity(Intent(this@CodeOnlyLoginActivity, ExternalStreamConnectActivity::class.java))
+                if (busy) return@setOnClickListener
+                val intent = Intent(this@CodeOnlyLoginActivity, ExternalStreamConnectActivity::class.java)
+                ExternalStreamConnectClient.normalizeCode(codeInput.text.toString())?.let { intent.putExtra(ExternalStreamConnectActivity.EXTRA_CONNECT_CODE, it) }
+                startActivity(intent)
             }
         }
         panel.addView(connectButton, LinearLayout.LayoutParams(
@@ -345,7 +349,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     classified != StreamConnectionDiagnostics.Cause.OTHER ->
                         StreamConnectionDiagnostics.guidance(this@CodeOnlyLoginActivity, classified)
                     message == "الكود مستخدم أو غير متاح. تواصل مع المسؤول" ->
-                        getString(R.string.stream_ui_code_used)
+                        if (ExternalStreamConnectClient.normalizeCode(code) != null) {
+                            if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") "هذا الكود غير متاح كتفعيل BLOFY. إذا أنشأته من موقع CONNECT فاضغط زر ربط كود الموقع أدناه." else "Not available as a BLOFY activation code. If it came from CONNECT, use the website code button below."
+                        } else getString(R.string.stream_ui_code_used)
                     message == "محاولات كثيرة، أعد المحاولة لاحقًا" ->
                         getString(R.string.stream_ui_too_many_attempts)
                     message == "كود غير صحيح" ->
