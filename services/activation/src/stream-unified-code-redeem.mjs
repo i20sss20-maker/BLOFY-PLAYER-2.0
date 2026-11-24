@@ -33,3 +33,23 @@ export function createUnifiedCodeRedeemer({paidExists,connectExists,redeemPaid,r
   return result;
  };
 }
+
+// Shared database-backed adapter used by the HTTP gateway and isolated
+// PostgreSQL integration tests. Each invocation owns its claim capability.
+export function createDatabaseUnifiedRedeemer({pool,paidProof,pairing,redeemPaid}){
+ return async input=>{
+  let attempt=null;
+  const redeem=createUnifiedCodeRedeemer({
+   paidExists:async code=>{
+    const proof=paidProof(code);
+    if(!proof)return false;
+    const result=await pool.query('SELECT 1 FROM blofy_xtream_gateway_duration_codes WHERE code_hash=$1 LIMIT 1',[proof]);
+    return result.rows.length===1;
+   },
+   connectExists:async code=>{attempt=await pairing.beginUnifiedAttempt(code);return attempt.exists;},
+   redeemPaid,
+   redeemConnect:(_code,deviceKey)=>attempt.redeem(deviceKey)
+  });
+  return redeem(input);
+ };
+}
