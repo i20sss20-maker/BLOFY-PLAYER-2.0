@@ -10,9 +10,11 @@ const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
 let active=0;
-// Never raise this from a synthetic CI benchmark. Only a measured Railway
-// resource profile + real subscribed-source long-play can justify scaling.
-const MAX_JOBS=2;
+// Bounded capacity for this worker: default two, configurable up to four.
+// Operator may increase only with measured CPU/RAM headroom; UHD remains
+// limited to one job. Never change subscriber/source authorization.
+const requestedJobs=Number(Bun.env.BLOFY_WEB_MEDIA_MAX_JOBS||2);
+const MAX_JOBS=Number.isSafeInteger(requestedJobs)&&requestedJobs>=2&&requestedJobs<=4?requestedJobs:2;
 /* Pilot quality profiles: never enlarge a low-resolution source.
  * The previous forced 854x480 / 900 kbit/s severely degraded every HD film
  * and channel. Live compatibility defaults to 720p; movies/series on the
@@ -141,7 +143,7 @@ function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
  // The old fixed 9-minute timer killed active live streams even as viewers
  // kept fetching HLS segments. Refresh the guard only for legacy HLS sessions;
- // idle timeout still releases abandoned sessions after 110 seconds.
+ // Live idle timeout releases abandoned decoders after 60 seconds.
  if(session.legacyHls&&session.hardTimer){
   clearTimeout(session.hardTimer);
   session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
@@ -149,7 +151,7 @@ function touchHls(session){
  }
  // Full-duration VOD generates chunks only on demand. Pausing longer than
  // two minutes must not invalidate its segment URL when playback resumes.
- const idleMs=session.fullVod?25*60*1000:110000;
+ const idleMs=session.fullVod?25*60*1000:session.kind==='live'?60000:110000;
  session.idleTimer=setTimeout(()=>stopHls(session,'idle_timeout'),idleMs);
  session.idleTimer.unref?.();
 }
@@ -381,12 +383,12 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
  const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true,
   sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});
- touchHls(session);
- session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
- session.hardTimer.unref?.();
  const target=BASE+kind+'/'+id+'.'+ext;
  try{
+  mkdirSync(dir,{recursive:true});
+  touchHls(session);
+  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
+  session.hardTimer.unref?.();
   const controller=new AbortController();session.sourceController=controller;
   // A stop during the upstream header wait must cancel that fetch as well.
   // Without this, a late response can spawn FFmpeg after the viewer leaves.
@@ -770,10 +772,10 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
  const abort=new AbortController(),dir=join(hlsRoot,key);
  const session={key,vod:true,kind,id,ext,track,start,bearer,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});touchHls(session);
- session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);
- session.hardTimer.unref?.();
  try{
+  mkdirSync(dir,{recursive:true});touchHls(session);
+  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);
+  session.hardTimer.unref?.();
   const src='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+key;
   const args=['-hide_banner','-loglevel','info','-nostats','-nostdin','-analyzeduration','2000000','-probesize','2000000',
    '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_delay_max','2',
