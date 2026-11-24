@@ -11,6 +11,24 @@ function seal(token){if(!KEY)throw new Error('SESSION_KEY_MISSING');const iv=ran
 function unseal(s){try{if(!KEY||!s)return null;const v=Buffer.from(s,'base64url');if(v.length<30||v.length>500)return null;const c=createDecipheriv('aes-256-gcm',KEY,v.subarray(0,12));c.setAuthTag(v.subarray(12,28));return Buffer.concat([c.update(v.subarray(28)),c.final()]).toString('utf8')}catch{return null}}
 function token(req){const m=String(req.headers.get('cookie')||'').match(/(?:^|;\s*)bv_session=([^;]+)/);return m?unseal(m[1]):null}
 function auth(req){const t=token(req);return t?{'Authorization':'Bearer '+t,'Accept':'application/json','Cache-Control':'no-store'}:null}
+function boundedEncoderCount(value,max=100000){
+ const n=Number(value);
+ return Number.isFinite(n)&&n>=0?Math.min(max,Math.trunc(n)):0
+}
+function safeEncoderCapacity(raw){
+ // Anonymous numerical aggregate; never forward worker source paths, tokens,
+ // customer info, hostnames, station identifiers or arbitrary JSON.
+ const data=raw&&typeof raw==='object'?raw:{},jobs=data.jobKinds||{};
+ return {busy:data.busy===true,
+  freeSlots:boundedEncoderCount(data.freeSlots,2),
+  deniedLastMinute:boundedEncoderCount(data.deniedLastMinute,100000),
+  jobKinds:{
+   live:boundedEncoderCount(jobs.live,2),
+   legacyVod:boundedEncoderCount(jobs.legacyVod,2),
+   fullVod:boundedEncoderCount(jobs.fullVod,2),
+   compatible:boundedEncoderCount(jobs.compatible,2)
+  }}
+}
 function verifiedWorkerRetryHeaders(headers){
  // Only numeric short delays are forwarded from the fixed private worker.
  // Never forward arbitrary media headers, URLs, upstream hostnames or secrets.
@@ -126,7 +144,8 @@ if(p==='/api/health/media'&&method==='GET'){
   const ok=info.ok===true&&info.vodSeek?.ok===true&&info.hls?.ok===true;
   const used=Math.max(0,Number(info.activeJobs)||0),limit=Math.max(0,Number(info.limit)||0);
   return json(ok?200:503,{ok,player:ok?'ready':'degraded',vodSeek:info.vodSeek?.ok===true,
-   hls:info.hls?.ok===true,converting:Math.round(used),capacity:Math.round(limit)});
+   hls:info.hls?.ok===true,converting:Math.round(used),capacity:Math.round(limit),
+   encoderCapacity:safeEncoderCapacity(info.encoderCapacity)});
  }catch{return json(503,{ok:false,player:'unreachable'})}
 }
 if(p==='/api/player-diagnostic'&&method==='POST'){
@@ -323,6 +342,7 @@ if(p==='/api/compatible/health'&&method==='GET'){
   const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(5000)});
   if(!r.ok)return json(503,{error:'compat_worker_unavailable'});
   const data=await r.json();return json(data.ok?200:503,{ok:!!data.ok,ffmpegAvailable:!!data.ffmpegAvailable,activeJobs:data.activeJobs,capacity:data.limit,
+   encoderCapacity:safeEncoderCapacity(data.encoderCapacity),
    liveQuality:['480','720','1080','2160'].includes(String(data.liveQuality))?String(data.liveQuality):'unknown',
    vodQuality:['480','720','1080','2160'].includes(String(data.vodQuality))?String(data.vodQuality):'unknown',
    sharedLive:{
