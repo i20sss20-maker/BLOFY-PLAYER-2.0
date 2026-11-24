@@ -85,3 +85,30 @@ test('changing channel cancels pending reconnect and never loads a previous chan
     player.destroy();
   }
 });
+
+test('internal teardown does not get mistaken for a manual pause', async () => {
+  const events = new Map();
+  let loads = 0;
+  const video = {
+    paused: false, ended: false, seeking: false, readyState: 0, currentTime: 0,
+    canPlayType: () => 'maybe',
+    addEventListener(name, callback) { events.set(name, callback); },
+    removeEventListener(name) { events.delete(name); },
+    pause() { events.get('pause')?.(); },
+    load() { loads++; },
+    removeAttribute() {},
+    play() { return Promise.resolve(); }
+  };
+  const states = [];
+  const player = createBrowserStreamPlayer(video, { origin: 'https://blofyplayer.com', onStatus: status => states.push(status) });
+  try {
+    player.open({ url: '/api/live/test.m3u8', format: 'hls' });
+    events.get('error')();
+    assert.ok(states.includes('reconnecting'), 'internal pause should not block recovery');
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.ok(loads >= 3);
+    assert.equal(player.resume(), true);
+  } finally {
+    player.destroy();
+  }
+});
