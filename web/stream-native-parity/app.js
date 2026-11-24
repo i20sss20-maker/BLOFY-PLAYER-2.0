@@ -1178,7 +1178,9 @@ function requestWebDownload(kind,id,ext,name){
  if(!message){message=document.createElement('div');message.id='web-download-message';message.className='info';message.setAttribute('role','status');
   var target=document.querySelector('#detail-root .detail-actions,.downloads-page,.episode-list');
   if(target)target.insertAdjacentElement('afterend',message);
-  else document.querySelector('#screen')?.prepend(message)}
+  else {var hud=document.getElementById('player-more-panel');
+   if(hud)hud.appendChild(message);
+   else document.querySelector('#screen')?.prepend(message)}}
  if(!url){if(message)message.textContent='صيغة هذا الملف لا تدعم التنزيل المباشر على الويب.';return}
  if(!S.userVerified){if(message)message.textContent='فعّل اشتراكك أولًا.';return}
  var epoch=S.accountEpoch;
