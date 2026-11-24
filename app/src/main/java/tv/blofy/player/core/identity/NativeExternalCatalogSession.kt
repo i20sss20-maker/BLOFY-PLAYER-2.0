@@ -86,6 +86,7 @@ internal object NativeExternalCatalogSession {
     suspend fun prepare(
         context: Context,
         result: UnifiedStreamCodeClient.Result.External,
+        onSaved: suspend () -> Unit = {},
         onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
     ): Prepared = gate.withLock {
         withContext(Dispatchers.IO) {
@@ -104,6 +105,7 @@ internal object NativeExternalCatalogSession {
             }
             // Persist the redeemed credential before any provider network call.
             ExternalStreamConnectStore.saveStaged(app, profile)
+            onSaved()
             if (previous != null && !same) {
                 val old = dao.provider(previous.providerId)
                 if (old != null && !old.enabled && old.baseUrl == ExternalXtreamCatalogTransport.ORIGIN) {
