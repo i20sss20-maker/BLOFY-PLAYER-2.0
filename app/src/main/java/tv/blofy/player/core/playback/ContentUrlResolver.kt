@@ -3,6 +3,7 @@ package tv.blofy.player.core.playback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.NativeExternalMediaTransport
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.ProviderKind
 import tv.blofy.player.core.url.XtreamUrlBuilder
@@ -26,6 +27,10 @@ object ContentUrlResolver {
     /** Single source of truth used by both Live preview and full-screen playback. */
     fun liveRoute(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): LiveRoute {
         recentRoutes[provider.id] = RouteContext(provider, profile)
+        if (nativeExternal(provider)) {
+            val routes = nativeLiveRoutes(provider.id, stream.remoteId, profile.liveFormat.extension)
+            return LiveRoute(routes.first(), routes.getOrNull(1), routes.drop(1))
+        }
         if (codeEdition(provider)) return LiveRoute(codeMedia("live",stream.remoteId,"ts"),null)
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
         val fallback = liveFallbackForPrimary(provider, profile, stream, primary)
@@ -34,6 +39,7 @@ object ContentUrlResolver {
 
     /** Ordered routes for one item. Preserve signed paths/queries; never invent a CDN path. */
     fun recoveryUrls(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): List<String> {
+        if (nativeExternal(provider)) return nativeStreamRoutes(provider.id, profile.liveFormat.extension, stream)
         if (codeEdition(provider)) return listOfNotNull(when (stream.kind) {
             "live" -> codeMedia("live",stream.remoteId,"ts")
             "movie" -> codeMedia("movie",stream.remoteId,stream.extension?:"mp4")
@@ -53,7 +59,8 @@ object ContentUrlResolver {
     }
 
     fun recoveryUrls(provider: ProviderEntity, episode: EpisodeEntity): List<String> =
-        if (codeEdition(provider)) listOf(codeMedia("series",episode.remoteId,episode.extension))
+        if (nativeExternal(provider)) listOf(NativeExternalMediaTransport.route(provider.id,"series",episode.remoteId,episode.extension))
+        else if (codeEdition(provider)) listOf(codeMedia("series",episode.remoteId,episode.extension))
         else listOfNotNull(
         primaryDirectSource(provider.baseUrl, episode.directSource),
         ProviderHostResolver.providerOriginFallback(provider.baseUrl, episode.directSource),
@@ -61,6 +68,8 @@ object ContentUrlResolver {
     ).distinct()
 
     fun recoveryUrls(stream: StreamEntity): List<String> {
+        if (BuildConfig.CODE_ONLY_LOGIN && NativeExternalMediaTransport.isExternal(stream.providerId))
+            return nativeStreamRoutes(stream.providerId, recentRoutes[stream.providerId]?.liveProfile?.liveFormat?.extension ?: "ts", stream)
         if (BuildConfig.CODE_ONLY_LOGIN) return listOf(codeMedia(
             if (stream.kind=="live") "live" else "movie",stream.remoteId,
             if (stream.kind=="live") "ts" else stream.extension?:"mp4"))
@@ -70,6 +79,8 @@ object ContentUrlResolver {
     }
 
     fun recoveryUrls(episode: EpisodeEntity): List<String> {
+        if (BuildConfig.CODE_ONLY_LOGIN && NativeExternalMediaTransport.isExternal(episode.providerId))
+            return listOf(NativeExternalMediaTransport.route(episode.providerId,"series",episode.remoteId,episode.extension))
         if (BuildConfig.CODE_ONLY_LOGIN) return listOf(codeMedia("series",episode.remoteId,episode.extension))
         val context = recentRoutes[episode.providerId] ?: return listOfNotNull(episode.directSource.safeContextFreeFallback())
         return recoveryUrls(context.provider, episode)
@@ -80,12 +91,14 @@ object ContentUrlResolver {
 
     fun movie(provider: ProviderEntity, stream: StreamEntity): String {
         recentRoutes[provider.id] = RouteContext(provider, recentRoutes[provider.id]?.liveProfile)
+        if (nativeExternal(provider)) return NativeExternalMediaTransport.route(provider.id,"movie",stream.remoteId,stream.extension?:"mp4")
         if (codeEdition(provider)) return codeMedia("movie",stream.remoteId,stream.extension?:"mp4")
         return primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalMovie(provider, stream)
     }
 
     fun episode(provider: ProviderEntity, episode: EpisodeEntity): String {
         recentRoutes[provider.id] = RouteContext(provider, recentRoutes[provider.id]?.liveProfile)
+        if (nativeExternal(provider)) return NativeExternalMediaTransport.route(provider.id,"series",episode.remoteId,episode.extension)
         if (codeEdition(provider)) return codeMedia("series",episode.remoteId,episode.extension)
         return primaryDirectSource(provider.baseUrl, episode.directSource) ?: canonicalEpisode(provider, episode)
     }
@@ -187,6 +200,20 @@ object ContentUrlResolver {
         }
         return alternatePath + suffix
     }
+
+    private fun nativeExternal(provider: ProviderEntity) =
+        BuildConfig.CODE_ONLY_LOGIN && NativeExternalMediaTransport.isExternal(provider.id)
+
+    private fun nativeLiveRoutes(providerId: String, id: String, format: String): List<String> =
+        listOf(format, if (format == "ts") "m3u8" else "ts")
+            .map { NativeExternalMediaTransport.route(providerId,"live",id,it) }.distinct()
+
+    private fun nativeStreamRoutes(providerId: String, format: String, stream: StreamEntity): List<String> =
+        when (stream.kind) {
+            "live" -> nativeLiveRoutes(providerId,stream.remoteId,format)
+            "movie" -> listOf(NativeExternalMediaTransport.route(providerId,"movie",stream.remoteId,stream.extension?:"mp4"))
+            else -> emptyList()
+        }
 
     private fun codeEdition(provider: ProviderEntity) =
         BuildConfig.CODE_ONLY_LOGIN && provider.baseUrl.trimEnd('/')==StreamCodeSession.HOST
