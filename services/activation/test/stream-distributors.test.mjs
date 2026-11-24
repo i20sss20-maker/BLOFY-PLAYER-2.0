@@ -80,6 +80,7 @@ function fixture({redemption=false}={}){
       issue_id:x.issue_id,details:x.result||{},created_at:now}));
    return {rows:credits.concat(relogins).reverse()};
   }
+  if(sql==='SELECT * FROM blofy_stream_distributors WHERE id=$1')return {rows:distributors.filter(x=>x.id===args[0])};
   if(sql.includes('SET permissions=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.permissions=JSON.parse(args[1]);return {rows:[row]};}
   if(sql.includes('SET bonus_policy=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.bonus_policy=JSON.parse(args[1]);return {rows:[row]};}
   if(sql.includes('SET daily_issue_limit=$2')){
@@ -791,4 +792,15 @@ test('operator permissions default to allowed and block disabled features server
  assert.equal((await f.manager.issued(ta)).items.length,1);
  assert.equal((await f.manager.me(ta)).item.credits,11);
  await assert.rejects(f.manager.setAdmin(a.item.id,{permissionSettings:{paidIssue:true}}),/distributor_permissions_invalid/);
+});
+
+test('admin distributor report reads scoped wallet and issued sales data',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Report A',username:'report-a',credits:12}),b=await f.manager.createAdmin({name:'Report B',username:'report-b',credits:24});
+ const ta=(await f.manager.login({username:'report-a',password:a.password})).token;
+ await f.manager.issue(ta,{kind:'app',durationDays:30,requestId:crypto.randomUUID()});
+ const report=await f.manager.adminReport(a.item.id),other=await f.manager.adminReport(b.item.id);
+ assert.equal(report.stats.walletCredits,11);assert.equal(other.stats.walletCredits,24);
+ assert.equal(report.stats.paidTotal,1);assert.equal(other.stats.paidTotal,0);
+ assert.equal(report.item.id,a.item.id);assert.equal(other.item.id,b.item.id);
+ await assert.rejects(f.manager.adminReport(crypto.randomUUID()),/distributor_missing/);
 });
