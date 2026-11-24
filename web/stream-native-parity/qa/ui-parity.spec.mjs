@@ -671,6 +671,42 @@ test('20-minute hardware acceptance starts only with real decoded picture; cance
  expect(errors).toEqual([])
 });
 
+test('renewed STREAM code on the same account retains favorites and playback checkpoints across sessions',async({page})=>{
+ const stable='1234567890abcdef12345678',old='abcdefabcdefabcdefabcdef';
+ let oldPartition=old;
+ await page.route('**/api/session',async route=>route.fulfill({
+  status:200,contentType:'application/json',
+  body:JSON.stringify({ok:true,active:true,profileKey:stable,legacyProfileKey:oldPartition})
+ }));
+ await page.addInitScript(({legacy})=>{
+  const prefix='blofy_web_profile_v1:'+legacy+':';
+  localStorage.setItem(prefix+'favorites',JSON.stringify({'movie:11':true}));
+  localStorage.setItem(prefix+'favoriteItems',JSON.stringify({
+   'movie:11':{id:'11',stream_id:'11',name:'فيلم قديم',container_extension:'mp4'}
+  }));
+  localStorage.setItem(prefix+'watch',JSON.stringify({
+   'movie:11':{position:502,duration:7200,updated:1795500000000,name:'فيلم قديم',ext:'mp4'}
+  }));
+ },{legacy:old});
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="favorites"]').first().click();
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+ const state=await page.evaluate(profile=>{
+  const key='blofy_web_profile_v1:'+profile+':';
+  return {favorite:JSON.parse(localStorage.getItem(key+'favorites')||'{}')['movie:11'],
+   checkpoint:JSON.parse(localStorage.getItem(key+'watch')||'{}')['movie:11']}
+ },stable);
+ expect(state.favorite).toBe(true);
+ expect(state.checkpoint.position).toBe(502);
+ // An access-token rotation changes the old V1 partition but keeps the
+ // stable same-account V2 ID. Reloading must NOT erase saved favorites.
+ oldPartition='bbbbbbbbbbbbbbbbbbbbbbbb';
+ await page.reload();
+ await page.locator('[data-go="favorites"]').first().click();
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+ expect(await page.evaluate(profile=>JSON.parse(localStorage.getItem(
+  'blofy_web_profile_v1:'+profile+':watch')||'{}')['movie:11'].position,stable)).toBe(502);
+});
 test('Hls.js vendor loader retries after transient TV Wi-Fi script failure',async({page})=>{
  let loads=0;
  await page.route('**/vendor/hls.min.js',async route=>{
