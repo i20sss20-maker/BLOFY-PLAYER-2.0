@@ -1,0 +1,35 @@
+name: BLOFY STREAM Web stable profile renewal QA
+on:
+  push:
+    branches: [fix/stream-web-stable-profile-renewals-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-web-stable-profile.yml'
+  pull_request:
+    branches: [feature/blofy-stream-web-native-parity-20261122]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-web-stable-profile.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-token-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Validate HMAC IDs, old key migration, account-bound storage and no bearer disclosure
+        run: |
+          node --check web/stream-native-parity/web-profile-key.mjs
+          node --check web/stream-native-parity/app.js
+          node --test web/stream-native-parity/qa/web-profile-key.test.mjs
+          bun build web/stream-native-parity/server.ts --target=bun --outdir=/tmp/blofy-server-profile-key
+      - name: Limitations
+        if: always()
+        run: |
+          echo 'No customer accounts, activation codes, or external data sources are touched by this test.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Preserves same-account LOCAL browser favorites across code renewal. This does not create multi-device cloud sync.' >> "$GITHUB_STEP_SUMMARY"
