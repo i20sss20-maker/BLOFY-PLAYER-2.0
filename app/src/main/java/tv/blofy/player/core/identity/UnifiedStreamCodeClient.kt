@@ -67,8 +67,19 @@ internal object UnifiedStreamCodeClient {
         }
     }
 
-    suspend fun redeem(rawCode: String, deviceKey: String): Result =
-        redeemRequest(rawCode,deviceKey,client,StreamCodeSession.HOST)
+    private const val SYNTHETIC_LAB = "https://blofy-migration-device-preview-test.up.railway.app"
+
+    suspend fun redeem(rawCode: String, deviceKey: String, syntheticLab: Boolean = false): Result {
+        // This path is available only from the isolated QA login. Never send
+        // the actual installation key or any customer code to the fixture.
+        if (syntheticLab && normalize(rawCode) == "00000000") {
+            val result = redeemRequest("00000000","0".repeat(64),client,SYNTHETIC_LAB)
+            require(result is Result.External && result.credentials.host.toString().trimEnd('/') == SYNTHETIC_LAB &&
+                result.credentials.username == "synthetic-lab" && result.credentials.password == "public-sample-only")
+            return result
+        }
+        return redeemRequest(rawCode,deviceKey,client,StreamCodeSession.HOST)
+    }
 
     // Internal test seam: production always uses the pinned first-party origin.
     internal suspend fun redeemRequest(rawCode: String, deviceKey: String,
