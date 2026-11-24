@@ -1,0 +1,109 @@
+name: STREAM 56.0.4 vs CONNECT 56.0.5 full regression comparison
+on:
+  push:
+    branches: [qa/stream-connect-baseline-comparison-20261124]
+    paths: ['.github/workflows/connect-baseline-comparison.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: baseline
+            sha: 6f5ebd8061d413492165bb2af0b4b66c3bede5bd
+          - label: candidate
+            sha: cd5f81cd44a72fd99c3f208b5b8668fd458a53ad
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Run complete identical STREAM suite on pinned source
+        id: tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          git rev-parse HEAD > tested-sha.txt
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 testStreamCodeDemoUnitTest > regression.log 2>&1
+          status=$?
+          echo "$status" > test-exit.txt
+          tail -n 12 regression.log
+          # Require XML evidence; never classify compilation/infrastructure failure as baseline test debt.
+          find app/build/test-results/testStreamCodeDemoUnitTest -name 'TEST-*.xml' | grep -q .
+      - name: Collect precise test outcomes
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob,json,xml.etree.ElementTree as ET
+          paths=glob.glob('app/build/test-results/testStreamCodeDemoUnitTest/TEST-*.xml')
+          assert paths, 'No test results'
+          result={}
+          for path in paths:
+              for t in ET.parse(path).getroot().iter('testcase'):
+                  key=t.attrib['classname']+'#'+t.attrib['name']
+                  assert key not in result, 'Duplicate test identity'
+                  failure=t.find('failure')
+                  if failure is None: failure=t.find('error')
+                  result[key]='failed' if failure is not None else 'skipped' if t.find('skipped') is not None else 'passed'
+          assert len(result)>500, 'Incomplete suite'
+          json.dump({'sha':open('tested-sha.txt').read().strip(),'exit':int(open('test-exit.txt').read()),'tests':result},open('outcomes.json','w'),indent=2,sort_keys=True)
+          print('Collected',len(result),'tests;',sum(x=='failed' for x in result.values()),'failures')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-${{ matrix.label }}
+          path: |
+            outcomes.json
+            test-exit.txt
+            app/build/test-results/testStreamCodeDemoUnitTest/TEST-*.xml
+          if-no-files-found: error
+  compare:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: regression-*
+          path: comparison
+      - name: Report pre-existing and newly introduced failures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          baseline=json.load(open('comparison/regression-baseline/outcomes.json'))
+          candidate=json.load(open('comparison/regression-candidate/outcomes.json'))
+          assert baseline['sha']=='6f5ebd8061d413492165bb2af0b4b66c3bede5bd'
+          assert candidate['sha']=='cd5f81cd44a72fd99c3f208b5b8668fd458a53ad'
+          b,c=baseline['tests'],candidate['tests']
+          bf={k for k,v in b.items() if v=='failed'}
+          cf={k for k,v in c.items() if v=='failed'}
+          missing=set(b)-set(c)
+          newly_skipped={k for k in b.keys() & c.keys() if b[k]!='skipped' and c[k]=='skipped'}
+          connect={k:v for k,v in c.items() if 'ExternalStreamConnect' in k}
+          report={'baseline_tests':len(b),'candidate_tests':len(c),'baseline_failures':sorted(bf),'candidate_failures':sorted(cf),'shared_failures':sorted(bf&cf),'new_failures':sorted(cf-bf),'fixed_failures':sorted(bf-cf),'missing':sorted(missing),'newly_skipped':sorted(newly_skipped),'connect_tests':connect}
+          pathlib.Path('comparison-report.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          assert connect and all(v=='passed' for v in connect.values()),'CONNECT tests must pass'
+          assert not missing and not newly_skipped,'Tests missing or newly skipped'
+          assert not cf-bf,'New regression detected'
+          # This workflow is diagnostic only; shared failures still require separate review.
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stream-regression-comparison
+          path: comparison-report.json
+          if-no-files-found: error
