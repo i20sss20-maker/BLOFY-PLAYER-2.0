@@ -54,4 +54,29 @@ class NativeExternalMediaTransportTest {
         assertEquals(transport.route(id,"series","789","mp4"), ContentUrlResolver.episode(provider,episode))
         assertEquals(listOf(transport.route(id,"series","789","mp4")), ContentUrlResolver.recoveryUrls(episode))
     }
+    @Test fun providerDirectedCdnAcceptsPublicDnsHostsButNotPrivateOrDowngradedRoutes() {
+        val routes = ExternalXtreamMediaRoutes(credentials.host,providerDirectedCdn = true)
+        val root = credentials.host.resolve("/live/private-user/private-pass/123.m3u8")!!
+        val redirected = routes.redirect(root,"https://cdn.example.net/stream/index.m3u8?sig=private")
+        val manifest = routes.rewriteManifest(redirected,"#EXTM3U\nsegment.ts\nhttps://edge.example.net/seg2.ts\n")
+        assertFalse(manifest.contains("cdn.example.net"))
+        assertFalse(manifest.contains("edge.example.net"))
+        val urls = manifest.lineSequence().filter { it.startsWith("https://") }
+            .map { routes.resolve(it.toHttpUrl()).toString() }.toList()
+        assertEquals(listOf("https://cdn.example.net/stream/segment.ts","https://edge.example.net/seg2.ts"),urls)
+        for (bad in listOf("http://cdn.example.net/seg.ts","https://127.0.0.1/seg.ts",
+            "https://router.local/seg.ts","https://user:pass@cdn.example.net/seg.ts")) {
+            assertThrows(IOException::class.java) { routes.redirect(root,bad) }
+        }
+    }
+
+    @Test fun catchupRouteIsBoundToProviderAndDoesNotExposeCredentials() {
+        val route = transport.catchupRoute(id,"123",60,"2026-11-24:20-00")
+        assertFalse(route.contains("private-"))
+        assertEquals(listOf("timeshift","private-user","private-pass","60","2026-11-24:20-00","123.ts"),
+            transport.resolveRoot(route.toHttpUrl(),id,credentials).pathSegments)
+        assertThrows(IOException::class.java) { transport.resolveRoot(route.toHttpUrl(),other,credentials) }
+        assertThrows(IllegalArgumentException::class.java) { transport.catchupRoute(id,"123",1441,"2026-11-24:20-00") }
+    }
+
 }
