@@ -95,6 +95,15 @@ class ConnectProfileDeviceTest {
                 assertEquals("01234567", tv.blofy.player.core.identity.StreamCodeClient.normalizeCode(field.text.toString()))
                 field.setText("012345678901")
                 assertEquals("012345678901", tv.blofy.player.core.identity.StreamCodeClient.normalizeCode(field.text.toString()))
+                // Exercise the Editable's actual input filters (paste path),
+                // not setText alone, while preserving a numeric IME.
+                field.text.replace(0,field.text.length,"BC-AbCdEf0123456789_-xyZabc")
+                assertEquals("BC-AbCdEf0123456789_-xyZabc",
+                    tv.blofy.player.core.identity.UnifiedStreamCodeClient.normalize(field.text.toString()))
+                field.text.replace(0,field.text.length,"٠١٢٣ ٤٥٦٧")
+                assertEquals("01234567",
+                    tv.blofy.player.core.identity.UnifiedStreamCodeClient.normalize(field.text.toString()))
+                assertEquals(android.text.InputType.TYPE_CLASS_NUMBER,field.inputType)
                 val buttons = views.filterIsInstance<Button>()
                 assertEquals("Activation and language only", 2, buttons.size)
                 assertFalse(buttons.any { it.text.toString().contains("CONNECT", ignoreCase = true) })
