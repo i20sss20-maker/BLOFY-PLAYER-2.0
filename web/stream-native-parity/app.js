@@ -4090,7 +4090,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  state.toggle=function(){
   if(video.paused){
    state.userPaused=false;
-   var p=video.play();if(p&&p.catch)p.catch(function(){})
+   try{
+    var p=video.play();if(p&&p.catch)p.catch(function(error){
+     if(S.route==='player'&&S.playerView===state&&
+        !offerIosPlayGesture(error,video,false))playerStatus('تعذر استئناف التشغيل؛ حاول إعادة الاتصال.',true)
+    })
+   }catch(error){if(!offerIosPlayGesture(error,video,false))playerStatus('تعذر استئناف التشغيل؛ حاول إعادة الاتصال.',true)}
   }else{
    state.userPaused=true;video.pause()
   }
