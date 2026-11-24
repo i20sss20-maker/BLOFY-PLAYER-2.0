@@ -7,13 +7,14 @@
  'use strict';
  function create(video,channelId,notify){
   var audio=null,activeId='',tracks=[],generation=0,disposed=false,
-    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null;
+    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null;
   function say(msg){if(typeof notify==='function')notify(msg)}
   function clearDelay(){if(delayTimer){clearTimeout(delayTimer);delayTimer=null}}
+  function clearStall(){if(stallTimer){clearTimeout(stallTimer);stallTimer=null}}
   function restore(){video.muted=savedMuted;video.volume=savedVolume}
   function stop(){
-   generation++;clearDelay();
-   if(audio){var a=audio;audio=null;a.onplaying=null;a.onerror=null;a.onended=null;
+   generation++;clearDelay();clearStall();
+   if(audio){var a=audio;audio=null;a.onplaying=null;a.onerror=null;a.onended=null;a.onwaiting=null;a.onstalled=null;a.ontimeupdate=null;
     try{a.pause();a.removeAttribute('src');a.load()}catch(e){}}
    activeId='';restore()
   }
@@ -27,8 +28,15 @@
    savedMuted=video.muted;savedVolume=video.volume;
    var next=new Audio();next.preload='none';next.autoplay=false;next.controls=false;
    next.onplaying=function(){if(disposed||epoch!==generation)return;
+    clearStall();
     video.muted=true;activeId=id;say('المعلق: '+track.label)};
    next.onerror=next.onended=function(){if(epoch===generation){stop();say('تعذر تشغيل المعلق؛ رجع صوت القناة الأصلي')}};
+   next.ontimeupdate=function(){if(epoch===generation)clearStall()};
+   next.onwaiting=next.onstalled=function(){
+    if(epoch!==generation||!activeId||stallTimer)return;
+    stallTimer=setTimeout(function(){stallTimer=null;
+     if(epoch===generation&&audio===next){stop();say('انقطع صوت المعلق؛ عاد صوت القناة الأصلي')}} ,7000)
+   };
    next.src='/api/audio/track/'+encodeURIComponent(id)+'?channel='+encodeURIComponent(channelId);
    audio=next;
    var delay=Math.max(0,Math.min(15000,(Number(track.delaySeconds)||0)*1000));
