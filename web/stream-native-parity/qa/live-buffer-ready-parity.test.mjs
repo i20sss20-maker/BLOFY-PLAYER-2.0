@@ -27,7 +27,7 @@ test('intentional pause, hidden tab, seek, source backoff and 429 never show a f
  assert.equal(allowed(rec,video,12000,true),false);
  assert.equal(allowed(rec,{...video,paused:true},12000,false),false);
  assert.equal(allowed(rec,{...video,seeking:true},12000,false),false);
- assert.equal(allowed(rec,{...video,ended:true},12000,false);
+ assert.equal(allowed(rec,{...video,ended:true},12000,false),false);
  for(const key of ['capacityTimer','originTimer','retryTimer','reconnecting']){
   assert.equal(allowed({...rec,[key]:1},video,12000,false),false,key)
  }
