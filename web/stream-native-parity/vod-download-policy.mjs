@@ -7,7 +7,8 @@ export function vodDownloadPath(kind,id,extension){
  return '/api/download/'+type+'/'+number+'.'+ext;
 }
 export function downloadableResponse(status,contentType){
- if(status!==200&&status!==206)return false;
+ // No Range was requested. A partial 206 response would create a corrupt file.
+ if(status!==200)return false;
  const type=String(contentType||'').split(';')[0].trim().toLowerCase();
  return type==='application/octet-stream'||type==='video/mp4'||
    type==='video/x-matroska'||type==='video/x-msvideo'||
