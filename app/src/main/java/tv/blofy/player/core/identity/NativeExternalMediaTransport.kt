@@ -58,7 +58,8 @@ internal object NativeExternalMediaTransport {
 
     fun client(context: Context, providerId: String): OkHttpClient {
         val profile = ExternalStreamConnectStore.loadStaged(context.applicationContext)
-        if (profile == null || profile.providerId != providerId || !isExternal(providerId)) {
+        if (!NativeExternalCatalogSession.qaEnabled(context) || StreamCodeSession.isClaimed(context) ||
+            profile == null || profile.providerId != providerId || !isExternal(providerId)) {
             return OkHttpClient.Builder().addInterceptor {
                 throw IOException("External subscription unavailable")
             }.build()
