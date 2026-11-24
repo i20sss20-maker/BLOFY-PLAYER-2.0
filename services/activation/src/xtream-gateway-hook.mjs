@@ -88,7 +88,7 @@ import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
   unsealXtreamHlsTicket,refreshExpiredXtreamHlsTicket} from './xtream-hls-playback.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
-import {permittedLicensedLiveFanout,permittedSharedLivePilot,
+import {permittedLicensedLiveFanout,permittedSharedLivePilot,permittedLicensedLiveProduction,
   createFirstAccountSharedLiveTestPilot} from './xtream-licensed-live-fanout-policy.mjs';
 import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
   from './xtream-shared-pilot-registry.mjs';
@@ -1364,7 +1364,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       sourceNameMatches:row.source_name_matches,
       kind,extension:mediaExtension,
       upstreamRestreamer:row.source_restreamer_allowed===true
-    })&&(permittedSharedLivePilot({
+    })&&(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:row.source_reported_max_connections})||permittedSharedLivePilot({
       accountId:account.id,gatewayId
     })||(durableSharedLiveTrialEnabled()?
       await claimDurableSharedLiveTrial(pool,{
