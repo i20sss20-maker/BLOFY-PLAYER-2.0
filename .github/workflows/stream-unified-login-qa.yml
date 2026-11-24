@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: stream-unified-login-qa-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   native-xtream-transport:
@@ -110,7 +110,7 @@ jobs:
           grep -Fq "$old" app/build.gradle.kts
           sed -i 's/testBuildType = if (securityR8Enabled) "release" else "debug"/testBuildType = "streamCodeDemo"/' app/build.gradle.kts
           grep -Fq 'testBuildType = "streamCodeDemo"' app/build.gradle.kts
-      - name: Test CONNECT encrypted profile and onboarding screen on Android 9 API 28
+      - name: Test original login and encrypted native staging profile on Android 9 API 28
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 28
