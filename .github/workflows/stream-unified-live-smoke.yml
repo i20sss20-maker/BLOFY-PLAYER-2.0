@@ -1,0 +1,41 @@
+name: STREAM live endpoint non-destructive rollout smoke
+on:
+  push:
+    branches: [release/stream-unified-server-20261125]
+    paths: ['.github/workflows/stream-unified-live-smoke.yml']
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: Unified feature flag expected enabled
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      ENABLED: ${{ inputs.enabled || false }}
+    steps:
+      - name: Verify public route and gate without touching any subscriber
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=https://blofyplayer.com
+          curl -fsS --retry 2 --connect-timeout 10 --max-time 25 "$root/health" > "$RUNNER_TEMP/health.json"
+          jq -e '.ok==true or .status=="ok" or .status=="healthy"' "$RUNNER_TEMP/health.json"
+          # Only deliberately malformed input. Never look up, issue, activate,
+          # rotate, or redeem any real code or account.
+          expected=503
+          if test "$ENABLED" = true; then expected=400; fi
+          status=$(curl -sS --connect-timeout 10 --max-time 25 -D "$RUNNER_TEMP/headers" -o "$RUNNER_TEMP/body" -w '%{http_code}' -H 'Content-Type: application/json' --data '{"code":"INVALID","deviceKey":"invalid"}' "$root/api/v1/stream/app/unified-redeem")
+          test "$status" = "$expected"
+          grep -Eiq '^cache-control:.*no-store' "$RUNNER_TEMP/headers"
+          grep -Eiq '^referrer-policy:.*no-referrer' "$RUNNER_TEMP/headers"
+          if test "$ENABLED" = true; then
+            jq -e '.ok==false and .error=="stream_code_invalid"' "$RUNNER_TEMP/body"
+          else
+            jq -e '.ok==false and .error=="stream_unified_unavailable"' "$RUNNER_TEMP/body"
+          fi
+          echo "Live unified route: expected $expected, confirmed. No real customer codes used." >> "$GITHUB_STEP_SUMMARY"
