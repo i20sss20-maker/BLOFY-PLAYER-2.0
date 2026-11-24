@@ -90,6 +90,8 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
                 if (done != total || partial.length() != total ||
                     NativeExternalCatalogSession.activeId(app) != provider)
                     return@withContext failure(DownloadManager.ERROR_HTTP_DATA_ERROR)
+                currentCoroutineContext().ensureActive()
+                check(OfflineDownloadStore.records(app,provider).any { it.workerId == id.toString() })
                 check(partial.renameTo(file))
                 setProgress(workDataOf("done" to total,"total" to total))
                 Result.success()
