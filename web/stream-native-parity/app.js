@@ -3612,11 +3612,19 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  if(qualityButton)qualityButton.onclick=function(){
   var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
   if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو؛ لا توجد دقات متعددة قابلة للاختيار.');return}
-  var current=Number(engine.currentLevel),next=current<0?0:current+1;
-  if(next>=levels.length)next=-1;
-  try{engine.currentLevel=next}catch(err){playerStatus('تعذر تغيير جودة هذا المصدر.');return}
-  var level=next>=0?levels[next]:null,quality=next===-1?'جودة تلقائية':('جودة '+(level.height?level.height+'p':'المستوى '+(next+1)));
-  playerStatus(quality);qualityButton.title=quality
+  // Match native STREAM: a titled quality selector, including Auto,
+  // rather than cycling blindly on each button press.
+  var options=[{name:'تلقائي (Auto)',selected:Number(engine.currentLevel)<0,
+   select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
+  for(var i=0;i<levels.length;i++)(function(level,index){
+   var height=Number(level.height)||0,fps=Number(level.frameRate)||0,
+    bitrate=Number(level.bitrate)||0;
+   var resolution=height>=2160?'4K':height?height+'p':'المستوى '+(index+1);
+   var label=[resolution,fps>0?Math.round(fps)+'fps':'',bitrate>0?(bitrate/1000000).toFixed(1)+'Mbps':''].filter(Boolean).join(' • ');
+   options.push({name:label,selected:Number(engine.currentLevel)===index,
+    select:function(){engine.currentLevel=index;playerStatus('الجودة: '+resolution)}})
+  })(levels[i],i);
+  showPlayerChoices('الجودة',options,this)
  };
  var infoToggle=document.getElementById('player-info-toggle');
  if(infoToggle)infoToggle.onclick=function(){
