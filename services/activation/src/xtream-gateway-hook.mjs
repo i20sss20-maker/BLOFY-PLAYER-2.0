@@ -170,6 +170,7 @@ let streamCodes=null;
 let streamCommercial=null;
 let streamRelogin=null;
 let streamDualLink=null;
+let unifiedConnectPairing=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 // Short numeric vouchers are more susceptible to distributed guessing.
 // Bound all public redemption attempts as well as each client IP.
@@ -2745,9 +2746,10 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             ...headers,'retry-after':String(Math.max(rate.retryAfterSeconds||0,overall.retryAfterSeconds||0))});
         try{
           await ensureReady();
-          const pairing=createStreamConnectPairing({pool,
+          if(!unifiedConnectPairing)unifiedConnectPairing=createStreamConnectPairing({pool,
             keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,
             enabled:['1','true'].includes(String(process.env.BLOFY_STREAM_CONNECT_ENABLED))});
+          const pairing=unifiedConnectPairing;
           const redeem=createUnifiedCodeRedeemer({
             paidExists:async code=>{
               const proof=streamCodeProof(code,KEY_HEX);
