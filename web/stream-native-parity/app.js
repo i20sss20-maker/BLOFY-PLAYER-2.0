@@ -2313,8 +2313,6 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  function recoverConnection(){
   if(!alive()||record.reconnecting)return;
-  // Superseding a stall must cancel its delayed spinner and timer.
-  clearLiveBufferWait(record,statusElement);
   if(preview){
    if(S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
    if(record.recoveryAttempt>=2){
@@ -2336,6 +2334,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
   var state=S.playerView;
   if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
+  // Previous preview source was stopped/recreated normally; for the real
+  // fullscreen player cancel a pending buffering notice before recovery.
+  clearLiveBufferWait(record,statusElement);
   countVisualOutage(record,video,Date.now());
   record.reconnecting=true;
   if(state.stats){
