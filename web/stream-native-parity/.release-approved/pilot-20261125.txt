@@ -1,0 +1,1 @@
+PILOT ONLY — feature branch validation candidate. Do not treat as production approval. New commentary and download APIs remain OFF by default pending licensed real-feed tests. Dockerfile includes all imported modules. Official production release branch is unchanged.
