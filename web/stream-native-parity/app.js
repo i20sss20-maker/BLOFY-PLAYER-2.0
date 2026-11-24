@@ -1949,7 +1949,9 @@ function clearLiveBufferWait(record,statusElement){
  // network backoff, manual controls or a newer channel's status.
  if(record.bufferStatusShown&&statusElement&&
    (statusElement.textContent==='جار استقبال البث…'||
-    statusElement.textContent==='جار انتظار أول صورة من البث…')){
+    statusElement.textContent==='جار انتظار أول صورة من البث…'||
+    statusElement.textContent==='وصل الصوت أو توقيت البث لكن الصورة لم تظهر؛ جار فحص الفيديو واستعادة التشغيل…'||
+    statusElement.textContent==='تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')){
   statusElement.style.display='none'
  }
  record.bufferStatusShown=false
@@ -2509,6 +2511,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     recoverConnection()
    }else if(progress.idleMs>=6500&&!record.bufferSince){
     record.bufferSince=Date.now();
+    // Mark watchdog-owned notices too: a picture that resumes without
+    // a browser "playing" event must dismiss this stale message.
+    record.bufferStatusShown=true;
     status(!video.videoWidth||!video.videoHeight?
      'وصل الصوت أو توقيت البث لكن الصورة لم تظهر؛ جار فحص الفيديو واستعادة التشغيل…':
      'تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')
