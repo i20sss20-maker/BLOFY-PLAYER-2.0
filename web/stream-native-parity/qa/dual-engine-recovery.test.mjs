@@ -51,6 +51,10 @@ test('explicit direct MPEGTS uses first-party auth stream only after old HLS STO
  assert.match(m,/window\.mpegts\.createPlayer/);
  assert.match(m,/window\.mpegts\.Events\.ERROR/);
  assert.match(m,/record\.startupTimer=setTimeout/);
+ assert.match(m,/record\.progressWatchdog=setInterval/);
+ assert.match(m,/!video\.videoWidth\|\|!video\.videoHeight/);
+ assert.match(m,/livePlaybackProgress\(record,video,now\)/);
+ assert.match(m,/progress\.idleMs>18000/);
  assert.match(m,/playHls\(video,'live',id,'ts',0,statusElement,false,0\)/);
  assert.match(server,/p==='\/vendor\/mpegts\.js'/);
  assert.match(server,/p\.indexOf\('\/api\/media\/'\)===0/);
