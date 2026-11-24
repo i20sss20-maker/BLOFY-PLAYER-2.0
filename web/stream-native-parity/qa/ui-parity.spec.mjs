@@ -104,6 +104,55 @@ test('switching channels and leaving live releases the old media worker session'
  await page.locator('[data-go="movie"]').first().click();
  await expect.poll(()=>stops.length).toBeGreaterThanOrEqual(2);
 });
+test('Chrome direct MPEG-TS engine waits for HLS STOP, decodes H264/AAC, and switches back safely',async({page})=>{
+ const raw=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
+ const names=[...new Set(raw.match(/seg-[0-9]{6}[.]ts/g)||[])];
+ expect(names.length).toBeGreaterThan(1);
+ const chunks={};for(const name of names)chunks[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
+ const directBytes=Buffer.concat(names.map(name=>chunks[name]));
+ const events=[],errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/api/hls/live/31/ts/0/**',async route=>{
+  const name=route.request().url().split('/').pop().split('?')[0];
+  if(name==='stop'){
+   events.push('hls-stop');
+   return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'})
+  }
+  if(name==='index.m3u8'){
+   events.push('hls-start');
+   return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',body:raw})
+  }
+  if(chunks[name])return route.fulfill({status:200,contentType:'video/mp2t',body:chunks[name]});
+  return route.fulfill({status:404,body:'not_found'})
+ });
+ await page.route('**/api/media/live/31.ts',async route=>{
+  events.push('direct-source');
+  await route.fulfill({status:200,contentType:'video/mp2t',body:directBytes,
+   headers:{'Cache-Control':'no-store','Content-Length':String(directBytes.length)}})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:13000}).toBeGreaterThan(1);
+ await page.locator('[data-preview-full]').click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:12000}).toBeGreaterThan(1);
+ await page.locator('#player-options-toggle').click();
+ await page.locator('#player-direct-ts').click();
+ await expect.poll(()=>events.filter(v=>v==='direct-source').length,{timeout:12000}).toBeGreaterThan(0);
+ const sourceIndex=events.indexOf('direct-source'),stopIndex=events.lastIndexOf('hls-stop');
+ expect(stopIndex).toBeGreaterThan(-1);
+ expect(sourceIndex).toBeGreaterThan(stopIndex,'old HLS must stop before opening second source');
+ await expect(page.locator('#player-source-mode')).toContainText('MPEG-TS',{timeout:5000});
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:12000}).toBeGreaterThan(1);
+ const state=await page.locator('#player-media').evaluate(v=>({width:v.videoWidth,height:v.videoHeight,error:v.error&&v.error.code}));
+ expect(state.error).toBeFalsy();expect(state.width).toBeGreaterThan(0);
+ const before=events.filter(v=>v==='hls-start').length;
+ await page.locator('#player-direct-ts').click();
+ await expect.poll(()=>events.filter(v=>v==='hls-start').length,{timeout:10000}).toBeGreaterThan(before);
+ await expect(page.locator('#player-direct-ts')).toContainText('MPEG-TS');
+ expect(errors).toEqual([])
+});
+
 test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsupported source',async({page})=>{
  const manifest=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
  const segments={};
