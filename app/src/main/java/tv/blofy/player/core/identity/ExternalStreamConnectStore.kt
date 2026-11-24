@@ -73,11 +73,69 @@ object ExternalStreamConnectStore {
         }.getOrNull()
     }
 
-    fun clear(context: Context) {
+    // Independent native catalog staging slot. The provider ID and credentials
+    // are authenticated together; swapping ciphertext or editing a preference
+    // cannot select another account's cached library.
+    internal class StagedProfile(
+        val providerId: String,
+        val credentials: ExternalStreamConnectClient.Credentials
+    )
+
+    @Synchronized internal fun saveStaged(context: Context, profile: StagedProfile) {
+        require(profile.providerId.startsWith("external-") &&
+            runCatching { java.util.UUID.fromString(profile.providerId.removePrefix("external-")) }.isSuccess)
+        val plain = JSONObject().put("providerId", profile.providerId)
+            .put("host", profile.credentials.host.toString())
+            .put("username", profile.credentials.username)
+            .put("password", profile.credentials.password).toString().toByteArray(Charsets.UTF_8)
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, checkNotNull(key(true)))
+            cipher.updateAAD("blofy-native-external-stage-v1".toByteArray(Charsets.UTF_8))
+            val sealed = Base64.encodeToString(cipher.iv + cipher.doFinal(plain), Base64.NO_WRAP)
+            check(prefs(context).edit().putString("native_stage_v1", sealed).commit()) {
+                "تعذر حفظ الاشتراك بأمان"
+            }
+        } finally { plain.fill(0) }
+    }
+
+    @Synchronized internal fun loadStaged(context: Context): StagedProfile? {
+        val value = prefs(context).getString("native_stage_v1", null) ?: return null
+        return runCatching {
+            val bytes = Base64.decode(value, Base64.NO_WRAP)
+            require(bytes.size in 29..8192)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, checkNotNull(key(false)),
+                GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+            cipher.updateAAD("blofy-native-external-stage-v1".toByteArray(Charsets.UTF_8))
+            val plain = cipher.doFinal(bytes.copyOfRange(12, bytes.size))
+            try {
+                val json = JSONObject(String(plain, Charsets.UTF_8))
+                val id = json.getString("providerId")
+                require(id.startsWith("external-"))
+                java.util.UUID.fromString(id.removePrefix("external-"))
+                val host = checkNotNull(ExternalStreamConnectClient.parseHost(json.getString("host")))
+                val username = json.getString("username")
+                val password = json.getString("password")
+                require(username.length in 1..256 && password.length in 1..256 &&
+                    (username + password).none { it.code < 32 || it.code == 127 })
+                StagedProfile(id, ExternalStreamConnectClient.Credentials(host, username, password))
+            } finally { plain.fill(0) }
+        }.getOrNull()
+    }
+
+    @Synchronized internal fun clearStaged(context: Context) {
+        check(prefs(context).edit().remove("native_stage_v1").commit()) {
+            "تعذر حذف الاشتراك المؤقت"
+        }
+        // The separate legacy profile can still depend on this Keystore alias.
+    }
+
+    @Synchronized fun clear(context: Context) {
         check(prefs(context).edit().remove(SEALED).commit()) {
             "تعذر حذف اشتراك CONNECT"
         }
-        runCatching {
+        if (!prefs(context).contains("native_stage_v1")) runCatching {
             KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(ALIAS) }
         }
     }
