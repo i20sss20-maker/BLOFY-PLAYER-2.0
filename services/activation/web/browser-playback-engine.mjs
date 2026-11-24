@@ -114,7 +114,7 @@ export function createBrowserStreamPlayer(video, {
     readyToPlay();
   }
   function scheduleRecovery(reason) {
-    if (disposed || !current || intentionalPause || timer !== null || video.ended) return;
+    if (disposed || !current || intentionalPause || timer !== null || (video.ended && !current.live)) return;
     diagnostic(reason);
     if (attempts >= maxRetries) { status('playback-unavailable'); return; }
     const version = generation;
@@ -196,7 +196,7 @@ export function createBrowserStreamPlayer(video, {
     status('loading');
     installSource(resumeAt);
     watch = setInterval(() => {
-      if (!current || disposed || video.paused || video.seeking || document?.hidden) return;
+      if (!current || disposed || video.paused || video.seeking || globalThis.document?.hidden) return;
       if (Date.now() - lastProgressAt >= stallMs && video.readyState < 3) scheduleRecovery('stall-timeout');
     }, 2000);
     return true;
