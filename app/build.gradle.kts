@@ -11,6 +11,7 @@ plugins {
 // Staged name obfuscation. Existing release jobs remain unchanged until acceptance.
 val securityR8Enabled = providers.gradleProperty("BLOFY_SECURITY_R8")
     .map { it.toBooleanStrict() }.orElse(false).get()
+val unifiedStreamRelease = providers.gradleProperty("BLOFY_UNIFIED_STREAM_RELEASE").orElse("false").get().toBooleanStrict()
 val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").orElse("https://api.blofyplayer.com").get().trim()
 val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
 val distribution = providers.gradleProperty("BLOFY_DISTRIBUTION").orElse("website").get()
@@ -49,13 +50,14 @@ android {
         targetSdk = 36
         // Isolated STREAM 56.0.4 final: nonblocking catalog refresh, poster recovery, and Android 9 compatibility fixes. This branch does
         // not change the main app, customer updater or Google Play releases.
-        versionCode = 2000123
+        versionCode = 2000124
         // VersionCode is higher than the published signed STREAM 55.8.24 (2000101).
-        versionName = "2.0.0-rc07.56.0.8" // STREAM build type appends -STREAM
+        versionName = "2.0.0-rc07.56.0.9" // STREAM build type appends -STREAM
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
         manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
         buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
+        buildConfigField("boolean", "UNIFIED_STREAM_RELEASE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -95,6 +97,7 @@ android {
         create("streamCodeOnly") {
             initWith(getByName("release"))
             applicationIdSuffix = ".stream"
+            buildConfigField("boolean", "UNIFIED_STREAM_RELEASE", unifiedStreamRelease.toString())
             versionNameSuffix = "-STREAM"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
             manifestPlaceholders["blofyApplicationIcon"] = "@drawable/stream_app_icon"
