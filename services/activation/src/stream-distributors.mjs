@@ -524,8 +524,14 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      return {ok:true,credits:amount,pointsUsed:quarters/4,balanceAfter:next};
    });
  }
- async function analytics(token){
-  const actor=await session(token);
+ async function analytics(token){return analyticsFor(await session(token));}
+ async function adminReport(id){
+  await ensureSchema();if(!UUID.test(String(id||'')))throw fail('distributor_invalid_id');
+  const actor=(await pool.query('SELECT * FROM blofy_stream_distributors WHERE id=$1',[id])).rows[0];
+  if(!actor)throw fail('distributor_missing',404);
+  return {...await analyticsFor(actor),item:publicDistributor(actor)};
+ }
+ async function analyticsFor(actor){
   const row=(await pool.query(`SELECT
     COUNT(*) FILTER (WHERE status='done' AND created_at>=((NOW() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'))::int AS today,
     COUNT(*) FILTER (WHERE status='done' AND created_at>=DATE_TRUNC('month',NOW()))::int AS month,
@@ -1078,5 +1084,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,updated,requested:ids.length,skipped:ids.length-updated,
    scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues,redeemRewards};
+ return {ensureSchema,listAdmin,adminReport,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues,redeemRewards};
 }
