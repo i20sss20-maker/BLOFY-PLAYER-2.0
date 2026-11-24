@@ -1,3 +1,4 @@
+import {conflictsWithConnect,conflictsWithPaid,SHARED_CODE_LOCK_SQL} from '../src/stream-code-namespace.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import pg from 'pg';
@@ -50,5 +51,21 @@ try{
  const corrupt=await a.issue(input);await pool.query("UPDATE blofy_connect_pairings SET sealed=set_byte(sealed,30,(get_byte(sealed,30)+1)%256)");
  const bad=await call('redeem',{code:corrupt.code});assert.equal(bad.status,503);assert.equal(bad.body.code,'connect_pairing_unavailable');
  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM blofy_connect_pairings')).rows[0].count,0);
+ // Exercise both HMAC domains against real isolated PostgreSQL tables.
+ await pool.query('CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_duration_codes (code_hash TEXT PRIMARY KEY)');
+ const paidKey=crypto.randomBytes(32).toString('hex');
+ const external=await a.issue({...input,numericCode:true});
+ const paidProof=crypto.createHmac('sha256',Buffer.from(paidKey,'hex')).update('blofy-stream-subscription:v1:').update(external.code).digest('hex');
+ const tx=await pool.connect();
+ try{
+  await tx.query('BEGIN');
+  await tx.query(SHARED_CODE_LOCK_SQL);
+  assert.equal(await conflictsWithConnect(tx,external.code,{enabled:true,keyHex:key}),true);
+  assert.equal(await conflictsWithPaid(tx,external.code,{enabled:true,keyHex:paidKey}),false);
+  await tx.query('INSERT INTO blofy_xtream_gateway_duration_codes(code_hash) VALUES($1)',[paidProof]);
+  assert.equal(await conflictsWithPaid(tx,external.code,{enabled:true,keyHex:paidKey}),true);
+  await tx.query('ROLLBACK');
+ }finally{tx.release()}
+ await a.redeem({code:external.code});
  console.log('CONNECT PostgreSQL: schema race, protected issuance, encrypted storage, atomic redemption, expiry cleanup and tamper detection passed');
 }finally{await pool.end()}
