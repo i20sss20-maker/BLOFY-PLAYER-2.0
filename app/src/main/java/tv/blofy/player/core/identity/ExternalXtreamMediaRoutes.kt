@@ -34,8 +34,16 @@ internal class ExternalXtreamMediaRoutes(
     private fun validHop(from: HttpUrl, target: HttpUrl): Boolean {
         if (target.username.isNotEmpty() || target.password.isNotEmpty() || target.fragment != null ||
             (from.scheme == "https" && target.scheme != "https")) return false
-        // Only DNS hosts accepted by the original provider policy. The actual
-        // connection also resolves every address through the public-only DNS guard.
+        // Some Xtream media servers return a public numeric CDN address.
+        // Permit only provider-directed media hops, never a numeric login host.
+        // Validate literals explicitly, including when the HTTP stack skips DNS.
+        val host = target.host
+        if (host.matches(Regex("[0-9.]+")) || host.contains(':')) {
+            if (!providerDirectedCdn || !host.matches(Regex("[0-9a-fA-F:.]+"))) return false
+            val address = runCatching { java.net.InetAddress.getByName(host) }.getOrNull() ?: return false
+            return ExternalStreamConnectVerifier.publicAddress(address)
+        }
+        // DNS names still pass the guarded resolver on every actual connection.
         return ExternalStreamConnectClient.parseHost(target.newBuilder()
             .encodedPath("/").query(null).fragment(null).build().toString()) != null
     }
