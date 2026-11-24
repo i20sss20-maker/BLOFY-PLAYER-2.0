@@ -862,7 +862,7 @@ function fullVodChunk(session,first){
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
  session.released=false;active++;
  session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;session.chunkFinishedAt=0;
- session.retiringProc=null;
+ session.retiringProc=null;session.retireEscalated=false;session.retireStartedAt=0;
  session.prefetchNext=null;session.prefetchScheduled=null;
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
  pruneFullVod(session,first);
@@ -899,7 +899,7 @@ function fullVodChunk(session,first){
    if(session.proc!==proc)return;
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
    const retiredOnSeek=session.retiringProc===proc;
-   session.retiringProc=null;
+   session.retiringProc=null;session.retireStartedAt=0;session.retireEscalated=false;
    session.finished=true;session.exitCode=code;session.chunkFinishedAt=Date.now();
    // The retired chunk is intentionally discarded after a distant seek;
    // do not retry its segment or prefetch from an obsolete position.
@@ -999,11 +999,20 @@ async function fullVodRequest(req,url){
     if(!adjacent&&session.retiringProc!==old){
      // A distant seek needs a new ffmpeg source. Kill the old job only
      // once, but hold its slot until proc.exited confirms termination.
-     session.retiringProc=old;
+     session.retiringProc=old;session.retireStartedAt=Date.now();session.retireEscalated=false;
      try{old.kill()}catch{}
     }
     const deadline=Date.now()+(adjacent?26000:5000);
-    while(session.proc===old&&!session.finished&&!session.stopped&&!req.signal.aborted&&Date.now()<deadline)await nap(160);
+    while(session.proc===old&&!session.finished&&!session.stopped&&!req.signal.aborted&&Date.now()<deadline){
+     // A stalled FFmpeg can ignore SIGTERM. Escalate once after 2.2s,
+     // never repeatedly kill on simultaneous Hls.js segment retries.
+     if(!adjacent&&session.retiringProc===old&&!session.retireEscalated&&
+      Date.now()-session.retireStartedAt>=2200){
+      session.retireEscalated=true;
+      try{old.kill(9)}catch{}
+     }
+     await nap(160)
+    }
     if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
     if(session.proc===old&&!session.finished){
      return hlsError(503,adjacent?'vod_previous_chunk_still_encoding':
