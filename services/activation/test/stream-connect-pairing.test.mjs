@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {createStreamConnectPairing,normalizeConnectInput,createConnectExpiryMaintenance} from '../src/stream-connect-pairing.mjs';
 const input={host:'https://provider.example.com:8443',username:'synthetic-user',password:'synthetic-secret'};
 function fixture(){
- let now=Date.now();const rows=new Map();
+ let now=Date.now(),minute=-1,attempts=0;const rows=new Map();
  async function query(sql,args=[]){
   if(/^(CREATE|BEGIN|COMMIT|ROLLBACK|SELECT pg_advisory)/.test(sql))return {rows:[]};
   if(sql==='DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()'){for(const [id,r] of rows)if(r.expiresAt<=now)rows.delete(id);return {rows:[]}}
   if(sql.startsWith('SELECT COUNT'))return {rows:[{count:rows.size}]};
+  if(sql.startsWith('INSERT INTO blofy_connect_short_budget')){const m=Math.floor(now/60000);if(m!==minute){minute=m;attempts=0}if(attempts>=20)return {rows:[]};return {rows:[{attempts:++attempts}]}}
   if(sql.startsWith('INSERT INTO blofy_connect_pairings')){if(rows.has(args[0]))return {rows:[]};rows.set(args[0],{sealed:args[1],expiresAt:args[2].getTime()});return {rows:[{code_hash:args[0]}]}}
   if(sql.startsWith('DELETE FROM blofy_connect_pairings WHERE code_hash=')){const r=rows.get(args[0]);if(!r||r.expiresAt<=now)return {rows:[]};rows.delete(args[0]);return {rows:[r]}}
   throw Error('unexpected test query');
@@ -61,3 +62,5 @@ test('expiry maintenance skips disabled and overlapping ticks and never reports 
 });
 
 test('numeric codes and explicit HTTP consent',async()=>{const f=fixture(),http={...input,host:'http://provider.example.com:8080'};await assert.rejects(f.service.issue(http),/connect_host_invalid/);const a=await f.service.issue({...http,allowHttp:true,numericCode:true});assert.match(a.code,/^[0-9]{12}$/);const b=await f.service.issue({...input,numericCode:true});assert.notEqual(a.code,b.code);assert.deepEqual((await f.service.redeem({code:a.code})).credentials,http);await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);assert.deepEqual((await f.service.redeem({code:b.code})).credentials,input);});
+
+test('eight digit code has five minute expiry, one use and shared capped attempts',async()=>{const f=fixture(),a=await f.service.issue({...input,shortCode:true});assert.match(a.code,/^[0-9]{8}$/);assert.deepEqual((await f.service.redeem({code:a.code})).credentials,input);await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);const b=await f.service.issue({...input,shortCode:true});for(let i=0;i<18;i++)await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);await assert.rejects(f.service.redeem({code:b.code}),/connect_rate_limited/);f.advance(60000);assert.deepEqual((await f.service.redeem({code:b.code})).credentials,input);const d=await f.service.issue({...input,shortCode:true});f.advance(300001);await assert.rejects(f.service.redeem({code:d.code}),/connect_code_expired_or_used/);});
