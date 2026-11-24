@@ -79,7 +79,6 @@ import tv.blofy.player.data.ResumeWriteRequest
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.remote.XtreamClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1478,7 +1477,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 ?: dao.stream(expectedContentKey)
                 ?: return@launch
             runCatching {
-                PlaylistManager(XtreamClient.api, dao)
+                PlaylistManager.forProvider(applicationContext, resolvedProvider, dao)
                     .syncShortEpg(resolvedProvider, resolvedStream.remoteId)
             }
         }
