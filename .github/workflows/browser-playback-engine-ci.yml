@@ -1,0 +1,30 @@
+name: Browser playback engine CI
+on:
+  push:
+    branches:
+      - feat/web-playback-engine-capability-20261125
+    paths:
+      - 'services/activation/web/browser-playback-engine.mjs'
+      - 'services/activation/test/browser-playback-engine.test.mjs'
+      - '.github/workflows/browser-playback-engine-ci.yml'
+  pull_request:
+    paths:
+      - 'services/activation/web/browser-playback-engine.mjs'
+      - 'services/activation/test/browser-playback-engine.test.mjs'
+      - '.github/workflows/browser-playback-engine-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check syntax
+        run: node --check services/activation/web/browser-playback-engine.mjs
+      - name: Run dedicated deterministic contract tests
+        run: node --test services/activation/test/browser-playback-engine.test.mjs
