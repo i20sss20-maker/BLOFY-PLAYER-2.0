@@ -157,3 +157,70 @@ test('sliding HLS playlist is ready if newest TS exists even if oldest has been 
  assert.equal(h.runner.liveManifestHasPlayableSegment(owner),true,
   'do not stall the whole live channel when previous TS has legitimately expired')
 });
+
+test('HTTP 200 upstream with no TS bytes cannot keep a live FFmpeg slot pending forever',async()=>{
+ const begin=source.indexOf('async function selectSourcePreservingInput(');
+ const end=source.indexOf('\nfunction streamInputVideoDimensions(',begin);
+ const start=source.indexOf('async function startHls(');
+ const finish=source.indexOf('\n/* Preview-only fan-out',start);
+ assert.ok(begin>0&&end>begin&&start>end&&finish>start);
+ let active=0,controllerNumber=0,pendingReadReject,spawned=0,stopped=0,reason='',readerCancelled=false;
+ const timers=[],sessionMap=new Map();
+ class FakeController{
+  constructor(){
+   controllerNumber++;
+   this.ordinal=controllerNumber;
+   this.actual=new AbortController();
+   this.signal=this.actual.signal
+  }
+  abort(){
+   this.actual.abort();
+   if(this.ordinal===2&&pendingReadReject)pendingReadReject(new Error('source aborted'))
+  }
+ }
+ const streamBody={
+  getReader(){return {
+   read(){return new Promise((resolve,reject)=>{pendingReadReject=reject})},
+   cancel(){readerCancelled=true;return Promise.resolve()}
+  }}
+ };
+ const ctx={
+  active,MAX_JOBS:2,
+  BASE:'https://synthetic.example.invalid/media/',
+  hlsRoot:'/tmp/fake-media',hardTTL:540000,
+  hlsSessions:sessionMap,Date,
+  join:(...x)=>x.join('/'),mkdirSync(){},
+  touchHls(){},clearTimeout(){},randomBytes:()=>Buffer.alloc(6),
+  setTimeout(fn,ms){
+   const t={fn,ms,unref(){}};
+   timers.push(t);return t
+  },
+  AbortController:FakeController,
+  fetch:async()=>({ok:true,status:200,body:streamBody}),
+  liveSourceIdentity:()=> 'source-private-id',
+  allowedSingleViewerLiveTsContinuity:()=>false,
+  tsCodecs:()=>({video:false}),
+  Bun:{env:{PORT:'3000'},spawn(){spawned++;throw Error('must not spawn no-byte FFmpeg')}},
+  stopHls:(s,r)=>{stopped++;reason=r;s.stopped=true;sessionMap.delete(s.key);active=0},
+  console:{info(){},warn(){}}
+ };
+ Object.defineProperty(ctx,'active',{get:()=>active,set:v=>{active=v}});
+ const code=source.slice(begin,end)+'\n'+source.slice(start,finish)+
+  ';({startHls})';
+ const {startHls}=vm.runInNewContext(code,ctx);
+ const pending=startHls({bearer:'Bearer SYNTHETIC',kind:'live',id:'25',ext:'ts',track:0,key:'live-probe'});
+ // Allow the synthetic upstream HTTP response and first reader.read to settle.
+ for(let i=0;i<8;i++)await Promise.resolve();
+ const prefixGuard=timers.find(x=>x.ms>=25000&&x.ms<=27000);
+ assert.ok(prefixGuard,'post-header source probe must have a bounded timer');
+ assert.ok(typeof pendingReadReject==='function');
+ prefixGuard.fn();
+ const result=await pending;
+ assert.equal(result.status,503);
+ assert.equal(result.error,'hls_source_probe_timeout');
+ assert.equal(spawned,0,'do not create FFmpeg when source supplies no bytes');
+ assert.equal(stopped,1);
+ assert.equal(reason,'live_no_initial_segment');
+ assert.equal(active,0);
+ assert.equal(readerCancelled,true,'release stalled upstream reader after abort');
+});
