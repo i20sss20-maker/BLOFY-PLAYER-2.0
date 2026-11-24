@@ -747,3 +747,51 @@ html[data-blofy-device="touch"] .native-stream-hud .native-player-dock{
 @media(prefers-reduced-motion:reduce){
  .mobile-player-action{transition:none!important}
 }
+
+
+/* User-visible improvements for installed PWA and touch-video gestures.
+ * All notices are advisory and never intercept the stream or remote input. */
+.mobile-seek-feedback[hidden],#blofy-connectivity-notice[hidden],#blofy-shell-update[hidden]{display:none!important}
+.mobile-seek-feedback{
+ position:absolute;z-index:206;top:43%;left:50%;transform:translate(-50%,-50%);
+ pointer-events:none;min-width:105px;max-width:72%;white-space:nowrap;
+ border-radius:100px;padding:12px 22px;border:1px solid #87ead8b5;
+ background:#071d27ee;color:#eefffa;font:800 18px/1.4 system-ui,Arial,sans-serif;
+ text-align:center;box-shadow:0 8px 36px #000c
+}
+#blofy-connectivity-notice{
+ position:fixed;z-index:215;top:max(12px,env(safe-area-inset-top,0px));
+ left:max(12px,env(safe-area-inset-left,0px));
+ right:max(12px,env(safe-area-inset-right,0px));
+ margin:auto;width:max-content;max-width:calc(100% - 24px);
+ padding:10px 15px;border-radius:12px;
+ background:#33241cf2;border:1px solid #e7a67699;color:#fff7e6;
+ font:700 13px/1.7 system-ui,Arial,sans-serif;text-align:center;
+ box-shadow:0 8px 24px #0009;pointer-events:none
+}
+#blofy-connectivity-notice[data-connection="restored"]{
+ background:#083d36f2;border-color:#5ae7bc99;color:#eafff7
+}
+#blofy-shell-update{
+ position:fixed;z-index:214;left:max(12px,env(safe-area-inset-left,0px));
+ bottom:max(16px,env(safe-area-inset-bottom,0px));
+ display:flex;direction:rtl;align-items:center;gap:10px;flex-wrap:wrap;
+ max-width:calc(100vw - 24px);padding:11px 14px;border-radius:14px;
+ background:#0b3641f5;color:#e8fff9;border:1px solid #74dfcebb;
+ font:700 13px/1.6 system-ui,Arial,sans-serif;
+ box-shadow:0 8px 26px #000a
+}
+#blofy-reload-shell{
+ min-height:44px;padding:8px 15px;border-radius:11px;
+ border:1px solid #b7faec;background:#1a807b;color:#fff;
+ font:800 13px/1.5 system-ui,Arial,sans-serif;cursor:pointer
+}
+#blofy-reload-shell:focus-visible{outline:2px solid #fff;outline-offset:3px}
+html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
+@media(max-height:440px) and (orientation:landscape){
+ .mobile-seek-feedback{top:35%;padding:7px 17px;font-size:16px}
+ #blofy-shell-update{bottom:4px;padding:6px 10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .mobile-seek-feedback{transition:none!important}
+}
