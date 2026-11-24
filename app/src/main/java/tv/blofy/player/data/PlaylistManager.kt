@@ -89,6 +89,7 @@ class PlaylistManager(
                     onSectionComplete("series")
                 }
             ),
+            preferSegmentation = externalCatalog,
             onRetry = { section, attempt ->
                 val stage = listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES)[section]
                 onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
@@ -686,14 +687,16 @@ internal data class XtreamSectionResult(
 internal suspend fun runXtreamSections(
     sections: List<suspend () -> Unit>,
     onRetry: suspend (Int, Int) -> Unit = { _, _ -> },
-    onExhausted: suspend (Int, Exception) -> Boolean = { _, _ -> false }
+    onExhausted: suspend (Int, Exception) -> Boolean = { _, _ -> false },
+    preferSegmentation: Boolean = false
 ): XtreamSectionResult {
     require(sections.isNotEmpty()) { "At least one Xtream section is required" }
     var successCount = 0
     val failures = mutableListOf<Exception>()
     sections.forEachIndexed { index, syncSection ->
         try {
-            CatalogSectionRetry.run(onRetry = { onRetry(index, it) }, block = syncSection)
+            CatalogSectionRetry.run(onRetry = { onRetry(index, it) },
+                preferSegmentation = preferSegmentation, block = syncSection)
             successCount += 1
         } catch (cancelled: CancellationException) {
             throw cancelled
