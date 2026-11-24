@@ -1037,7 +1037,9 @@ function searchNow(q,token){
  var old=S.searchRequests||[];S.searchRequests=[];
  for(var j=0;j<old.length;j++)try{old[j].abort()}catch(e){}
  var kinds=S.searchKind==='all'?['live','movie','series']:[S.searchKind],
- responses={live:[],movie:[],series:[]},pending=kinds.length;
+ responses={live:[],movie:[],series:[]},pending=kinds.length,failed=0;
+ // Keep only the current search results, not every result ever browsed.
+ ['live','movie','series'].forEach(function(k){delete S.loaded[keyOf(k,'search')]});
  function draw(){
   if(token!==S.searchToken||S.route!=='search')return;
   var output=document.getElementById('search-result'),status=document.getElementById('search-status');
@@ -1046,21 +1048,17 @@ function searchNow(q,token){
    var cards=responses[kind];count+=cards.length;
    return cards.map(function(item){return posterCard(item,kind)}).join('')
   }).join('');
-  output.innerHTML=html||(pending===0?'<div class="empty-state">لم يتم العثور على نتائج لهذا البحث.</div>':'');
-  status.textContent=(count?'تم العثور على '+count+' نتيجة':'جار البحث')+(pending?' • استكمال باقي المكتبة…':'')
+  output.innerHTML=html||(pending===0?'<div class="empty-state">'+(failed?'تعذر البحث في بعض الأقسام، حاول مرة أخرى.':'لم يتم العثور على نتائج لهذا البحث.')+'</div>':'');
+  status.textContent=(count?'تم العثور على '+count+' نتيجة':pending?'جار البحث':failed?'تعذر البحث':'لا توجد نتائج')+(pending?' • استكمال باقي المكتبة…':failed&&count?' • تعذر البحث في بعض الأقسام':'')
  }
  for(var i=0;i<kinds.length;i++)(function(k){
   var xhr=pageRequest(k,'all',0,20,function(st,p){
    if(token!==S.searchToken||S.route!=='search')return;
    pending--;
    if(st===200&&p){
-    responses[k]=p.items;
-    var key=keyOf(k,'search');S.loaded[key]=S.loaded[key]||{items:[]};
-    for(var a=0;a<p.items.length;a++){
-     var item=p.items[a],id=itemId(item,k);
-     if(!findItem(k,id))S.loaded[key].items.push(item)
-    }
-   }
+    responses[k]=p.items.slice(0,20);
+    S.loaded[keyOf(k,'search')]={items:responses[k]};
+   }else failed++;
    draw()
   },q);
   if(xhr)S.searchRequests.push(xhr)
