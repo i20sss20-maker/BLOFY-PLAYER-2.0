@@ -1858,7 +1858,7 @@ function dismissRecoveredPlaybackNotice(state,now){
  if(iosPrompt&&!iosPrompt.hidden)iosPrompt.hidden=true;
  var modeBadge=document.getElementById('player-mode-badge');
  if(modeBadge&&state.mode==='direct'&&/جار فحص/.test(modeBadge.textContent||''))
-  modeBadge.textContent='MP4 • جار التشغيل';
+  modeBadge.textContent='MP4 • تشغيل مباشر';
  var label=document.getElementById('player-status');
  if(!label||label.style.display==='none'||!label.textContent)return true;
  if(label.className==='player-error'){
