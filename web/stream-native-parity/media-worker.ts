@@ -665,6 +665,7 @@ async function hlsRequest(req,url){
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
  if(!ready){
+  if(manifestDeadline&&req.signal?.aborted)return hlsError(410,'hls_request_cancelled');
   if(manifestDeadline&&!owner.stopped&&!owner.hadPlayableLiveManifest){
    // Covers an upstream HTTP stream that never produced even index.m3u8.
    // Once the first playable-video deadline passes, free its slot and
