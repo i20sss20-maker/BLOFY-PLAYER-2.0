@@ -50,7 +50,7 @@ test('commentary feature is isolated, gate-closed, and restores original LIVE au
  assert.match(server,/commentary_hls_not_ready/);
  assert.match(sidecar,/video\.muted=true/);
  assert.match(sidecar,/function restore\(\)/);
- assert.match(sidecar,/audio\.pause\(\)/);
+ assert.match(sidecar,/a\.pause\(\)/);
  assert.match(js,/player-commentary-more/);
  assert.match(js,/function showCommentators\(/);
  assert.match(js,/state\.commentary\.destroy\(\)/);
