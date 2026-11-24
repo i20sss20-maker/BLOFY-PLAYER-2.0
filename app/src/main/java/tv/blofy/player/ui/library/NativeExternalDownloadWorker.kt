@@ -48,34 +48,59 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
 
         val file = NativeExternalDownloadQueue.file(app,id,extension)
         val partial = File(file.parentFile,file.name + ".part")
+        val validator = File(file.parentFile,file.name + ".etag")
+        var preservePartial = false
+        var retrying = false
         if (file.isFile && file.length() > 0L) return@withContext Result.success()
         try {
             check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true)
             setForeground(foreground())
-            val request = Request.Builder().url(route).header("Accept-Encoding","identity").build()
+            val previousTag = if (validator.isFile && validator.length() in 1L..256L)
+                NativeDownloadResumePolicy.strongTag(validator.readText()) else null
+            val requestedOffset = if (previousTag != null && partial.isFile) partial.length() else 0L
+            val request = Request.Builder().url(route).header("Accept-Encoding","identity").apply {
+                if (requestedOffset > 0) {
+                    header("Range","bytes=$requestedOffset-")
+                    header("If-Range",checkNotNull(previousTag))
+                }
+            }.build()
             val call = NativeExternalMediaTransport.client(app,provider).newCall(request)
             call.execute().use { response ->
-                if (response.code != 200) return@withContext failure(DownloadManager.ERROR_UNHANDLED_HTTP_CODE)
+                if (response.code !in setOf(200,206)) {
+                    if ((response.code == 416 && requestedOffset > 0L) || response.code in 500..599)
+                        throw IOException("Download response retry")
+                    return@withContext failure(DownloadManager.ERROR_UNHANDLED_HTTP_CODE)
+                }
+                if (response.header("Content-Encoding")?.equals("identity",true) == false)
+                    return@withContext failure(DownloadManager.ERROR_UNHANDLED_HTTP_CODE)
                 val body = response.body ?: return@withContext failure(DownloadManager.ERROR_HTTP_DATA_ERROR)
                 val mime = body.contentType()
                 if (mime == null || (mime.type != "video" && mime.toString().substringBefore(';') !in
                         setOf("application/octet-stream","application/x-matroska")))
                     return@withContext failure(DownloadManager.ERROR_UNHANDLED_HTTP_CODE)
-                val total = body.contentLength()
-                if (total <= 0L) return@withContext failure(DownloadManager.ERROR_CANNOT_RESUME)
-                if (!DownloadTransferPolicy.enoughSpace(file.parentFile!!.usableSpace,total))
+                val plan = NativeDownloadResumePolicy.plan(response.code,requestedOffset,previousTag,
+                    response.header("ETag"),response.header("Content-Range"),body.contentLength())
+                    ?: throw IOException("Invalid download range")
+                if (!DownloadTransferPolicy.enoughSpace(file.parentFile!!.usableSpace,plan.total-plan.offset))
                     return@withContext failure(DownloadManager.ERROR_INSUFFICIENT_SPACE)
-                var done = 0L
+                if (plan.offset == 0L) {
+                    validator.delete()
+                    partial.delete()
+                    if (plan.tag != null) validator.writeText(plan.tag)
+                }
+                val total = plan.total
+                preservePartial = plan.tag != null
+                var done = plan.offset
                 var last = 0L
                 body.byteStream().use { source ->
-                    partial.outputStream().buffered().use { sink ->
+                    java.io.FileOutputStream(partial,plan.offset > 0L).buffered().use { sink ->
                         val buffer = ByteArray(64*1024)
                         while (true) {
                             currentCoroutineContext().ensureActive()
                             val n = source.read(buffer)
                             if (n < 0) break
                             done += n
-                            if (done > total) throw IOException("Unexpected download size")
+                            if (done > total) { preservePartial = false; throw IOException("Unexpected download size") }
                             if (file.parentFile!!.usableSpace < 268_435_456L)
                                 return@withContext failure(DownloadManager.ERROR_INSUFFICIENT_SPACE)
                             sink.write(buffer,0,n)
@@ -92,15 +117,29 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
                     return@withContext failure(DownloadManager.ERROR_HTTP_DATA_ERROR)
                 currentCoroutineContext().ensureActive()
                 check(OfflineDownloadStore.records(app,provider).any { it.workerId == id.toString() })
-                check(partial.renameTo(file))
+                check(OfflineDownloadStore.publishNativeFile(app,provider,id,partial,file))
+                preservePartial = false
                 setProgress(workDataOf("done" to total,"total" to total))
                 Result.success()
             }
-        } catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: IOException) {
-            if (runAttemptCount < 2) Result.retry() else failure(DownloadManager.ERROR_HTTP_DATA_ERROR)
-        } catch (_: Exception) { failure(DownloadManager.ERROR_FILE_ERROR) }
-        finally { partial.delete() }
+        } catch (cancelled: CancellationException) {
+            retrying = true
+            preservePartial = preservePartial && OfflineDownloadStore.records(app,provider).any { it.workerId == id.toString() }
+            throw cancelled
+        } catch (_: IOException) {
+            if (runAttemptCount < 2) { retrying = true; Result.retry() } else {
+                preservePartial = false
+                failure(DownloadManager.ERROR_HTTP_DATA_ERROR)
+            }
+        } catch (_: Exception) {
+            preservePartial = false
+            failure(DownloadManager.ERROR_FILE_ERROR)
+        } finally {
+            if (!retrying || !preservePartial || !OfflineDownloadStore.records(app,provider).any { it.workerId == id.toString() }) {
+                partial.delete()
+                validator.delete()
+            }
+        }
     }
 
     private fun failure(reason: Int) = Result.failure(workDataOf("reason" to reason))
