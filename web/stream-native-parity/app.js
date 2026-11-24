@@ -3611,23 +3611,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  };
  refreshFavoriteButton();
  var qualityButton=document.getElementById('player-quality');
- if(qualityButton)qualityButton.onclick=function(){
-  var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
-  if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو؛ لا توجد دقات متعددة قابلة للاختيار.');return}
-  // Match native STREAM: a titled quality selector, including Auto,
-  // rather than cycling blindly on each button press.
-  var options=[{name:'تلقائي (Auto)',selected:Number(engine.currentLevel)<0,
-   select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
-  for(var i=0;i<levels.length;i++)(function(level,index){
-   var height=Number(level.height)||0,fps=Number(level.frameRate)||0,
-    bitrate=Number(level.bitrate)||0;
-   var resolution=height>=2160?'4K':height?height+'p':'المستوى '+(index+1);
-   var label=[resolution,fps>0?Math.round(fps)+'fps':'',bitrate>0?(bitrate/1000000).toFixed(1)+'Mbps':''].filter(Boolean).join(' • ');
-   options.push({name:label,selected:Number(engine.currentLevel)===index,
-    select:function(){engine.currentLevel=index;playerStatus('الجودة: '+resolution)}})
-  })(levels[i],i);
-  showPlayerChoices('الجودة',options,this)
- };
+ // The single quality handler below covers both LIVE and on-demand media.
  var playerDownloadButton=document.getElementById('player-download-file');
  if(playerDownloadButton)playerDownloadButton.onclick=function(){
   // Native parity: download never pauses or restarts the VOD playback session.
@@ -4605,12 +4589,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var width=Number(video.videoWidth)||0,height=Number(video.videoHeight)||0;
    playerStatus('دقة الفيديو المعروضة: '+(width&&height?width+'×'+height:'بانتظار بيانات المصدر')+'؛ لا تتوفر دقات إضافية للاختيار لهذا التشغيل.');return
   }
-  var options=[{name:'تلقائي',selected:engine.autoLevelEnabled!==false,
+  var options=[{name:'تلقائي (Auto)',selected:engine.autoLevelEnabled!==false,
    select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
   for(var i=0;i<levels.length;i++)(function(level,index){
-   var name=level.height?level.height+'p':('الجودة '+(index+1));
+   var height=Number(level.height)||0,fps=Number(level.frameRate)||0,bitrate=Number(level.bitrate)||0;
+   var resolution=height>=2160?'4K':height?height+'p':('الجودة '+(index+1));
+   var name=[resolution,fps>0?Math.round(fps)+'fps':'',bitrate>0?(bitrate/1000000).toFixed(1)+'Mbps':''].filter(Boolean).join(' • ');
    options.push({name:name,selected:engine.autoLevelEnabled===false&&engine.currentLevel===index,
-    select:function(){engine.currentLevel=index;playerStatus('جودة '+name)}})
+    select:function(){engine.currentLevel=index;playerStatus('جودة '+resolution)}})
   })(levels[i],i);
   showPlayerChoices('جودة الفيديو',options,this)
  };
