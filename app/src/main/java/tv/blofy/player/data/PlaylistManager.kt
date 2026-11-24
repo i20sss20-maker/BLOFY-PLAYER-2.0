@@ -16,6 +16,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.StreamSearchFtsEntity
 import tv.blofy.player.data.remote.XtreamApi
+import tv.blofy.player.data.remote.ExternalXtreamCatalogTransport
+import tv.blofy.player.core.identity.ExternalStreamConnectClient
 import tv.blofy.player.data.remote.XtreamIdentifier
 import tv.blofy.player.data.remote.readCatalog
 import java.io.FilterInputStream
@@ -33,7 +35,8 @@ data class PlaylistSyncResult(
 /** Xtream-only catalog synchronization for BLOFY rc07.12+. */
 class PlaylistManager(
     private val api: XtreamApi,
-    private val dao: BlofyDao
+    private val dao: BlofyDao,
+    private val externalCatalog: Boolean = false
 ) {
     suspend fun syncAll(
         provider: ProviderEntity,
@@ -42,8 +45,10 @@ class PlaylistManager(
         onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
     ): PlaylistSyncResult {
         require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
-        require((BuildConfig.CODE_ONLY_LOGIN && provider.baseUrl.trimEnd('/')==StreamCodeSession.HOST) ||
-            (provider.username.isNotBlank() && provider.password.isNotBlank())) {
+        require((externalCatalog && provider.baseUrl == ExternalXtreamCatalogTransport.ORIGIN &&
+            provider.username.isEmpty() && provider.password.isEmpty()) ||
+            (!externalCatalog && ((BuildConfig.CODE_ONLY_LOGIN && provider.baseUrl.trimEnd('/')==StreamCodeSession.HOST) ||
+            (provider.username.isNotBlank() && provider.password.isNotBlank())))) {
             "Xtream credentials required"
         }
 
@@ -171,8 +176,8 @@ class PlaylistManager(
                         categoryId = row.id("category_id"),
                         kind = "live",
                         name = row.string("name") ?: "Channel $id",
-                        icon = row.string("stream_icon"),
-                        directSource = row.string("direct_source"),
+                        icon = if (externalCatalog) null else row.string("stream_icon"),
+                        directSource = if (externalCatalog) null else row.string("direct_source"),
                         epgChannelId = row.string("epg_channel_id"),
                         streamType = row.string("stream_type"),
                         archiveEnabled = archive,
@@ -237,9 +242,9 @@ class PlaylistManager(
             categoryId = row.id("category_id"),
             kind = "movie",
             name = row.string("name") ?: "Movie $id",
-            icon = row.string("stream_icon"),
+            icon = if (externalCatalog) null else row.string("stream_icon"),
             extension = row.string("container_extension") ?: "mp4",
-            directSource = row.string("direct_source"),
+            directSource = if (externalCatalog) null else row.string("direct_source"),
             addedAt = row.string("added")?.toLongOrNull(),
             plot = row.string("plot") ?: row.string("description"),
             genre = row.string("genre"),
@@ -247,7 +252,7 @@ class PlaylistManager(
             year = row.string("year"),
             rating = row.string("rating") ?: row.string("rating_5based"),
             duration = row.string("duration"),
-            backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
+            backdrop = if (externalCatalog) null else backdrop?.takeIf { it.isNotBlank() && it != "null" },
             favorite = false,
             locked = false
         )
@@ -290,7 +295,7 @@ class PlaylistManager(
                         categoryId = row.id("category_id"),
                         kind = "series",
                         name = row.string("name") ?: "Series $id",
-                        icon = row.string("cover") ?: row.string("stream_icon"),
+                        icon = if (externalCatalog) null else row.string("cover") ?: row.string("stream_icon"),
                         addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
                         plot = row.string("plot") ?: row.string("description"),
                         genre = row.string("genre"),
@@ -298,7 +303,7 @@ class PlaylistManager(
                         year = row.string("year"),
                         rating = row.string("rating") ?: row.string("rating_5based"),
                         duration = row.string("episode_run_time") ?: row.string("duration"),
-                        backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
+                        backdrop = if (externalCatalog) null else backdrop?.takeIf { it.isNotBlank() && it != "null" },
                         favorite = false,
                         locked = false
                     )
@@ -494,12 +499,13 @@ class PlaylistManager(
         val requestSeriesId = SeriesEpisodeParser.normalizeSeriesIdForRequest(seriesId)
         val response = api.jsonResponse(actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId)))
         val parsed = SeriesEpisodeParser.parse(provider.id, seriesId, response)
-        if (parsed.episodes.isNotEmpty()) {
+        val safeEpisodes = if (externalCatalog) parsed.episodes.map { it.copy(directSource = null) } else parsed.episodes
+        if (safeEpisodes.isNotEmpty()) {
             val merged = if (preserveCachedRows) {
                 SeriesEpisodeRetentionPolicy.preserveCached(
-                    dao.episodeSnapshot(provider.id, seriesId), parsed.episodes
+                    dao.episodeSnapshot(provider.id, seriesId), safeEpisodes
                 )
-            } else parsed.episodes
+            } else safeEpisodes
             dao.replaceEpisodes(provider.id, seriesId, merged)
         }
         return SeriesEpisodeSyncResult(parsed.episodes.size, parsed.payloadPresent, parsed.episodes.isNotEmpty())
@@ -540,6 +546,11 @@ class PlaylistManager(
     private fun actionUrl(provider: ProviderEntity, action: String, extra: Map<String, String> = emptyMap()): String {
         val base = provider.baseUrl.trim().trimEnd('/')
         val tail = extra.entries.joinToString("") { "&${enc(it.key)}=${enc(it.value)}" }
+        if (externalCatalog) {
+            require(base == ExternalXtreamCatalogTransport.ORIGIN &&
+                provider.username.isEmpty() && provider.password.isEmpty())
+            return "$base/player_api.php?action=${enc(action)}$tail"
+        }
         if (BuildConfig.CODE_ONLY_LOGIN && base==StreamCodeSession.HOST)
             return "$base/player_api.php?action=${enc(action)}$tail"
         return "$base/player_api.php?username=${enc(provider.username)}&password=${enc(provider.password)}&action=${enc(action)}$tail"
@@ -565,7 +576,10 @@ class PlaylistManager(
         return runCatching { String(android.util.Base64.decode(value, android.util.Base64.DEFAULT), Charsets.UTF_8).trim() }.getOrDefault(value)
     }
 
-    private companion object {
+    companion object {
+        internal fun forExternal(credentials: ExternalStreamConnectClient.Credentials, dao: BlofyDao): PlaylistManager =
+            PlaylistManager(ExternalXtreamCatalogTransport.api(credentials), dao, externalCatalog = true)
+
         const val DIRECT_STREAM_BATCH = 700
         const val DIRECT_CATEGORY_BATCH = 500
         const val MAX_RECOVERY_CATEGORIES = 501
