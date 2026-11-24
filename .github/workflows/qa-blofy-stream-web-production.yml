@@ -41,6 +41,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/adaptive-device-input.test.mjs
       - name: Verify touch-first mobile playback and fullscreen controls
         run: cd web/stream-native-parity && node --test qa/mobile-playback-controls.test.mjs
+      - name: Verify safe PWA update, connectivity and VOD double-tap gesture
+        run: cd web/stream-native-parity && node --test qa/mobile-resilience.test.mjs
       - name: Verify logout drains authorized HLS and VOD STOP requests
         run: cd web/stream-native-parity && node --test qa/logout-media-stop.test.mjs
       # Browser tests explicitly use channel: chrome. Installing Chromium as
