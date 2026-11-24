@@ -24,6 +24,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Verify streamed media response and capacity hints
         run: node --test web/stream-native-parity/qa/media-buffer-capacity.test.mjs
+      - name: Real Bun HTTP concurrency smoke with synthetic TS data
+        run: bun run web/stream-native-parity/qa/media-bun-stream-smoke.mjs
       - name: Verify media lifecycle including authenticated viewer isolation
         run: node --test web/stream-native-parity/qa/media-lifecycle.test.mjs
       - name: Build production Web and private media worker independently
