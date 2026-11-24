@@ -109,6 +109,8 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/health && break; sleep 1; done
       - name: Test actual mouse and remote screens
         run: cd web/stream-native-parity && npx playwright test qa/ui-parity.spec.mjs --reporter=line
+      - name: Test mobile-first layout, catalog tabs, and responsive live preview
+        run: cd web/stream-native-parity && npx playwright test qa/mobile-layout.spec.mjs --reporter=line
       - name: Test offline notices and VOD double-tap in real Chrome
         run: cd web/stream-native-parity && npx playwright test qa/mobile-resilience.spec.mjs --reporter=line
       - name: Verify official 1.0 release, auth boundary, first-party media engine
