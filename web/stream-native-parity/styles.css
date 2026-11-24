@@ -1788,3 +1788,17 @@ button,input,select,textarea{font-synthesis:none}
 .episode-download{margin:2px 12px 14px;align-self:flex-start;min-height:40px}
 #web-download-message{max-width:940px;margin:12px 0;line-height:1.8}
 @media(max-width:730px){.download-row{align-items:stretch;flex-direction:column}.download-row .btn{width:100%}.episode-download{margin:4px 9px 13px}}
+
+/* Curated channel-commentary library: mirrors native STREAM voice shortcuts. */
+.commentator-library{max-width:1180px;margin:16px auto;padding:clamp(12px,3vw,27px);background:rgba(6,23,31,.65);border:1px solid rgba(105,221,218,.28);border-radius:20px}
+.commentator-library h2{font-size:clamp(23px,3.5vw,34px);color:#e9fffd;margin:0 0 12px}
+.commentator-library .small{line-height:1.85}
+.commentator-channel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:20px}
+.commentator-channel{display:flex;align-items:center;min-width:0;gap:12px;min-height:84px;text-align:start;padding:12px;border-radius:14px;border:1px solid rgba(116,209,204,.32);background:rgba(9,42,51,.88);color:#e8fbf6;cursor:pointer;font:inherit}
+.commentator-channel:hover,.commentator-channel:focus-visible{outline:2px solid var(--accent);background:rgba(13,61,70,.96)}
+.commentator-channel strong{display:block;overflow-wrap:anywhere;font-size:14px}
+.commentator-channel small{display:block;margin-top:5px;color:var(--muted);font-size:12px}
+.commentator-channel-art,.commentator-channel-empty{width:56px;height:56px;flex:none;border-radius:12px;object-fit:contain;background:#07242d;padding:4px}
+.commentator-channel-empty{display:flex;align-items:center;justify-content:center;font-size:25px}
+#player-commentary-status{padding:4px 8px;line-height:1.65}
+@media(max-width:730px){.commentator-channel-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.commentator-channel{padding:8px;gap:8px;min-height:96px}.commentator-channel-art,.commentator-channel-empty{width:42px;height:42px}.commentator-channel strong{font-size:12px}}
