@@ -1,0 +1,10 @@
+FROM oven/bun:1-debian
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY media-worker.ts /app/media-worker.ts
+COPY live-source-continuity.mjs /app/live-source-continuity.mjs
+ENV PORT=8080
+EXPOSE 8080
+USER bun
+CMD ["bun","run","/app/media-worker.ts"]

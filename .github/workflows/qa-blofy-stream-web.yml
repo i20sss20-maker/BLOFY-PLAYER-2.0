@@ -1,0 +1,101 @@
+name: QA BLOFY STREAM Web Native Parity
+on:
+  push:
+    branches: [feature/blofy-stream-web-native-parity-20261122]
+    paths:
+      - web/stream-native-parity/**
+      - .github/workflows/qa-blofy-stream-web.yml
+  pull_request:
+    branches: [release/stream-56-0-4-final-20261121]
+    paths:
+      - web/stream-native-parity/**
+      - .github/workflows/qa-blofy-stream-web.yml
+  workflow_dispatch:
+# Keep only the newest experimental QA run; obsolete push checks previously
+# piled up downloading browsers and apt packages while the site was iterating.
+concurrency:
+  group: blofy-native-web-qa-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cd web/stream-native-parity && npm install --no-audit --no-fund
+      - name: Verify long-running HLS sessions and safe worker idle expiry
+        run: cd web/stream-native-parity && node --test qa/media-lifecycle.test.mjs
+      # Browser tests explicitly use channel: chrome. Installing Chromium as
+      # well needlessly downloads a second browser and apt packages, and can
+      # block the only UI release gate during installer network outages.
+      - name: Verify installed Google Chrome or install Chrome only
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --version
+          elif command -v google-chrome-stable >/dev/null 2>&1; then
+            google-chrome-stable --version
+          else
+            cd web/stream-native-parity
+            npx playwright install --with-deps chrome
+          fi
+      - name: Install FFmpeg from pinned CI-only static binary; bounded apt fallback
+        timeout-minutes: 4
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            mkdir -p /tmp/blofy-web-ci-media
+            if timeout 120s npm install --no-audit --no-fund --no-save --prefix /tmp/blofy-web-ci-media @ffmpeg-installer/linux-x64@4.1.0; then
+              ffmpeg_bin=/tmp/blofy-web-ci-media/node_modules/@ffmpeg-installer/linux-x64
+              test -x "$ffmpeg_bin/ffmpeg"
+              export PATH="$ffmpeg_bin:$PATH"
+              echo "$ffmpeg_bin" >> "$GITHUB_PATH"
+            else
+              # Network mirrors can stall apt indefinitely on ephemeral runners:
+              # cap each attempt and fail the job instead of never reaching UI QA.
+              timeout 75s sudo apt-get update -qq
+              timeout 75s sudo apt-get install -y -qq ffmpeg
+            fi
+          fi
+          ffmpeg -version | head -n 1
+      - name: Verify H264 preserves real UHD 3840x2160 pixels through HLS packaging
+        run: |
+          mkdir -p /tmp/blofy-qa-4k
+          ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i color=c=blue:size=3840x2160:rate=2 -t 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 2 -f hls -hls_time 1 -hls_list_size 0 -hls_segment_filename '/tmp/blofy-qa-4k/seg-%06d.ts' -y /tmp/blofy-qa-4k/index.m3u8
+          echo 'UHD HLS generated files:'
+          ls -lh /tmp/blofy-qa-4k/
+          segment=$(find /tmp/blofy-qa-4k -maxdepth 1 -type f -name 'seg-*.ts' | sort | head -n 1)
+          test -n "$segment" && test -s "$segment"
+          # The old FFprobe static binary crashes on valid 4K TS in hosted CI.
+          # Use the verified FFmpeg demuxer to read actual SPS dimensions
+          # without re-encoding, and insist on the true 3840x2160 input.
+          ffmpeg -hide_banner -loglevel info -nostdin -i "$segment" -map 0:v:0 -c copy -f null - > /tmp/blofy-ci-4k-inspect.txt 2>&1
+          cat /tmp/blofy-ci-4k-inspect.txt
+          grep -E 'Video: h264.*3840x2160' /tmp/blofy-ci-4k-inspect.txt
+      - name: Verify 11-minute live audio keeps natural commentator pitch
+        run: cd web/stream-native-parity && node --test qa/audio-11min.test.mjs
+      - name: Make video fixture
+        run: ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=size=320x180:rate=25 -f lavfi -i sine=frequency=400:sample_rate=44100 -t 4 -c:v libx264 -preset ultrafast -g 25 -keyint_min 25 -sc_threshold 0 -pix_fmt yuv420p -c:a aac -movflags +faststart -y /tmp/blofy-qa-test.mp4
+      - name: Generate real browser-decodable HLS fixtures
+        run: |
+          mkdir -p /tmp/blofy-qa-hls
+          ffmpeg -hide_banner -loglevel error -i /tmp/blofy-qa-test.mp4 -c copy -f hls -hls_time 1 -hls_list_size 0 -hls_segment_filename '/tmp/blofy-qa-hls/seg-%06d.ts' -y /tmp/blofy-qa-hls/index.m3u8
+          test -s /tmp/blofy-qa-hls/index.m3u8
+          first_hls_segment=$(sed -n '/^seg-[0-9][0-9]*[.]ts$/ {p;q;}' /tmp/blofy-qa-hls/index.m3u8)
+          test -n "$first_hls_segment"
+          test -s "/tmp/blofy-qa-hls/$first_hls_segment"
+      - name: Start isolated local web server
+        run: |
+          cd web/stream-native-parity
+          PORT=3000 VIDAA_SESSION_KEY=$(printf 'a%.0s' {1..64}) VIDAA_COMPAT_KEY=$(printf 'b%.0s' {1..64}) bun run server.ts >/tmp/blofy-web.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/health && break; sleep 1; done
+      - name: Test actual mouse and remote screens
+        run: cd web/stream-native-parity && npx playwright test qa/ui-parity.spec.mjs --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-qa-failures
+          path: web/stream-native-parity/test-results
+          retention-days: 2

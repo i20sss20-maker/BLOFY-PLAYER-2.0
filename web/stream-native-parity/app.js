@@ -1,0 +1,3896 @@
+/* BLOFY STREAM Web — visual parity port from Android STREAM 56.0.4.
+ * Source references in README.md; native Android-only APIs are not emulated.
+ * ES5-compatible UI code for older VIDAA WebKit/Chromium engines.
+ * Playback is deliberately distinct: LIVE HLS, VOD seekable MP4 when possible.
+ */
+(function(){
+'use strict';
+var app=document.getElementById('app');
+var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
+ item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
+ watch:{},favoriteItems:{},lastPlaybackDiag:null,lastLongPlaybackTest:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
+var browserDepth=0,handlingBrowserPop=false;
+var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
+function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
+function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
+function profileStorageKey(name){return 'blofy_web_profile_v1:'+S.profileKey+':'+name}
+function profileSave(name,value){if(S.profileKey)writeJson(profileStorageKey(name),value)}
+// Existing preview clients partitioned their favorites by the full MAC of
+// the code-bound access token. Renewing that same account changes the token,
+// hiding those local favorites. The authenticated server now returns an opaque
+// stable account partition plus this exact old-token legacy partition only
+// for one-time same-device local migration. Nothing is uploaded to the server.
+function migrateLegacyProfile(id,legacy){
+ if(!/^[a-f0-9]{24}$/.test(String(id||''))||
+  !/^[a-f0-9]{24}$/.test(String(legacy||''))||id===legacy)return;
+ var names=['favorites','favoriteItems','watch','recentSearches','lastPlaybackDiag','lastLongPlaybackTest'];
+ for(var i=0;i<names.length;i++){
+  var newKey='blofy_web_profile_v1:'+id+':'+names[i];
+  var oldKey='blofy_web_profile_v1:'+legacy+':'+names[i];
+  try{
+   // Never erase a newer stable-account value or remove legacy backups.
+   // Malformed huge old entries are ignored instead of filling TV storage.
+   if(localStorage.getItem(newKey)!==null)continue;
+   var oldValue=localStorage.getItem(oldKey);
+   if(oldValue===null||oldValue.length>220000)continue;
+   JSON.parse(oldValue);
+   localStorage.setItem(newKey,oldValue)
+  }catch(e){}
+ }
+}
+function useProfile(id,legacy){
+ if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
+ migrateLegacyProfile(id,legacy);
+ var changed=S.profileKey!==id;
+ if(changed)S.accountEpoch++;
+ S.profileKey=id;
+ S.library=readJson(profileStorageKey('favorites'),{});
+ S.watch=readJson(profileStorageKey('watch'),{});
+ S.favoriteItems=readJson(profileStorageKey('favoriteItems'),{});
+ S.recentSearches=readJson(profileStorageKey('recentSearches'),[]);
+ S.lastPlaybackDiag=readJson(profileStorageKey('lastPlaybackDiag'),null);
+ S.lastLongPlaybackTest=readJson(profileStorageKey('lastLongPlaybackTest'),null);
+ if(changed){
+  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
+  S.epgToken++;S.epgCache={};
+  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+  S.selected=null;S.livePreview=null;S.listingInflight={};S.catsInflight={}
+ }
+ return true
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function enc(s){return encodeURIComponent(String(s==null?'':s))}
+function urlPic(raw){if(Array.isArray(raw))raw=raw[0];if(typeof raw!=='string')return '';var s=raw.trim();if(!/^https?:\/\/[^\s<>]+$/i.test(s))return '';if(/[?&](username|password|token|api_key|auth)=/i.test(s))return '';if(s.slice(0,5)==='http:')s='https:'+s.slice(5);return s}
+function artCandidates(x){
+ if(!x)return [];
+ var arr=[x.stream_icon,x.cover_big,x.cover,x.movie_image,x.poster,x.poster_url,x.thumbnail,x.icon,x.backdrop,x.backdrop_path],seen={},result=[];
+ for(var i=0;i<arr.length&&result.length<4;i++){
+  var p=urlPic(arr[i]);if(p&&!seen[p]){seen[p]=true;result.push(p)}
+ }
+ return result
+}
+function art(x){var all=artCandidates(x);return all[0]||''}
+function title(x){return x&&(x.name||x.title||x.episode_name)||'بدون عنوان'}
+function kindName(k){return k==='live'?'البث المباشر':k==='movie'?'الأفلام':k==='series'?'المسلسلات':'BLOFY STREAM'}
+function itemId(x,k){return String(x?(k==='series'?(x.series_id||x.id):(x.stream_id||x.id))||'':'')}
+function findItem(k,id){var sets=[];var keys=Object.keys(S.loaded);for(var i=0;i<keys.length;i++)if(keys[i].indexOf(k+':')===0)sets.push(S.loaded[keys[i]].items||[]);for(var a=0;a<sets.length;a++)for(var b=0;b<sets[a].length;b++)if(itemId(sets[a][b],k)===id)return sets[a][b];return S.favoriteItems[k+':'+id]||null}
+function api(method,endpoint,payload,cb){
+ var xhr=new XMLHttpRequest(),done=false,epoch=S.accountEpoch;
+ try{xhr.open(method,endpoint,true);xhr.withCredentials=true;xhr.timeout=40000;
+ xhr.setRequestHeader('Accept','application/json');if(method==='POST')xhr.setRequestHeader('Content-Type','application/json');
+ xhr.onreadystatechange=function(){if(xhr.readyState===4&&!done){done=true;
+   if(epoch!==S.accountEpoch)return;
+   var json={};try{json=JSON.parse(xhr.responseText)}catch(e){}cb(xhr.status,json)
+  }};
+ xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;
+   if(epoch===S.accountEpoch)cb(0,{error:'network_unavailable'})
+  }};
+ xhr.send(payload?JSON.stringify(payload):null);
+  return xhr
+ }catch(e){cb(0,{error:'request_failed'});return null}
+}
+function setStatus(text,error){var box=document.getElementById('page-status')||document.getElementById('login-status');if(box){box.textContent=text;box.className=error?'info error':'info'}}
+function deviceKey(){
+ var key='';try{key=localStorage.getItem('blofy_stream_web_device_v1')||''}catch(e){}
+ if(/^[0-9a-f]{64}$/.test(key))return key;
+ var bytes=new Uint8Array(32),hex='0123456789abcdef';
+ if(window.crypto&&window.crypto.getRandomValues)window.crypto.getRandomValues(bytes);
+ else for(var i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
+ for(var j=0;j<bytes.length;j++)key+=hex[(bytes[j]>>4)&15]+hex[bytes[j]&15];
+ try{localStorage.setItem('blofy_stream_web_device_v1',key)}catch(e){}
+ return key
+}
+function login(message){
+ S.accountEpoch++;
+ cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
+ S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
+ S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+ S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
+ if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
+ S.epgToken++;S.epgCache={};
+ app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
+ '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
+ '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
+ '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'تفعيل بالكود فقط • نسخة ويب تحت التطوير')+'</div>'+
+ '</div></div>';
+ var button=document.getElementById('redeem');
+ button.onclick=redeem;
+ document.getElementById('activation-code').onkeydown=function(e){if((e.keyCode||e.which)===13)redeem()};
+ setTimeout(function(){(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
+}
+function redeem(){
+ var code=(document.getElementById('activation-code').value||'').replace(/[\s-]/g,'').toUpperCase();
+ if(!/^([0-9]{8,12}|[A-F0-9]{24})$/.test(code)){setStatus('تأكد من إدخال كود BLOFY STREAM الصحيح',true);return}
+ var btn=document.getElementById('redeem');btn.disabled=true;setStatus('جار التحقق من التفعيل…');
+ api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
+  btn.disabled=false;
+  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true)}
+   else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
+  else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
+ })
+}
+// Remember the exact scroll/focus position so returning from a title never jumps to the top.
+function viewKey(route){
+ route=route||S.route;
+ if(route==='movie'||route==='series'||route==='live')return route+':'+(S.cat[route]||'all');
+ if(route==='detail')return 'detail:'+(S.item?S.item.kind+':'+S.item.id:'');
+ if(route==='episodes')return 'episodes:'+(S.item&&S.item.id||'');
+ return route
+}
+function focusIdentity(node){
+ if(!node||node===document.body)return null;
+ var keys=['data-cat','data-channel','data-details','data-watch','data-more','data-season','data-go','data-episodes','data-sort','data-favorite','data-back'];
+ for(var i=0;i<keys.length;i++)if(node.hasAttribute&&node.hasAttribute(keys[i]))return [keys[i],node.getAttribute(keys[i])];
+ if(node.id)return ['id',node.id];
+ return null
+}
+function findFocus(identity){
+ if(!identity)return null;
+ if(identity[0]==='id')return document.getElementById(identity[1]);
+ var nodes=document.querySelectorAll('['+identity[0]+']');
+ for(var i=0;i<nodes.length;i++)if(nodes[i].getAttribute(identity[0])===identity[1])return nodes[i];
+ return null
+}
+function rememberView(){
+ if(S.route==='player'||S.route==='boot'||S.route==='login')return;
+ var root=document.getElementById('workspace');
+ if(!root)return;
+ var key=viewKey(),view={scroll:root.scrollTop,focus:focusIdentity(document.activeElement),parts:{}};
+ var scrollers=root.querySelectorAll('.pane-scroll,.poster-panel,.h-scroll,.episode-list');
+ for(var i=0;i<scrollers.length;i++)view.parts[i]=[scrollers[i].scrollTop,scrollers[i].scrollLeft];
+ S.views[key]=view
+}
+function restoreView(route,preferred){
+ var key=viewKey(route);
+ setTimeout(function(){
+  if(S.route!==route||viewKey()!==key)return;
+  var entry=S.views[key],root=document.getElementById('workspace');
+  if(!root)return;
+  // Focus only for remote/keyboard use; mouse users keep natural pointer focus.
+  var target=findFocus(preferred||(entry&&entry.focus));
+  if(!target&&S.keyboardMode){
+   target=root.querySelector('.cat-item.selected,.detail-actions .btn,.hero-actions .btn,.poster,.channel-item,.story,.episode-row,.btn:not([disabled])')||
+    document.querySelector('.rail-link.active');
+  }
+  if(target&&S.keyboardMode){try{target.focus({preventScroll:true})}catch(e){target.focus()}}
+  if(entry){
+   var scrollers=root.querySelectorAll('.pane-scroll,.poster-panel,.h-scroll,.episode-list');
+   for(var i=0;i<scrollers.length;i++)if(entry.parts[i]){scrollers[i].scrollTop=entry.parts[i][0];scrollers[i].scrollLeft=entry.parts[i][1]}
+   root.scrollTop=entry.scroll||0
+  }else if(root)root.scrollTop=0
+ },0)
+}
+function navHtml(){
+ return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
+ NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
+ '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
+}
+function shell(pageTitle,markup){
+ var catalogPage=S.route==='live'||S.route==='movie'||S.route==='series';
+ S.heading=pageTitle;
+ // Each catalog is its own wide TV screen. The global app sidebar belongs
+ // to Home, not to the Live/Movies/Series list, as in the native TV workflow.
+ app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+'">'+
+ (catalogPage?'':navHtml())+'<main class="workspace" id="workspace">'+
+ '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
+ (S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+
+ (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
+ '<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
+ '<div id="screen">'+markup+'</div></main></div>';
+ // Pages restore their own controls after data arrives rather than focusing the sidebar.
+}
+function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
+function pushBrowserStep(route,opts){
+ if(handlingBrowserPop)return;
+ try{
+  var next=browserDepth+1;
+  window.history.pushState({blofyStreamWeb:true,depth:next,route:route,opts:opts||{}},'',window.location.href);
+  browserDepth=next
+ }catch(e){}
+}
+function navigate(route,opts,replace){
+ if(S.route==='search'&&route!=='search')cancelSearch();
+ if(route!==S.route)rememberView();
+ if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
+ // Release any live preview session before leaving its page (not just full-screen player).
+ if(S.play&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
+ if(S.route==='player'&&route!=='player'&&S.playerView&&S.playerView.video){
+  try{S.playerView.video.pause();S.playerView.video.removeAttribute('src');S.playerView.video.load()}catch(e){}
+  S.playerView=null;
+ }
+ if(route==='login'){login();return}
+ if(!replace&&S.route!==route){
+  var options={kind:S.kind};
+  if(S.route==='detail'&&S.item)options={kind:S.item.kind,id:S.item.id};
+  else if(S.route==='episodes'&&S.item)options={id:S.item.id};
+  S.history.push({route:S.route,opts:options});
+  if(S.history.length>30)S.history.shift();
+  pushBrowserStep(route,opts||{})
+ }
+ S.route=route;
+ if(route==='home')home();
+ else if(route==='live'||route==='movie'||route==='series')catalog(route);
+ else if(route==='detail')details(opts||{});
+ else if(route==='episodes')episodesScreen(opts||{});
+ else if(route==='favorites')favoritesScreen();
+ else if(route==='search')searchScreen();
+ else if(route==='ai')aiScreen();
+ else if(route==='settings')settingsScreen();
+ else if(route==='collections')collectionsScreen();
+ else home()
+}
+function back(){
+ if(!handlingBrowserPop&&browserDepth>0){
+  try{window.history.back();return}catch(e){}
+ }
+ if(S.route==='player'){closePlayer();return}
+ var prev=S.history.pop();
+ if(prev&&prev.route&&prev.route!=='boot'&&prev.route!=='login'){navigate(prev.route,prev.opts||{},true);return}
+ navigate('home',{},true)
+}
+window.addEventListener('popstate',function(event){
+ if(!S.userVerified)return;
+ var next=event.state&&event.state.blofyStreamWeb?Number(event.state.depth)||0:0;
+ var forward=next>browserDepth,entry=event.state||{};
+ browserDepth=next;handlingBrowserPop=true;
+ try{
+  if(forward&&entry.route==='player'&&entry.opts){
+   var p=entry.opts;openPlayer(p.kind,p.id,p.extension,p.name,p.from)
+  }else if(forward&&entry.route&&entry.route!=='boot'&&entry.route!=='login'){
+   navigate(entry.route,entry.opts||{})
+  }else back()
+ }finally{handlingBrowserPop=false}
+});
+function categories(kind,done){
+ if(S.cats[kind]){done(S.cats[kind]);return}
+ if(S.catsInflight[kind]){S.catsInflight[kind].push(done);return}
+ S.catsInflight[kind]=[done];
+ api('GET','/api/catalog?action=get_'+(kind==='movie'?'vod':kind)+'_categories',null,function(st,result){
+  var waiting=S.catsInflight[kind]||[];delete S.catsInflight[kind];
+  if(st===401){login('انتهت جلسة الاشتراك');return}
+  if(st===200&&Array.isArray(result))S.cats[kind]=result;
+  for(var i=0;i<waiting.length;i++)waiting[i](S.cats[kind]||[])
+ })
+}
+function pageRequest(kind,cat,offset,limit,cb,query,fresh){
+ var endpoint='/api/page?kind='+enc(kind)+'&offset='+enc(offset||0)+'&limit='+enc(limit||30);
+ if(cat&&cat!=='all')endpoint+='&category_id='+enc(cat);
+ if(query)endpoint+='&query='+enc(query);
+ if(fresh)endpoint+='&fresh=1';
+ return api('GET',endpoint,null,function(st,result){
+  if(st===401){login('انتهت جلسة الاشتراك');return}
+  cb(st,result&&Array.isArray(result.items)?result:null)
+ })
+}
+function keyOf(kind,cat){return kind+':'+(cat||'all')}
+function getListing(kind,cat,cb,force){
+ var key=keyOf(kind,cat);
+ if(!force&&S.loaded[key]){cb(200,S.loaded[key]);return}
+ if(!force&&S.listingInflight[key]){S.listingInflight[key].push(cb);return}
+ if(!force)S.listingInflight[key]=[cb];
+ pageRequest(kind,cat,0,36,function(st,r){
+  var waiting=force?[cb]:(S.listingInflight[key]||[cb]);
+  if(!force)delete S.listingInflight[key];
+  if(st===200&&r)S.loaded[key]=r;
+  for(var i=0;i<waiting.length;i++)waiting[i](st,st===200?r:null)
+ },null,!!force)
+}
+function safeImg(pic,cls){
+ var alternatives=[];
+ if(pic&&typeof pic==='object'){
+  alternatives=artCandidates(pic);pic=alternatives.shift()||''
+ }
+ return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" alt="" src="'+esc(pic)+'"'+
+  (alternatives.length?' data-art-fallback="'+esc(JSON.stringify(alternatives))+'"':'')+'>':''
+}
+function posterCard(item,kind){
+ var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
+ return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
+ '<span class="poster-art">'+safeImg(item)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
+ '<span class="poster-caption"><strong>'+esc(name)+'</strong><span>'+(percent>3&&percent<95?'متابعة • '+percent+'٪':'BLOFY STREAM')+'</span></span></button>'
+}
+function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).map(function(x){return posterCard(x,kind)}).join('')+'</div>'}
+function home(){
+ shell('الرئيسية','<div id="home-content">'+loading('الواجهة الرئيسية')+'</div>');
+ var movies=S.loaded['movie:all'],series=S.loaded['series:all'];
+ function draw(){
+  if(S.route!=='home')return;
+  var film=(movies&&movies.items)||[],show=(series&&series.items)||[],combined=film.concat(show),candidate=combined.length?combined[S.heroIndex%combined.length]:null;
+  var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art').replace('loading="lazy"','loading="eager" fetchpriority="high"')+'<div class="hero-shade"></div><div class="hero-copy">'+
+  '<div class="hero-kicker">'+esc(candidate.series_id?'مسلسل جديد':'أحدث العناوين')+'</div><h2 class="hero-title">'+esc(title(candidate))+'</h2>'+
+  '<div class="hero-description">اكتشف أحدث ما أضيف إلى مكتبة BLOFY STREAM، مع تفاصيل ومواسم ومتابعة مشاهدة.</div>'+
+  '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل والمشاهدة</button>'+
+  '<button class="btn secondary" data-go="movie">استكشف الأفلام</button></div>'+
+  '<div class="hero-dots">'+combined.slice(0,5).map(function(x,n){return '<span class="'+(n===S.heroIndex?'current':'')+'"></span>'}).join('')+'</div></div></div>':
+  '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2><div class="hero-description">قنوات وأفلام ومسلسلات باستخدام كود اشتراكك.</div></div></div>';
+  var shortcuts='<div class="shelf"><div class="shelf-title"><h2>وصول سريع</h2></div><div class="story-row">'+
+   '<button class="story" id="home-shortcut-live" data-go="live"><strong>◉ البث المباشر</strong><small>القنوات المفضلة والتصنيفات</small></button>'+
+   '<button class="story" id="home-shortcut-movie" data-go="movie"><strong>▣ الأفلام</strong><small>الملصقات والتفاصيل</small></button>'+
+   '<button class="story" id="home-shortcut-series" data-go="series"><strong>▤ المسلسلات</strong><small>المواسم والحلقات</small></button>'+
+   '<button class="story" id="home-shortcut-search" data-go="search"><strong>⌕ البحث</strong><small>ابحث في المكتبة</small></button></div></div>';
+  var shelfMovies=film.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث الأفلام</h2><button class="btn secondary" data-go="movie">عرض الكل</button></div>'+shelves(film,'movie')+'</section>':'';
+  var shelfSeries=show.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث المسلسلات</h2><button class="btn secondary" data-go="series">عرض الكل</button></div>'+shelves(show,'series')+'</section>':'';
+  var recent=Object.keys(S.watch).map(function(key){
+   var pos=S.watch[key]||{},split=key.indexOf(':'),kind=key.slice(0,split),id=key.slice(split+1);
+   if(split<0||(kind!=='movie'&&kind!=='series')||!(pos.position>30)||pos.duration>0&&pos.position/pos.duration>.95)return null;
+   var item=findItem(kind,id),name=pos.name||item&&title(item),poster=pos.art||art(item);
+   return name?{kind:kind,id:id,name:name,poster:poster,ext:pos.ext||item&&item.container_extension||'mp4',pos:pos}:null
+  }).filter(Boolean).sort(function(a,b){return (b.pos.updated||0)-(a.pos.updated||0)}).slice(0,12);
+  var watch=recent.length?'<section class="shelf"><div class="shelf-title"><h2>أكمل المشاهدة</h2></div><div class="h-scroll">'+recent.map(function(r){
+   var pct=r.pos.duration>0?Math.round(100*r.pos.position/r.pos.duration):0;
+   return '<button class="poster" data-watch="'+esc(r.kind)+':'+esc(r.id)+'" data-ext="'+esc(r.ext)+'" data-name="'+esc(r.name)+'" data-from="'+r.pos.position+'" title="'+esc(r.name)+'">'+
+   '<span class="poster-art">'+safeImg(r.poster)+'<span class="no-poster">'+esc(r.name)+'</span></span>'+
+   '<span class="poster-caption"><strong>'+esc(r.name)+'</strong><span>متابعة من '+formatTime(r.pos.position)+(pct?' • '+pct+'٪':'')+'</span></span></button>'
+  }).join('')+'</div></section>':'';
+  var target=document.getElementById('home-content');
+  if(target){
+   // Returning a slow series listing must not steal TV remote focus, reset
+   // scroll, or blank movie cards already visible.
+   var hadScreen=!!target.querySelector('.story-row');
+   var focus=hadScreen&&S.keyboardMode&&target.contains(document.activeElement)?
+    (document.activeElement.id?['id',document.activeElement.id]:focusIdentity(document.activeElement)):null;
+   if(hadScreen)rememberView();
+   target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;
+   restoreView('home',focus)
+  }
+ }
+ // Render navigation and recent watched items instantly. Movie and series
+ // shelves arrive independently; a slow source cannot hold home hostage.
+ draw();
+ if(!movies)getListing('movie','all',function(st,d){movies=d||{items:[]};draw()});
+ if(!series)getListing('series','all',function(st,d){series=d||{items:[]};draw()})
+}
+function catalog(kind){
+ S.kind=kind;var cat=S.cat[kind]||'all';
+ shell(kindName(kind),'<div id="catalog-root">'+loading(kindName(kind))+'</div>');
+ // Do not block the content grid on slower category metadata.
+ getListing(kind,cat,function(st,listing){
+  if(S.route!==kind||(S.cat[kind]||'all')!==cat)return;
+  var root=document.getElementById('catalog-root');if(!root)return;
+  if(st!==200||!listing){
+   root.innerHTML='<div class="info error">تعذر تحميل المحتوى. <button class="btn secondary" data-reload="'+kind+'">إعادة المحاولة</button></div>';
+   return
+  }
+  buildCatalog(kind,listing)
+ });
+ categories(kind,function(){
+  if(S.route!==kind||(S.cat[kind]||'all')!==cat)return;
+  var panel=document.querySelector('#catalog-root .cat-rail');if(!panel)return;
+  var oldScroll=panel.querySelector('.pane-scroll'),y=oldScroll?oldScroll.scrollTop:0;
+  var focused=S.keyboardMode&&panel.contains(document.activeElement);
+  var prevFocus=focused?focusIdentity(document.activeElement):null;
+  panel.outerHTML=categoryRail(kind);
+  var next=document.querySelector('#catalog-root .cat-rail .pane-scroll');
+  if(next)next.scrollTop=y;
+  if(focused){var target=findFocus(prevFocus)||document.querySelector('.cat-item.selected');if(target)target.focus()}
+ })
+}
+function categoryRail(kind){
+ var data=S.cats[kind]||[],cat=S.cat[kind]||'all';
+ return '<aside class="cat-rail"><div class="pane-head"><strong>الفئات</strong><small>'+data.length+' تصنيف</small></div>'+
+ '<div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
+ data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(x.category_name||'تصنيف')+'</button>'}).join('')+
+ '</div></aside>'
+}
+function currentListing(){return S.loaded[keyOf(S.kind,S.cat[S.kind]||'all')]||{items:[],hasMore:false,nextOffset:0}}
+function buildCatalog(kind,listing){
+ var host=document.getElementById('catalog-root');if(!host)return;var source=listing.items||[];
+ if(host.querySelector('.catalog'))rememberView();
+ if(kind==='live'){
+  host.innerHTML='<div class="catalog">'+categoryRail(kind)+
+  '<section class="channels"><div class="pane-head"><strong>القنوات</strong><small>'+source.length+' قناة محمّلة</small></div>'+
+  '<div class="pane-scroll" id="channel-list">'+source.map(function(x){var id=itemId(x,kind),pic=art(x);return '<button class="channel-item '+(S.selected===id?'selected':'')+'" data-channel="'+esc(id)+'">'+
+  (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
+  '<span class="channel-name"><strong>'+esc(title(x))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'}).join('')+
+  '</div><div class="pane-bottom"><button class="btn secondary" data-more="live" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section>'+
+  '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
+  '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
+  '<p class="live-preview-quality" id="live-preview-quality" aria-live="polite">الدقة المعروضة: جار قراءة معلومات الفيديو…</p>'+
+  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
+   '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
+  '</div>';
+  var selected=findItem('live',S.selected)||source[0];
+  if(selected)selectChannel(itemId(selected,'live'),true);
+  // Arrow navigation on a TV changes the highlighted channel as it settles.
+  // A short delay avoids opening one transcoder for every rapid D-pad press.
+  var channelList=document.getElementById('channel-list');
+  if(channelList){
+   channelList.addEventListener('focusin',function(e){
+    var row=e.target&&e.target.closest&&e.target.closest('[data-channel]');
+    if(!row||S.route!=='live')return;
+    var id=row.getAttribute('data-channel');
+    if(S.previewFocusTimer)clearTimeout(S.previewFocusTimer);
+    if(id===S.selected)return;
+    S.previewFocusTimer=setTimeout(function(){
+     S.previewFocusTimer=null;
+     if(S.route==='live'&&channelList.isConnected&&channelList.contains(document.activeElement))selectChannel(id,true)
+    },380)
+   });
+   channelList.addEventListener('focusout',function(){
+    if(S.previewFocusTimer){clearTimeout(S.previewFocusTimer);S.previewFocusTimer=null}
+   })
+  }
+ }else{
+  var sorted=source.slice();if(S.sort==='alpha')sorted.sort(function(a,b){return title(a).localeCompare(title(b))});
+  if(S.sort==='new')sorted.sort(function(a,b){return Number(b.added||0)-Number(a.added||0)});
+  host.innerHTML='<div class="catalog posters">'+categoryRail(kind)+
+  '<section class="poster-panel"><div class="poster-panel-header"><div><h2>'+kindName(kind)+'</h2><small>'+sorted.length+' عنوان محمّل • تصفح الملصقات</small></div>'+
+  '<div class="sort-bar"><span class="small muted">الترتيب</span><button class="btn secondary" data-sort="next">'+(S.sort==='alpha'?'أبجدي':S.sort==='new'?'الأحدث':'ترتيب المصدر')+'</button></div></div>'+
+  '<div class="poster-grid">'+sorted.map(function(x){return posterCard(x,kind)}).join('')+'</div>'+
+  '<div style="margin-top:20px;text-align:center"><button class="btn secondary" data-more="'+kind+'" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section></div>';
+  enrichPosters(kind,sorted.slice(0,10))
+ }
+ bindMoreOnScroll(kind);
+ restoreView(kind)
+}
+
+/* Update a category without destroying the shell, TV focus, or the live
+ * preview <video>. Replacing #catalog-root previously flashed the page,
+ * restarted HLS and lost the D-pad position on every category press.
+ */
+function renderCategoryItems(kind,listing){
+ var source=listing&&Array.isArray(listing.items)?listing.items:[];
+ if(kind==='live'){
+  var list=document.getElementById('channel-list'),pane=document.querySelector('.channels');
+  if(!list||!pane)return false;
+  list.innerHTML=source.length?source.map(function(x){
+   var id=itemId(x,'live'),pic=art(x);
+   return '<button class="channel-item" data-channel="'+esc(id)+'">'+
+    (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
+    '<span class="channel-name"><strong>'+esc(title(x))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'
+  }).join(''):'<p class="catalog-inline-empty">لا توجد قنوات في هذا التصنيف.</p>';
+  list.scrollTop=0;
+  var counter=pane.querySelector('.pane-head small');
+  if(counter)counter.textContent=source.length+' قناة محمّلة';
+  var more=pane.querySelector('[data-more="live"]');
+  if(more){more.disabled=!listing.hasMore;more.textContent=listing.hasMore?'عرض المزيد':'تم عرض المحتوى'}
+  // Keep the same preview video element while selecting a channel in the
+  // new list. beginPreview serializes STOP before the next upstream starts.
+  var next=source.find(function(x){return itemId(x,'live')===String(S.selected)})||source[0];
+  if(next){
+   S.selected=itemId(next,'live');
+   selectChannel(S.selected,true)
+  }else{
+   S.selected=null;S.livePreview=null;
+   if(S.play&&S.play.preview)stopPlayback(true);
+   var empty=document.getElementById('preview-empty');
+   if(empty){empty.style.display='';empty.textContent='لا توجد قناة للمعاينة في هذا التصنيف'}
+   var heading=document.getElementById('live-title');
+   if(heading)heading.textContent='المعاينة المباشرة';
+   var details=document.getElementById('live-desc');
+   if(details)details.textContent='اختر تصنيفًا يحتوي على قنوات';
+   var status=document.getElementById('live-status');
+   if(status)status.textContent='';
+  }
+  return true
+ }
+ var grid=document.querySelector('.poster-panel .poster-grid');
+ if(!grid)return false;
+ var sorted=source.slice();
+ if(S.sort==='alpha')sorted.sort(function(a,b){return title(a).localeCompare(title(b))});
+ if(S.sort==='new')sorted.sort(function(a,b){return Number(b.added||0)-Number(a.added||0)});
+ grid.innerHTML=sorted.length?sorted.map(function(x){return posterCard(x,kind)}).join(''):
+  '<p class="catalog-inline-empty">لا يوجد محتوى في هذا التصنيف.</p>';
+ var count=document.querySelector('.poster-panel-header small');
+ if(count)count.textContent=sorted.length+' عنوان محمّل • تصفح الملصقات';
+ var moreButton=document.querySelector('.poster-panel [data-more="'+kind+'"]');
+ if(moreButton){moreButton.disabled=!listing.hasMore;moreButton.textContent=listing.hasMore?'عرض المزيد':'تم عرض المحتوى'}
+ var sortButton=document.querySelector('.poster-panel [data-sort]');
+ if(sortButton)sortButton.textContent=S.sort==='alpha'?'أبجدي':S.sort==='new'?'الأحدث':'ترتيب المصدر';
+ var scroller=document.querySelector('.poster-panel');
+ if(scroller)scroller.scrollTop=0;
+ enrichPosters(kind,sorted.slice(0,10));
+ return true
+}
+function changeCatalogCategory(kind,category){
+ if(S.route!==kind||!document.querySelector('#catalog-root .catalog'))return;
+ if((S.cat[kind]||'all')===category&&!S.categoryLoadFailed)return;
+ S.categoryLoadFailed=false;
+ rememberView();
+ S.cat[kind]=category;
+ var epoch=(S.categoryEpoch||0)+1;S.categoryEpoch=epoch;
+ var panel=document.querySelector('#catalog-root .cat-rail');
+ if(panel){
+  var buttons=panel.querySelectorAll('[data-cat]');
+  for(var i=0;i<buttons.length;i++){
+   var active=buttons[i].getAttribute('data-cat')===kind+':'+category;
+   buttons[i].classList.toggle('selected',active);
+   buttons[i].setAttribute('aria-pressed',active?'true':'false')
+  }
+ }
+ // This local status does not touch the video or global layout.
+ var root=document.getElementById('catalog-root'),badge=document.getElementById('catalog-update-status');
+ if(!badge&&root){badge=document.createElement('div');badge.id='catalog-update-status';
+  badge.setAttribute('role','status');badge.setAttribute('aria-live','polite');
+  root.insertBefore(badge,root.firstChild)}
+ if(badge){badge.hidden=false;badge.textContent='جار عرض التصنيف…'}
+ var catalog=root&&root.querySelector('.catalog');
+ if(catalog)catalog.setAttribute('aria-busy','true');
+ getListing(kind,category,function(st,listing){
+  if(S.route!==kind||(S.cat[kind]||'all')!==category||S.categoryEpoch!==epoch||
+   !root||!root.isConnected)return;
+  if(catalog)catalog.removeAttribute('aria-busy');
+  if(st!==200||!listing){
+   S.categoryLoadFailed=true;
+   if(badge){badge.textContent='تعذر تحميل التصنيف. اختره مرة أخرى للمحاولة.';badge.hidden=false}
+   // Remain on previous media rows, rather than blanking the screen.
+   return
+  }
+  renderCategoryItems(kind,listing);
+  if(badge){badge.hidden=true;badge.textContent=''}
+ })
+}
+
+function enrichPosters(kind,source){
+ if(kind!=='movie'&&kind!=='series')return;
+ // Recover source metadata artwork only for a bounded visible window.
+ var queue=source.filter(function(x){return !art(x)&&!x.__cover_checked}).slice(0,16),at=0,inflight=0;
+ function pump(){
+  while(at<queue.length&&inflight<2){
+   var item=queue[at++];item.__cover_checked=true;inflight++;
+   (function(x){
+    var id=itemId(x,kind),action=kind==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
+    api('GET','/api/catalog?action='+action+enc(id),null,function(st,res){
+     inflight--;
+     if(st===200&&res){
+      var data=res.info||res.movie_data||res;
+      var cover=urlPic(data.movie_image||data.cover_big||data.cover||data.poster||data.poster_path||data.backdrop_path||'');
+      if(cover){
+       x.movie_image=cover;
+       var buttons=document.querySelectorAll('[data-details="'+kind+':'+id+'"]');
+       for(var j=0;j<buttons.length;j++){
+        var holder=buttons[j].querySelector('.poster-art');
+        if(holder&&!holder.querySelector('img')){
+         var image=document.createElement('img');image.loading='lazy';image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
+        }
+       }
+      }
+     }
+     pump();
+    });
+   })(item)
+  }
+ }pump()
+}
+function selectChannel(id,activate){
+ var item=findItem('live',id);if(!item)return;S.selected=id;
+ var rows=document.querySelectorAll('[data-channel]');for(var i=0;i<rows.length;i++)rows[i].className='channel-item'+(rows[i].getAttribute('data-channel')===id?' selected':'');
+ var name=document.getElementById('live-title'),desc=document.getElementById('live-desc');
+ if(name)name.textContent=title(item);if(desc)desc.textContent='معاينة '+title(item)+' • التشغيل تلقائي عند التحديد';
+ var favorite=document.getElementById('live-favorite');if(favorite){
+  favorite.setAttribute('data-favorite','live:'+id);
+  favorite.textContent=S.library['live:'+id]?'♥ إزالة من المفضلة':'♡ المفضلة'
+ }
+ loadShortEpg(id);
+ if(activate)beginPreview(item)
+}
+function decodeEpgField(raw){
+ var source=String(raw==null?'':raw).trim().slice(0,500);
+ if(source.length<8||source.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(source))return source;
+ try{
+  var binary=atob(source),decoded='';
+  if(typeof TextDecoder!=='undefined'){
+   var bytes=new Uint8Array(binary.length);
+   for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+   decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes)
+  }else decoded=decodeURIComponent(escape(binary));
+  if(decoded&&decoded.indexOf('\ufffd')<0&&!/[\x00-\x08\x0e-\x1f]/.test(decoded))return decoded.slice(0,500)
+ }catch(e){}
+ return source
+}
+function epgTime(raw,stamp){
+ var t=String(raw||'');
+ var match=/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/.exec(t);
+ if(match)return (match[1].length===1?'0':'')+match[1]+':'+match[2];
+ var n=Number(stamp||0);
+ if(n>1000000000&&n<4102444800){
+  try{return new Date(n*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Riyadh'})}catch(e){}
+ }
+ return ''
+}
+function formatEpg(value){
+ var list=Array.isArray(value)?value:value&&Array.isArray(value.epg_listings)?value.epg_listings:[];
+ if(!list.length)return '<span class="epg-empty">دليل البرامج غير متوفر لهذه القناة من المصدر.</span>';
+ var seen={},items=[];
+ for(var i=0;i<list.length&&items.length<5;i++){
+  var x=list[i]||{},name=decodeEpgField(x.title||x.name||'');
+  if(!name||seen[name+':'+(x.start||'')])continue;
+  seen[name+':'+(x.start||'')]=true;
+  var from=epgTime(x.start,x.start_timestamp),to=epgTime(x.end||x.stop,x.stop_timestamp);
+  var on=String(x.now_playing||'')==='1';
+  items.push('<div class="epg-entry">'+
+   '<span class="epg-time">'+esc(from&&to?from+' – '+to:from||'الوقت غير متوفر')+'</span>'+
+   '<span class="epg-program">'+(on?'<em>الآن</em> ':'')+esc(name.slice(0,110))+'</span></div>')
+ }
+ return items.length?items.join(''):'<span class="epg-empty">لم يرسل المصدر بيانات برامج قابلة للعرض.</span>'
+}
+function loadShortEpg(id){
+ var box=document.getElementById('live-epg'),now=Date.now(),cached=S.epgCache[id],token=++S.epgToken;
+ if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
+ if(!box||S.route!=='live'||!id)return;
+ if(cached&&now-cached.time<300000){box.innerHTML=cached.html;return}
+ box.textContent='جار تحميل دليل القناة…';
+ S.epgTimer=setTimeout(function(){
+  S.epgTimer=null;
+  if(S.route!=='live'||token!==S.epgToken||S.selected!==id)return;
+  api('GET','/api/catalog?action=get_short_epg&stream_id='+enc(id)+'&limit=5',null,function(st,data){
+   if(S.route!=='live'||token!==S.epgToken||S.selected!==id)return;
+   var target=document.getElementById('live-epg');if(!target)return;
+   var html=st===200?formatEpg(data):'<span class="epg-empty">تعذر تحميل دليل البرامج الآن.</span>';
+   target.innerHTML=html;
+   if(st===200){
+    S.epgCache[id]={time:Date.now(),html:html};
+    // Keep the TV's memory bounded when browsing hundreds of channels.
+    var keys=Object.keys(S.epgCache);
+    if(keys.length>80){
+     keys.sort(function(a,b){return S.epgCache[a].time-S.epgCache[b].time});
+     for(var i=0;i<keys.length-80;i++)delete S.epgCache[keys[i]]
+    }
+   }
+  })
+ },450)
+}
+function beginPreview(item){
+ var video=document.getElementById('live-video'),box=document.getElementById('live-status'),empty=document.getElementById('preview-empty');
+ if(!video||!item||S.route!=='live')return;
+ var id=itemId(item,'live'),key='live/'+id+'/ts/0';
+ if(String(S.selected)!==String(id))return;
+ if(S.livePreview===id&&S.play&&S.play.preview&&S.play.video===video){
+  if(video.paused&&S.play.ready){try{var p=video.play();if(p&&p.catch)p.catch(function(){})}catch(e){}}
+  return
+ }
+ if(empty)empty.style.display='none';
+ // Never start the next live FFmpeg session until the server confirms
+ // shutdown of the previous preview. We retain only the latest remote choice.
+ if(S.previewStopPending){
+  S.previewPendingItem=item;
+  if(box)box.textContent='جار تبديل المعاينة للقناة المحددة…';
+  return
+ }
+ var previous=S.play;
+ if(previous&&previous.preview&&previous.hlsKey){
+  S.previewStopPending=true;S.previewPendingItem=item;
+  var previousKey=previous.hlsKey,settled=false,guard=null;
+  stopPlayback(false);
+  if(box)box.textContent='جار تبديل القناة…';
+  function finished(st){
+   if(settled)return;
+   settled=true;if(guard)clearTimeout(guard);
+   S.previewStopPending=false;
+   var next=S.previewPendingItem;S.previewPendingItem=null;
+   if(S.route!=='live'||!video.isConnected)return;
+   if(st!==200&&st!==404){
+    if(box)box.textContent='تعذر إنهاء اتصال المعاينة السابقة؛ اضغط المعاينة لإعادة المحاولة.';
+    return
+   }
+   if(next&&String(itemId(next,'live'))===String(S.selected))beginPreview(next)
+  }
+  guard=setTimeout(function(){finished(0)},6500);
+  api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)});
+  return
+ }
+ S.livePreview=id;
+ if(box)box.textContent='جار تشغيل معاينة '+title(item)+' تلقائيًا…';
+ video.muted=true;video.defaultMuted=true;
+ video.setAttribute('muted','');
+ video.autoplay=true;video.setAttribute('autoplay','');
+ video.playsInline=true;video.controls=false;
+ playHls(video,'live',id,'ts',0,box,true)
+}
+function loadMore(kind){
+ var cat=S.cat[kind]||'all',key=keyOf(kind,cat),listing=S.loaded[key];
+ if(!listing||!listing.hasMore||listing.loadingMore)return;
+ listing.loadingMore=true;
+ var btn=document.querySelector('[data-more="'+kind+'"]');
+ if(btn){btn.disabled=true;btn.textContent='جار تحميل المزيد…'}
+ pageRequest(kind,cat,listing.nextOffset||listing.items.length,36,function(st,result){
+  listing.loadingMore=false;
+  if(st!==200||!result||S.route!==kind||(S.cat[kind]||'all')!==cat){
+   if(btn&&S.route===kind){btn.disabled=false;btn.textContent='تعذر التحميل، حاول مرة أخرى'}
+   return
+  }
+  var seen={};for(var i=0;i<listing.items.length;i++)seen[itemId(listing.items[i],kind)]=true;
+  var next=result.items.filter(function(item){var id=itemId(item,kind);if(seen[id])return false;seen[id]=true;return true});
+  listing.items=listing.items.concat(next);listing.nextOffset=result.nextOffset;
+  listing.hasMore=!!result.hasMore&&next.length>0;
+  var list=kind==='live'?document.getElementById('channel-list'):(S.sort==='source'?document.querySelector('.poster-panel .poster-grid'):null);
+  if(!list){buildCatalog(kind,listing);return}
+  // Incremental append keeps the existing focus, scroll position and live preview player.
+  if(kind==='live'){
+   list.insertAdjacentHTML('beforeend',next.map(function(item){
+    var id=itemId(item,'live'),pic=art(item);
+    return '<button class="channel-item" data-channel="'+esc(id)+'">'+(pic?safeImg(item,'channel-image'):'<span class="channel-image"></span>')+
+      '<span class="channel-name"><strong>'+esc(title(item))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'
+   }).join(''))
+  }else{
+   list.insertAdjacentHTML('beforeend',next.map(function(item){return posterCard(item,kind)}).join(''));
+   enrichPosters(kind,next.slice(0,8))
+  }
+  var count=document.querySelector(kind==='live'?'.channels .pane-head small':'.poster-panel-header small');
+  if(count)count.textContent=listing.items.length+(kind==='live'?' قناة محمّلة':' عنوان محمّل • تصفح الملصقات');
+  if(btn){btn.disabled=!listing.hasMore;btn.textContent=listing.hasMore?'عرض المزيد':'تم عرض المحتوى'}
+ })
+}
+function bindMoreOnScroll(kind){
+ var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-panel');
+ if(!panel)return;
+ var queued=false;
+ panel.addEventListener('scroll',function(){
+  if(queued||S.route!==kind)return;
+  queued=true;
+  setTimeout(function(){
+   queued=false;
+   if(S.route!==kind||panel.scrollHeight-panel.scrollTop-panel.clientHeight>480)return;
+   var button=document.querySelector('[data-more="'+kind+'"]');
+   if(button&&!button.disabled)loadMore(kind)
+  },130)
+ },{passive:true})
+}
+function recordPlaybackQuality(p){
+ if(!p||!p.stats||!S.profileKey)return;
+ var st=p.stats,now=Date.now(),bufferMs=st.bufferMs||0;
+ if(st.bufferSince)bufferMs+=Math.max(0,now-st.bufferSince);
+ // No channel ID, access token, customer code or provider URL is retained.
+ var result={kind:p.kind==='live'?'live':p.kind==='series'?'series':'movie',
+  mode:['fullvod','vodhls','direct','hls','mpegts'].indexOf(p.mode)>=0?p.mode:'unknown',
+  startupMs:st.firstFrameAt?Math.max(0,Math.min(120000,st.firstFrameAt-st.openedAt)):null,
+  bufferingEvents:Math.max(0,Math.min(999,st.bufferEvents||0)),
+  bufferingMs:Math.max(0,Math.min(3600000,Math.round(bufferMs))),
+  seekAttempts:Math.max(0,Math.min(999,st.seekAttempts||0)),
+  seekReady:Math.max(0,Math.min(999,st.seekReady||0)),
+  verifiedSeekFrames:Math.max(0,Math.min(999,st.verifiedSeekFrames||0)),
+  seekTimeouts:Math.max(0,Math.min(999,st.seekTimeouts||0)),
+  lastSeekMs:st.lastSeekMs!==null&&st.lastSeekMs!==undefined&&isFinite(Number(st.lastSeekMs))?Math.max(0,Math.min(120000,Number(st.lastSeekMs))):null,
+  errors:Math.max(0,Math.min(99,st.errors||0)),
+  stoppedAt:now};
+ S.lastPlaybackDiag=result;
+ profileSave('lastPlaybackDiag',result)
+}
+function checkpointPosition(p){
+ if(!p||!p.video)return 0;
+ var base=(p.mode==='vodhls'?Number(p.offset)||0:0)+Math.max(0,Number(p.video.currentTime)||0);
+ // A pending TV key repeat or an in-flight seek has not updated the video
+ // element playhead yet. Preserve the user's chosen location on close.
+ var pending=p.pendingSeek,now=Date.now(),desired=null;
+ if(p.seekDebounce&&p.lastSeekTarget!==undefined&&p.lastSeekTarget!==null)
+  desired=p.lastSeekTarget;
+ else if(pending&&now-pending.startedAt<55000)desired=pending.target;
+ else if(p.seekIncomplete&&p.lastSeekTarget!==undefined&&p.lastSeekTarget!==null&&
+  now-(p.lastSeekAt||0)<120000)desired=p.lastSeekTarget;
+ if(desired!==null&&desired!==undefined&&isFinite(Number(desired))){
+  var runtime=playbackDuration(p),position=Math.max(0,Number(desired));
+  if(runtime>0)position=Math.min(position,Math.max(0,runtime-2));
+  // Never mark a movie watched merely because someone selected its last frame.
+  if(runtime>60&&position>=runtime-60)return Math.min(base,Math.floor(runtime*.94));
+  return position
+ }
+ return base
+}
+function vodEndedAtRealFinish(duration,position,seekIncomplete){
+ // Full-film playback must not be marked complete because a TV decoder
+ // emits "ended" after a single 24-second chunk. Unknown EVENT duration
+ // cannot prove that an arbitrary source EOF was the end of the title.
+ var length=Number(duration),seen=Number(position);
+ if(!(length>=120&&length<=21600&&isFinite(length))||
+  !(seen>=0&&isFinite(seen))||seekIncomplete)return false;
+ var tolerance=Math.min(45,Math.max(8,Math.round(length*.008)));
+ return seen>=length-tolerance
+}
+function playbackDuration(p){
+ if(!p)return 0;
+ var seconds=Number(p.duration)||0,observed=Number(p.video&&p.video.duration);
+ // Some native TV HLS decoders report a single 24-second chunk rather
+ // than the real runtime. That wrong number must never erase checkpoints.
+ if(p.mode==='fullvod'||p.mode==='vodhls')return seconds>0&&isFinite(seconds)?seconds:0;
+ if(seconds>=120&&seconds<=21600)return seconds;
+ return observed>=120&&observed<=21600&&isFinite(observed)?observed:0
+}
+function progressKey(k,id){return k+':'+id}
+function getResume(k,id){return S.watch[progressKey(k,id)]||null}
+function finishResume(kind,id){
+ // Only explicitly verified media EOF can mark a title as fully watched.
+ if(kind==='live')return;
+ var player=S.playerView;
+ if(player&&player.kind===kind&&String(player.id)===String(id))player.completed=true;
+ delete S.watch[progressKey(kind,id)];
+ profileSave('watch',S.watch)
+}
+function saveResume(kind,id,pos,duration,ready){
+ if(kind==='live'||!ready||!isFinite(pos)||pos<0)return;
+ var player=S.playerView;
+ // timeupdate, pause and pagehide can fire AFTER verified EOF. Without this
+ // guard they immediately recreate a completed title in Continue Watching.
+ if(player&&player.completed&&player.kind===kind&&String(player.id)===String(id))return;
+ duration=isFinite(duration)&&duration>0?duration:0;
+ var key=progressKey(kind,id),last=S.watch[key];
+ // A new player starting at zero must not overwrite a real checkpoint.
+ if(pos<5&&(duration===0||(last&&last.position>30)))return;
+ // Choosing the last minutes of a film does not prove it was watched.
+ // Retain the resume checkpoint until a verified end event fires.
+ if(duration>0)pos=Math.min(pos,Math.max(0,duration-1));
+ {
+  var info=S.playerView&&S.playerView.kind===kind&&String(S.playerView.id)===String(id)?S.playerView:null;
+  var entry={position:Math.round(pos),duration:Math.round(duration),updated:Date.now()},old=last||{};
+  entry.name=String(info&&info.name||old.name||'').slice(0,140);
+  entry.ext=String(info&&info.ext||old.ext||'mp4').slice(0,8);
+  entry.art=urlPic(info&&info.art||old.art||'');
+  entry.seriesId=String(info&&info.seriesId||old.seriesId||'').slice(0,18);
+  S.watch[key]=entry;
+  var keys=Object.keys(S.watch);
+  if(keys.length>160){
+   keys.sort(function(a,b){return (S.watch[a].updated||0)-(S.watch[b].updated||0)});
+   for(var i=0;i<keys.length-160;i++)delete S.watch[keys[i]]
+  }
+ }
+ profileSave('watch',S.watch)
+}
+function details(o){
+ var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
+ if(!item){navigate(k,{},true);return}
+ if(k==='series'&&S.item&&S.item.id!==id)S.episodes=null;
+ S.item={kind:k,id:id,data:item};S.kind=k;S.route='detail';
+ shell(title(item),'<div id="detail-root">'+loading('تفاصيل المحتوى')+'</div>');
+ function show(extra){
+  if(S.route!=='detail'||!S.item||S.item.id!==id)return;
+  var info=(extra&&extra.info)||{};
+  if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
+  var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
+  var plot=info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM';
+  var gen=info.genre||info.genres||'',year=info.releaseDate||info.release_date||item.release_date||'',rating=info.rating||item.rating||'';
+  var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
+  var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
+   (hasResume?'<button class="btn secondary" data-watch="movie:'+esc(id)+'" data-from="0">ابدأ من البداية</button>':''):
+   '<button class="btn" data-episodes="'+esc(id)+'">▤ المواسم والحلقات</button>';
+  buttons+='<button class="btn secondary" data-favorite="'+k+':'+esc(id)+'">'+(S.library[key]?'♥ إزالة من المفضلة':'♡ المفضلة')+'</button>';
+  var genre=Array.isArray(gen)?gen.join(' • '):String(gen||'');
+  var root=document.getElementById('detail-root');if(!root)return;
+  var savedFocus=root.contains(document.activeElement)?focusIdentity(document.activeElement):null;
+  root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
+  (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
+  '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
+  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot">'+esc(plot)+'</p>'+
+  '<div class="detail-actions">'+buttons+'</div>'+
+  (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
+  '</div></div><section id="related-root"></section>';
+  restoreView('detail');
+  if(savedFocus&&S.keyboardMode){var target=findFocus(savedFocus);if(target)try{target.focus({preventScroll:true})}catch(e){target.focus()}}
+ }
+ show();
+ var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
+ api('GET','/api/catalog?action='+endpoint+enc(id),null,function(st,data){
+  if(S.route!=='detail'||!S.item||S.item.id!==id)return;
+  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
+ })
+}
+function parseEpisodes(data){
+ var result=[];if(!data||!data.episodes)return result;
+ var sets=data.episodes;for(var key in sets){if(!Object.prototype.hasOwnProperty.call(sets,key))continue;var arr=sets[key];if(!Array.isArray(arr))continue;
+  for(var i=0;i<arr.length;i++){var ep=arr[i];ep.__season=String(key);result.push(ep)}
+ }
+ return result
+}
+function episodesScreen(opts){
+ var id=String(opts.id||S.item&&S.item.id||'');var item=findItem('series',id)||S.item&&S.item.data;
+ if(!item){navigate('series',{},true);return}
+ S.route='episodes';S.kind='series';
+ shell(title(item)+' — الحلقات','<div id="episodes-root">'+loading('مواسم المسلسل')+'</div>');
+ function finish(data){
+  if(S.route!=='episodes')return;
+  var list=parseEpisodes(data),seasons={};for(var i=0;i<list.length;i++)seasons[list[i].__season]=true;
+  var keys=Object.keys(seasons).sort(function(a,b){return Number(a)-Number(b)});
+  if(!keys.length){document.getElementById('episodes-root').innerHTML='<div class="info">تعذر جلب الحلقات لهذا المسلسل.</div>';return}
+  if(keys.indexOf(S.selectedSeason)<0)S.selectedSeason=keys[0];
+  S.episodes=data;
+  var chosen=list.filter(function(x){return x.__season===S.selectedSeason}).sort(function(a,b){return Number(a.episode_num||0)-Number(b.episode_num||0)});
+  var rail=keys.map(function(x){return '<button class="cat-item '+(x===S.selectedSeason?'selected':'')+'" data-season="'+esc(x)+'">الموسم '+esc(x)+'</button>'}).join('');
+  var html='<div class="episode-layout"><aside class="cat-rail season-rail"><div class="pane-head"><strong>المواسم</strong></div><div class="pane-scroll">'+rail+'</div></aside>'+
+  '<section class="episode-list">'+chosen.map(function(x,i){
+   var eid=String(x.id||''),name=x.title||'الحلقة '+(x.episode_num||i+1),extension=x.container_extension||'mp4';
+   var w=getResume('series',eid),pct=w&&w.duration?Math.round(w.position/w.duration*100):0;
+   return '<button class="episode-row" data-watch="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'" data-from="'+(w&&w.position>30?Math.round(w.position):0)+'">'+
+   '<span class="episode-art">'+(art(x.info)||art(x)||art(item)?safeImg(art(x.info)||art(x)||art(item),'episode-cover'):'')+'<span class="episode-placeholder">▤</span>'+'</span><span class="episode-copy"><strong class="episode-name">الحلقة '+esc(x.episode_num||i+1)+' — '+esc(name)+'</strong>'+
+   '<span class="episode-meta">الموسم '+esc(S.selectedSeason)+
+   (x.info&&x.info.duration||x.duration?' • '+esc(String(x.info&&x.info.duration||x.duration).slice(0,30)):'')+
+   (pct?' • متابعة '+pct+'٪':' • اضغط للمشاهدة')+'</span>'+
+   (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'
+  }).join('')+'</section></div>';
+  document.getElementById('episodes-root').innerHTML=html;restoreView('episodes');
+ }
+ if(S.episodes&&S.episodes.episodes)finish(S.episodes);
+ else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(st===200)finish(d);else document.getElementById('episodes-root').innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div>'})
+}
+function favoritesScreen(){
+ shell('المفضلة','<div id="fav-root"></div>');var keys=Object.keys(S.library),html='';
+ for(var i=0;i<keys.length;i++){var p=keys[i].split(':'),item=findItem(p[0],p[1])||S.favoriteItems[keys[i]];if(item&&S.library[keys[i]])html+=posterCard(item,p[0])}
+ document.getElementById('fav-root').innerHTML=html?'<div class="poster-grid">'+html+'</div>':'<div class="empty-state">أضف أفلامك ومسلسلاتك وقنواتك المفضلة حتى تظهر هنا.</div>';restoreView('favorites')
+}
+function collectionsScreen(){
+ shell('التصنيفات','<div class="story-row"><button class="story" data-go="movie"><strong>أفلام</strong><small>جميع أنواع الأفلام</small></button>'+
+ '<button class="story" data-go="series"><strong>مسلسلات</strong><small>المواسم والحلقات</small></button>'+
+ '<button class="story" data-go="live"><strong>القنوات</strong><small>البث المباشر</small></button></div>'+
+ '<div class="info" style="margin-top:25px">يعرض هذا القسم تصنيفات المصدر نفسها، دون إنشاء مجموعات وهمية.</div>')
+}
+function cancelSearch(){
+ ++S.searchToken;
+ if(S.searchTimer){clearTimeout(S.searchTimer);S.searchTimer=null}
+ var old=S.searchRequests||[];S.searchRequests=[];
+ for(var i=0;i<old.length;i++)try{old[i].abort()}catch(e){}
+}
+function searchScreen(){
+ S.route='search';
+ shell('البحث','<section class="search-screen"><div class="search-compose"><input id="search-input" class="input" placeholder="ابحث عن فيلم أو مسلسل أو قناة…" autofocus>'+
+ '<button class="btn" id="search-submit">بحث ⌕</button></div>'+
+ '<div class="search-tabs" id="search-filters">'+
+ '<button class="chip" data-search-kind="all">الكل</button><button class="chip" data-search-kind="live">القنوات</button>'+
+ '<button class="chip" data-search-kind="movie">الأفلام</button><button class="chip" data-search-kind="series">المسلسلات</button></div>'+
+ '<div class="search-recent" id="search-recent"></div>'+
+ '<p id="search-status" class="muted">أدخل اسم المحتوى لعرض النتائج من BLOFY</p><div id="search-result" class="search-result-grid"></div></section>');
+ function renderRecent(){
+  var target=document.getElementById('search-recent');if(!target)return;
+  var old=S.recentSearches.slice(0,6);
+  target.innerHTML=old.length?'<div class="row"><span class="small muted">عمليات البحث الأخيرة</span><button id="search-clear" class="chip">مسح</button></div>'+
+   '<div class="search-recent-items">'+old.map(function(v){return '<button class="chip" data-recent-search="'+esc(v)+'">⌕ '+esc(v)+'</button>'}).join('')+'</div>':'';
+  var clear=document.getElementById('search-clear');if(clear)clear.onclick=function(){
+   S.recentSearches=[];profileSave('recentSearches',S.recentSearches);renderRecent()
+  };
+  var buttons=target.querySelectorAll('[data-recent-search]');
+  for(var i=0;i<buttons.length;i++)buttons[i].onclick=function(){
+   var q=this.getAttribute('data-recent-search'),input=document.getElementById('search-input');
+   input.value=q;input.focus();var token=++S.searchToken;searchNow(q,token)
+  }
+ }
+ function setSearchKind(kind){
+  if(['all','live','movie','series'].indexOf(kind)<0)return;
+  S.searchKind=kind;
+  var filters=document.querySelectorAll('[data-search-kind]');
+  for(var i=0;i<filters.length;i++){
+   filters[i].className='chip'+(filters[i].getAttribute('data-search-kind')===kind?' primary':'')
+  }
+  var q=document.getElementById('search-input').value.trim(),token=++S.searchToken;
+  if(q.length>=2)searchNow(q,token)
+ }
+ var filters=document.querySelectorAll('[data-search-kind]');
+ for(var i=0;i<filters.length;i++)filters[i].onclick=function(){setSearchKind(this.getAttribute('data-search-kind'))};
+ function commitSearch(){
+  var q=document.getElementById('search-input').value.trim().slice(0,75);
+  if(q.length<2)return;
+  S.recentSearches=[q].concat(S.recentSearches.filter(function(v){return v!==q})).slice(0,8);
+  profileSave('recentSearches',S.recentSearches);
+  renderRecent();
+  var token=++S.searchToken;searchNow(q,token)
+ }
+ document.getElementById('search-submit').onclick=commitSearch;
+ document.getElementById('search-input').onkeydown=function(e){
+  if((e.keyCode||e.which)===13){e.preventDefault();commitSearch()}
+ };
+ setSearchKind(S.searchKind);
+ renderRecent();
+ document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
+ if(q.length<2){cancelSearch();document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
+ var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
+ S.searchTimer=setTimeout(function(){searchNow(q,token)},260)
+ };
+ document.getElementById('search-input').focus();
+ if(S.aiSearchTitle){
+  var text=S.aiSearchTitle;S.aiSearchTitle=null;
+  var input=document.getElementById('search-input');input.value=text;
+  if(text.length>=2){var token=++S.searchToken;searchNow(text,token)}
+ }
+}
+function searchNow(q,token){
+ var old=S.searchRequests||[];S.searchRequests=[];
+ for(var j=0;j<old.length;j++)try{old[j].abort()}catch(e){}
+ var kinds=S.searchKind==='all'?['live','movie','series']:[S.searchKind],
+ responses={live:[],movie:[],series:[]},pending=kinds.length;
+ function draw(){
+  if(token!==S.searchToken||S.route!=='search')return;
+  var output=document.getElementById('search-result'),status=document.getElementById('search-status');
+  if(!output||!status)return;
+  var count=0,html=kinds.map(function(kind){
+   var cards=responses[kind];count+=cards.length;
+   return cards.map(function(item){return posterCard(item,kind)}).join('')
+  }).join('');
+  output.innerHTML=html||(pending===0?'<div class="empty-state">لم يتم العثور على نتائج لهذا البحث.</div>':'');
+  status.textContent=(count?'تم العثور على '+count+' نتيجة':'جار البحث')+(pending?' • استكمال باقي المكتبة…':'')
+ }
+ for(var i=0;i<kinds.length;i++)(function(k){
+  var xhr=pageRequest(k,'all',0,20,function(st,p){
+   if(token!==S.searchToken||S.route!=='search')return;
+   pending--;
+   if(st===200&&p){
+    responses[k]=p.items;
+    var key=keyOf(k,'search');S.loaded[key]=S.loaded[key]||{items:[]};
+    for(var a=0;a<p.items.length;a++){
+     var item=p.items[a],id=itemId(item,k);
+     if(!findItem(k,id))S.loaded[key].items.push(item)
+    }
+   }
+   draw()
+  },q);
+  if(xhr)S.searchRequests.push(xhr)
+ })(kinds[i])
+}
+function aiScreen(){
+ S.route='ai';
+ shell('مساعد BLOFY الذكي','<section class="ai-chat-screen" aria-label="محادثة مساعد BLOFY">'+
+  '<div class="ai-note">المساعد يستخدم خدمة BLOFY نفسها الموجودة في تطبيق Android. الاقتراحات تُعرض كبحث داخل مكتبتك، وليست روابط لمحتوى غير متحقق.</div>'+
+  '<div class="ai-thread" id="ai-thread" role="log" aria-live="polite"></div>'+
+  '<div class="ai-prompts" id="ai-prompts"><button class="chip" data-ai-prompt="اقترح أفلام أكشن">أفلام أكشن</button>'+
+  '<button class="chip" data-ai-prompt="رشح لي مسلسل كوميدي">مسلسلات كوميدية</button>'+
+  '<button class="chip" data-ai-prompt="اقترح فيلم رعب جديد">أفلام رعب جديدة</button></div>'+
+  '<div class="ai-compose"><input class="input" id="ai-text" maxlength="160" placeholder="اسأل عن فيلم أو مسلسل ترغب بمشاهدته…" autocomplete="off">'+
+  '<button class="btn" id="ai-send">إرسال ⟵</button></div>'+
+  '<p class="muted small">الذكاء الاصطناعي قد يخطئ. اضغط على العنوان لعرض النتائج الفعلية في مكتبتك.</p></section>');
+ function render(){
+  if(S.route!=='ai')return;
+  var box=document.getElementById('ai-thread');if(!box)return;
+  var turns=S.aiTurns.slice(-16);
+  box.innerHTML=turns.map(function(turn){
+   var suggestions=(turn.suggestions||[]).map(function(t){
+    return '<button class="chip ai-result" data-ai-result="'+esc(t)+'">⌕ '+esc(t)+'</button>'
+   }).join('');
+   return '<div class="ai-bubble '+(turn.user?'mine':'assistant')+'"><strong>'+(turn.user?'أنت':'BLOFY AI')+'</strong>'+
+    '<p>'+esc(turn.text)+'</p>'+(suggestions?'<div class="ai-links">'+suggestions+'</div>':'')+'</div>'
+  }).join('')+(S.aiBusy?'<div class="ai-bubble assistant"><strong>BLOFY AI</strong><p>جار تحليل طلبك…</p></div>':'');
+  box.scrollTop=box.scrollHeight
+ }
+ if(!S.aiTurns.length)S.aiTurns.push({user:false,text:'أهلًا بك في مساعد BLOFY. أخبرني بنوع الأفلام أو المسلسلات التي تحبها، وسأقترح عناوين للبحث عنها في مكتبتك.'});
+ render();
+ function ask(text){
+  var query=String(text||'').trim().slice(0,160);
+  if(query.length<3||S.aiBusy)return;
+  S.aiBusy=true;var token=++S.aiToken;
+  S.aiTurns.push({user:true,text:query});
+  document.getElementById('ai-text').value='';
+  render();
+  api('POST','/api/ai/interpret',{text:query,locale:document.documentElement.lang==='en'?'en':'ar'},function(st,data){
+   if(token!==S.aiToken)return;
+   S.aiBusy=false;
+   if(st===200&&data&&data.ok){
+    var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
+    if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
+    S.aiTurns.push({user:false,text:String(data.reply||'اضغط على أحد العناوين للبحث عنه في مكتبة BLOFY.').slice(0,240),suggestions:suggestions})
+   }else{
+    var message=st===429?'تم الوصول إلى حد الطلبات مؤقتًا. جرب بعد قليل.':
+     st===401||st===403?'انتهت جلسة الاشتراك. افتح الإعدادات وتحقق من التفعيل.':
+     'خدمة المساعد غير متاحة حاليًا. يمكنك استخدام البحث المباشر من القائمة.';
+    S.aiTurns.push({user:false,text:message})
+   }
+   if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);
+   render()
+  })
+ }
+ document.getElementById('ai-send').onclick=function(){ask(document.getElementById('ai-text').value)};
+ document.getElementById('ai-text').onkeydown=function(e){if((e.keyCode||e.which)===13){e.preventDefault();ask(this.value)}};
+ document.getElementById('ai-prompts').onclick=function(e){
+  var t=e.target.getAttribute('data-ai-prompt');if(t)ask(t)
+ };
+ document.getElementById('ai-thread').onclick=function(e){
+  var node=e.target;
+  while(node&&node!==this&&!node.getAttribute('data-ai-result'))node=node.parentNode;
+  if(node&&node!==this){var title=node.getAttribute('data-ai-result');S.aiSearchTitle=title;navigate('search')}
+ };
+}
+function refreshCatalog(manual){
+ if(S.refreshing||!S.userVerified)return;
+ S.refreshing=true;
+ var kinds=['live','movie','series'],errors=[],done=0;
+ var button=document.getElementById('refresh-content');
+ if(button)button.disabled=true;
+ function notify(message){
+  var box=document.getElementById('refresh-progress');
+  if(box)box.textContent=message
+ }
+ notify('جار تحديث المحتوى • 0٪');
+ function finish(){
+  S.refreshing=false;if(button)button.disabled=false;
+  if(!errors.length){
+   // Keep the existing screen stable; lists are reused when user opens them.
+   S.cats={};S.pages={};S.catsInflight={};
+   notify('✓ اكتمل تحديث القنوات والأفلام والمسلسلات — 100٪');
+  }else notify('تم تحديث '+(3-errors.length)+' من 3 أقسام. تعذر: '+errors.join('، ')+' — حاول مرة أخرى');
+ }
+ function next(){
+  if(done===kinds.length){finish();return}
+  var kind=kinds[done],label=kindName(kind);
+  notify('جار تحديث '+label+' • '+Math.round(done/3*100)+'٪');
+  pageRequest(kind,'all',0,36,function(st,result){
+   if(st===200&&result){
+    S.loaded[keyOf(kind,'all')]=result;
+    // Other category caches are invalidated lazily, without disrupting a playing video.
+    var keys=Object.keys(S.loaded);
+    for(var i=0;i<keys.length;i++)if(keys[i].indexOf(kind+':')===0&&keys[i]!==kind+':all')delete S.loaded[keys[i]];
+   }else errors.push(label);
+   done++;next()
+  },null,true)
+ }
+ next()
+}
+function checkCatalogVersion(){
+ if(!S.userVerified||S.refreshing||S.route==='player'||document.hidden)return;
+ var now=Date.now();if(now-S.lastCatalogCheck<10*60*1000)return;S.lastCatalogCheck=now;
+ api('GET','/api/catalog?action=get_blofy_catalog_version',null,function(st,v){
+  if(st!==200||!v)return;
+  var raw=v.version||v.epoch||v.catalogVersion||v.revision||v.lastModified;
+  if(!raw||typeof raw!=='string'&&typeof raw!=='number')return;
+  var version=String(raw);
+  if(S.catalogVersion&&S.catalogVersion!==version){
+   // Refresh in the background only while browsing non-live pages; never interrupt playback.
+   refreshCatalog(false)
+  }
+  S.catalogVersion=version
+ })
+}
+function settingsScreen(){
+ var diag=S.lastPlaybackDiag,mode=diag&&({fullvod:'VOD كامل',vodhls:'HLS مؤقت',direct:'MP4 مباشر',hls:'بث HLS',mpegts:'MPEG-TS'}[diag.mode]||'غير معروف');
+ var diagText=!diag?'لا توجد مشاهدة مسجلة بعد. شغّل محتوى، ثم ارجع إلى الإعدادات لمعرفة أداء المشغّل.':
+  'آخر مشاهدة: '+(diag.kind==='live'?'بث مباشر':diag.kind==='series'?'حلقة':'فيلم')+
+  ' • المحرك: '+mode+
+  ' • بداية التشغيل: '+(diag.startupMs===null?'لم تبدأ':(diag.startupMs/1000).toFixed(1)+' ث')+
+  ' • مرات الانتظار: '+(diag.bufferingEvents||0)+
+  ' • زمن الانتظار: '+Math.round((diag.bufferingMs||0)/1000)+' ث'+
+  ' • طلبات التقديم: '+(diag.seekAttempts||0)+
+  ' • التقديم الذي وصل للمكان المطلوب: '+(diag.seekReady||0)+
+  ' • منها تقديمات مؤكدة بالصورة: '+(diag.verifiedSeekFrames||0)+
+  ' • حالات انتظار تجاوزت 30 ثانية: '+(diag.seekTimeouts||0)+
+  ' • زمن آخر تقديم ناجح: '+(diag.lastSeekMs===null?'غير متوفر':(diag.lastSeekMs/1000).toFixed(1)+' ث')+
+  ' • أخطاء الوسائط: '+(diag.errors||0)+'.';
+ shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button><p id="refresh-progress" role="status" aria-live="polite">فهرس المحتوى يُراجع تلقائيًا عند توفر رقم إصدار جديد.</p></section>'+
+ '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
+  '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
+  '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
+ '<section class="setting-panel"><h3>اتصالات البث ومشاركة المصدر</h3><p>فحص آمن لكفاءة الجلسات وإجمالي المحركات المستخدمة في النسخة التجريبية. لا يعرض حسابات العملاء أو أكواد الاشتراك.</p>'+
+  '<button class="btn secondary" id="check-live-share-health" type="button">فحص اتصالات البث</button>'+
+  '<p class="small muted" id="live-share-health-status" role="status" aria-live="polite">مشاركة المصدر معطلة افتراضيًا، ولن تُفعّل من هذا الزر.</p></section>'+
+ '<section class="setting-panel"><h3>آخر اختبار مشاهدة فعلي</h3><p id="last-playback-diagnostic" role="status" aria-live="polite">'+esc(diagText)+'</p>'+
+  '<button class="btn secondary" id="clear-playback-diagnostic">مسح بيانات التشخيص</button>'+
+  '<p class="small muted">إحصاءات من المشاهدة داخل هذا المتصفح فقط؛ ليست اختبارًا لكل مصادر Xtream. لا نحفظ بيانات الاشتراك أو رابط المصدر.</p></section>'+
+ '<section class="setting-panel"><h3>اختبار جودة حقيقي لمدة 20 دقيقة</h3><p>شغّل قناة أو فيلمًا على جهازك، ثم من خيارات المشغّل اختر «بدء اختبار 20 دقيقة». يراقب المشغل الصورة والانقطاع دون اتصال إضافي بالمصدر. النتيجة لا تثبت جودة الصوت أو توافق كل القنوات.</p>'+
+ '<p id="last-long-playback-test" role="status" aria-live="polite">'+esc(S.lastLongPlaybackTest&&window.BlofyPlaybackAcceptance?
+   window.BlofyPlaybackAcceptance.message(S.lastLongPlaybackTest):'لم يكتمل اختبار مستمر لمدة 20 دقيقة على هذا الجهاز.')+'</p>'+
+ '<p class="small muted">النتيجة محلية لهذا الاشتراك والمتصفح، ولا تحتوي بيانات أكواد أو روابط أو معرفات للقنوات. يجب اختبار الصوت يدويًا.</p></section>'+
+ '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
+  '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
+  '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
+ '<section class="setting-panel"><h3>نسخة احتياطية للمفضلة والمتابعة</h3><p>انقل قوائمك ومواقع متابعة الأفلام والحلقات يدويًا بين متصفحاتك. الملف لا يحتوي كود اشتراك أو كلمات مرور أو روابط بث أو بوسترات أو سجل بحث، ولا يُرسل إلى خادم.</p>'+
+ '<button class="btn secondary" id="profile-export" type="button">↓ حفظ نسخة محلية</button> '+
+ '<button class="btn secondary" id="profile-import" type="button">↑ استيراد نسخة محلية</button>'+
+ '<input id="profile-import-file" type="file" accept=".json,application/json" hidden aria-label="اختيار نسخة بيانات BLOFY">'+
+ '<div id="profile-import-confirm" class="settings-inline-confirm" hidden><p id="profile-import-summary"></p>'+
+ '<button class="btn" type="button" id="profile-import-accept">تأكيد دمج البيانات</button> '+
+ '<button class="btn secondary" type="button" id="profile-import-cancel">إلغاء</button></div>'+
+ '<p class="small muted" id="profile-transfer-status" role="status" aria-live="polite">الاستيراد يضيف المفضلة ويحافظ على تقدم مشاهدة أحدث لديك. استخدم الملف فقط مع الاشتراك ومصدر المحتوى نفسه؛ هذا نقل يدوي وليس مزامنة سحابية.</p></section>'+
+ '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
+ '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
+ '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
+ document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
+ document.getElementById('check-player-health').onclick=function(){
+  var button=this,box=document.getElementById('player-health-status');
+  button.disabled=true;box.textContent='جار فحص خادم تشغيل الأفلام والمسلسلات…';
+  api('GET','/api/health/media',null,function(st,result){
+   button.disabled=false;if(!box||S.route!=='settings')return;
+   if(st===200&&result&&result.ok){
+    box.textContent='✓ مشغّل الفيديو جاهز. الاختبار التجريبي للتقديم والبث نجح. العمليات الحالية: '+
+     (result.converting||0)+' من '+(result.capacity||0)+'.';
+   }else{
+    box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
+   }
+  })
+ };
+ document.getElementById('check-live-share-health').onclick=function(){
+  var button=this,target=document.getElementById('live-share-health-status');
+  button.disabled=true;
+  if(target)target.textContent='جار فحص الموارد والجلسات دون تشغيل قناة جديدة…';
+  api('GET','/api/compatible/health',null,function(st,data){
+   button.disabled=false;
+   if(!target||!target.isConnected||S.route!=='settings')return;
+   if(st!==200||!data||!data.ok){
+    target.textContent='تعذّر الوصول لمحرك البث التجريبي حاليًا. لن يتأثر اشتراكك بهذا الفحص.';
+    return
+   }
+   var share=data.sharedLive||{},enabled=share.enabled===true,
+    groups=Math.max(0,Math.min(100,Number(share.groups)||0)),
+    viewers=Math.max(0,Math.min(400,Number(share.viewers)||0)),
+    pending=Math.max(0,Math.min(400,Number(share.pending)||0)),
+    recovering=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.coolingSources)||0)),
+    affected=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.recentSources)||0)),
+    active=Math.max(0,Math.min(100,Number(data.activeJobs)||0)),
+    cap=Math.max(0,Math.min(100,Number(data.capacity)||0));
+   target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة في التجربة':'معطلة لحماية الاستقرار')+
+    ' • مجموعات البث: '+groups+' • المشاهدون المشاركون: '+viewers+
+    ' • بانتظار اتصال المصدر: '+pending+
+    ' • مصادر في تهدئة الاتصال: '+recovering+
+    ' • مصادر تعثرت خلال دقيقتين: '+affected+
+    ' • محركات الفيديو النشطة: '+active+' من '+cap+
+    (cap&&active>=cap?' • المحركات ممتلئة حاليًا؛ قد يلزم الانتظار عند فتح قناة جديدة.':'')+
+    ' • هذه أرقام حالة المحرك فقط، وليست قياسًا لجودة الصورة على جهازك.'
+  })
+ };
+ document.getElementById('clear-playback-diagnostic').onclick=function(){
+  S.lastPlaybackDiag=null;profileSave('lastPlaybackDiag',null);
+  var box=document.getElementById('last-playback-diagnostic');
+  if(box)box.textContent='تم حذف بيانات التشخيص لهذا الاشتراك من المتصفح.'
+ };
+ document.getElementById('clear-watch-history').onclick=function(){
+  var trigger=this,existing=document.getElementById('watch-clear-confirm');
+  if(existing){existing.remove();trigger.focus();return}
+  var panel=document.createElement('div');
+  panel.id='watch-clear-confirm';panel.className='settings-inline-confirm';
+  panel.innerHTML='<p>هل تريد حذف سجل المشاهدة والبحث من هذا الجهاز فقط؟ المفضلة والاشتراك لن يتأثرا.</p>'+
+   '<button type="button" class="btn danger" id="watch-clear-accept">تأكيد الحذف</button> '+
+   '<button type="button" class="btn secondary" id="watch-clear-cancel">إلغاء</button>';
+  trigger.parentNode.appendChild(panel);
+  panel.querySelector('#watch-clear-accept').onclick=function(){
+   S.watch={};S.recentSearches=[];
+   profileSave('watch',S.watch);profileSave('recentSearches',S.recentSearches);
+   panel.remove();setStatus('تم حذف سجل المشاهدة والبحث المحلي؛ المفضلة محفوظة.');
+   trigger.focus()
+  };
+  panel.querySelector('#watch-clear-cancel').onclick=function(){panel.remove();trigger.focus()};
+  panel.querySelector('#watch-clear-cancel').focus()
+ };
+ // This export is user-initiated, browser-local and profile-partitioned.
+ // NEVER include encrypted session cookies, activation/device IDs, raw media
+ // links, poster URLs or full search history in the portable format.
+ var transfer=window.BlofyProfileTransfer||null,
+  transferStatus=document.getElementById('profile-transfer-status'),
+  importInput=document.getElementById('profile-import-file'),
+  importPanel=document.getElementById('profile-import-confirm'),
+  importedCandidate=null,importEpoch=-1,importProfile='';
+ function transferMessage(message,error){
+  if(transferStatus){
+   transferStatus.textContent=message;
+   transferStatus.className=error?'small info error':'small muted'
+  }
+ }
+ function clearImport(){
+  importedCandidate=null;importEpoch=-1;importProfile='';
+  if(importPanel)importPanel.hidden=true;
+  if(importInput)importInput.value=''
+ }
+ document.getElementById('profile-export').onclick=function(){
+  if(!S.userVerified||!S.profileKey||!transfer){
+   transferMessage('النسخة المحلية غير متاحة قبل تفعيل الاشتراك.',true);return
+  }
+  if(typeof Blob==='undefined'||!window.URL||!window.URL.createObjectURL){
+   transferMessage('هذا المتصفح لا يدعم حفظ الملفات. استخدم متصفح هاتف أو كمبيوتر لنقل البيانات.',true);
+   return
+  }
+  try{
+   var data=transfer.create(S.library,S.watch,S.favoriteItems,Date.now()),
+    blob=new Blob([data],{type:'application/json;charset=utf-8'});
+   if(blob.size>240000)throw Error('backup_too_large');
+   var link=document.createElement('a'),address=window.URL.createObjectURL(blob);
+   link.href=address;link.download='BLOFY-STREAM-Web-Profile-'+new Date().toISOString().slice(0,10)+'.json';
+   link.style.display='none';document.body.appendChild(link);link.click();link.remove();
+   setTimeout(function(){window.URL.revokeObjectURL(address)},15000);
+   transferMessage('تم تجهيز النسخة المحلية. احفظ الملف في مكان آمن، ثم استورده من الإعدادات على جهازك الآخر.')
+  }catch(e){transferMessage('تعذر تجهيز النسخة المحلية. تحقق من مساحة التخزين وإمكانات المتصفح.',true)}
+ };
+ document.getElementById('profile-import').onclick=function(){
+  if(!S.userVerified||!S.profileKey||!transfer||!importInput){
+   transferMessage('فعّل اشتراكك أولاً قبل الاستيراد.',true);return
+  }
+  clearImport();importInput.click()
+ };
+ importInput.onchange=function(){
+  var file=importInput.files&&importInput.files[0];
+  if(!file)return;
+  clearImport();
+  if(!S.userVerified||!S.profileKey){transferMessage('انتهت الجلسة؛ أعد التفعيل أولاً.',true);return}
+  if(file.size>240000||file.size<30){
+   transferMessage('حجم ملف النسخة غير صالح أو يتجاوز 240 كيلوبايت.',true);return
+  }
+  if(typeof FileReader==='undefined'){
+   transferMessage('هذه الشاشة لا تدعم قراءة ملف النسخة المحلية.',true);return
+  }
+  var epoch=S.accountEpoch,profile=S.profileKey,reader=new FileReader();
+  reader.onload=function(){
+   if(epoch!==S.accountEpoch||profile!==S.profileKey||!S.userVerified||S.route!=='settings')return;
+   try{
+    var candidate=transfer.parse(String(reader.result||''),Date.now());
+    importedCandidate=candidate;importEpoch=epoch;importProfile=profile;
+    importPanel.hidden=false;
+    document.getElementById('profile-import-summary').textContent=
+     'النسخة تحتوي '+candidate.favorites.length+' عنصرًا بالمفضلة و'+
+     candidate.watch.length+' موضع متابعة. سيتم دمجها مع بيانات الجهاز الحالية دون حذف المفضلة أو استبدال تقدم مشاهدة أحدث. تأكد أن ملف النسخة من الاشتراك ومصدر المحتوى نفسه.';
+    transferMessage('راجع عدد العناصر، ثم أكد الدمج أو ألغِ العملية.');
+    document.getElementById('profile-import-accept').focus()
+   }catch(e){clearImport();transferMessage('رفض الملف: ليس نسخة BLOFY STREAM Web صالحة أو يحتوي بيانات غير معتمدة.',true)}
+  };
+  reader.onerror=function(){clearImport();transferMessage('تعذر قراءة ملف النسخة المحلية.',true)};
+  reader.readAsText(file,'UTF-8')
+ };
+ document.getElementById('profile-import-cancel').onclick=function(){
+  clearImport();transferMessage('أُلغِي الاستيراد؛ لم تتغير أي بيانات.');document.getElementById('profile-import').focus()
+ };
+ document.getElementById('profile-import-accept').onclick=function(){
+  if(!importedCandidate||!S.userVerified||S.route!=='settings'||
+   importEpoch!==S.accountEpoch||importProfile!==S.profileKey){
+   clearImport();transferMessage('تغير الحساب أو انتهت صلاحية الاستيراد؛ اختر الملف مرة أخرى.',true);return
+  }
+  var merged=transfer.merge(S.library,S.watch,S.favoriteItems,importedCandidate);
+  var updates=[
+   ['favorites',merged.favorites],['favoriteItems',merged.favoriteItems],['watch',merged.watch]
+  ],old=[];
+  try{
+   // A quota failure must not leave a misleading success message or switch
+   // profile data mid-import. Recover previous storage values best-effort.
+   for(var t=0;t<updates.length;t++){
+    var key=profileStorageKey(updates[t][0]);
+    old.push({key:key,value:localStorage.getItem(key)});
+   }
+   for(var w=0;w<updates.length;w++)
+    localStorage.setItem(profileStorageKey(updates[w][0]),JSON.stringify(updates[w][1]))
+  }catch(e){
+   for(var j=0;j<old.length;j++)try{
+    if(old[j].value===null)localStorage.removeItem(old[j].key);
+    else localStorage.setItem(old[j].key,old[j].value)
+   }catch(ignore){}
+   clearImport();transferMessage('تعذر حفظ النسخة: المساحة المحلية غير كافية أو التخزين مغلق. لم تُعتمد بيانات جديدة.',true);
+   return
+  }
+  S.library=merged.favorites;S.watch=merged.watch;S.favoriteItems=merged.favoriteItems;
+  var stats=merged.stats;
+  clearImport();
+  transferMessage('✓ تم دمج '+stats.newFavorites+' مفضلة جديدة و'+
+   stats.newCheckpoints+' متابعة جديدة، وتحديث '+stats.updatedCheckpoints+
+   ' متابعة، مع الاحتفاظ بـ '+stats.preservedCheckpoints+' متابعة أحدث على الجهاز.');
+  document.getElementById('profile-import').focus()
+ };
+ var tvTest=document.getElementById('test-tv-capabilities');
+ if(tvTest)tvTest.onclick=function(){
+  var target=document.getElementById('tv-capabilities-result'),device=document.createElement('video');
+  var ua=navigator.userAgent||'';
+  var vidaa=/VIDAA|Hisense/i.test(ua);
+  var hls='غير معروف',mp4='غير معروف';
+  try{hls=device.canPlayType('application/vnd.apple.mpegurl')||'غير مدعوم'}catch(e){}
+  try{mp4=device.canPlayType('video/mp4; codecs="avc1.42E01E,mp4a.40.2"')||'غير مدعوم'}catch(e){}
+  var hasFullscreen=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen||
+    document.documentElement.mozRequestFullScreen||document.documentElement.msRequestFullscreen);
+  var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
+  var width=Math.round(Number(window.innerWidth)||0),height=Math.round(Number(window.innerHeight)||0);
+  target.textContent='بيئة الجهاز: '+(vidaa?'VIDAA/Hisense محتمل':'لم يتم التعرف على VIDAA من المتصفح')+
+   ' • حجم نافذة العرض: '+width+'×'+height+
+   ' • ملء الشاشة الأصلي: '+(hasFullscreen?'واجهة برمجية متوفرة':'قد يحتاج وضع ملء الصفحة البديل')+
+   ' • HLS الأصلي: '+hls+' • HLS عبر MSE: '+(mse?'متاح مبدئيًا':'غير متاح')+
+   ' • H.264/AAC: '+mp4+
+   '. يلزم تشغيل فيديو حقيقي وتجربة ريموت توشيبا لاعتماد التوافق.';
+  api('GET','/api/compatible/health',null,function(st,data){
+   if(!target||!target.isConnected)return;
+   if(st!==200||!data||!data.ok){
+    target.textContent+=' • خادم الوسائط: تعذّر فحص حالته الآن';
+    return
+   }
+   target.textContent+=' • الحد الأعلى لتحويل البث: '+(data.liveQuality||'غير معروف')+'p'+
+    ' • الحد الأعلى لتحويل الأفلام: '+(data.vodQuality||'غير معروف')+'p'+
+    ' • مشغلات التحويل النشطة: '+(Number(data.activeJobs)||0)+' / '+(Number(data.capacity)||0)+
+    '. قد يستخدم الفيديو الأصلي دقة أعلى عند تشغيله دون تحويل.'
+  })
+ };
+ document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
+}
+function fmt(n){return n<10?'0'+n:String(n)}
+function formatTime(seconds){seconds=Math.max(0,Math.floor(Number(seconds)||0));return fmt(Math.floor(seconds/3600))+':'+fmt(Math.floor(seconds/60)%60)+':'+fmt(seconds%60)}
+
+function diagnose(kind,phase,mode,code){
+ if(!S.userVerified)return;
+ var p=S.playerView;
+ var actualMode=p&&p.kind===kind?p.mode:mode||'direct';
+ if(['direct','audio','video','fullvod','vodhls','hls','mpegts'].indexOf(actualMode)<0)actualMode=mode||'video';
+ var itemId=p&&p.kind===kind?p.id:kind==='live'?S.selected:'';
+ var video=p&&p.kind===kind?p.video:null;
+ var position=p&&p.kind===kind?(p.mode==='vodhls'?p.offset:0)+Number(video&&video.currentTime||0):0;
+ var payload={kind:kind==='live'?'live':kind==='series'?'series':'movie',
+  mode:actualMode,phase:phase,errorCode:Math.max(0,Math.min(9,Number(code)||0)),
+  itemId:String(itemId||''),position:Math.max(0,Math.round(position)),
+  duration:Math.max(0,Math.round(Number(p&&p.duration)||0))};
+ api('POST','/api/player-diagnostic',payload,function(){})
+}
+
+function shouldUseNativeHls(video){
+ if(S.preferMseHls&&window.MediaSource&&window.MediaSource.isTypeSupported)return false;
+ if(!video||!video.canPlayType||!video.canPlayType('application/vnd.apple.mpegurl'))return false;
+ // Chrome and Edge sometimes report "maybe" here yet fail to decode MPEG-TS
+ // with MEDIA_ERR_SRC_NOT_SUPPORTED (4). Use Hls.js/MSE on these browsers.
+ var ua=(navigator.userAgent||'');
+ var apple=/Safari/i.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);
+ var tv=/VIDAA|Hisense/i.test(ua);
+ var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
+ return apple||tv||!mse
+}
+
+function loadHls(done){
+ if(window.Hls){done(true);return}
+ if(S.hlsState==='loading'){S.hlsCallbacks.push(done);return}
+ // A transient failed JS request must not permanently disable HLS after
+ // Wi-Fi recovers. Keep retries bounded: one script request per user attempt.
+ S.hlsState='loading';S.hlsCallbacks=[done];
+ var script=document.createElement('script'),settled=false;
+ script.src='/vendor/hls.min.js';
+ function finish(ok){
+  if(settled)return;settled=true;clearTimeout(timer);
+  S.hlsState=ok?'ready':'error';
+  var callbacks=S.hlsCallbacks||[];S.hlsCallbacks=[];
+  for(var i=0;i<callbacks.length;i++)callbacks[i](ok)
+  if(!ok){script.onload=null;script.onerror=null;if(script.parentNode)script.parentNode.removeChild(script)}
+ }
+ var timer=setTimeout(function(){finish(!!window.Hls)},16000);
+ script.onload=function(){finish(!!window.Hls)};
+ script.onerror=function(){finish(false)};
+ document.head.appendChild(script)
+}
+function stopPlayback(sendStop){
+ if(!S.play)return;var old=S.play;S.play=null;
+ if(old.preview)S.livePreview=null;
+ try{
+  if(old.timer)clearTimeout(old.timer);
+  if(old.stallTimer)clearTimeout(old.stallTimer);
+  if(old.progressWatchdog)clearInterval(old.progressWatchdog);
+  // Cancel the per-frame observer before switching media nodes, or a delayed
+  // callback from an old channel may be mistaken for recovery of the new one.
+  if(old.presentedFrameId!==null&&old.presentedFrameId!==undefined&&old.video&&typeof old.video.cancelVideoFrameCallback==='function'){
+   try{old.video.cancelVideoFrameCallback(old.presentedFrameId)}catch(err){}
+   old.presentedFrameId=null
+  }
+  if(old.startupTimer)clearTimeout(old.startupTimer);
+  if(old.retryTimer)clearTimeout(old.retryTimer);
+  if(old.capacityTimer)clearTimeout(old.capacityTimer);
+  if(old.originTimer)clearTimeout(old.originTimer);
+  if(old.stableTimer)clearTimeout(old.stableTimer);
+  if(old.qualityListener&&old.video){old.video.removeEventListener('loadedmetadata',old.qualityListener);old.video.removeEventListener('resize',old.qualityListener)}
+ }catch(e){}
+ if(old.engine){try{old.engine.destroy()}catch(e){}}
+ try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
+ if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
+}
+function cleanupPlayer(){
+ if(S.playerView){
+  if(S.playerView.stopLongTest)S.playerView.stopLongTest();
+  if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
+  if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
+  if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
+  if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
+  if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
+  if(S.playerView.channelSwitchTimer){clearTimeout(S.playerView.channelSwitchTimer);S.playerView.channelSwitchTimer=null}
+  if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
+  if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
+  if(S.playerView.seekFrameId!==null&&S.playerView.seekFrameId!==undefined&&
+   S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
+   try{S.playerView.video.cancelVideoFrameCallback(S.playerView.seekFrameId)}catch(e){}
+   S.playerView.seekFrameId=null
+  }
+  if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
+  if(S.playerView.healthTimer){clearInterval(S.playerView.healthTimer);S.playerView.healthTimer=null}
+  S.playerView.pendingSeek=null;
+  if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
+  if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
+  if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen()
+ }
+ stopPlayback(true)
+}
+function playerStatus(message,error){
+ var el=document.getElementById('player-status');
+ if(el){el.style.display=message?'block':'none';el.textContent=message||'';el.className=error?'player-error':'player-loading'}
+ var retry=document.getElementById('player-retry');
+ if(retry)retry.style.display=error?'inline-flex':'none';
+ if(error){
+  // An error must always expose its recovery button, even if the cinematic
+  // controls were hidden before the source stopped.
+  var root=document.getElementById('player-root');
+  if(root)root.classList.remove('controls-hidden');
+  if(S.playerView&&S.playerView.hudTimer){
+   clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null
+  }
+ }
+}
+/* A VIDAA decoder can freeze while readyState still equals 4.
+ * Decode/playhead progress is stronger evidence than buffered metadata. */
+function livePlaybackProgress(record,video,now){
+ var time=Number(video&&video.currentTime),frames=null;
+ try{
+  var q=video&&video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
+  if(q&&Number.isFinite(Number(q.totalVideoFrames)))frames=Number(q.totalVideoFrames)
+ }catch(e){}
+ var advancedTime=Number.isFinite(time)&&Number.isFinite(record.lastMediaTime)&&Math.abs(time-record.lastMediaTime)>0.15;
+ var advancedFrames=frames!==null&&record.lastVideoFrames!==null&&record.lastVideoFrames!==undefined&&frames>record.lastVideoFrames;
+ // A live audio clock may keep currentTime moving while the picture freezes.
+ // If real decoded-frame counters are usable, trust them over audio time.
+ // Browsers reporting 0 or unavailable frames retain the time-based fallback.
+ // Some TV firmwares expose a non-changing frame counter. Only trust it
+ // after seeing that this specific decoder has advanced it at least once.
+ if(advancedFrames)record.frameCounterObserved=true;
+ var frameCounterUsable=!!record.frameCounterObserved&&frames!==null&&frames>=5;
+ var advancedPresented=!!record.framePresentationObserved&&Number(record.lastPresentedFrameAt)>Number(record.lastSampledPresentationAt||0);
+ // Prefer actual presented video callbacks (not the audio-only currentTime
+ // clock) on browsers supporting requestVideoFrameCallback.
+ var visualProgress=record.framePresentationObserved?advancedPresented:
+  frameCounterUsable?advancedFrames:(advancedTime||advancedFrames);
+ if(record.framePresentationObserved)record.lastSampledPresentationAt=record.lastPresentedFrameAt;
+ if(Number.isFinite(time))record.lastMediaTime=time;
+ if(frames!==null)record.lastVideoFrames=frames;
+ if(visualProgress){
+  record.lastProgressAt=now;record.bufferSince=0;record.stallChecks=0;
+  return {advanced:true,idleMs:0}
+ }
+ return {advanced:false,idleMs:Math.max(0,now-(record.lastProgressAt||record.started||now))}
+}
+/* Stop a silent ended/paused live decoder from requiring a full page reload.
+ * Only act after the video was playing; honor explicit user Pause and a hidden
+ * browser tab. On a TV the player can become paused after a fatal decoder error.
+ */
+function liveExpiredSegmentRecovery(record,engine,video,now){
+ // HLS occasionally requests a sequence that has fallen off the live
+ // playlist while the viewer catches up. Prefer an in-place live-edge
+ // jump before tearing down a healthy source and FFmpeg decoder.
+ if(now-(record.expiredSegmentWindowAt||0)>30000){
+  record.expiredSegmentWindowAt=now;record.expiredSegmentRecoveries=0
+ }
+ if(now-(record.lastExpiredSegmentAt||0)<3500)return 'cooling';
+ record.lastExpiredSegmentAt=now;
+ record.expiredSegmentRecoveries=(record.expiredSegmentRecoveries||0)+1;
+ if(record.expiredSegmentRecoveries>2)return 'restart';
+ try{
+  if(!engine||typeof engine.startLoad!=='function'||typeof engine.stopLoad!=='function')
+   return 'restart';
+  engine.stopLoad();
+  var edge=Number(engine.liveSyncPosition);
+  var current=Number(video.currentTime);
+  if(video.readyState>=1&&Number.isFinite(edge)&&edge>0&&
+     (!Number.isFinite(current)||edge-current>2)){
+   video.currentTime=edge
+  }
+  engine.startLoad(-1);
+  return 'resync'
+ }catch(e){return 'restart'}
+}
+/* A viewer can fall far behind even while the audio/video clocks continue.
+ * With MSE Hls.js (not the native TV HLS engine), return to a validated live
+ * edge after sustained lag, without restarting its shared source/encoder.
+ * The 90-second cool-down protects decoders and slower Wi-Fi connections.
+ */
+function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
+ if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
+    record.reconnecting||Number(video.readyState)<2){
+  record.liveLagSince=0;return false
+ }
+ var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
+ var gap=edge-at;
+ if(!Number.isFinite(edge)||!Number.isFinite(at)||edge<=0||at<0||
+    !Number.isFinite(gap)||gap<16||gap>180){
+  record.liveLagSince=0;return false
+ }
+ var ranges=video.seekable;
+ if(ranges&&ranges.length){
+  try{
+   var last=ranges.length-1,first=Number(ranges.start(last)),end=Number(ranges.end(last));
+   if(!Number.isFinite(first)||!Number.isFinite(end)||edge<first||edge>end+1){
+    record.liveLagSince=0;return false
+   }
+  }catch(e){record.liveLagSince=0;return false}
+ }
+ if(!record.liveLagSince){record.liveLagSince=now;return false}
+ if(now-record.liveLagSince<8000)return false;
+ if(record.lastLiveCatchupAt&&now-record.lastLiveCatchupAt<90000)return false;
+ try{
+  video.currentTime=edge;
+  record.lastLiveCatchupAt=now;record.liveLagSince=0;
+  return true
+ }catch(e){record.liveLagSince=0;return false}
+}
+function liveOriginRetryMs(attempt){
+ // A temporary origin failure should not trigger a tight re-open loop.
+ var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
+ return [0,2400,4100,6900,10900,16800][n]
+}
+function liveCapacityRetryMs(attempt){
+ // Shared-source capacity errors must not trigger an immediate request storm.
+ var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
+ return 2500+n*2200
+}
+/* Private, bounded on-device incident trail. Never store a URL, channel ID,
+ * token, account identifier or source error string in the troubleshooting
+ * report. It is a small evidence window, not remote telemetry.
+ */
+function recordLiveIncident(code,now){
+ var names={
+  playing:'الصورة بدأت تعمل',buffering:'انتظار مقاطع البث',
+  decoder_paused:'توقف مفاجئ في المشغل',picture_freeze:'تجمد الصورة',
+  reconnect:'بدء استعادة اتصال القناة',decoder_error:'خطأ فك ترميز الصورة',
+  source_error:'فشل مؤقت في اتصال المصدر',encoder_capacity:'المحرك مشغول',
+  live_edge_resync:'تجاوز مقطع قديم إلى البث الحي',live_catchup:'اللحاق بالبث المباشر',
+  channel_switch:'تغيير القناة'
+ };
+ if(!Object.prototype.hasOwnProperty.call(names,code))return false;
+ var st=S.playerView&&S.playerView.stats;
+ if(S.route!=='player'||!S.playerView||S.playerView.kind!=='live'||!st)return false;
+ var at=Number(now);
+ if(!Number.isFinite(at)||at<0)at=Date.now();
+ var events=Array.isArray(st.liveEvents)?st.liveEvents:(st.liveEvents=[]);
+ var previous=events[events.length-1];
+ if(previous&&previous.code===code&&at-previous.at<3000)return false;
+ events.push({code:code,at:at});
+ if(events.length>12)events.splice(0,events.length-12);
+ return true
+}
+function liveUnexpectedPause(record,video,userPaused,hidden,now){
+ if(userPaused||hidden||video.seeking||(!video.paused&&!video.ended)){
+  record.unexpectedPauseAt=0;return false
+ }
+ if(!record.unexpectedPauseAt){record.unexpectedPauseAt=now;return false}
+ return now-record.unexpectedPauseAt>=10000
+}
+function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
+ var modeKey=kind+':'+id+':'+extension+':'+track;
+ // Thumbnail previews must never start an expensive UHD software encoder.
+ var ultra=!preview&&!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
+ var compat=ultra||!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
+ // Each opening gets an independent, non-authentication playback SID.
+ // A viewer sharing an activation code can no longer stop a different
+ // viewer's same-channel feed while restarting or switching engines.
+ var key=kind+'/'+id+'/'+extension+'/'+track+'/sid-'+freshPlaybackId()+
+     (ultra?'/ultra':compat?'/compat':''),
+     manifest='/api/hls/'+key+'/index.m3u8';
+ // An existing session with the same key must stop BEFORE the replacement
+ // starts. A delayed stop otherwise kills the newly opened channel on VIDAA.
+ if(S.play&&S.play.hlsKey&&(S.play.hlsKey===key||S.play.video===video)){
+  var oldHlsKey=S.play.hlsKey;
+  var token=(S.hlsStopEpoch||0)+1;S.hlsStopEpoch=token;
+  stopPlayback(false);
+  if(statusElement)statusElement.textContent='جار إعادة تهيئة اتصال القناة…';
+  var settled=false,timer=setTimeout(function(){finish(0)},5500);
+  function finish(status){
+   if(settled)return;settled=true;clearTimeout(timer);
+   if(S.hlsStopEpoch!==token||!video.isConnected||!S.userVerified)return;
+   if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
+   if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)))return;
+   if(status!==200&&status!==404){
+    if(!preview)playerStatus('لم يؤكد الخادم إغلاق البث السابق. اضغط إعادة المحاولة.',true);
+    else if(statusElement)statusElement.textContent='تعذر تحديث الاتصال، حاول ثانية.';
+    return
+   }
+   if(preview)S.livePreview=String(id);
+   playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt)
+  }
+  api('POST','/api/hls/'+oldHlsKey+'/stop',{},function(st){finish(st)});
+  return
+ }
+ stopPlayback(true);
+ var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
+  retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),lastProgressAt:0,lastMediaTime:null,lastVideoFrames:null,stallChecks:0,compat:compat,ultra:ultra};
+ S.play=record;
+ // requestVideoFrameCallback measures frames actually submitted for display;
+ // on supported VIDAA engines this catches frozen pictures even when an
+ // audio clock keeps advancing or getVideoPlaybackQuality is unreliable.
+ if(typeof video.requestVideoFrameCallback==='function'){
+  record.watchPresentedFrame=function(){
+   if(S.play!==record||!video.isConnected)return;
+   try{
+    record.presentedFrameId=video.requestVideoFrameCallback(function(now,metadata){
+     record.presentedFrameId=null;
+     if(S.play!==record)return;
+     // An invocation itself proves a presented frame, regardless of
+     // metadata formatting differences across legacy TV firmwares.
+     record.framePresentationObserved=true;
+     record.lastPresentedFrameAt=Date.now();
+     record.presentedFrames=(record.presentedFrames||0)+1;
+     record.watchPresentedFrame()
+    })
+   }catch(e){record.presentedFrameId=null}
+  };
+  record.watchPresentedFrame()
+ }
+ if(preview){
+  record.qualityListener=function(){
+   if(S.play!==record||S.route!=='live')return;
+   var label=document.getElementById('live-preview-quality');
+   if(!label)return;
+   var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
+   label.textContent=w&&h?'الدقة المعروضة فعليًا: '+w+'×'+h+' • '+(h>=4300?'8K':h>=2100?'4K':h>=1400?'2K':h>=1000?'FHD':h>=690?'HD':'SD')+
+    (record.sourceDimensions?' • المصدر '+record.sourceDimensions:''):
+    'الدقة المعروضة: جار قراءة معلومات الفيديو…'
+  };
+  video.addEventListener('loadedmetadata',record.qualityListener);
+  video.addEventListener('resize',record.qualityListener);
+  record.qualityListener()
+ }
+ // Always play live at 1x: a stale playback speed must not pitch-shift voices.
+ if(kind==='live'){
+  video.defaultPlaybackRate=1;video.playbackRate=1;
+  if('preservesPitch' in video)video.preservesPitch=true;
+  if('webkitPreservesPitch' in video)video.webkitPreservesPitch=true
+ }
+ video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
+ function alive(){return S.play===record}
+ function setCompatibility(force,automatic,forceUltra){
+  var nextUltra=!!(force&&forceUltra);
+  if(!alive()||kind!=='live'||(compat===!!force&&ultra===nextUltra))return false;
+  if(!S.hlsForceCompatibility)S.hlsForceCompatibility={};
+  if(!S.hlsForceUltra)S.hlsForceUltra={};
+  S.hlsForceCompatibility[modeKey]=!!force&&!nextUltra;
+  S.hlsForceUltra[modeKey]=nextUltra;
+  status(automatic?'تعذر فك ترميز الوضع السابق؛ جار تشغيل توافق 1080p…':
+    nextUltra?'جار اختبار 4K من المصدر الحقيقي؛ الأداء يعتمد على الشاشة والاتصال…':
+    force?'جار التحويل إلى تشغيل متوافق مع التلفزيون…':'جار العودة لجودة المصدر الأصلية…');
+  playHls(video,kind,id,extension,track,statusElement,preview,0);
+  return true
+ }
+ if(!preview&&S.playerView&&S.playerView.video===video){
+  S.playerView.setHlsCompatibility=function(force,forceUltra){
+   if(S.route==='player'&&S.playerView&&S.playerView.video===video)
+    setCompatibility(force,false,forceUltra)
+  }
+ }
+ function recoverConnection(){
+  if(!alive()||record.reconnecting)return;
+  if(preview){
+   if(S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
+   if(record.recoveryAttempt>=2){
+    status('المعاينة توقفت بعد محاولات الاستعادة؛ افتح القناة أو اخترها مجددًا.');
+    return
+   }
+   record.reconnecting=true;
+   if(record.startupTimer)clearTimeout(record.startupTimer);
+   if(record.stallTimer)clearTimeout(record.stallTimer);
+   if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+   status('جار استعادة معاينة القناة تلقائيًا…');
+   var nextAttempt=record.recoveryAttempt+1;
+   record.retryTimer=setTimeout(function(){
+    record.retryTimer=null;
+    if(!alive()||S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
+    playHls(video,kind,id,extension,track,statusElement,true,nextAttempt)
+   },1200*nextAttempt);
+   return
+  }
+  var state=S.playerView;
+  if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
+  record.reconnecting=true;
+  if(state.stats){
+   state.stats.recoveries=(state.stats.recoveries||0)+1;
+   state.stats.lastRecoveryAt=Date.now();
+   recordLiveIncident('reconnect')
+  }
+  // Recovery order: original-native -> original MSE -> bounded compatibility.
+  // Do not sacrifice upstream 4K on the first TV decoder stall.
+  if(record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
+  if(!record.engine&&record.recoveryAttempt>=1&&window.MediaSource&&window.MediaSource.isTypeSupported){
+   S.preferMseHls=true;
+  }
+  if(!record.compat&&record.recoveryAttempt>=2&&setCompatibility(true,true))return;
+  if(record.startupTimer)clearTimeout(record.startupTimer);
+  if(record.stallTimer)clearTimeout(record.stallTimer);
+  if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+  if(record.stableTimer)clearTimeout(record.stableTimer);
+  if(record.recoveryAttempt>=4){
+   // Allow a struggling source to recover without forcing an app exit.
+   playerStatus('انقطع مصدر البث. إعادة محاولة تلقائية بعد 25 ثانية أو اضغط إعادة المحاولة.',true);
+   record.retryTimer=setTimeout(function(){
+    record.retryTimer=null;
+    if(!alive()||S.route!=='player'||!video.isConnected||state.userPaused)return;
+    // A decoder may set video.paused=true on a fatal error without user input.
+    playHls(video,kind,id,extension,track,statusElement,false,0)
+   },25000);
+   return
+  }
+  playerStatus('جار استعادة القناة تلقائيًا… ('+(record.recoveryAttempt+1)+'/4)');
+  playHls(video,kind,id,extension,track,statusElement,false,record.recoveryAttempt+1)
+ }
+ record.startupTimer=setTimeout(function(){
+  record.startupTimer=null;
+  if(!alive()||record.ready||video.paused)return;
+  recoverConnection()
+ },50000);
+
+ function probeSourceVideoMode(){
+  if(record.videoModeProbed||!alive()||typeof fetch!=='function')return;
+  record.videoModeProbed=true;
+  fetch(manifest,{method:'GET',credentials:'same-origin',cache:'no-store'}).then(function(response){
+   if(!response.ok)return null;
+   return {
+    mode:response.headers.get('x-blofy-video-mode')||'',
+    source:response.headers.get('x-blofy-source-resolution')||''
+   }
+  }).then(function(info){
+   if(!info||!alive())return;
+   record.videoMode=info.mode;
+   record.sourceDimensions=/^[1-9][0-9]{1,3}x[1-9][0-9]{1,3}$/.test(info.source)?info.source:'';
+   if(preview){
+    if(record.qualityListener)record.qualityListener();
+    return
+   }
+   if(S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
+   if(S.playerView.refreshVideoResolution)S.playerView.refreshVideoResolution();
+   var tag=document.getElementById('player-source-mode');
+   if(!tag)return;
+   if(info.mode==='source_copy'){
+    tag.textContent='الفيديو الأصلي • بدون ضغط إضافي';tag.hidden=false
+   }else if(info.mode==='ultra_transcode'){
+    tag.textContent='4K تجريبي • إعادة ترميز حتى دقة المصدر';tag.hidden=false
+   }else if(info.mode==='compatibility_transcode'){
+    tag.textContent='وضع توافق • تحويل الصورة';tag.hidden=false
+   }else tag.hidden=true
+  }).catch(function(){})
+ }
+ function status(text){if(!alive())return;
+  if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
+  else playerStatus(text)
+ }
+ video.onerror=function(){if(alive()){
+  var unsupported=video.error&&(video.error.code===4||video.error.code===3);
+  // Some VIDAA browsers advertise native HLS but cannot actually decode it.
+  // Prefer the verified MSE engine on the codec fallback where available.
+  if(unsupported&&window.MediaSource&&window.MediaSource.isTypeSupported)S.preferMseHls=true;
+  if(unsupported&&setCompatibility(true,true))return;
+  if(unsupported&&window.MediaSource&&window.MediaSource.isTypeSupported){
+   S.preferMseHls=true;
+   status('المشغّل الأصلي لا يدعم الترميز؛ جار التحويل إلى مشغّل HLS المتوافق…')
+  }else status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');
+  recoverConnection()
+ }};
+ video.onplaying=function(){
+  if(!alive())return;
+  record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;
+  record.lastProgressAt=Date.now();
+  record.unexpectedPauseAt=0;
+  record.lastMediaTime=Number(video.currentTime)||0;
+  record.lastVideoFrames=null;
+  if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
+  if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+  if(record.stableTimer)clearTimeout(record.stableTimer);
+  record.stableTimer=setTimeout(function(){
+   record.stableTimer=null;
+   if(alive()&&record.ready&&video.readyState>=2)record.recoveryAttempt=0
+  },120000);
+  status(preview?'● المعاينة تعمل':'● تشغيل البث');
+  probeSourceVideoMode();
+  if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
+   var state=S.playerView,firstPlay=!state.ready;state.ready=true;
+   if(firstPlay)recordLiveIncident('playing');
+   if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
+   if(statusElement)statusElement.style.display='none';
+   if(firstPlay&&state.revealControls)state.revealControls()
+  }
+ };
+ video.onwaiting=video.onstalled=function(){
+  if(!alive()||video.paused)return;
+  if(!preview)recordLiveIncident('buffering');
+  if(!record.bufferSince)record.bufferSince=Date.now();
+  if(Date.now()-record.bufferSince>36000){recoverConnection();return}
+  status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
+  if(record.stallTimer)clearTimeout(record.stallTimer);
+  record.stallTimer=setTimeout(function(){
+   record.stallTimer=null;
+   if(!alive()||video.paused)return;
+   // Buffering can freeze with readyState=4: inspect actual progress.
+   var progress=livePlaybackProgress(record,video,Date.now());
+   if(progress.advanced)return;
+   record.stallChecks++;
+   if(record.stallChecks>=3){recoverConnection();return}
+   if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
+   record.stallTimer=setTimeout(function(){
+    record.stallTimer=null;
+    if(alive()&&!video.paused&&Date.now()-(record.lastProgressAt||record.started)>15000)recoverConnection()
+   },14000)
+  },8500)
+ };
+ // Independent timer covers silent stalls in preview and fullscreen.
+ // Preview restarts are capped to two to protect the upstream connection.
+ record.progressWatchdog=setInterval(function(){
+   if(!alive()||!record.ready||!video.isConnected)return;
+   if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
+   if(!preview&&S.route!=='player')return;
+   var now=Date.now();
+   var intentionalPause=!preview&&S.playerView&&S.playerView.video===video&&S.playerView.userPaused;
+   if(liveUnexpectedPause(record,video,!!intentionalPause,document.hidden,now)){
+    status('توقف مشغّل الفيديو دون طلب؛ جار إعادة اتصال القناة…');
+    if(!preview)recordLiveIncident('decoder_paused');
+    recoverConnection();return
+   }
+   if(video.paused||video.ended||video.seeking||document.hidden){
+    record.lastProgressAt=now;return
+   }
+   var progress=livePlaybackProgress(record,video,now);
+   if(liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
+    if(!preview)recordLiveIncident('live_catchup',now);
+    status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
+    return
+   }
+   if(progress.advanced)return;
+   if(progress.idleMs>=16000){
+    diagnose('live','startup_timeout','hls',0);
+    if(!preview)recordLiveIncident('picture_freeze');
+    recoverConnection()
+   }else if(progress.idleMs>=6500&&!record.bufferSince){
+    record.bufferSince=Date.now();
+    status('تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')
+   }
+  },2200);
+ if(shouldUseNativeHls(video)){
+  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})}catch(e){}return
+ }
+ loadHls(function(ok){
+  if(!alive())return;
+  if(!ok||!window.Hls||!window.Hls.isSupported()){
+   // Only try native HLS if the browser genuinely advertises it.
+   if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src=manifest;try{video.play()}catch(e){};return
+   }
+   status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
+  }
+  try{
+   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
+   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
+   // Network and decoder are separate signals. If HLS fragments arrive while
+   // actual decoded frames remain frozen, the report can flag a TV decoder
+   // problem instead of blaming Railway or the subscriber's source.
+   engine.on(window.Hls.Events.FRAG_LOADED,function(){
+    if(alive()){
+     record.lastFragmentAt=Date.now();
+     record.capacityRetries=0;record.originRetries=0;
+     if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
+    }
+   });
+   engine.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail)return;
+    var code=Number(detail.response&&detail.response.code)||0;
+    if(code===410&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     if(!preview)recordLiveIncident('live_edge_resync');
+     var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());
+     if(edgeAction==='restart')recoverConnection();
+     else if(edgeAction==='resync')status('تأخرت بعض مقاطع البث؛ جار الانتقال إلى البث المباشر…');
+     return
+    }
+    if(!detail.fatal)return;
+    diagnose('live','hls_error','video',0);
+    if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
+    if(code===429){
+     if(!preview)recordLiveIncident('encoder_capacity');
+     // Only two worker slots exist on the pilot. Back off instead of
+     // burning connection attempts, which could cut off healthy viewers.
+     record.capacityRetries=(record.capacityRetries||0)+1;
+     if(record.capacityRetries>5){recoverConnection();return}
+     var delay=liveCapacityRetryMs(record.capacityRetries);
+     status('المحرك مشغول مؤقتًا؛ إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');
+     if(record.capacityTimer)clearTimeout(record.capacityTimer);
+     record.capacityTimer=setTimeout(function(){
+      record.capacityTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){recoverConnection()}
+     },delay);
+     return
+    }
+    if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     if(!preview)recordLiveIncident('source_error');
+     record.originRetries=(record.originRetries||0)+1;
+     if(record.originRetries>5){recoverConnection();return}
+     var delay=liveOriginRetryMs(record.originRetries);
+     status('تعثر اتصال مصدر القناة؛ محاولة تدريجية بعد '+Math.ceil(delay/1000)+' ثوانٍ…');
+     if(record.originTimer)clearTimeout(record.originTimer);
+     record.originTimer=setTimeout(function(){
+      record.originTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){recoverConnection()}
+     },delay);
+     return
+    }
+    if(record.retries<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
+    }
+    if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+     if(!preview)recordLiveIncident('decoder_error');
+     record.retries++;status('جار إعادة تهيئة الفيديو…');try{engine.recoverMediaError()}catch(e){};return;
+    }
+    if(detail.type===window.Hls.ErrorTypes.MEDIA_ERROR&&setCompatibility(true,true))return;
+    recoverConnection()
+   });
+   engine.attachMedia(video);engine.loadSource(manifest)
+  }catch(e){status('تعذر إعداد مشغّل HLS')}
+ })
+}
+
+function durationSeconds(value,unit){
+ if(value===null||value===undefined||value==='')return 0;
+ var raw=typeof value==='number'?value:typeof value==='string'?value.trim():NaN;
+ if(typeof raw==='string'&&raw.indexOf(':')>=0){
+  var parts=raw.split(':');
+  if(parts.length<2||parts.length>3)return 0;
+  var seconds=0;
+  for(var i=0;i<parts.length;i++){
+   if(!/^\d{1,3}$/.test(parts[i]))return 0;
+   var part=Number(parts[i]);
+   if(i>0&&part>=60)return 0;
+   seconds=seconds*60+part
+  }
+  return seconds>0&&seconds<=21600?seconds:0
+ }
+ if(typeof raw==='string'&&!/^\d+(?:\.\d+)?$/.test(raw))return 0;
+ var n=Number(raw);
+ if(!isFinite(n)||n<=0)return 0;
+ // Xtream duration_secs reports seconds; plain duration often reports minutes.
+ if(unit!=='seconds'&&n<=240)n*=60;
+ return n>=1&&n<=21600?Math.round(n):0
+}
+function knownDuration(kind,id,item){
+ var opts=[],movieResponse=kind==='movie'&&S.item&&S.item.kind==='movie'&&String(S.item.id)===String(id)&&S.item.info,
+ movieInfo=movieResponse&&movieResponse.info,movieData=movieResponse&&movieResponse.movie_data;
+ // Episode-specific duration must win over a series' parent metadata.
+ if(kind==='series'&&S.episodes&&S.episodes.episodes){
+  var eps=parseEpisodes(S.episodes);
+  for(var i=0;i<eps.length;i++)if(String(eps[i].id)===String(id)){
+   var ep=eps[i],ei=ep.info||{};
+   opts.push([ep.duration_secs,'seconds'],[ei.duration_secs,'seconds'],[ep.duration,'duration'],[ei.duration,'duration']);
+   break
+  }
+ }
+ opts=opts.concat([[item&&item.duration_secs,'seconds'],[item&&item.duration,'duration'],
+  [item&&item.info&&item.info.duration_secs,'seconds'],[item&&item.info&&item.info.duration,'duration'],
+  [movieInfo&&movieInfo.duration_secs,'seconds'],[movieInfo&&movieInfo.duration,'duration'],
+  [movieData&&movieData.duration_secs,'seconds'],[movieData&&movieData.duration,'duration']]);
+ for(var k=0;k<opts.length;k++){var sec=durationSeconds(opts[k][0],opts[k][1]);if(sec>=120)return sec}
+ var saved=getResume(kind,id);
+ return saved&&saved.duration>=300&&saved.duration<=21600?saved.duration:0
+}
+
+/* Real full-length VOD player. EXT-X-ENDLIST exposes the entire runtime to
+ * Hls.js from the first manifest. A fragment requested after a seek is
+ * transcoded on demand at that absolute movie position by the worker.
+ * Unknown-length sources still use the bounded legacy streaming fallback.
+ */
+function freshPlaybackId(){
+ var bytes=new Uint8Array(16),hex='0123456789abcdef',result='';
+ if(window.crypto&&window.crypto.getRandomValues)window.crypto.getRandomValues(bytes);
+ else for(var k=0;k<bytes.length;k++)bytes[k]=Math.floor(Math.random()*256);
+ for(var i=0;i<bytes.length;i++)result+=hex[(bytes[i]>>4)&15]+hex[bytes[i]&15];
+ return result
+}
+function playFullVod(video,kind,id,ext,track,duration,state,ready){
+ // Xtream providers sometimes permit one source connection per account.
+ // When upgrading a temporary EVENT playlist to full VOD, close that live
+ // transcoder before opening the new one instead of racing two connections.
+ var previous=S.play;
+ if(previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===0){
+  var oldStop=previous.stopUrl;
+  stopPlayback(false);
+  state.ready=false;
+  playerStatus('جار إغلاق اتصال الفيلم المؤقت قبل تفعيل التقديم…');
+  var completed=false;
+  function proceed(){
+   if(completed)return;
+   completed=true;clearTimeout(timeout);
+   if(S.route!=='player'||S.playerView!==state)return;
+   playFullVod(video,kind,id,ext,track,duration,state,ready)
+  }
+  var timeout=setTimeout(proceed,4000);
+  api('POST',oldStop,{},function(){proceed()});
+  return
+ }
+ var seconds=Math.round(duration),path='/api/vodfull/'+kind+'/'+id+'/'+ext+'/'+track+'/'+seconds;
+ var sid='sid='+state.playbackId;
+ var firstAt=Math.max(0,Math.min(seconds-2,Math.round(Number(state.resume)||0)));
+ // Tell the seekable VOD worker which chunk is required first, before Hls.js
+ // requests segments. Other chunks are still produced only when requested.
+ var playlist=path+'/index.m3u8?'+sid+'&at='+firstAt;
+ var stopUrl=path+'/stop?'+sid;
+ // A retry of the same full VOD session must NOT issue asynchronous /stop:
+ // the delayed stop response could kill the newly started retry.
+ var sameSession=!!(S.play&&S.play.stopUrl===stopUrl);
+ state.ready=false;
+ stopPlayback(!sameSession);
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:stopUrl,hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
+ S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;state.didResume=false;
+ var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='وضع VOD • مدة كاملة';
+ var pathBadge=document.getElementById('player-source-mode');if(pathBadge){pathBadge.textContent='وضع توافق • إعادة ضغط';pathBadge.hidden=false}
+ diagnose(kind,'vod_full_start','fullvod',0);
+ video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
+ playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
+ function alive(){return S.route==='player'&&S.play===rec}
+ function fail(msg){
+  if(!alive())return;
+  if(rec.timer)clearTimeout(rec.timer);
+  if(rec.stallTimer)clearTimeout(rec.stallTimer);
+  if(rec.startupTimer)clearTimeout(rec.startupTimer);
+  playerStatus(msg,true)
+ }
+ function recoverFilm(){
+  if(!alive()||rec.pendingRecovery)return;
+  var now=Date.now();
+  if(!state.fullRecoveryStart||now-state.fullRecoveryStart>180000){
+   state.fullRecoveryStart=now;state.fullRecoveryCount=0
+  }
+  if((state.fullRecoveryCount||0)>=2){
+   fail('المصدر توقف عدة مرات. تم حفظ مكانك؛ استخدم إعادة المحاولة أو اختر محتوى آخر.');
+   return
+  }
+  rec.pendingRecovery=true;state.fullRecoveryCount++;
+  // The browser may still report the previous frame while a seek is loading.
+  // Retry at the actual requested timestamp, not that stale video.currentTime.
+  var pending=state.pendingSeek,requested=pending&&Date.now()-pending.startedAt<55000?pending.target:null;
+  if(requested===null&&state.seekIncomplete&&Date.now()-(state.lastSeekAt||0)<80000)
+   requested=state.lastSeekTarget;
+  var resumeAt=Math.max(0,Math.floor(requested!==null?requested:(video.currentTime||state.resume||0))-1);
+  if(state.ready)saveResume(kind,id,resumeAt,seconds,true);
+  state.resume=resumeAt;
+  diagnose(kind,'vod_retry','fullvod',0);
+  playerStatus('انقطع المصدر مؤقتًا؛ جار استكمال الفيلم من '+formatTime(resumeAt)+'…');
+  setTimeout(function(){
+   if(alive())playFullVod(video,kind,id,ext,track,seconds,state,ready)
+  },Math.min(1800,state.fullRecoveryCount*650))
+ }
+ function checkStall(){
+  if(!alive()||video.paused)return;
+  if(rec.stallTimer)clearTimeout(rec.stallTimer);
+  // The worker can finish a previous 24-second chunk for up to 26s,
+  // followed by a 28s segment wait. Avoid canceling useful FFmpeg work:
+  // Hls.js handles the 68s fragment deadline before this recovery.
+  var observed=Number(video.currentTime)||0;
+  rec.stallTimer=setTimeout(function(){
+   rec.stallTimer=null;
+   if(!alive()||video.paused||video.readyState>=3)return;
+   // Ignore an earlier buffering event if new video frames have arrived.
+   if(Math.abs((Number(video.currentTime)||0)-observed)>0.9)return;
+   recoverFilm()
+  },72000)
+ }
+ rec.timer=setTimeout(function(){
+  if(alive()&&!rec.ready)playerStatus('جار تجهيز الفيديو من المصدر…')
+ },16000);
+ // A source can hang before it emits a video waiting/stalled event. Ensure
+ // the initial spinner does not remain forever; allow enough time for a slow
+ // on-demand first segment before a bounded recovery attempt. Wait beyond
+ // the worker's 75s watchdog so its own timeout governs stalled encoders.
+ rec.startupTimer=setTimeout(function(){
+  rec.startupTimer=null;
+  if(alive()&&!rec.ready&&!video.paused)recoverFilm()
+ },82000);
+ video.onplaying=function(){
+  if(!alive())return;
+  if(state.completed&&video.currentTime<5)state.completed=false;
+  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
+  if(rec.startupTimer){clearTimeout(rec.startupTimer);rec.startupTimer=null}
+  if(rec.stallTimer){clearTimeout(rec.stallTimer);rec.stallTimer=null}
+  ready()
+ };
+ video.onwaiting=video.onstalled=function(){
+  if(!alive()||video.paused)return;
+  playerStatus('جار تحميل الجزء المطلوب من الفيلم…');
+  checkStall()
+ };
+ video.onended=function(){
+  if(!alive())return;
+  var observed=Math.max(0,Number(video.currentTime)||0);
+  if(!vodEndedAtRealFinish(seconds,observed,!!state.seekIncomplete)){
+   // A TV HLS decoder sometimes sees only the local 24-second conversion
+   // and emits ended, even though our VOD manifest has a full movie timeline.
+   var checkpoint=Math.max(0,Math.floor(observed)-1);
+   if(state.ready)saveResume(kind,id,checkpoint,seconds,true);
+   playerStatus('انتهى مقطع قبل نهاية الفيلم؛ جار استعادة التشغيل من '+formatTime(checkpoint)+'…');
+   recoverFilm();return
+  }
+  finishResume(kind,id);
+  playerStatus('اكتملت المشاهدة')
+ };
+ video.onerror=function(){
+  if(!alive())return;
+  diagnose(kind,'media_error','video',video.error&&video.error.code);
+  recoverFilm()
+ };
+ function attachNative(){
+  video.onloadedmetadata=function(){
+   if(!alive())return;
+   if(state.resume>30&&state.resume<seconds-5&&!state.didResume){
+    state.didResume=true;
+    try{video.currentTime=state.resume}catch(e){}
+   }
+   if(state.onDuration)state.onDuration()
+  };
+  video.src=playlist;
+  try{var p=video.play();if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط تشغيل للمتابعة')})}
+  catch(e){fail('تعذر بدء الفيلم')}
+ }
+ if(shouldUseNativeHls(video)){attachNative();return}
+ loadHls(function(ok){
+  if(!alive())return;
+  if(!ok||!window.Hls||!window.Hls.isSupported()){
+   if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){attachNative();return}
+   fail('المتصفح لا يدعم تشغيل ملفات HLS القابلة للتقديم.');return
+  }
+  try{
+   var hls=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
+    maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:68000,manifestLoadingTimeOut:30000,
+    fragLoadingMaxRetry:2,manifestLoadingMaxRetry:2});
+   rec.engine=hls;
+   video.onloadedmetadata=function(){
+    if(!alive())return;
+    // Hls.js startPosition already jumps to the saved VOD time.
+    // A second assignment here used to abort the initial chunk download,
+    // leaving some Android-TV browsers stuck rebuffering.
+    state.didResume=state.resume>30&&state.resume<seconds-5;
+    if(state.onDuration)state.onDuration()
+   };
+   hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
+    if(!alive())return;
+    if(state.onDuration)state.onDuration();
+    // startPosition already points Hls.js to the right fragment. Avoid issuing
+    // a second redundant seek before metadata is ready.
+    try{
+     var p=video.play();
+     if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط ▶ لتشغيل الفيلم')})
+    }catch(e){playerStatus('اضغط تشغيل للمتابعة')}
+   });
+   var recovery=0;
+   hls.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail||!detail.fatal)return;
+    var status=Number(detail.response&&detail.response.code||detail.networkDetails&&detail.networkDetails.status||0);
+    diagnose(kind,'hls_error','video',0);
+    if(status===416){
+     fail('مصدر هذا الفيلم لا يدعم الوصول إلى الجزء المطلوب. التقديم يحتاج ملفًا يدعم القراءة العشوائية؛ إعادة المحاولة لن تصلح المصدر.');
+     return
+    }
+    if(status===422){
+     fail('مدة الفيلم المُعلنة لا تطابق الملف الفعلي، أو الجزء المطلوب غير موجود في المصدر. التقديم لهذا الموضع غير متاح.');
+     return
+    }
+    if(status===401||status===403){
+     fail('تعذر تفويض الوصول إلى ملف الفيلم. تحقق من اشتراكك ثم أعد فتح المحتوى.');
+     return
+    }
+    if(status===429){
+     fail('خادم معالجة الفيديو مشغول حاليًا. تم حفظ مكان المشاهدة؛ حاول لاحقًا.');
+     return
+    }
+    if(recovery<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovery++;try{hls.startLoad()}catch(e){};return}
+    if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
+    recoverFilm()
+   });
+   hls.attachMedia(video);hls.loadSource(playlist)
+  }catch(e){fail('تعذر تهيئة مشغّل الأفلام')}
+ })
+}
+
+function playVodSegments(video,kind,id,ext,track,start,state,ready){
+ var at=Math.max(0,Math.round(start||0)),key=kind+'/'+id+'/'+ext+'/'+track+'/'+at,manifest='/api/vod/'+key+'/index.m3u8';
+ // Retry the same timestamp without racing against an older asynchronous /stop.
+ var newStop='/api/vod/'+key+'/stop',sameSession=!!(S.play&&S.play.stopUrl===newStop);
+ state.ready=false;stopPlayback(!sameSession);
+ state.mode='vodhls';state.offset=at;state.didResume=true;
+ var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='HLS مؤقت • مدة غير مؤكدة';
+ var pathBadge=document.getElementById('player-source-mode');if(pathBadge){pathBadge.textContent='وضع توافق • إعادة ضغط';pathBadge.hidden=false}
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
+ S.play=rec;
+ diagnose(kind,'vod_fallback','vodhls',0);
+ playerStatus('جار فتح الفيلم من '+formatTime(at)+' بصيغة H.264 / AAC…');
+ video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
+ function alive(){return S.play===rec&&S.route==='player'}
+ // Source duration lookup is independent of transcoding and safe before first segment.
+ if(!(state.duration>0)&&!state.durationPending){
+  state.durationPending=true;
+  api('GET','/api/vod/'+key+'/meta',null,function(st,r){
+   state.durationPending=false;
+   if(!alive())return;
+   if(st===200&&r&&Number(r.durationSec)>0){
+    state.duration=Math.round(Number(r.durationSec));
+    if(state.onDuration)state.onDuration();
+    if(state.duration>=120&&state.duration<=21600&&state.mode==='vodhls'){
+     var actual=Math.max(at,at+Math.max(0,video.currentTime||0));
+     state.resume=Math.round(actual);
+     // One-time migration from temporary streaming preview to a seekable full VOD.
+     playFullVod(video,kind,id,ext,track,state.duration,state,ready);
+     return
+    }
+   }else if(state.onDuration)state.onDuration()
+  })
+ }
+ function fail(text){if(alive()){if(rec.timer)clearTimeout(rec.timer);playerStatus(text,true)}}
+ function interrupted(detail){
+  if(!alive())return;
+  var current=Math.max(at,at+Math.max(0,video.currentTime||0)-1);
+  var now=Date.now();
+  if(!state.recoveryWindow||now-state.recoveryWindow>180000){state.recoveryWindow=now;state.recoveries=0}
+  if((state.recoveries||0)>=2){
+   fail('انقطع مصدر الفيديو أكثر من مرة. موضع المشاهدة محفوظ؛ ارجع ثم افتح العنوان مجددًا.');
+   return
+  }
+  state.recoveries++;
+  if(state.ready)saveResume(kind,id,current,state.duration,true);
+  playerStatus('انقطع مصدر الفيديو مؤقتًا. جار استكمال المشاهدة من '+formatTime(current)+'…');
+  var delay=state.recoveries*650;
+  setTimeout(function(){if(alive())playVodSegments(video,kind,id,ext,track,Math.round(current),state,ready)},delay)
+ }
+ rec.timer=setTimeout(function(){if(alive()&&!rec.ready){diagnose(kind,'startup_timeout','video',video.readyState||0);playerStatus('الفيلم يستغرق وقتًا أطول من المتوقع للتجهيز. جار محاولة تحميل المقاطع الأولى…')}} ,18000);
+ video.onerror=function(){if(!alive())return;diagnose(kind,'media_error','video',video.error&&video.error.code);interrupted('media_error')};
+ video.onplaying=function(){
+  if(!alive())return;
+  if(state.completed&&video.currentTime<5)state.completed=false;
+  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready()
+ };
+ video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ video.onended=function(){
+  if(!alive())return;
+  var absolute=at+Math.max(0,Number(video.currentTime)||0),
+   duration=Number(state.duration)||0;
+  if(!vodEndedAtRealFinish(duration,absolute,!!state.seekIncomplete)){
+   // The short EVENT fallback is NOT a complete movie timeline.
+   // Never claim that unknown-duration EOF equals finished viewing.
+   interrupted('early_or_unverified_end');return
+  }
+  finishResume(kind,id);
+  playerStatus('اكتملت المشاهدة')
+ };
+ if(shouldUseNativeHls(video)){
+  video.src=manifest;try{var promise=video.play();if(promise&&promise.catch)promise.catch(function(){fail('اضغط ▶ داخل المشغّل للبدء')})}catch(e){}return
+ }
+ loadHls(function(ok){
+  if(!alive())return;
+  if(!ok||!window.Hls||!window.Hls.isSupported()){
+   if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src=manifest;try{video.play()}catch(e){};return
+   }
+   fail('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
+  }
+  try{
+   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:0,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});
+   rec.engine=engine;
+   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){
+    if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيلم')})}catch(e){}
+   });
+   var recovered=0;
+   engine.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail||!detail.fatal)return;
+    diagnose(kind,'hls_error','video',0);
+    if(recovered<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     recovered++;try{engine.startLoad()}catch(e){};return
+    }
+    if(recovered<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+     recovered++;try{engine.recoverMediaError()}catch(e){};return
+    }
+    interrupted(String(detail.details||detail.type).slice(0,80))
+   });
+   engine.attachMedia(video);engine.loadSource(manifest)
+  }catch(e){fail('تعذر فتح محرك الفيلم على هذا المتصفح')}
+ })
+}
+
+function playerIcon(name){
+ var p={
+  audio:'<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 9a5 5 0 0 1 0 6M18 6a9 9 0 0 1 0 12"/>',
+  subtitles:'<rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M10 10H7.5a2 2 0 0 0 0 4H10m7-4h-2.5a2 2 0 0 0 0 4H17"/>',
+  rewind:'<path d="m11 6-8 6 8 6V6Zm10 0-8 6 8 6V6Z"/>',
+  forward:'<path d="m3 6 8 6-8 6V6Zm10 0 8 6-8 6V6Z"/>',
+  play:'<path d="m8 5 11 7-11 7V5Z"/>',
+  pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  previous:'<path d="M5 5v14M19 6 9 12l10 6V6Z"/>',
+  next:'<path d="M19 5v14M5 6l10 6-10 6V6Z"/>',
+  quality:'<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="11" cy="17" r="2"/>',
+  health:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.8"/>',
+  favorite:'<path d="M20.8 8.3C20.8 13 12 19 12 19S3.2 13 3.2 8.3a4.6 4.6 0 0 1 8.8-1.8 4.6 4.6 0 0 1 8.8 1.8Z"/>'
+ };
+ return '<svg class="native-player-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">'+(p[name]||p.play)+'</svg>'
+}
+function playerControl(id,icon,label,primary){
+ return '<button class="native-player-control'+(primary?' native-player-primary':'')+'" id="'+id+'" type="button" aria-label="'+label+'" title="'+label+'">'+playerIcon(icon)+'</button>'
+}
+
+function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
+ var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
+ if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
+ var explicitStart=from!==undefined&&from!==null&&from!=='';var initial=Math.max(0,Number(from)||0),isLive=kind==='live',prior=getResume(kind,id),resume=explicitStart?initial:(prior&&prior.position||0);
+ // The preview and fullscreen player share one upstream media-worker HLS key.
+ // Never send asynchronous /stop for that key after starting fullscreen:
+ // late /stop responses would kill the newly opened FFmpeg session.
+ var oldPreview=S.play,fullKey='live/'+id+'/ts/0';
+ if(isLive&&oldPreview&&oldPreview.preview&&(
+  oldPreview.hlsKey===fullKey||oldPreview.hlsKey===fullKey+'/compat'||
+  (oldPreview.hlsKey||'').indexOf(fullKey+'/sid-')===0)){
+  if(S.previewToFullPending)return;
+  S.previewToFullPending=true;
+  var expectedRoute=S.route,expectedId=String(id);
+  var previewStopKey=oldPreview.hlsKey;
+  var previewStatus=document.getElementById('live-status');
+  if(previewStatus)previewStatus.textContent='جار نقل القناة إلى المشغّل الكامل…';
+  stopPlayback(false);
+  var promotionSettled=false,promotionTimer=null;
+  function promotionComplete(status){
+   if(promotionSettled)return;
+   promotionSettled=true;
+   if(promotionTimer)clearTimeout(promotionTimer);
+   S.previewToFullPending=false;
+   if(S.route!==expectedRoute||!S.userVerified||String(S.selected)!==expectedId)return;
+   if(status===200||status===404){
+    openPlayer(kind,id,extension,name,from,replacePlayerHistory)
+   }else{
+    if(previewStatus)previewStatus.textContent='تعذر إغلاق المعاينة السابقة بأمان؛ أعد محاولة فتح القناة.'
+   }
+  }
+  promotionTimer=setTimeout(function(){promotionComplete(0)},6500);
+  api('POST','/api/hls/'+previewStopKey+'/stop',{},function(status){promotionComplete(status)});
+  return
+ }
+ var detail=S.detailInfo&&S.detailInfo.kind===kind&&S.detailInfo.id===id?S.detailInfo.info:
+  (kind==='series'&&S.episodes&&S.episodes.info||null);
+ var overview=String(detail&&(detail.plot||detail.description)||item&&(item.plot||item.description)||'').trim().slice(0,950);
+ var attributes=detail?[detail.genre||detail.genres||'',detail.releaseDate||detail.release_date||'',detail.rating||''].filter(Boolean).join(' • '):'';
+ var nextEpisode=null,previousEpisode=null;
+ if(kind==='series'&&S.episodes&&S.episodes.episodes){
+  var episodeList=parseEpisodes(S.episodes).sort(function(a,b){return Number(a.__season)-Number(b.__season)||Number(a.episode_num||0)-Number(b.episode_num||0)});
+  for(var ix=0;ix<episodeList.length;ix++)if(String(episodeList[ix].id)===String(id)){
+   if(ix>0)previousEpisode=episodeList[ix-1];
+   if(ix+1<episodeList.length)nextEpisode=episodeList[ix+1];
+   break
+  }
+ }
+ rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};
+ if(replacePlayerHistory){
+  try{window.history.replaceState({blofyStreamWeb:true,depth:browserDepth,route:'player',
+   opts:{kind:kind,id:id,extension:ext,name:name,from:resume}},'',window.location.href)}catch(err){}
+ }else pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
+ S.route='player';
+ app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
+ '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+
+ '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
+ '<div class="player-hud native-stream-hud">'+
+ '<div class="native-player-topline"><button class="native-player-back" id="player-back" type="button">↶ رجوع</button>'+
+ '<span class="native-player-eyebrow">BLOFY '+(isLive?'LIVE':kind==='series'?'SERIES':'CINEMA')+'</span>'+
+ (isLive?'<button class="native-player-channels" id="player-channels-toggle" type="button" aria-label="قائمة القنوات">☷ القنوات</button>':'')+
+ '<button class="native-player-fullscreen" id="player-fullscreen" type="button" aria-label="ملء الشاشة" aria-pressed="false" title="ملء الشاشة">⛶ ملء الشاشة</button>'+ 
+ '<button class="native-player-more" id="player-options-toggle" type="button" aria-expanded="false" aria-controls="player-more-panel" aria-label="المزيد من الخيارات" title="المزيد من الخيارات">⋯</button></div>'+
+ '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span><span class="player-resolution-badge" id="player-resolution" aria-live="polite" hidden></span><span class="player-resolution-badge" id="player-source-mode" aria-live="polite" hidden></span></div>'+
+ (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
+ '<div class="native-player-timeline" dir="ltr"><span id="now-time">00:00</span><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled aria-label="موضع التشغيل"><span id="total-time">--:--</span></div>')+
+ '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+(isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
+ '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
+ playerControl('player-audio','audio','المسارات الصوتية')+
+ playerControl('player-subtitles','subtitles','الترجمة')+
+ (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
+ (isLive?playerControl('player-channel-prev','rewind','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
+ playerControl('player-toggle','pause','إيقاف مؤقت',true)+
+ (isLive?playerControl('player-channel-next','forward','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
+ (nextEpisode?playerControl('player-next-episode','next','الحلقة التالية'):'')+
+ playerControl('player-quality','quality','جودة الفيديو')+
+ (isLive?playerControl('player-health-shortcut','health','حالة التشغيل الفعلية'):'')+
+ (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
+ '</div>'+
+ '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
+ (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
+
+ '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
+ (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button>':'')+
+ '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
+ '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
+ (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
+ (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
+ (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
+ '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section>'+
+ (isLive?'<section class="player-diagnostic-panel" id="player-diagnostic-panel" hidden role="status" aria-live="off"></section>':'')+
+ (isLive?'':'<form class="player-jump-panel" id="player-jump-panel" hidden><label for="player-jump-minute">الانتقال إلى الدقيقة (0–359)</label>'+
+ '<input id="player-jump-minute" type="number" inputmode="numeric" min="0" max="359" step="1" required placeholder="مثلاً 10">'+
+ '<button class="btn" type="submit">انتقال</button><button class="btn secondary" type="button" id="player-jump-cancel">إلغاء</button>'+
+ '<small>القفز يعتمد على دعم المصدر للقراءة العشوائية؛ بعض مصادر Xtream قد لا تسمح به.</small></form>')+
+ '</div>'+ (isLive?'<aside id="player-channel-panel" class="native-channel-panel" hidden aria-label="قائمة القنوات"></aside>':'')+'</section>';
+ var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
+ mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
+  art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
+   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,liveEvents:[],
+    seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
+ // The 20-minute acceptance uses existing decoded-frame and source health
+ // observations. It never opens a new media, catalog or telemetry request.
+ // Monotonic time avoids TV system-clock/date problems.
+ var acceptance=window.BlofyPlaybackAcceptance||null,
+  verifyButton=document.getElementById('player-verify-20m'),
+  verifyStatus=document.getElementById('player-verify-status');
+ function acceptanceClock(){
+  return window.performance&&typeof window.performance.now==='function'?
+   window.performance.now():Date.now()
+ }
+ function acceptanceSnapshot(){
+  var frames=null,rec=S.play&&S.play.video===video?S.play:null,quality=null;
+  try{quality=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality()}catch(e){}
+  if(quality&&isFinite(Number(quality.totalVideoFrames))&&Number(quality.totalVideoFrames)>0)
+   frames=Number(quality.totalVideoFrames);
+  var presented=rec&&rec.framePresentationObserved?Number(rec.presentedFrames)||0:null;
+  var bufferMs=(state.stats.bufferMs||0)+(state.stats.bufferSince?
+   Math.max(0,Date.now()-state.stats.bufferSince):0);
+  return {
+   at:acceptanceClock(),playing:!video.paused&&!video.ended&&video.readyState>=2,
+   hidden:document.hidden===true,width:Number(video.videoWidth)||0,height:Number(video.videoHeight)||0,
+   frames:frames,presented:presented,time:video.currentTime,
+   errors:state.stats.errors||0,recoveries:state.stats.recoveries||0,bufferMs:bufferMs
+  }
+ }
+ function acceptanceFinish(result){
+  if(!result||!state.longTest)return;
+  if(state.longTestTimer){clearInterval(state.longTestTimer);state.longTestTimer=null}
+  state.longTest=null;
+  if(verifyButton)verifyButton.textContent='◷ بدء اختبار 20 دقيقة';
+  var saved={kind:result.kind,status:result.status,reason:result.reason,
+   elapsedSeconds:result.elapsedSeconds,videoFramesObserved:result.videoFramesObserved,
+   timeProgressObserved:result.timeProgressObserved,bufferingSeconds:result.bufferingSeconds,
+   samples:result.samples,finishedAt:Date.now()};
+  S.lastLongPlaybackTest=saved;profileSave('lastLongPlaybackTest',saved);
+  var msg=acceptance?acceptance.message(result):'اكتمل الاختبار';
+  if(verifyStatus)verifyStatus.textContent=msg;
+  if(S.route==='player'&&S.playerView===state)playerStatus(msg,false)
+ }
+ function sampleAcceptance(){
+  if(!state.longTest||!acceptance)return;
+  if(S.route!=='player'||S.playerView!==state||!video.isConnected){
+   acceptanceFinish(acceptance.stop(state.longTest,acceptanceClock()));return
+  }
+  var result=acceptance.tick(state.longTest,acceptanceSnapshot());
+  if(result){acceptanceFinish(result);return}
+  var seconds=Math.max(0,Math.round((acceptanceClock()-state.longTest.startedAt)/1000));
+  if(verifyStatus)verifyStatus.textContent='جار فحص تشغيل الصورة: '+formatTime(seconds)+
+   ' من 00:20:00 • بدون طلبات فيديو إضافية. يمكن إيقاف الفحص من الزر نفسه.'
+ }
+ state.stopLongTest=function(){
+  if(!state.longTest||!acceptance)return;
+  acceptanceFinish(acceptance.stop(state.longTest,acceptanceClock()))
+ };
+ if(verifyButton)verifyButton.onclick=function(){
+  if(state.longTest){state.stopLongTest();return}
+  if(!acceptance||!S.userVerified||S.route!=='player'||S.playerView!==state){
+   if(verifyStatus)verifyStatus.textContent='الفحص غير متاح لهذا المشغل.';return
+  }
+  try{
+   var now=acceptanceClock(),snap=acceptanceSnapshot();
+   if(!state.ready||!snap.playing||!snap.width||!snap.height)
+    throw Error('not_ready');
+   state.longTest=acceptance.init(kind,now,snap);
+   verifyButton.textContent='■ إنهاء اختبار 20 دقيقة';
+   if(verifyStatus)verifyStatus.textContent='بدأ فحص الصورة المستمر. حافظ على تشغيل القناة وعدم إخفاء الصفحة لمدة 20 دقيقة.';
+   state.longTestTimer=setInterval(sampleAcceptance,2000);
+   sampleAcceptance()
+  }catch(e){
+   if(verifyStatus)verifyStatus.textContent='ابدأ تشغيل الفيديو حتى تظهر الصورة أولًا، ثم شغّل اختبار 20 دقيقة.'
+  }
+ };
+ var toggle=document.getElementById('player-toggle');
+ function syncToggle(){
+  if(!toggle)return;
+  var paused=video.paused;
+  toggle.innerHTML=playerIcon(paused?'play':'pause');
+  toggle.setAttribute('aria-label',paused?'تشغيل':'إيقاف مؤقت');
+  toggle.title=paused?'تشغيل':'إيقاف مؤقت'
+ }
+ video.addEventListener('play',syncToggle);
+ video.addEventListener('pause',syncToggle);
+ syncToggle();
+
+ var moreToggle=document.getElementById('player-options-toggle');
+ if(moreToggle)moreToggle.onclick=function(){
+  var panel=document.getElementById('player-more-panel');
+  if(!panel)return;
+  panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
+ };
+ var controlHint=document.getElementById('player-control-hint'),dock=document.querySelector('.native-player-dock');
+ if(dock&&controlHint){
+  dock.addEventListener('focusin',function(e){
+   var label=e.target&&e.target.getAttribute('aria-label');
+   if(label)controlHint.textContent=label
+  });
+  dock.addEventListener('pointerover',function(e){
+   var button=e.target&&e.target.closest&&e.target.closest('.native-player-control');
+   if(button)controlHint.textContent=button.getAttribute('aria-label')||''
+  },{passive:true})
+ }
+ var favoriteButton=document.getElementById('player-favorite');
+ function refreshFavoriteButton(){
+  if(!favoriteButton)return;
+  var marked=!!S.library[kind+':'+state.id];
+  favoriteButton.classList.toggle('native-player-liked',marked);
+  favoriteButton.setAttribute('aria-pressed',String(marked));
+  favoriteButton.setAttribute('aria-label',marked?'إزالة من المفضلة':'إضافة إلى المفضلة');
+  favoriteButton.title=marked?'إزالة من المفضلة':'إضافة إلى المفضلة'
+ }
+ state.refreshFavoriteButton=refreshFavoriteButton;
+ if(favoriteButton)favoriteButton.onclick=function(){
+  var key=kind+':'+state.id,wasMarked=!!S.library[key],choice=findItem(kind,state.id)||item;
+  if(wasMarked){delete S.library[key];delete S.favoriteItems[key]}
+  else{
+   S.library[key]=true;
+   var record={id:String(state.id),name:String(state.name||title(choice)).slice(0,160),
+    stream_icon:art(choice),container_extension:choice&&choice.container_extension||'mp4'};
+   if(kind==='series')record.series_id=String(state.id);else record.stream_id=String(state.id);
+   S.favoriteItems[key]=record
+  }
+  profileSave('favorites',S.library);
+  profileSave('favoriteItems',S.favoriteItems);
+  refreshFavoriteButton();
+  if(controlHint)controlHint.textContent=wasMarked?'تمت الإزالة من المفضلة':'تمت الإضافة إلى المفضلة'
+ };
+ refreshFavoriteButton();
+ var qualityButton=document.getElementById('player-quality');
+ if(qualityButton)qualityButton.onclick=function(){
+  var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
+  if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو؛ لا توجد دقات متعددة قابلة للاختيار.');return}
+  var current=Number(engine.currentLevel),next=current<0?0:current+1;
+  if(next>=levels.length)next=-1;
+  try{engine.currentLevel=next}catch(err){playerStatus('تعذر تغيير جودة هذا المصدر.');return}
+  var level=next>=0?levels[next]:null,quality=next===-1?'جودة تلقائية':('جودة '+(level.height?level.height+'p':'المستوى '+(next+1)));
+  playerStatus(quality);qualityButton.title=quality
+ };
+ var infoToggle=document.getElementById('player-info-toggle');
+ if(infoToggle)infoToggle.onclick=function(){
+  var panel=document.getElementById('player-info-panel');if(!panel)return;
+  panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
+ };
+ function renderPlayerHealth(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  var box=document.getElementById('player-health-panel');
+  if(!box||box.hidden)return;
+  var st=state.stats,now=Date.now();
+  var startup=st.firstFrameAt?Math.max(0,st.firstFrameAt-st.openedAt):null;
+  var buffering=(st.bufferMs||0)+(st.bufferSince?Math.max(0,now-st.bufferSince):0);
+  var modes={fullvod:'فيلم كامل قابل للتقديم',direct:'MP4 أصلي',vodhls:'HLS مؤقت',
+   hls:'بث مباشر',mpegts:'MPEG-TS'};
+  var mode=modes[state.mode]||'جار تغيير المحرك',pending=state.pendingSeek;
+  var liveVideoMode=isLive&&S.play&&S.play.video===video?S.play.videoMode:'';
+  var videoPath=isLive?(liveVideoMode==='source_copy'?'أصلي دون إعادة ترميز':liveVideoMode==='ultra_transcode'?'تحويل 4K تجريبي':liveVideoMode==='compatibility_transcode'?'توافق مع إعادة ترميز':'جار تحديد المسار'):'غير مطبق';
+  var width=Math.max(0,Number(video.videoWidth)||0),height=Math.max(0,Number(video.videoHeight)||0);
+  var screenQuality=width&&height?(width+'×'+height+' (دقة الفيديو المعروضة)'):'بانتظار بيانات الدقة';
+  var sourceQuality=isLive&&S.play&&S.play.video===video?S.play.sourceDimensions||'غير محدد':'غير مطبق';
+  var frames=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
+  var dropped=frames&&Number.isFinite(frames.droppedVideoFrames)?frames.droppedVideoFrames:null;
+  var droppedPct=dropped!==null&&frames&&Number(frames.totalVideoFrames)>0?
+   Math.min(100,100*dropped/Number(frames.totalVideoFrames)).toFixed(2)+'٪':null;
+  var estimate=S.play&&S.play.video===video&&S.play.engine?Number(S.play.engine.bandwidthEstimate)||0:0;
+  var bitrate=estimate>100000&&estimate<1e10?(estimate/1000000).toFixed(1)+' Mbps':'غير متوفر';
+  var liveRecord=isLive&&S.play&&S.play.video===video?S.play:null;
+  var recentSegment=liveRecord&&liveRecord.engine?
+   (liveRecord.lastFragmentAt?Math.round((now-liveRecord.lastFragmentAt)/1000)+' ثانية':'بانتظار أول مقطع'):
+   'غير متاح بالمشغل الأصلي';
+  var lastPresented=liveRecord&&liveRecord.framePresentationObserved?
+   Math.round((now-liveRecord.lastPresentedFrameAt)/1000)+' ثانية':
+   'غير متاح على هذا الجهاز';
+  var uptime=formatTime(Math.max(0,(now-st.openedAt)/1000));
+  var status4k=height>=4300&&width>=7600?'8K معروض فعليًا':height>=2100&&width>=3800?'4K معروض فعليًا':
+   'الدقة تعتمد على المصدر والجهاز';
+  var metrics=[
+   ['الصورة الفعلية',screenQuality],
+   ['دقة المصدر',sourceQuality],
+   ['مسار الصورة',videoPath],
+   ['زمن تشغيل الجلسة',uptime],
+   ['انتظارات التخزين',(st.bufferEvents||0)+' مرة / '+Math.round(buffering/1000)+' ثانية'],
+   ['إطارات ساقطة',dropped===null?'غير متاح':dropped+(droppedPct?' / '+droppedPct:'')],
+   ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
+   ['سرعة شبكة مقدّرة',bitrate],
+   ['آخر مقطع HLS',recentSegment],
+   ['آخر إطار معروض',lastPresented],
+   ['بدء الصورة',startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية'],
+   ['أخطاء المشغل',String(st.errors||0)],
+   ['استعادات تلقائية',String(st.recoveries||0)]
+  ];
+  box.innerHTML='<div class="playback-health-head"><strong>مراقبة جودة BLOFY المباشرة</strong>'+
+   '<small>'+esc(status4k)+' • قياسات حقيقية وليست اسم القناة</small></div>'+
+   '<div class="playback-health-grid">'+metrics.map(function(m){
+    return '<div class="playback-health-metric"><span>'+esc(m[0])+'</span><strong>'+esc(m[1])+'</strong></div>'
+   }).join('')+'</div>'+
+   (!isLive?'<p class="playback-health-note">التقديم: '+(st.seekReady||0)+' من '+(st.seekAttempts||0)+
+   ' • مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+'</p>':'')+
+   (pending?'<p class="playback-health-note">جار الوصول إلى '+esc(formatTime(pending.target))+'</p>':'');
+ }
+ // A redacted diagnostic snapshot that never includes stream URLs, host,
+ // account identifiers, codes or auth tokens. Useful for remote TV screenshots.
+ function playbackDiagnosticSnapshot(){
+  var now=Date.now(),r=S.play&&S.play.video===video?S.play:null,st=state.stats;
+  var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
+  var frames=null,drops=null;
+  try{
+   var q=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality();
+   if(q){frames=Number(q.totalVideoFrames);drops=Number(q.droppedVideoFrames)}
+  }catch(e){}
+  var ms=r&&r.lastFragmentAt?Math.max(0,now-r.lastFragmentAt):null;
+  var idle=r&&r.lastProgressAt?Math.max(0,now-r.lastProgressAt):null;
+  var assessment='توجد بيانات غير كافية لتحديد سبب الانقطاع.';
+  if(r&&idle!==null&&idle>=8000){
+   if(r.engine&&ms!==null&&ms<6000)assessment='مقاطع البث تصل لكن الصورة لا تتقدم؛ افحص فك الترميز في الجهاز.';
+   else if(r.engine&&ms!==null&&ms>=10000)assessment='مقاطع البث توقفت مؤخرًا؛ افحص المصدر أو الشبكة.';
+   else assessment='توقف تقدم الصورة؛ فحص المحرك أو المصدر مطلوب.';
+  }else if(r&&idle!==null)assessment='الصورة تتقدم مؤخرًا؛ لا يوجد تجمد مثبت الآن.';
+  var mode=r&&r.videoMode==='source_copy'?'أصلي دون إعادة ضغط':r&&r.videoMode==='ultra_transcode'?'تحويل 4K تجريبي':
+   r&&r.videoMode==='compatibility_transcode'?'وضع توافق':'غير معروف';
+  return [
+   'BLOFY STREAM • تقرير فحص آمن',
+   'وقت التقرير: '+new Date(now).toISOString(),
+   'مدة الجلسة: '+formatTime((now-st.openedAt)/1000),
+   'دقة الفيديو المعروضة: '+(w&&h?w+'×'+h:'غير متوفرة'),
+   'دقة المصدر: '+(r&&r.sourceDimensions||'غير متوفرة'),
+   'المعالجة: '+mode,
+   'محرك التشغيل: '+(r&&r.engine?'HLS.js':'تشغيل الجهاز الأصلي'),
+   'آخر مقطع HLS: '+(r&&r.engine?(ms===null?'غير مرصود':Math.round(ms/1000)+' ثانية'):'غير متوفر في المحرك الأصلي'),
+   'آخر تقدم للصورة: '+(idle===null?'غير مرصود':Math.round(idle/1000)+' ثانية'),
+   'آخر إطار معروض على الشاشة: '+(r&&r.framePresentationObserved?Math.round((now-r.lastPresentedFrameAt)/1000)+' ثانية':'غير مدعوم'),
+   'عدد الإطارات المعروضة المرصودة: '+(r&&r.presentedFrames||0),
+   'الإطارات: '+(Number.isFinite(frames)?frames:'غير متوفرة')+
+    ' • الساقطة: '+(Number.isFinite(drops)?drops:'غير متوفرة'),
+   'إعادة الاتصال: '+(st.recoveries||0)+' • أخطاء الفيديو: '+(st.errors||0),
+   'انتظار التخزين: '+(st.bufferEvents||0)+' مرة',
+   'آخر أحداث البث (وقت UTC):'+(st.liveEvents&&st.liveEvents.length?
+    st.liveEvents.slice(-6).map(function(item){
+     var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
+      picture_freeze:'تجمد الصورة',reconnect:'استعادة الاتصال',decoder_error:'فك الترميز',
+      source_error:'المصدر',encoder_capacity:'ازدحام المعالجة',
+      live_edge_resync:'العودة للبث المباشر',live_catchup:'تسريع اللحاق بالبث',channel_switch:'تغيير القناة'};
+     return ' '+new Date(item.at).toISOString().slice(11,19)+' '+(labels[item.code]||'تشغيل')
+    }).join(' ؛ '):' لا توجد أحداث مسجلة'),
+   'النتيجة الأولية: '+assessment,
+   'ملاحظة: التقرير يستبعد بيانات الاشتراك والروابط؛ النتيجة تقديرية وليست تشخيصًا قطعيًا.'
+  ].join(String.fromCharCode(10))
+ }
+ var diagnosticToggle=document.getElementById('player-diagnostic-toggle');
+ if(diagnosticToggle)diagnosticToggle.onclick=function(){
+  var panel=document.getElementById('player-diagnostic-panel');if(!panel)return;
+  panel.hidden=!panel.hidden;
+  diagnosticToggle.setAttribute('aria-expanded',String(!panel.hidden));
+  if(!panel.hidden){
+   panel.textContent=playbackDiagnosticSnapshot();
+   root.classList.remove('controls-hidden')
+  }
+ };
+ var healthToggle=document.getElementById('player-health-toggle');
+ var healthShortcut=document.getElementById('player-health-shortcut');
+ if(healthShortcut)healthShortcut.onclick=function(){
+  if(healthToggle)healthToggle.click();
+  root.classList.remove('controls-hidden');
+ };
+ if(healthToggle)healthToggle.onclick=function(){
+  var box=document.getElementById('player-health-panel');if(!box)return;
+  box.hidden=!box.hidden;
+  this.setAttribute('aria-expanded',String(!box.hidden));
+  if(state.healthTimer){clearInterval(state.healthTimer);state.healthTimer=null}
+  if(!box.hidden){
+   renderPlayerHealth();
+   state.healthTimer=setInterval(renderPlayerHealth,1700)
+  }
+ };
+ function onBufferEvent(){
+  var stats=state.stats;
+  if(S.route!=='player'||S.playerView!==state||video.paused||!stats.firstFrameAt)return;
+  if(!stats.bufferSince){stats.bufferEvents++;stats.bufferSince=Date.now()}
+ }
+ function stopSeekFrameWatch(){
+  if(state.seekFrameId!==null&&state.seekFrameId!==undefined&&
+   typeof video.cancelVideoFrameCallback==='function'){
+   try{video.cancelVideoFrameCallback(state.seekFrameId)}catch(e){}
+  }
+  state.seekFrameId=null
+ }
+ function watchSeekFrame(pending){
+  if(!pending||!pending.requireDecodedFrame||state.pendingSeek!==pending||
+   typeof video.requestVideoFrameCallback!=='function')return;
+  try{
+   state.seekFrameId=video.requestVideoFrameCallback(function(now,frame){
+    state.seekFrameId=null;
+    if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
+    var frameTime=Number(frame&&frame.mediaTime);
+    var real=state.mode==='vodhls'?state.offset+frameTime:frameTime;
+    if(isFinite(frameTime)&&Math.abs(real-pending.target)<=8&&
+     video.readyState>=2&&!video.seeking){
+     pending.decodedFrame=true;confirmSeek();return
+    }
+    watchSeekFrame(pending)
+   })
+  }catch(e){
+   pending.requireDecodedFrame=false;confirmSeek()
+  }
+ }
+ function confirmSeek(){
+  var pending=state.pendingSeek;
+  if(!pending||S.route!=='player'||S.playerView!==state||video.readyState<2||video.seeking)return;
+  var now=Date.now(),actual=state.mode==='vodhls'?
+   state.offset+Math.max(0,Number(video.currentTime)||0):Math.max(0,Number(video.currentTime)||0);
+  if(Math.abs(actual-pending.target)>8)return;
+  // Some TV decoders update currentTime optimistically before the video
+  // actually jumps. Prefer the presented-frame clock where supported.
+  if(pending.requireDecodedFrame&&!pending.decodedFrame)return;
+  stopSeekFrameWatch();
+  if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
+  if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
+  if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
+  state.pendingSeek=null;
+  state.seekIncomplete=false;
+  state.stats.seekReady++;
+  if(pending.requireDecodedFrame&&pending.decodedFrame)state.stats.verifiedSeekFrames++;
+  state.stats.lastSeekMs=Math.max(0,now-pending.startedAt);
+  diagnose(kind,'vod_seek_ready',state.mode,0);
+  // A seek within an already-buffered range may emit "seeked" without a
+  // fresh "playing" event. Clear the progress overlay in either case.
+  var status=document.getElementById('player-status');
+  if(status&&status.className!=='player-error'&&
+   /التقديم|جار فتح المقطع|جار فتح الفيلم|جار تحميل الجزء المطلوب/.test(status.textContent||''))playerStatus('')
+ }
+ function startSeekCheck(target){
+  if(isLive)return;
+  var now=Date.now(),wasPending=!!state.pendingSeek;
+  if(!wasPending)state.stats.seekAttempts++;
+  if(state.seekWatchdog)clearTimeout(state.seekWatchdog);
+  if(state.seekLogTimer)clearTimeout(state.seekLogTimer);
+  stopSeekFrameWatch();
+  var canObserveFrames=typeof video.requestVideoFrameCallback==='function'&&!video.paused;
+  var pending={target:target,startedAt:now,logged:false,
+   requireDecodedFrame:canObserveFrames,decodedFrame:false};
+  state.pendingSeek=pending;
+  state.seekIncomplete=true;
+  watchSeekFrame(pending);
+  state.seekLogTimer=setTimeout(function(){
+   state.seekLogTimer=null;
+   if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
+   pending.logged=true;
+   diagnose(kind,'vod_seek_request',state.mode,0)
+  },320);
+  state.seekWatchdog=setTimeout(function(){
+   state.seekWatchdog=null;
+   if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
+   state.pendingSeek=null;
+   stopSeekFrameWatch();
+   state.stats.seekTimeouts++;
+   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
+   if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
+   diagnose(kind,'vod_seek_timeout',state.mode,0);
+   playerStatus('التقديم يستغرق وقتًا أطول من المتوقع. سيستمر المشغّل بالمحاولة، ويمكنك إعادة التشغيل إذا لم يتحرك الفيديو.')
+  },30000)
+ }
+ function onPlayingEvent(){
+  var stats=state.stats,now=Date.now();
+  if(!stats.firstFrameAt)stats.firstFrameAt=now;
+  if(stats.bufferSince){stats.bufferMs+=Math.max(0,now-stats.bufferSince);stats.bufferSince=0}
+  confirmSeek()
+ }
+ function onPauseEvent(){
+  var stats=state.stats;
+  if(stats.bufferSince){stats.bufferMs+=Math.max(0,Date.now()-stats.bufferSince);stats.bufferSince=0}
+ }
+ video.addEventListener('waiting',onBufferEvent);
+ video.addEventListener('stalled',onBufferEvent);
+ video.addEventListener('playing',onPlayingEvent);
+ video.addEventListener('seeked',confirmSeek);
+ video.addEventListener('canplay',confirmSeek);
+ video.addEventListener('loadeddata',confirmSeek);
+ video.addEventListener('timeupdate',confirmSeek);
+ video.addEventListener('pause',onPauseEvent);
+ video.addEventListener('error',function(){state.stats.errors++});
+ var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
+ function releaseWakeLock(){
+  var lock=state.wakeLock;state.wakeLock=null;
+  if(lock&&lock.release){try{var p=lock.release();if(p&&p.catch)p.catch(function(){})}catch(e){}}
+ }
+ function acquireWakeLock(){
+  if(!navigator.wakeLock||!navigator.wakeLock.request||document.hidden||video.paused||
+   S.route!=='player'||state.wakeLock||state.wakeLockPending)return;
+  state.wakeLockPending=true;
+  try{
+   var promise=navigator.wakeLock.request('screen');
+   if(promise&&promise.then)promise.then(function(lock){
+    state.wakeLockPending=false;
+    if(S.route==='player'&&S.playerView===state&&!video.paused&&!document.hidden)state.wakeLock=lock;
+    else if(lock&&lock.release){var p=lock.release();if(p&&p.catch)p.catch(function(){})}
+   }).catch(function(){state.wakeLockPending=false});
+   else state.wakeLockPending=false
+  }catch(e){state.wakeLockPending=false}
+ }
+ state.releaseWakeLock=releaseWakeLock;
+ state.acquireWakeLock=acquireWakeLock;
+ function revealControls(){
+  root.classList.remove('controls-hidden');
+  if(state.hudTimer)clearTimeout(state.hudTimer);
+  state.hudTimer=setTimeout(function(){
+   state.hudTimer=null;
+   if(S.route!=='player'||S.playerView!==state||!root.isConnected)return;
+   // The buffering notice lives outside the HUD; it remains readable while
+   // transport controls fade, including when decoder events are inconsistent.
+   var retry=document.getElementById('player-retry');
+   if(retry&&retry.style.display!=='none')return;
+   // Keep intentional menus visible until the viewer closes them.
+   var panels=['player-more-panel','player-info-panel','player-health-panel',
+    'player-diagnostic-panel','player-jump-panel','player-choice-panel','player-channel-panel'];
+   for(var i=0;i<panels.length;i++){
+    var open=document.getElementById(panels[i]);
+    if(open&&!open.hidden)return
+   }
+   // Remote controls retain focus after an OK/arrow press. Blurring a
+   // stale control allows the TV HUD to fade after inactivity, and arrows
+   // show/re-focus controls again without requiring a mouse.
+   var focused=document.activeElement;
+   if(focused&&hud.contains(focused)&&typeof focused.blur==='function')focused.blur();
+   root.classList.add('controls-hidden')
+  },3800)
+ }
+ state.revealControls=revealControls;
+ root.addEventListener('pointermove',revealControls,{passive:true});
+ root.addEventListener('pointerdown',revealControls,{passive:true});
+ root.addEventListener('keydown',revealControls);
+ root.addEventListener('focusin',revealControls);
+ video.addEventListener('click',revealControls);
+ function refreshVideoResolution(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
+  var el=document.getElementById('player-resolution');
+  if(!el)return;
+  if(!w||!h){el.hidden=true;el.textContent='';return}
+  var grade=h>=4300?'8K':h>=2100?'4K':h>=1400?'2K':h>=1000?'FHD':h>=690?'HD':'SD';
+  // These are actual decoded pixels, not guessed from the Xtream title.
+  var copyMode=!!(S.play&&S.play.video===video&&S.play.videoMode==='source_copy');
+  var src=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
+  var srcH=src?Number(src.split('x')[1])||0:0;
+  el.textContent='المعروض '+w+'×'+h+' • '+grade+
+   (src?' • المصدر '+src:(copyMode&&h<690?' • المصدر نفسه SD':''))+
+   (srcH>=690&&h<690?' • تحويل خفّض الدقة':'');
+  el.title='دقة الصورة التي يعرضها المتصفح، وليس جودة المصدر المعلنة';
+  el.hidden=false
+ }
+ video.addEventListener('loadedmetadata',refreshVideoResolution);
+ video.addEventListener('resize',refreshVideoResolution);
+ video.addEventListener('playing',refreshVideoResolution);
+ state.refreshVideoResolution=refreshVideoResolution;
+ function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
+ function totalDuration(){return playbackDuration(state)}
+ function nativeCanSeek(target){
+  var ranges=video.seekable;
+  if(!ranges||!ranges.length)return false;
+  for(var i=0;i<ranges.length;i++){
+   try{if(target>=ranges.start(i)-0.4&&target<=ranges.end(i)+0.4)return true}catch(e){}
+  }
+  return false
+ }
+ function verifyDirectSeek(target){
+  if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
+  state.directSeekVerify=setTimeout(function(){
+   state.directSeekVerify=null;
+   if(S.route!=='player'||state.mode!=='direct'||state.directFallback)return;
+   if(Math.abs(Math.max(0,Number(video.currentTime)||0)-target)>8){
+    state.resume=target;
+    state.requestedSeek=target;
+    playerStatus('لم يصل المشغّل الأصلي إلى الموضع المختار؛ جار استخدام مشغّل الفيديو الكامل…');
+    state.recoverDirect()
+   }
+  },4200)
+ }
+ function markReady(){
+  if(S.route!=='player')return;
+  var firstReady=!state.ready;state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
+  if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
+  if(firstReady)revealControls();
+  if(state.mode==='direct'){
+   var sourceLabel=document.getElementById('player-source-mode');
+   if(sourceLabel){sourceLabel.textContent='المصدر الأصلي • بدون تحويل';sourceLabel.hidden=false}
+  }
+  acquireWakeLock();
+  if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30){
+   // Checkpoints must not be clamped to a misleading 60-second native preview.
+   // Trust the real catalog runtime, or retain the exact saved seek target.
+   var duration=Number(state.duration)||0;
+   var checkpoint=duration>=120?Math.min(resume,Math.max(0,duration-5)):resume;
+   state.didResume=true;
+   if(nativeCanSeek(checkpoint)){
+    try{video.currentTime=checkpoint;verifyDirectSeek(checkpoint)}catch(e){state.requestedSeek=checkpoint;state.recoverDirect()}
+   }else{
+    // Never discard a saved checkpoint because a pseudo-live source advertises
+    // only the first minute as seekable.
+    state.resume=checkpoint;
+    state.requestedSeek=checkpoint;
+    state.recoverDirect()
+   }
+  }
+ }
+ function progress(){
+  if(S.route!=='player')return;
+  var pos=realPos(),duration=totalDuration();
+  if(!isLive){
+   var n=document.getElementById('now-time'),t=document.getElementById('total-time'),seek=document.getElementById('seek');
+   if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'المدة غير متوفرة';
+   if(seek){seek.disabled=!(duration>0&&isFinite(duration));
+    if(document.activeElement!==seek&&duration>0&&isFinite(duration))seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
+   // Seek-timeout can clear pendingSeek while the browser still displays
+   // the desired time rather than decoded frames. Do not treat that as watched.
+   if(!state.pendingSeek&&!state.seekDebounce&&!state.seekIncomplete&&
+    Date.now()-state.lastSaved>5000&&state.ready){
+    saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()
+   }
+  }
+ }
+ state.onDuration=progress;
+ function releaseDirectSource(){
+  if(isLive||state.mode!=='direct')return;
+  // Some Xtream accounts permit a single active source connection.
+  // The old HTML5 MP4 fetch otherwise continues while the HLS worker opens
+  // the same movie, causing the provider to reset the new connection.
+  state.mode='switching';state.ready=false;
+  for(var i=0;i<4;i++){
+   var key=['directTimer','directSeekCheck','directSeekVerify','directStartupTimer'][i];
+   if(state[key]){clearTimeout(state[key]);state[key]=null}
+  }
+  video.onplaying=null;video.onwaiting=null;video.onstalled=null;
+  video.onerror=null;video.onloadedmetadata=null;video.onended=null;
+  try{video.pause();video.removeAttribute('src');video.load()}catch(e){}
+ }
+ function startVod(at,metadataGeneration){
+  // Late Xtream info requests must not reopen an older seek position.
+  // Only the metadata request that launched the current fallback may keep
+  // its generation; all other restarts invalidate pending metadata.
+  if(metadataGeneration===undefined||(metadataGeneration!==state.mediaGeneration)){
+   state.mediaGeneration=(state.mediaGeneration||0)+1
+  }
+  releaseDirectSource();
+  if(state.duration>=120&&state.duration<=21600){
+   state.resume=Math.max(0,Math.round(at||0));
+   playFullVod(video,kind,id,ext,state.track,state.duration,state,markReady)
+  }else{
+   playVodSegments(video,kind,id,ext,state.track,at,state,markReady)
+  }
+ }
+ function startWithMetadata(at){
+  if(state.duration>=120||kind==='live'){startVod(at);return}
+  releaseDirectSource();
+  var requestGeneration=state.mediaGeneration=(state.mediaGeneration||0)+1;
+  var settled=false;
+  function launch(){
+   if(settled||S.route!=='player'||S.playerView!==state||requestGeneration!==state.mediaGeneration)return;
+   settled=true;
+   startVod(at,requestGeneration)
+  }
+  var timeout=setTimeout(launch,4200);
+  var episodeParent=kind==='series'&&(
+   (prior&&prior.seriesId)||
+   (S.item&&S.item.kind==='series'&&S.episodes&&parseEpisodes(S.episodes).some(function(ep){return String(ep.id)===String(id)})?S.item.id:'')
+  );
+  var endpoint=kind==='movie'?'get_vod_info&vod_id='+enc(id):
+   (kind==='series'&&episodeParent?'get_series_info&series_id='+enc(episodeParent):'');
+  if(!endpoint){clearTimeout(timeout);setTimeout(launch,0);return}
+  playerStatus('جار قراءة معلومات الفيلم لتفعيل التقديم والترجيع…');
+  api('GET','/api/catalog?action='+endpoint,null,function(st,result){
+   if(S.route!=='player'||S.playerView!==state||requestGeneration!==state.mediaGeneration)return;
+   var alreadyStarted=settled;
+   clearTimeout(timeout);
+   if(st===200&&result){
+    if(kind==='movie'){
+     if(S.item&&S.item.kind==='movie'&&S.item.id===id)S.item.info=result;
+     var info=result.info||{},data=result.movie_data||{};
+     var opts=[[info.duration_secs,'seconds'],[info.duration,'duration'],
+      [data.duration_secs,'seconds'],[data.duration,'duration'],
+      [result.duration_secs,'seconds'],[result.duration,'duration']];
+     for(var i=0;i<opts.length;i++){var d=durationSeconds(opts[i][0],opts[i][1]);if(d>=120){state.duration=d;break}}
+    }else if(kind==='series'){
+     S.episodes=result;
+     var eps=parseEpisodes(result);
+     for(var j=0;j<eps.length;j++)if(String(eps[j].id)===String(id)){
+      var episode=eps[j],extra=episode.info||{},options=[
+       [extra.duration_secs,'seconds'],[episode.duration_secs,'seconds'],
+       [extra.duration,'duration'],[episode.duration,'duration']];
+      for(var k=0;k<options.length;k++){var d2=durationSeconds(options[k][0],options[k][1]);if(d2>=120){state.duration=d2;break}}
+      break
+     }
+    }
+   }
+   // Metadata may arrive after the short startup timeout.
+   // Upgrade the still-live EVENT fallback to real VOD at the same movie time.
+   if(alreadyStarted){
+    if(state.duration>=120&&state.duration<=21600&&state.mode==='vodhls')startVod(realPos());
+    return
+   }
+   launch()
+  })
+ }
+ function seekTo(raw){
+  if(isLive)return;
+  state.completed=false; // Explicitly scrubbing after finish starts a rewatch.
+  if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
+  state.recoveries=0;state.recoveryWindow=0;
+  var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
+  if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
+  state.lastSeekTarget=target;state.lastSeekAt=Date.now();
+  if(target<5){
+   // Explicitly scrubbing back to the beginning is different from a
+   // newly opened player briefly reporting currentTime=0.
+   delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch)
+  }
+  startSeekCheck(target);
+  if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
+   try{
+    if(state.mode==='direct'){resume=target;state.resume=target;state.requestedSeek=target}
+    if(state.mode==='fullvod')state.resume=target;
+    video.currentTime=target;
+    if(state.mode==='direct')verifyDirectSeek(target);
+    progress();return target
+   }catch(e){}
+  }
+  if(state.mode==='direct'){
+   state.directFallback=true;
+   // The user may deliberately rewind. Never prefer an earlier, larger
+   // checkpoint or the stale MP4 time when switching to VOD.
+   state.requestedSeek=target;state.resume=target;resume=target;
+   // A nonseekable MP4 reports untrusted duration. Prefer Xtream metadata.
+   playerStatus('هذا المصدر لا يسمح بالتقديم إلى '+formatTime(target)+' مباشرة؛ جار فتح مشغّل الأفلام…')
+  }
+  // Resolve Xtream metadata before converting MP4 to the temporary EVENT
+  // playlist. Previously direct-MP4 failures bypassed metadata entirely,
+  // leaving episodes looking like one-minute live television.
+  if(state.ready&&target>=5)saveResume(kind,id,checkpointPosition(state),duration,true);
+  if(state.mode==='direct'&&!(state.duration>=120))startWithMetadata(target);
+  else startVod(target);
+  playerStatus('جار فتح المقطع عند '+formatTime(target)+'…');
+  return target
+ }
+ state.seekTo=seekTo;
+ var jumpToggle=document.getElementById('player-jump-toggle');
+ var jumpPanel=document.getElementById('player-jump-panel');
+ function closeJumpPanel(){
+  if(!jumpPanel)return;
+  jumpPanel.hidden=true;
+  if(jumpToggle)jumpToggle.setAttribute('aria-expanded','false')
+ }
+ if(jumpToggle&&jumpPanel){
+  jumpToggle.onclick=function(){
+   jumpPanel.hidden=!jumpPanel.hidden;
+   jumpToggle.setAttribute('aria-expanded',String(!jumpPanel.hidden));
+   if(!jumpPanel.hidden){
+    var input=document.getElementById('player-jump-minute');
+    if(input){input.value=String(Math.max(0,Math.min(359,Math.floor(realPos()/60))));input.focus()}
+   }
+  };
+  var cancel=document.getElementById('player-jump-cancel');
+  if(cancel)cancel.onclick=function(){closeJumpPanel();jumpToggle.focus()};
+  jumpPanel.onsubmit=function(event){
+   event.preventDefault();
+   var input=document.getElementById('player-jump-minute');
+   var text=input?String(input.value||'').trim():'',minute=Number(text);
+   if(!/^\d{1,3}$/.test(text)||!Number.isInteger(minute)||minute<0||minute>359){
+    playerStatus('أدخل دقيقة صحيحة بين 0 و359.');if(input)input.focus();return
+   }
+   closeJumpPanel();jumpToggle.focus();
+   seekTo(minute*60)
+  }
+ }
+ state.seekBy=function(delta){
+  // TV key-repeat sends many events in one second. Show immediate preview
+  // but issue only ONE network seek after the remote stops repeating,
+  // otherwise each press kills and restarts FFmpeg at the upstream source.
+  var recent=Date.now()-(state.lastSeekAt||0)<4500&&
+   state.lastSeekTarget!==null&&state.lastSeekTarget!==undefined&&isFinite(state.lastSeekTarget);
+  var target=Math.max(0,Math.round((recent?state.lastSeekTarget:realPos())+delta));
+  var duration=totalDuration();
+  if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
+  state.lastSeekTarget=target;state.lastSeekAt=Date.now();
+  if(state.seekDebounce)clearTimeout(state.seekDebounce);
+  var n=document.getElementById('now-time'),bar=document.getElementById('seek');
+  if(n)n.textContent=formatTime(target);
+  if(bar&&duration>0&&isFinite(duration))bar.value=String(Math.max(0,Math.min(1000,Math.round(target/duration*1000))));
+  playerStatus('التقديم إلى '+formatTime(target)+'…');
+  state.seekDebounce=setTimeout(function(){
+   state.seekDebounce=null;
+   if(S.route==='player'&&S.playerView===state)seekTo(target)
+  },360);
+  return target
+ };
+ state.toggle=function(){
+  if(video.paused){
+   state.userPaused=false;
+   var p=video.play();if(p&&p.catch)p.catch(function(){})
+  }else{
+   state.userPaused=true;video.pause()
+  }
+ };
+ state.recoverDirect=function(){
+  if(state.mode!=='direct'||S.route!=='player'||state.directFallback)return;
+  state.directFallback=true;
+  if(state.directSeekCheck){clearTimeout(state.directSeekCheck);state.directSeekCheck=null}
+  if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
+  if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  // A user-specified seek is authoritative, including 0 and backward seeks.
+  // A plain playback stall without a requested seek resumes at the furthest
+  // reliable checkpoint as before.
+  var position=state.requestedSeek!==undefined&&state.requestedSeek!==null?
+   Math.max(0,Number(state.requestedSeek)||0):
+   Math.max(resume,state.resume||0,video.currentTime||0);
+  state.requestedSeek=null;
+  playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
+  if(state.duration>=120)startVod(position);
+  else startWithMetadata(position)
+ };
+ function startDirect(){
+  state.mode='direct';state.offset=0;state.didResume=false;state.ready=false;
+  var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='MP4 • جار فحص إمكانية التقديم';
+  if(state.directStartupTimer)clearTimeout(state.directStartupTimer);
+  state.directStartupTimer=setTimeout(function(){
+   state.directStartupTimer=null;
+   if(S.route!=='player'||S.playerView!==state||state.mode!=='direct'||state.directFallback||state.ready)return;
+   if(video.paused){
+    playerStatus('اضغط تشغيل لبدء الفيلم. إذا استمر التعليق استخدم إعادة المحاولة.');
+    return
+   }
+   playerStatus('تأخر فتح الفيديو الأصلي؛ جار استخدام مشغّل الأفلام البديل…');
+   state.recoverDirect()
+  },18000);
+  video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
+  try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
+ }
+ video.onloadedmetadata=function(){
+  if(state.mode!=='direct')return;
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  var observed=Number(video.duration);
+  // Retain the browser estimate only as a hint. Never override the verified
+  // catalog duration unless the source really exposes seekable byte ranges.
+  if(isFinite(observed)&&observed>=120&&observed<=21600)state.directDurationHint=Math.round(observed);
+  progress();
+  // HTML5 can decode MP4 yet have NO seekable byte ranges: in that case the
+  // film looks like live streaming. Try the full VOD engine automatically.
+  if(state.directSeekCheck)clearTimeout(state.directSeekCheck);
+  var badge=document.getElementById('player-mode-badge');
+  var far=state.directDurationHint&&Math.max(0,Math.min(state.directDurationHint-10,state.directDurationHint*0.75));
+  if(badge&&far>0&&nativeCanSeek(far)){
+   badge.textContent='MP4 • قابل للتقديم';
+   if(!(state.duration>=120))state.duration=state.directDurationHint
+  }
+  state.directSeekCheck=setTimeout(function(){
+   state.directSeekCheck=null;
+   if(S.route!=='player'||state.mode!=='direct'||state.directFallback||isLive)return;
+   if(!(video.duration>120&&isFinite(video.duration))){
+    // A non-live movie/episode advertised as 60 seconds or Infinity is not
+    // a usable full-length VOD timeline. Resolve its actual Xtream runtime.
+    playerStatus('المدة الظاهرة غير كاملة؛ جار قراءة مدة الفيلم من المصدر…');
+    state.recoverDirect();return
+   }
+   // Some sources expose only a short, moving video range despite reporting
+   // a full movie duration. Test a distant timestamp, not just range count.
+   var probe=Math.max(video.duration*0.75,video.currentTime+120);
+   if(!nativeCanSeek(Math.min(probe,video.duration-10))){
+    playerStatus('المصدر يتيح دقائق محدودة فقط؛ جار التحويل إلى مشغّل الأفلام الكامل…');
+    state.recoverDirect()
+   }else if(state.directDurationHint>=120&&!(state.duration>=120)){
+    state.duration=state.directDurationHint;progress()
+   }
+  },3500)
+ };
+ video.onwaiting=video.onstalled=function(){
+  if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
+  playerStatus('جار تعبئة مخزن الفيديو…');
+  if(state.directTimer)clearTimeout(state.directTimer);
+  state.directTimer=setTimeout(function(){
+   state.directTimer=null;
+   if(state.mode==='direct'&&!video.paused&&video.readyState<3)state.recoverDirect()
+  },14000)
+ };
+ video.ontimeupdate=progress;video.onpause=function(){
+  releaseWakeLock();progress();
+  if(state.ready&&!isLive)saveResume(kind,id,checkpointPosition(state),totalDuration(),true)
+ };
+ video.onplaying=function(){
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  if(state.completed&&video.currentTime<5)state.completed=false;
+  markReady()
+ };
+ video.onended=function(){
+  if(state.mode!=='direct'||S.route!=='player'||S.playerView!==state)return;
+  var runtime=totalDuration(),observed=Math.max(0,Number(video.currentTime)||0);
+  if(vodEndedAtRealFinish(runtime,observed,!!state.seekIncomplete)){
+   finishResume(kind,id);
+   playerStatus('اكتملت المشاهدة')
+  }else{
+   // An early EOF from an incomplete MP4 range must use the fallback
+   // rather than making the title disappear from Continue Watching.
+   playerStatus('انتهى اتصال الفيلم قبل نهايته؛ جار استخدام مشغّل الفيديو البديل…');
+   state.requestedSeek=observed;state.resume=observed;
+   state.recoverDirect()
+  }
+ };
+ video.onerror=function(){
+  if(state.mode==='direct'&&!isLive)state.recoverDirect();
+  else playerStatus('تعذّر تشغيل هذا المصدر.',true)
+ };
+ document.getElementById('player-back').onclick=back;
+ document.getElementById('player-toggle').onclick=state.toggle;
+ document.getElementById('player-retry').onclick=function(){
+  diagnose(kind,'vod_retry',state.mode,0);
+  playerStatus('جار إعادة اتصال المشغّل…');
+  if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);
+  else startVod(Math.round(state.seekIncomplete&&state.lastSeekTarget!==undefined&&state.lastSeekTarget!==null?
+   state.lastSeekTarget:checkpointPosition(state)))
+ };
+ var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
+  if(state.seekDebounce){clearTimeout(state.seekDebounce);state.seekDebounce=null}
+  if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
+  if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
+  state.pendingSeek=null;stopSeekFrameWatch();state.seekIncomplete=false;state.completed=false;
+  state.lastSeekTarget=0;state.lastSeekAt=Date.now();state.requestedSeek=0;
+  delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;state.resume=0;
+  if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
+  else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
+  else{state.ready=false;startVod(0)}
+ };
+ // Android's audio, subtitles and quality controls open a choice list
+ // rather than silently cycling options or replacing their icon labels.
+ var choicePanel=document.createElement('section');
+ choicePanel.id='player-choice-panel';choicePanel.className='native-player-choice-panel';
+ choicePanel.hidden=true;choicePanel.setAttribute('role','dialog');choicePanel.setAttribute('aria-modal','true');
+ root.appendChild(choicePanel);
+ var choiceOrigin=null;
+ function closePlayerChoices(){
+  choicePanel.hidden=true;choicePanel.innerHTML='';
+  if(choiceOrigin&&choiceOrigin.isConnected)try{choiceOrigin.focus({preventScroll:true})}catch(err){choiceOrigin.focus()}
+ }
+ state.closePlayerChoices=closePlayerChoices;
+ function showPlayerChoices(heading,options,origin){
+  if(!options.length){playerStatus('المصدر الحالي لا يتيح خيارات '+heading+' إضافية.');return}
+  choiceOrigin=origin;
+  choicePanel.innerHTML='<div class="native-player-choice-card">'+
+   '<div class="native-player-choice-head"><strong>'+esc(heading)+'</strong><button type="button" id="player-choice-close" aria-label="إغلاق">✕</button></div>'+
+   '<div class="native-player-choice-items">'+options.map(function(option,index){
+    return '<button class="native-player-choice-item'+(option.selected?' selected':'')+'" type="button" data-choice-index="'+index+'">'+
+      (option.selected?'✓ ':'')+esc(option.name)+'</button>'
+   }).join('')+'</div></div>';
+  choicePanel.hidden=false;root.classList.remove('controls-hidden');
+  choicePanel.querySelector('#player-choice-close').onclick=closePlayerChoices;
+  Array.prototype.forEach.call(choicePanel.querySelectorAll('[data-choice-index]'),function(button){
+   button.onclick=function(){
+    var index=Number(button.getAttribute('data-choice-index')),option=options[index];
+    if(!option)return;
+    try{option.select()}catch(err){playerStatus('لم يتمكن المتصفح من تطبيق الخيار.')}
+    closePlayerChoices()
+   }
+  });
+  var chosen=choicePanel.querySelector('.native-player-choice-item.selected')||choicePanel.querySelector('.native-player-choice-item');
+  if(chosen)chosen.focus()
+ }
+ document.getElementById('player-audio').onclick=function(){
+  var engine=S.play&&S.play.engine,tracks=video.audioTracks,options=[];
+  if(tracks&&tracks.length>1){
+   for(var i=0;i<tracks.length;i++)(function(track,index){
+    options.push({name:track.label||track.language||('المسار الصوتي '+(index+1)),selected:!!track.enabled,
+     select:function(){for(var n=0;n<tracks.length;n++)tracks[n].enabled=n===index;playerStatus('تم اختيار المسار الصوتي '+(index+1))}})
+   })(tracks[i],i)
+  }else if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
+   var list=engine.audioTracks;
+   for(var j=0;j<list.length;j++)(function(track,index){
+    options.push({name:track.name||track.lang||('المسار الصوتي '+(index+1)),selected:engine.audioTrack===index,
+     select:function(){engine.audioTrack=index;playerStatus('تم اختيار المسار الصوتي '+(index+1))}})
+   })(list[j],j)
+  }
+  showPlayerChoices('المسارات الصوتية',options,this)
+ };
+ var subtitleButton=document.getElementById('player-subtitles');
+ if(subtitleButton)subtitleButton.onclick=function(){
+  var engine=S.play&&S.play.engine,list=[],native=video.textTracks;
+  if(native&&native.length){
+   for(var i=0;i<native.length;i++)if(native[i].kind==='subtitles'||native[i].kind==='captions')list.push(native[i]);
+  }
+  var options=[];
+  if(list.length){
+   options.push({name:'إيقاف الترجمة',selected:list.every(function(track){return track.mode!=='showing'}),
+    select:function(){for(var n=0;n<list.length;n++)list[n].mode='disabled';playerStatus('تم إيقاف الترجمة')}})
+   for(var j=0;j<list.length;j++)(function(track,index){
+    options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
+     select:function(){for(var n=0;n<list.length;n++)list[n].mode=n===index?'showing':'disabled';playerStatus('تم اختيار الترجمة')}})
+   })(list[j],j)
+  }else if(engine&&engine.subtitleTracks&&engine.subtitleTracks.length){
+   var subs=engine.subtitleTracks;
+   options.push({name:'إيقاف الترجمة',selected:engine.subtitleTrack===-1,
+    select:function(){engine.subtitleDisplay=false;engine.subtitleTrack=-1;playerStatus('تم إيقاف الترجمة')}})
+   for(var k=0;k<subs.length;k++)(function(track,index){
+    options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index,
+     select:function(){engine.subtitleDisplay=true;engine.subtitleTrack=index;playerStatus('تم اختيار الترجمة')}})
+   })(subs[k],k)
+  }
+  showPlayerChoices('الترجمة',options,this)
+ };
+ if(qualityButton)qualityButton.onclick=function(){
+  // The native-like TV quality panel can explicitly switch H.264 source-copy
+  // to the bounded compatible encoder when an older VIDAA decoder rejects it.
+  if(isLive&&state.setHlsCompatibility){
+   var modeKey='live:'+state.id+':ts:0';
+   var ultra=!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
+   var forced=ultra||!!(S.hlsForceCompatibility&&S.hlsForceCompatibility[modeKey]);
+   var source=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
+   var sourceH=source?Number(source.split('x')[1])||0:0;
+   var choices=[
+    {name:'جودة المصدر الأصلية • 4K/8K إذا توفرت ودعم الجهاز',selected:!forced,
+     select:function(){state.setHlsCompatibility(false)}},
+    {name:'متوافق مع التلفزيون • حتى 1080p دون تكبير الصورة',selected:forced&&!ultra,
+     select:function(){state.setHlsCompatibility(true)}}
+   ];
+   if(sourceH>=2100){
+    choices.push({name:'تجربة 4K • تحويل حتى 2160p (محرك واحد، قد يكون أبطأ)',selected:ultra,
+     select:function(){state.setHlsCompatibility(true,true)}})
+   }
+   showPlayerChoices('جودة تشغيل البث • المصدر '+(source||'غير محدد'),choices,this);
+   return
+  }
+  var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
+  if(!engine||!levels.length){
+   var width=Number(video.videoWidth)||0,height=Number(video.videoHeight)||0;
+   playerStatus('دقة الفيديو المعروضة: '+(width&&height?width+'×'+height:'بانتظار بيانات المصدر')+'؛ لا تتوفر دقات إضافية للاختيار لهذا التشغيل.');return
+  }
+  var options=[{name:'تلقائي',selected:engine.autoLevelEnabled!==false,
+   select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
+  for(var i=0;i<levels.length;i++)(function(level,index){
+   var name=level.height?level.height+'p':('الجودة '+(index+1));
+   options.push({name:name,selected:engine.autoLevelEnabled===false&&engine.currentLevel===index,
+    select:function(){engine.currentLevel=index;playerStatus('جودة '+name)}})
+  })(levels[i],i);
+  showPlayerChoices('جودة الفيديو',options,this)
+ };
+ var speeds=[1,1.25,1.5,2,0.75],speedBtn=document.getElementById('player-speed');
+ if(isLive){
+  // Broadcast must stay at 1.00x: a TV remote speed toggle would distort
+  // a commentator's voice after several minutes of viewing.
+  if(speedBtn){speedBtn.hidden=true;speedBtn.disabled=true}
+  video.addEventListener('ratechange',function(){
+   if(S.route==='player'&&S.playerView===state&&Math.abs(video.playbackRate-1)>0.001){
+    video.defaultPlaybackRate=1;video.playbackRate=1
+   }
+  });
+ }else if(speedBtn)speedBtn.onclick=function(){
+  var idx=speeds.indexOf(video.playbackRate),next=speeds[(idx+1)%speeds.length];
+  video.playbackRate=next;this.textContent='السرعة '+next+'×'
+ };
+
+ // VIDAA packaged web apps run chromeless. For the TV browser use Fullscreen
+ // API when allowed, and an honest viewport-only fallback when blocked.
+ var fullButton=document.getElementById('player-fullscreen');
+ function nativeFullOwner(){return document.fullscreenElement||document.webkitFullscreenElement||
+  document.mozFullScreenElement||document.msFullscreenElement||null}
+ function isNativeFull(){return nativeFullOwner()===root||nativeFullOwner()===video||!!video.webkitDisplayingFullscreen}
+ function isFull(){return isNativeFull()||root.classList.contains('tv-immersive')}
+ function updateFullButton(){
+  if(!fullButton||!fullButton.isConnected)return;
+  var on=isFull();
+  fullButton.textContent=on?'⤢ تصغير':'⛶ ملء الشاشة';
+  fullButton.setAttribute('aria-label',on?'الخروج من ملء الشاشة':'ملء الشاشة');
+  fullButton.setAttribute('aria-pressed',String(on));
+  fullButton.title=on?'الخروج من ملء الشاشة':'ملء الشاشة'
+ }
+ function enterViewportMode(){
+  if(!root.isConnected||S.route!=='player')return;
+  root.classList.add('tv-immersive');
+  document.documentElement.classList.add('blofy-tv-immersive');
+  document.body.classList.add('blofy-tv-immersive');
+  updateFullButton();
+  var hint=document.getElementById('player-control-hint');
+  if(hint)hint.textContent='وضع ملء الصفحة • قد يُظهر متصفح التلفزيون شريط النظام'
+ }
+ function exitFull(){
+  var owner=nativeFullOwner(),exit=document.exitFullscreen||document.webkitExitFullscreen||
+    document.mozCancelFullScreen||document.msExitFullscreen;
+  if(owner&&exit){try{var p=exit.call(document);if(p&&p.catch)p.catch(function(){})}catch(err){}}
+  if(video.webkitDisplayingFullscreen&&video.webkitExitFullscreen){try{video.webkitExitFullscreen()}catch(err){}}
+  root.classList.remove('tv-immersive');
+  document.documentElement.classList.remove('blofy-tv-immersive');
+  document.body.classList.remove('blofy-tv-immersive');
+  updateFullButton()
+ }
+ function toggleFull(){
+  if(isFull()){exitFull();return}
+  var request=root.requestFullscreen||root.webkitRequestFullscreen||root.mozRequestFullScreen||root.msRequestFullscreen;
+  if(request){
+   try{
+    var p=request.call(root);
+    if(p&&p.then){
+     p.then(function(){updateFullButton()},function(){
+      if(/iPhone|iPad|iPod/i.test(navigator.userAgent||'')&&video.webkitEnterFullscreen){
+       try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}
+      }
+      enterViewportMode()
+     })
+    }else setTimeout(function(){
+     if(!isNativeFull()&&S.route==='player')enterViewportMode();
+     else updateFullButton()
+    },600);
+    return
+   }catch(err){}
+  }
+  if(/iPhone|iPad|iPod/i.test(navigator.userAgent||'')&&video.webkitEnterFullscreen){
+   try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}
+  }
+  enterViewportMode()
+ }
+ state.isFullscreen=isFull;state.exitFullscreen=exitFull;state.toggleFullscreen=toggleFull;
+ if(fullButton)fullButton.onclick=toggleFull;
+ function fullscreenChanged(){updateFullButton()}
+ var events=['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'];
+ events.forEach(function(e){document.addEventListener(e,fullscreenChanged)});
+ video.addEventListener('webkitbeginfullscreen',fullscreenChanged);
+ video.addEventListener('webkitendfullscreen',fullscreenChanged);
+ state.cleanupFullscreen=function(){
+  events.forEach(function(e){document.removeEventListener(e,fullscreenChanged)});
+  video.removeEventListener('webkitbeginfullscreen',fullscreenChanged);
+  video.removeEventListener('webkitendfullscreen',fullscreenChanged);
+  exitFull()
+ };
+ updateFullButton();
+ var back30=document.getElementById('player-skip-back'),forward30=document.getElementById('player-skip-forward');
+ if(back30)back30.onclick=function(){state.seekBy(-10)};
+ if(forward30)forward30.onclick=function(){state.seekBy(10)};
+ var forward5=document.getElementById('player-skip-forward5');
+ if(forward5)forward5.onclick=function(){state.seekBy(300)};
+ function jumpEpisode(targetEpisode){
+  if(!targetEpisode||S.route!=='player')return;
+  if(state.ready)saveResume(kind,id,checkpointPosition(state),totalDuration(),true);
+  var previous=S.previousBeforePlayer||{route:'episodes',kind:'series',id:id};
+  recordPlaybackQuality(state);
+  cleanupPlayer();S.playerView=null;S.route='episodes';
+  var selectedId=String(targetEpisode.id),checkpoint=getResume('series',selectedId);
+  openPlayer('series',selectedId,targetEpisode.container_extension||'mp4',
+   targetEpisode.title||'الحلقة '+(targetEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0,true);
+  S.previousBeforePlayer=previous;
+ }
+ var nextBtn=document.getElementById('player-next-episode'),previousBtn=document.getElementById('player-previous-episode');
+ if(nextBtn&&nextEpisode)nextBtn.onclick=function(){jumpEpisode(nextEpisode)};
+ if(previousBtn&&previousEpisode)previousBtn.onclick=function(){jumpEpisode(previousEpisode)};
+ var seek=document.getElementById('seek');
+ if(seek)seek.onchange=function(){
+  var duration=totalDuration(),target=Math.round(duration*Number(this.value)/1000);
+  if(!(duration>0))return;
+  seekTo(target)
+ };
+ // Register the player before starting its media engine. The native-like
+ // quality dialog and first-frame callbacks need state during startup.
+ S.playerView=state;
+ if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
+ else if(ext==='mp4'){startDirect()}
+ else{startWithMetadata(Math.round(resume))}
+ if(isLive){
+  function liveItems(){
+   var listing=S.loaded[keyOf('live',S.cat.live)]||S.loaded['live:all'];
+   return listing&&Array.isArray(listing.items)?listing.items:[]
+  }
+  function selectFullscreenChannel(requestedId){
+   if(S.route!=='player'||S.playerView!==state)return;
+   var items=liveItems(),next=items.find(function(item){return itemId(item,'live')===String(requestedId)});
+   if(!next){playerStatus('هذه القناة ليست في القائمة المحمّلة؛ ارجع للقائمة لعرض المزيد.');return}
+   var newId=itemId(next,'live');
+   if(!newId||newId===String(id))return;
+   id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
+   if(state.stats){state.stats.liveEvents=[];recordLiveIncident('channel_switch')}
+   if(state.refreshFavoriteButton)state.refreshFavoriteButton();
+   var qualityPath=document.getElementById('player-source-mode');if(qualityPath)qualityPath.hidden=true;
+   var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
+   if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
+   var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
+   playerStatus('جار التبديل إلى '+state.name+'…');
+   if(state.channelSwitchTimer)clearTimeout(state.channelSwitchTimer);
+   state.channelSwitchTimer=setTimeout(function(){
+    state.channelSwitchTimer=null;
+    if(S.route!=='player'||S.playerView!==state)return;
+    playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);
+    if(state.refreshLiveGuide)state.refreshLiveGuide()
+   },260)
+  }
+  function switchChannel(step){
+   var items=liveItems(),current=items.findIndex(function(item){return itemId(item,'live')===String(id)});
+   if(current<0||!items.length){playerStatus('افتح قائمة القنوات أولًا ثم حاول التبديل.');return}
+   selectFullscreenChannel(itemId(items[(current+step+items.length)%items.length],'live'))
+  }
+  function closeLiveChannels(){
+   var panel=document.getElementById('player-channel-panel');
+   if(panel)panel.hidden=true;
+   var toggle=document.getElementById('player-channels-toggle');
+   if(toggle)toggle.setAttribute('aria-expanded','false')
+  }
+  function openLiveChannels(){
+   if(S.route!=='player'||S.playerView!==state)return;
+   var panel=document.getElementById('player-channel-panel'),items=liveItems();
+   if(!panel)return;
+   var chosen=String(id);
+   panel.innerHTML='<div class="native-channel-heading"><strong>القنوات</strong>'+
+    '<button class="native-channel-close" id="player-channel-close" type="button">✕ إغلاق</button></div>'+
+    '<div class="native-channel-items">'+(items.length?items.slice(0,150).map(function(ch){
+     var cid=itemId(ch,'live'),selected=cid===chosen;
+     return '<button class="native-channel-item'+(selected?' selected':'')+'" data-player-channel="'+esc(cid)+'">'+
+      (art(ch)?safeImg(ch,'native-channel-art'):'<span class="native-channel-art native-channel-empty">◉</span>')+
+      '<span>'+esc(title(ch))+'</span>'+(selected?'<span class="native-channel-now">يعمل الآن</span>':'')+'</button>'
+    }).join(''):'<div class="info">لا توجد قنوات محمّلة في هذا التصنيف.</div>')+'</div>'+
+    (items.length>150?'<p class="small muted">لعرض بقية القنوات، افتح القائمة الرئيسية.</p>':'');
+   panel.hidden=false;
+   var toggle=document.getElementById('player-channels-toggle');if(toggle)toggle.setAttribute('aria-expanded','true');
+   var root=document.getElementById('player-root');if(root)root.classList.remove('controls-hidden');
+   var close=document.getElementById('player-channel-close');
+   if(close)close.onclick=function(){closeLiveChannels();if(video)video.focus()};
+   Array.prototype.forEach.call(panel.querySelectorAll('[data-player-channel]'),function(button){
+    button.onclick=function(){
+     selectFullscreenChannel(button.getAttribute('data-player-channel'));
+     closeLiveChannels();
+     if(video)video.focus()
+    }
+   });
+   var selectedButton=panel.querySelector('.native-channel-item.selected')||panel.querySelector('.native-channel-item');
+   if(selectedButton){selectedButton.focus();selectedButton.scrollIntoView({block:'nearest'})}
+  }
+  state.switchChannel=switchChannel;
+  state.openChannels=openLiveChannels;
+  state.closeChannels=closeLiveChannels;
+  var channelToggle=document.getElementById('player-channels-toggle');
+  if(channelToggle)channelToggle.onclick=function(){
+   var panel=document.getElementById('player-channel-panel');
+   if(panel&&!panel.hidden)closeLiveChannels();else openLiveChannels()
+  };
+  var previousChannel=document.getElementById('player-channel-prev'),nextChannel=document.getElementById('player-channel-next');
+  if(previousChannel)previousChannel.onclick=function(){switchChannel(-1)};
+  if(nextChannel)nextChannel.onclick=function(){switchChannel(1)};
+
+  // Do not poll provider guide continuously; a 10-minute refresh is enough.
+  function refreshLiveGuide(){
+   if(S.route!=='player'||S.playerView!==state||!S.userVerified)return;
+   var requestedId=String(id);
+   var el=document.getElementById('player-live-epg');
+   if(!el)return;
+   var cached=S.epgCache[String(id)],fresh=cached&&Date.now()-cached.time<300000;
+   if(fresh)el.innerHTML=cached.html;
+   else{
+    el.textContent='جار قراءة دليل القناة…';
+    api('GET','/api/catalog?action=get_short_epg&stream_id='+enc(id)+'&limit=5',null,function(st,data){
+     if(S.route!=='player'||S.playerView!==state||String(id)!==requestedId)return;
+     var node=document.getElementById('player-live-epg');if(!node)return;
+     var html=st===200?formatEpg(data):'<span class="epg-empty">دليل البرامج غير متوفر حاليًا.</span>';
+     node.innerHTML=html;
+     if(st===200)S.epgCache[String(id)]={html:html,time:Date.now()}
+    })
+   }
+   state.liveEpgTimer=setTimeout(refreshLiveGuide,10*60*1000)
+  }
+  state.refreshLiveGuide=refreshLiveGuide;
+  refreshLiveGuide()
+ }
+}
+function closePlayer(){
+ var state=S.playerView;
+ if(state&&S.route==='player')recordPlaybackQuality(state);
+ if(state&&S.route==='player'&&state.kind!=='live'){
+  var pos=checkpointPosition(state),duration=playbackDuration(state);
+  if(state.ready)saveResume(state.kind,state.id,pos,duration,true)
+ }
+ cleanupPlayer();
+ var previous=S.previousBeforePlayer||{route:'home'};
+ S.playerView=null;S.route=previous.route==='player'?'home':previous.route;
+ if(previous.route==='detail')navigate('detail',{kind:previous.kind,id:previous.id},true);
+ else if(previous.route==='episodes')navigate('episodes',{id:S.item&&S.item.id},true);
+ else navigate(previous.route||'home',{},true)
+}
+window.addEventListener('error',function(e){
+ var target=e&&e.target;
+ if(target&&target.tagName==='IMG'){
+  var fallbacks=[];try{fallbacks=JSON.parse(target.getAttribute('data-art-fallback')||'[]')}catch(err){}
+  if(Array.isArray(fallbacks)&&fallbacks.length){
+   var next=fallbacks.shift();target.setAttribute('data-art-fallback',JSON.stringify(fallbacks));
+   target.src=next;return
+  }
+  target.style.display='none';return
+ }
+ if(S.route!=='login')diagnose(S.kind,'play_rejected','direct',0);
+},true);
+
+function clickHandler(event){
+ var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload'))node=node.parentNode;
+ if(!node||node===document.body)return;
+ var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
+ if(node.hasAttribute('data-back')){back();return}
+ if(go){if(go!==S.route)navigate(go);return}
+ if(cat){var parts=cat.split(':'),kind=parts[0];
+  changeCatalogCategory(kind,parts[1]||'all');return}
+ if(det){var sep=det.indexOf(':'),kind=det.slice(0,sep),id=det.slice(sep+1);
+  if(kind==='live'){var channel=findItem('live',id);openPlayer('live',id,'ts',title(channel),0);return}
+  navigate('detail',{kind:kind,id:id});return}
+ if(ch){selectChannel(ch,true);return}
+ if(more){loadMore(more);return}
+ if(node.getAttribute('data-sort')){
+  S.sort=S.sort==='source'?'new':S.sort==='new'?'alpha':'source';
+  renderCategoryItems(S.kind,currentListing());return
+ }
+ if(ep){navigate('episodes',{id:ep});return}
+ if(season){S.selectedSeason=season;episodesScreen({id:S.item&&S.item.id});return}
+ if(fav){
+  rememberView();S.library[fav]=!S.library[fav];
+  if(S.library[fav]){
+   var split=fav.indexOf(':'),kind=fav.slice(0,split),id=fav.slice(split+1),item=findItem(kind,id)||S.item&&S.item.data;
+   if(item){
+    var record={id:id,name:String(title(item)).slice(0,160),stream_icon:art(item),container_extension:item.container_extension||'mp4'};
+    if(kind==='series')record.series_id=id;else record.stream_id=id;
+    S.favoriteItems[fav]=record
+   }
+  }else delete S.favoriteItems[fav];
+  profileSave('favorites',S.library);
+  profileSave('favoriteItems',S.favoriteItems);
+  if(S.route==='live'){
+   var liveFavorite=document.getElementById('live-favorite');
+   if(liveFavorite)liveFavorite.textContent=S.library[fav]?'♥ إزالة من المفضلة':'♡ المفضلة'
+  }else if(S.route==='detail'&&S.item)details({kind:S.item.kind,id:S.item.id});else favoritesScreen();
+  return
+ }
+ if(watch){var a=watch.split(':'),kind=a[0],id=a[1],it=findItem(kind,id),ext=node.getAttribute('data-ext')||(it&&it.container_extension)||'mp4',name=node.getAttribute('data-name')||title(it);openPlayer(kind,id,ext,name,Number(node.getAttribute('data-from'))||0);return}
+ if(node.hasAttribute('data-preview-play')){var x=findItem('live',S.selected);if(x)beginPreview(x);return}
+ if(node.hasAttribute('data-preview-full')){var live=findItem('live',S.selected);if(live)openPlayer('live',S.selected,'ts',title(live),0);return}
+ if(node.hasAttribute('data-reload')){delete S.loaded[keyOf(node.getAttribute('data-reload'),S.cat[node.getAttribute('data-reload')])];catalog(node.getAttribute('data-reload'))}
+}
+function directional(e){
+ var code=e.keyCode||e.which;
+ var editable=e.target&&((e.target.tagName==='INPUT'&&e.target.type!=='range')||
+  /^(TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable);
+ if(code===37||code===38||code===39||code===40||code===13||code===27||code===461||code===10009||code===8)S.keyboardMode=true;
+ if(code===27||code===461||code===10009||code===8){
+  if(editable&&code===8)return;
+  if(S.route==='login')return;
+  if(S.route==='player'){
+   var choice=document.getElementById('player-choice-panel');
+   if(choice&&!choice.hidden&&S.playerView&&S.playerView.closePlayerChoices){S.playerView.closePlayerChoices();e.preventDefault();return}
+   var channels=document.getElementById('player-channel-panel');
+   if(channels&&!channels.hidden&&S.playerView&&S.playerView.closeChannels){S.playerView.closeChannels();e.preventDefault();return}
+   var report=document.getElementById('player-diagnostic-panel');
+   if(report&&!report.hidden){
+    report.hidden=true;
+    var reportBtn=document.getElementById('player-diagnostic-toggle');
+    if(reportBtn)reportBtn.setAttribute('aria-expanded','false');
+    e.preventDefault();return
+   }
+   var panel=document.getElementById('player-more-panel');
+   if(panel&&!panel.hidden){panel.hidden=true;var more=document.getElementById('player-options-toggle');if(more)more.setAttribute('aria-expanded','false');e.preventDefault();return}
+   var info=document.getElementById('player-info-panel');
+   if(info&&!info.hidden){info.hidden=true;var infoBtn=document.getElementById('player-info-toggle');if(infoBtn)infoBtn.setAttribute('aria-expanded','false');e.preventDefault();return}
+   var jump=document.getElementById('player-jump-panel');
+   if(jump&&!jump.hidden){jump.hidden=true;e.preventDefault();return}
+   if(S.playerView&&S.playerView.isFullscreen&&S.playerView.isFullscreen()){
+    e.preventDefault();S.playerView.exitFullscreen();return
+   }
+  }
+  e.preventDefault();back();return
+ }
+ if(S.route==='player'&&!editable&&(code===37||code===38||code===39||code===40)){
+  var activePanel=document.getElementById('player-choice-panel');
+  if(!activePanel||activePanel.hidden)activePanel=document.getElementById('player-channel-panel');
+  if(activePanel&&!activePanel.hidden){
+   var panelButtons=Array.prototype.slice.call(activePanel.querySelectorAll('button:not([disabled])'));
+   if(panelButtons.length){
+    var currentIndex=panelButtons.indexOf(document.activeElement);
+    var step=code===38||code===37?-1:1;
+    var targetIndex=currentIndex<0?0:(currentIndex+step+panelButtons.length)%panelButtons.length;
+    e.preventDefault();
+    panelButtons[targetIndex].focus();
+    panelButtons[targetIndex].scrollIntoView({block:'nearest'});
+    return
+   }
+  }
+ }
+ if(S.route==='player'&&!editable&&(code===37||code===38||code===39||code===40)){
+  var hiddenRoot=document.getElementById('player-root');
+  if(hiddenRoot&&hiddenRoot.classList.contains('controls-hidden')&&S.playerView&&S.playerView.revealControls){
+   e.preventDefault();S.playerView.revealControls();
+   var focusTarget=document.getElementById(code===38?'player-audio':'player-toggle');
+   if(focusTarget)focusTarget.focus();
+   return
+  }
+ }
+ if(S.route==='player'&&!editable){
+  var transport=S.playerView;
+  if(code===70&&transport&&transport.toggleFullscreen){e.preventDefault();transport.toggleFullscreen();return}
+  if(code===413){e.preventDefault();back();return}
+  if((code===415||code===19||code===179)&&transport){
+   e.preventDefault();
+   if(code===415&&!transport.video.paused)return;
+   if(code===19&&transport.video.paused)return;
+   transport.toggle();return
+  }
+  if((code===412||code===417)&&transport&&transport.kind!=='live'&&transport.seekBy){
+   e.preventDefault();transport.seekBy(code===412?-10:10);return
+  }
+  if((code===427||code===428)&&transport&&transport.kind==='live'&&transport.switchChannel){
+   e.preventDefault();transport.switchChannel(code===427?1:-1);return
+  }
+ }
+ if(S.route==='player'&&(!editable||document.activeElement&&document.activeElement.id==='seek')){
+  var p=S.playerView,active=document.activeElement;
+  if(code===13&&p&&p.kind==='live'&&p.openChannels&&(!active||active===document.body||active===p.video)){
+   e.preventDefault();p.openChannels();return
+  }
+  if(code===32||code===13){
+   if(p&&p.toggle&&(!active||active===document.body||active===p.video)){
+    e.preventDefault();p.toggle();return
+   }
+  }
+  if(p&&p.kind==='live'&&(code===38||code===40)&&
+   (!active||active===document.body||active===p.video)){
+   var audio=document.getElementById('player-audio');
+   if(audio){e.preventDefault();var root=document.getElementById('player-root');if(root)root.classList.remove('controls-hidden');audio.focus();return}
+  }
+  if(p&&p.kind==='live'&&p.switchChannel&&(code===33||code===34)){
+   e.preventDefault();p.switchChannel(code===33?-1:1);return
+  }
+  if(p&&p.kind!=='live'&&p.seekBy&&(code===37||code===39)&&
+   ((!active||active===document.body||active===p.video)||active.id==='seek')){
+   // Keep focus on the time slider. Old TV browsers otherwise treat arrows
+   // as navigation and jump away instead of seeking.
+   e.preventDefault();p.seekBy(code===37?-10:10);return
+  }
+ }
+ if(!editable&&S.userVerified&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&code===191&&S.route!=='player'){
+  e.preventDefault();navigate('search');return
+ }
+ if(code!==37&&code!==38&&code!==39&&code!==40)return;
+ if(editable)return;
+ var nodes=document.querySelectorAll('button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])'),arr=[];
+ for(var i=0;i<nodes.length;i++){
+  var node=nodes[i],r=node.getBoundingClientRect();
+  if(r.width>0&&r.height>0)arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
+ }
+ var active=document.activeElement,from=null;
+ for(var j=0;j<arr.length;j++)if(arr[j].node===active){from=arr[j];break}
+ if(!from){
+  var preferred=document.querySelector('.cat-item.selected,.hero-actions .btn,.episode-row,.poster,.channel-item,.story,.detail-actions .btn,.player-actions .btn')||document.querySelector('.rail-link.active');
+  if(preferred){preferred.focus();e.preventDefault()}return
+ }
+ var best=null,score=1e9;
+ for(var k=0;k<arr.length;k++){
+  var n=arr[k],dx=n.x-from.x,dy=n.y-from.y;
+  if(n.node===active)continue;
+  if(code===37&&dx>=-3||code===39&&dx<=3||code===38&&dy>=-3||code===40&&dy<=3)continue;
+  var primary=(code===37||code===39)?Math.abs(dx):Math.abs(dy);
+  var secondary=(code===37||code===39)?Math.abs(dy):Math.abs(dx);
+  var metric=primary+secondary*2.7;
+  if(metric<score){best=n;score=metric}
+ }
+ if(best){
+  try{best.node.focus({preventScroll:true})}catch(err){best.node.focus()}
+  try{best.node.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})}catch(err){best.node.scrollIntoView(false)}
+  e.preventDefault()
+ }
+}
+document.addEventListener('pointerdown',function(){
+ S.keyboardMode=false;
+ var old=document.querySelector('.remote-focus');if(old)old.classList.remove('remote-focus')
+},true);
+document.addEventListener('focusin',function(e){
+ var old=document.querySelector('.remote-focus');
+ if(old&&old!==e.target)old.classList.remove('remote-focus');
+ if(S.keyboardMode&&e.target&&e.target.classList)e.target.classList.add('remote-focus')
+},true);
+document.addEventListener('focusout',function(e){
+ if(e.target&&e.target.classList)e.target.classList.remove('remote-focus')
+},true);
+document.addEventListener('click',clickHandler,false);
+document.addEventListener('keydown',directional,false);
+function persistPlaybackCheckpoint(){
+ var p=S.playerView;
+ if(!p||!p.ready||p.kind==='live')return;
+ var pos=checkpointPosition(p),duration=playbackDuration(p);
+ saveResume(p.kind,p.id,pos,duration,true)
+}
+window.addEventListener('beforeunload',function(){
+ persistPlaybackCheckpoint();
+ if(S.playerView)recordPlaybackQuality(S.playerView)
+});
+window.addEventListener('pagehide',persistPlaybackCheckpoint);
+document.addEventListener('visibilitychange',function(){
+ if(document.hidden){
+  persistPlaybackCheckpoint();
+  if(S.playerView&&S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
+ }else if(S.playerView&&S.playerView.acquireWakeLock)S.playerView.acquireWakeLock()
+});
+try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
+api('GET','/api/session',null,function(st,json){
+ if(st===200&&json.active&&useProfile(json.profileKey,json.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
+ else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
+});
+setInterval(checkCatalogVersion,10*60*1000);
+// Optional installable web shell. The worker never caches subscription tokens,
+// API responses, movie streams or account content.
+if('serviceWorker' in navigator&&window.isSecureContext){
+ window.addEventListener('load',function(){
+  navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){})
+ })
+}
+})();

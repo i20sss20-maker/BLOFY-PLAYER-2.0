@@ -1,0 +1,11 @@
+# Isolated BLOFY STREAM Web preview: bounded live latency catch-up
+
+Scope: isolated `blofy-stream-native-web-parity` Railway preview site only. Do NOT merge PR #804 into Android or the paying production gateway; do NOT alter customer activation, catalogs, database, network/DNS or entitlements.
+
+Improvement: When the MSE Hls.js video clock is moving but playback lags the independently tracked live sync position by 16+ seconds for at least 8 seconds, validate the seekable window and advance to the supported live edge without spawning another upstream source. Never perform the jump for an explicitly paused video, an inactive/hidden tab, an already reconnecting player, unsupported/invalid live sync data, or when source is within normal live latency. Cap catch-up to at most one jump every 90 seconds. Log an anonymous local `live_catchup` incident (no PII, session IDs, URLs, or media source identifiers).
+
+Validation: `app.js` full JavaScript syntax check passed. On feature commit 3b3c1118f556cc935ba2fcbac6d0b81a3c853212, Github Actions web QA run 45271540259 passed the HLS worker and Node media lifecycle test step including targeted latency catch-up/cooldown/paused/hidden/seekable tests, but the subsequent full browser/Chrome fixture is still in progress at this point, delayed by dependency installation. This is an **experimental-only approval to deploy to the private preview**, NOT a claim of complete browser/hardware QA and NOT a customer release.
+
+Production read-only triage 2026-11-23: main gateway and database services currently deployed SUCCESS. Gateway logs show Xtream **series source connection resets** (`xtream_transport_connection_reset`) repeatedly for one media item. PostgreSQL logged shared-memory `No space left on device` errors at 19:35 UTC; current memory usage ~1.6GB/8GB and disk ~1.9GB, so do not misdiagnose as volume capacity exhaustion. These require separate root-cause analysis and safe staging; no production database restart or unsafe provider retry performed here. Existing tracking issues #745, #816 and #806 remain open.
+
+Hard release gates: physical 20+ minute Toshiba/VIDAA audio/video observation, authorized source failure reproduction and concurrent viewers, resource measurement, backup/revert. Source fan-out `VIDAA_LIVE_SHARE_SAME_BEARER` stays disabled by default. 
