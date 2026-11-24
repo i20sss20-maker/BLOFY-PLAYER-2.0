@@ -300,7 +300,7 @@ function safeImg(pic,cls){
  if(pic&&typeof pic==='object'){
   alternatives=artCandidates(pic);pic=alternatives.shift()||''
  }
- return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" alt="" src="'+esc(pic)+'"'+
+ return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" src="'+esc(pic)+'"'+
   (alternatives.length?' data-art-fallback="'+esc(JSON.stringify(alternatives))+'"':'')+'>':''
 }
 function posterCard(item,kind){
