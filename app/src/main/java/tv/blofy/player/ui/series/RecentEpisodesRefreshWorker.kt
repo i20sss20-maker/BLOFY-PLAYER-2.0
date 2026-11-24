@@ -17,7 +17,6 @@ import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
-import tv.blofy.player.data.remote.XtreamClient
 import java.util.concurrent.TimeUnit
 
 /**
@@ -50,7 +49,8 @@ class RecentEpisodesRefreshWorker(appContext: Context, params: WorkerParameters)
             seriesIds.add(episode.seriesId)
             if (seriesIds.size >= MAX_SERIES_PER_RUN) break
         }
-        val manager = PlaylistManager(XtreamClient.episodeApi, dao)
+        val manager = try { PlaylistManager.forProvider(app, provider, dao, episodeRequest = true) }
+            catch (_: Exception) { return Result.retry() }
         for (seriesId in seriesIds) {
             if (CatalogPlaybackGate.isPlaying) return Result.retry()
             if (!SeriesEpisodeRefreshPolicy.claim(app, providerId, seriesId)) continue
