@@ -56,6 +56,7 @@
   function onVideoPlay(){if(audio&&activeId){var play=audio.play();if(play&&play.catch)play.catch(function(){})}}
   video.addEventListener('pause',onVideoPause);video.addEventListener('play',onVideoPlay);
   return {load:load,select:select,stop:stop,current:function(){return activeId},
+   currentLabel:function(){var item=validTrack(activeId);return item?item.label:''},
    destroy:function(){disposed=true;stop();video.removeEventListener('pause',onVideoPause);
     video.removeEventListener('play',onVideoPlay)}}
  }
