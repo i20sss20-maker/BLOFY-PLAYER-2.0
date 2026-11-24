@@ -5,12 +5,14 @@ const input={host:'https://provider.example.com:8443',username:'synthetic-user',
 function fixture(){
  let now=Date.now(),minute=-1,attempts=0;const rows=new Map();
  async function query(sql,args=[]){
-  if(/^(CREATE|BEGIN|COMMIT|ROLLBACK|SELECT pg_advisory)/.test(sql))return {rows:[]};
+  if(/^(CREATE|ALTER|BEGIN|COMMIT|ROLLBACK|SELECT pg_advisory)/.test(sql))return {rows:[]};
   if(sql==='DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()'){for(const [id,r] of rows)if(r.expiresAt<=now)rows.delete(id);return {rows:[]}}
   if(sql.startsWith('SELECT COUNT'))return {rows:[{count:rows.size}]};
   if(sql.startsWith('INSERT INTO blofy_connect_short_budget')){const m=Math.floor(now/60000);if(m!==minute){minute=m;attempts=0}if(attempts>=20)return {rows:[]};return {rows:[{attempts:++attempts}]}}
   if(sql.startsWith('INSERT INTO blofy_connect_pairings')){if(rows.has(args[0]))return {rows:[]};rows.set(args[0],{sealed:args[1],expiresAt:args[2].getTime()});return {rows:[{code_hash:args[0]}]}}
-  if(sql.startsWith('DELETE FROM blofy_connect_pairings WHERE code_hash=')){const r=rows.get(args[0]);if(!r||r.expiresAt<=now)return {rows:[]};rows.delete(args[0]);return {rows:[r]}}
+  if(sql.startsWith('DELETE FROM blofy_connect_pairings WHERE code_hash=')){const r=rows.get(args[0]);if(!r||r.expiresAt<=now||r.claimedDeviceHash)return {rows:[]};rows.delete(args[0]);return {rows:[r]}}
+  if(sql.startsWith('UPDATE blofy_connect_pairings SET claimed_device_hash=')){const r=rows.get(args[0]);if(!r||r.expiresAt<=now||(r.claimedDeviceHash&&r.claimedDeviceHash!==args[1]))return {rows:[]};r.claimedDeviceHash=args[1];return {rows:[r]}}
+  if(sql.startsWith('SELECT 1 FROM blofy_connect_pairings')){const r=rows.get(args[0]);return {rows:r&&r.expiresAt>now?[{exists:1}]:[]}}
   throw Error('unexpected test query');
  }
  const pool={query,connect:async()=>({query,release(){}})};
@@ -64,3 +66,19 @@ test('expiry maintenance skips disabled and overlapping ticks and never reports 
 test('numeric codes and explicit HTTP consent',async()=>{const f=fixture(),http={...input,host:'http://provider.example.com:8080'};await assert.rejects(f.service.issue(http),/connect_host_invalid/);const a=await f.service.issue({...http,allowHttp:true,numericCode:true});assert.match(a.code,/^[0-9]{12}$/);const b=await f.service.issue({...input,numericCode:true});assert.notEqual(a.code,b.code);assert.deepEqual((await f.service.redeem({code:a.code})).credentials,http);await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);assert.deepEqual((await f.service.redeem({code:b.code})).credentials,input);});
 
 test('eight digit code has five minute expiry, one use and shared capped attempts',async()=>{const f=fixture(),a=await f.service.issue({...input,shortCode:true});assert.match(a.code,/^[0-9]{8}$/);assert.deepEqual((await f.service.redeem({code:a.code})).credentials,input);await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);const b=await f.service.issue({...input,shortCode:true});for(let i=0;i<18;i++)await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);await assert.rejects(f.service.redeem({code:b.code}),/connect_rate_limited/);f.advance(60000);assert.deepEqual((await f.service.redeem({code:b.code})).credentials,input);const d=await f.service.issue({...input,shortCode:true});f.advance(300001);await assert.rejects(f.service.redeem({code:d.code}),/connect_code_expired_or_used/);});
+
+test('bound redemption retries same installation without extending expiry or allowing other devices',async()=>{
+ const f=fixture(),issued=await f.service.issue(input),deviceKey='b'.repeat(64),otherKey='c'.repeat(64);
+ assert.equal(await f.service.exists(issued.code),true);
+ const first=await f.service.redeem({code:issued.code,deviceKey});
+ assert.deepEqual(first.credentials,input);
+ const row=[...f.rows.values()][0];
+ assert.notEqual(row.claimedDeviceHash,deviceKey);assert.equal(row.expiresAt,issued.expiresAt);
+ await assert.rejects(f.service.redeem({code:issued.code,deviceKey:otherKey}),/connect_code_expired_or_used/);
+ await assert.rejects(f.service.redeem({code:issued.code}),/connect_code_expired_or_used/);
+ assert.deepEqual((await f.service.redeem({code:issued.code,deviceKey})).credentials,input);
+ f.advance(15*60*1000+1);
+ assert.equal(await f.service.exists(issued.code),false);
+ await assert.rejects(f.service.redeem({code:issued.code,deviceKey}),/connect_code_expired_or_used/);
+ await f.service.purgeExpired();assert.equal(f.rows.size,0);
+});
