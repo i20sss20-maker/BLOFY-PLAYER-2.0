@@ -1792,6 +1792,13 @@ function cleanupPlayer(){
   }
   if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
   if(S.playerView.healthTimer){clearInterval(S.playerView.healthTimer);S.playerView.healthTimer=null}
+  if(S.playerView.noticeObserverTimer){clearInterval(S.playerView.noticeObserverTimer);S.playerView.noticeObserverTimer=null}
+  if(S.playerView.noticeFrameRepeatTimer){clearTimeout(S.playerView.noticeFrameRepeatTimer);S.playerView.noticeFrameRepeatTimer=null}
+  if(S.playerView.noticeFrameId!==null&&S.playerView.noticeFrameId!==undefined&&
+     S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
+   try{S.playerView.video.cancelVideoFrameCallback(S.playerView.noticeFrameId)}catch(err){}
+   S.playerView.noticeFrameId=null
+  }
   if(S.playerView.firstPictureWatchTimer){clearInterval(S.playerView.firstPictureWatchTimer);S.playerView.firstPictureWatchTimer=null}
   if(S.playerView.firstPictureFrameId!==null&&S.playerView.firstPictureFrameId!==undefined&&
      S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
@@ -1805,9 +1812,97 @@ function cleanupPlayer(){
  }
  stopPlayback(true)
 }
+/* Real decoded/presented frames, not HTMLMediaElement "playing", prove
+ * that the image has resumed. Audio clocks alone may move over black video.
+ * Old TVs without video-frame APIs use a bounded time+dimensions fallback. */
+function activePlaybackNoticeRecord(state){
+ if(!state||!state.video)return null;
+ if(S.play&&S.play.video===state.video)return S.play;
+ // Direct HTML5 MP4 is an authenticated <video src> stream without a
+ // separate S.play media-worker record; it still needs stale-text recovery.
+ if(state.mode==='direct'&&!state.directFallback){
+  if(!state.directNoticeRecord)
+   state.directNoticeRecord={video:state.video,mode:'direct',id:state.id};
+  return state.directNoticeRecord
+ }
+ return null
+}
+function playbackNoticeProgress(previous,current){
+ if(!previous||!current||previous.record!==current.record||
+    current.paused||current.userPaused||current.hidden||current.ended||
+    current.seeking||current.pendingSeek||current.readyState<2||
+    current.width<1||current.height<1)return false;
+ if(current.frames!==null&&previous.frames!==null)
+  return current.frames>previous.frames;
+ if(current.frames!==null||previous.frames!==null)return false;
+ return previous.width>0&&previous.height>0&&
+  current.time-previous.time>=0.22&&current.time-previous.time<=3.5
+}
+function playbackNoticeSample(state,record,video){
+ var frames=null,quality=null;
+ try{quality=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality()}catch(err){}
+ var presented=Number(state.noticePresentedFrames)||0;
+ if(presented>0)frames=presented;
+ else if(quality&&Number(quality.totalVideoFrames)>0)
+  frames=Number(quality.totalVideoFrames);
+ else if(Number(video.webkitDecodedFrameCount)>0)
+  frames=Number(video.webkitDecodedFrameCount);
+ return {record:record||null,frames:frames,
+  time:Number(video.currentTime)||0,width:Number(video.videoWidth)||0,
+  height:Number(video.videoHeight)||0,readyState:Number(video.readyState)||0,
+  paused:!!video.paused,userPaused:!!state.userPaused,hidden:document.hidden===true,
+  ended:!!video.ended,seeking:!!video.seeking,
+  pendingSeek:!!state.pendingSeek||!!state.seekIncomplete}
+}
+function dismissRecoveredPlaybackNotice(state,now){
+ if(!state||S.route!=='player'||S.playerView!==state||
+    !state.video||!state.video.isConnected)return false;
+ var video=state.video,record=activePlaybackNoticeRecord(state);
+ if(!record||record.video!==video)return false;
+ var observed=playbackNoticeSample(state,record,video),
+  advanced=playbackNoticeProgress(state.noticePreviousSample,observed);
+ state.noticePreviousSample=observed;
+ if(!advanced)return false;
+ state.noticeLastProgressAt=now;state.noticeLastProgressRecord=record;
+ // iOS play-gesture prompts must disappear as soon as decoded video really
+ // resumes, even when WebKit omits the usual "play"/"playing" DOM events.
+ var iosPrompt=document.getElementById('player-ios-tap-to-play');
+ if(iosPrompt&&!iosPrompt.hidden)iosPrompt.hidden=true;
+ var modeBadge=document.getElementById('player-mode-badge');
+ if(modeBadge&&state.mode==='direct'&&/جار فحص/.test(modeBadge.textContent||''))
+  modeBadge.textContent='MP4 • تشغيل مباشر';
+ var label=document.getElementById('player-status');
+ if(!label||label.style.display==='none'||!label.textContent)return true;
+ if(label.className==='player-error'){
+  state.noticeRecoveryFrames=(state.noticeRecoveryFrames||0)+1;
+  if(state.noticeRecoveryFrames<2)return true
+ }
+ if(now-(state.noticeShownAt||0)<400)return true;
+ playerStatus('');
+ if(state.revealControls)state.revealControls();
+ return true
+}
 function playerStatus(message,error){
+ var state=S.route==='player'?S.playerView:null,video=state&&state.video,
+     now=Date.now(),copy=String(message||'');
+ // Silent recovery and informational notices must not cover advancing video.
+ // Real errors, paused media, seeks, hidden tabs and new sources are exempt.
+ if(!error&&copy&&state&&video&&activePlaybackNoticeRecord(state)&&
+    state.noticeLastProgressRecord===activePlaybackNoticeRecord(state)&&
+    now-(state.noticeLastProgressAt||0)<2000&&
+    !state.userPaused&&!state.pendingSeek&&!state.seekIncomplete&&
+    !video.paused&&!video.seeking&&!document.hidden&&
+    /^(?:جار |تعليق |تأخر |وصل الصوت|الفيلم يستغرق)/.test(copy))
+  copy='';
  var el=document.getElementById('player-status');
- if(el){el.style.display=message?'block':'none';el.textContent=message||'';el.className=error?'player-error':'player-loading'}
+ if(el){
+  if(state&&copy&&(el.textContent!==copy||el.style.display==='none'||
+      el.className!==(error?'player-error':'player-loading'))){
+   state.noticeShownAt=now;state.noticeRecoveryFrames=0
+  }
+  el.style.display=copy?'block':'none';el.textContent=copy;
+  el.className=error?'player-error':'player-loading'
+ }
  var retry=document.getElementById('player-retry');
  if(retry)retry.style.display=error?'inline-flex':'none';
  if(error){
@@ -2163,7 +2258,7 @@ function playDirectMpegts(video,id,statusElement){
   String(state.id)===String(id)&&video.isConnected}
  function status(msg){
   if(!alive())return;
-  if(statusElement){statusElement.textContent=msg;statusElement.style.display='block'}
+  if(statusElement)playerStatus(msg)
  }
  function fallback(msg){
   if(!alive()||record.fallback)return;
@@ -2462,8 +2557,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }).catch(function(){})
  }
  function status(text){if(!alive())return;
-  if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
-  else playerStatus(text)
+  if(preview){if(statusElement)statusElement.textContent=text}
+  else playerStatus(text.slice(0,1)==='●'?'':text)
  }
  video.onerror=function(){if(alive()){
   var unsupported=video.error&&(video.error.code===4||video.error.code===3);
@@ -2840,17 +2935,16 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   },Math.min(1800,state.fullRecoveryCount*650))
  }
  function checkStall(){
-  if(!alive()||video.paused)return;
-  if(rec.stallTimer)clearTimeout(rec.stallTimer);
-  // The worker can finish a previous 24-second chunk for up to 26s,
-  // followed by a 28s segment wait. Avoid canceling useful FFmpeg work:
-  // Hls.js handles the 68s fragment deadline before this recovery.
-  var observed=Number(video.currentTime)||0;
+  if(!alive()||video.paused||video.seeking||document.hidden||rec.stallTimer)return;
+  // Repeated Safari waiting events must NOT push an actual VOD stall timer
+  // out forever. Keep the first 72s deadline, and prefer new picture frames
+  // (not an advancing audio clock or stale readyState=4) as recovery proof.
+  var started=Date.now();
   rec.stallTimer=setTimeout(function(){
    rec.stallTimer=null;
-   if(!alive()||video.paused||video.readyState>=3)return;
-   // Ignore an earlier buffering event if new video frames have arrived.
-   if(Math.abs((Number(video.currentTime)||0)-observed)>0.9)return;
+   if(!alive()||video.paused||video.seeking||document.hidden)return;
+   if((state.noticeLastProgressAt||0)>started&&
+      state.noticeLastProgressRecord===rec)return;
    recoverFilm()
   },72000)
  }
@@ -2871,11 +2965,18 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
   if(rec.startupTimer){clearTimeout(rec.startupTimer);rec.startupTimer=null}
   if(rec.stallTimer){clearTimeout(rec.stallTimer);rec.stallTimer=null}
+  if(rec.bufferNoticeTimer){clearTimeout(rec.bufferNoticeTimer);rec.bufferNoticeTimer=null}
   ready()
  };
  video.onwaiting=video.onstalled=function(){
-  if(!alive()||video.paused)return;
-  playerStatus('جار تحميل الجزء المطلوب من الفيلم…');
+  if(!alive()||video.paused||video.seeking||document.hidden)return;
+  if(!rec.bufferNoticeTimer){
+   rec.bufferNoticeTimer=setTimeout(function(){
+    rec.bufferNoticeTimer=null;
+    if(alive()&&!video.paused&&!video.seeking&&!document.hidden&&
+       video.readyState<3)playerStatus('جار تحميل الجزء المطلوب من الفيلم…')
+   },1600)
+  }
   checkStall()
  };
  video.onended=function(){
@@ -3049,9 +3150,18 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  video.onplaying=function(){
   if(!alive())return;
   if(state.completed&&video.currentTime<5)state.completed=false;
-  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready()
+  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
+  if(rec.bufferNoticeTimer){clearTimeout(rec.bufferNoticeTimer);rec.bufferNoticeTimer=null}
+  ready()
  };
- video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ video.onwaiting=function(){
+  if(!alive()||!rec.ready||video.paused||video.seeking||document.hidden||rec.bufferNoticeTimer)return;
+  rec.bufferNoticeTimer=setTimeout(function(){
+   rec.bufferNoticeTimer=null;
+   if(alive()&&!video.paused&&!video.seeking&&!document.hidden&&
+      video.readyState<3)playerStatus('جار تحميل المقطع التالي من الفيلم…')
+  },1600)
+ };
  video.onended=function(){
   if(!alive())return;
   var absolute=at+Math.max(0,Number(video.currentTime)||0),
@@ -3884,7 +3994,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function markReady(){
   if(S.route!=='player')return;
-  var firstReady=!state.ready;state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
+  var firstReady=!state.ready;state.ready=true;playerStatus('');
   if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   if(firstReady)revealControls();
   if(state.mode==='direct'){
@@ -4549,6 +4659,30 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  // Register the player before starting its media engine. The native-like
  // quality dialog and first-frame callbacks need state during startup.
  S.playerView=state;
+ // All engines share this throttled decoded-frame observer. Safari may
+ // resume after waiting without a new 'playing' event. No media requests.
+ function scheduleNoticeFrame(){
+  if(S.route!=='player'||S.playerView!==state||!video.isConnected||
+     typeof video.requestVideoFrameCallback!=='function')return;
+  try{
+   state.noticeFrameId=video.requestVideoFrameCallback(function(){
+    state.noticeFrameId=null;
+    if(S.route!=='player'||S.playerView!==state||!video.isConnected)return;
+    state.noticePresentedFrames=(state.noticePresentedFrames||0)+1;
+    dismissRecoveredPlaybackNotice(state,Date.now());
+    state.noticeFrameRepeatTimer=setTimeout(function(){
+     state.noticeFrameRepeatTimer=null;scheduleNoticeFrame()
+    },450)
+   })
+  }catch(err){state.noticeFrameId=null}
+ }
+ scheduleNoticeFrame();
+ state.noticeObserverTimer=setInterval(function(){
+  dismissRecoveredPlaybackNotice(state,Date.now())
+ },950);
+ video.addEventListener('timeupdate',function(){
+  dismissRecoveredPlaybackNotice(state,Date.now())
+ });
  if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
  else if(ext==='mp4'){startDirect()}
  else{startWithMetadata(Math.round(resume))}

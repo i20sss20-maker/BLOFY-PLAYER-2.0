@@ -1129,3 +1129,48 @@ html[data-blofy-ios="true"] .player-ios-tap-to-play:focus-visible{
  }
  html[data-blofy-ios="true"] .player-ios-tap-to-play small{display:none}
 }
+
+
+/* Playback notices must never become a permanent full-screen text layer.
+ * Both warning and error use the same centered non-layout-shifting surface;
+ * when JavaScript marks them display:none, no other rule forces them visible.
+ * Error retry remains a separate reachable button while playback is stalled. */
+.player-overlay>#player-status.player-loading,
+.player-overlay>#player-status.player-error{
+ position:absolute;z-index:202;
+ top:34%;left:50%;right:auto;bottom:auto;
+ transform:translate(-50%,-50%);
+ display:block;box-sizing:border-box;
+ width:max-content;max-width:min(460px,calc(100vw - 28px));
+ max-height:min(35vh,230px);overflow-y:auto;
+ margin:0;padding:11px 16px;
+ text-align:center;line-height:1.55;
+ font-size:clamp(12px,2.6vw,14px);
+ overflow-wrap:anywhere;white-space:normal;
+ -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+ pointer-events:none
+}
+.player-overlay>#player-status.player-loading{
+ color:#e1fff8;background:rgba(7,23,29,.88);
+ border:1px solid rgba(90,194,187,.33)
+}
+.player-overlay>#player-status.player-error{
+ color:#ffe7e9;background:rgba(50,16,27,.95);
+ border:1px solid rgba(219,113,140,.67)
+}
+.player-overlay>#player-status[hidden],
+.player-overlay>#player-status[style*="display: none"]{display:none!important}
+@media(max-width:730px){
+ .player-overlay>#player-status.player-loading,
+ .player-overlay>#player-status.player-error{
+  top:33%;max-width:calc(100vw - 24px);
+  max-height:30dvh;padding:9px 12px
+ }
+}
+@media(max-height:460px) and (orientation:landscape){
+ .player-overlay>#player-status.player-loading,
+ .player-overlay>#player-status.player-error{
+  top:29%;max-height:30dvh;max-width:min(460px,60vw);
+  padding:7px 11px;font-size:12px
+ }
+}
