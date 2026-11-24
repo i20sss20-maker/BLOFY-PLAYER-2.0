@@ -2935,17 +2935,16 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   },Math.min(1800,state.fullRecoveryCount*650))
  }
  function checkStall(){
-  if(!alive()||video.paused)return;
-  if(rec.stallTimer)clearTimeout(rec.stallTimer);
-  // The worker can finish a previous 24-second chunk for up to 26s,
-  // followed by a 28s segment wait. Avoid canceling useful FFmpeg work:
-  // Hls.js handles the 68s fragment deadline before this recovery.
-  var observed=Number(video.currentTime)||0;
+  if(!alive()||video.paused||video.seeking||document.hidden||rec.stallTimer)return;
+  // Repeated Safari waiting events must NOT push an actual VOD stall timer
+  // out forever. Keep the first 72s deadline, and prefer new picture frames
+  // (not an advancing audio clock or stale readyState=4) as recovery proof.
+  var started=Date.now();
   rec.stallTimer=setTimeout(function(){
    rec.stallTimer=null;
-   if(!alive()||video.paused||video.readyState>=3)return;
-   // Ignore an earlier buffering event if new video frames have arrived.
-   if(Math.abs((Number(video.currentTime)||0)-observed)>0.9)return;
+   if(!alive()||video.paused||video.seeking||document.hidden)return;
+   if((state.noticeLastProgressAt||0)>started&&
+      state.noticeLastProgressRecord===rec)return;
    recoverFilm()
   },72000)
  }
