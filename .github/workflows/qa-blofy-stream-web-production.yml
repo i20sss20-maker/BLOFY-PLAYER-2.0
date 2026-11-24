@@ -51,6 +51,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/adaptive-device-input.test.mjs
       - name: Verify cinematic design, scalable navigation, live pane priorities and iPhone safe areas
         run: cd web/stream-native-parity && node --test qa/cinematic-responsive-ui.test.mjs
+      - name: Verify native Arabic logo and font routes, PWA icons and actual Docker asset packaging
+        run: cd web/stream-native-parity && node --test qa/branding-native-arabic-font.test.mjs
       - name: Verify touch-first mobile playback and fullscreen controls
         run: cd web/stream-native-parity && node --test qa/mobile-playback-controls.test.mjs
       - name: Verify safe PWA update, connectivity and VOD double-tap gesture
