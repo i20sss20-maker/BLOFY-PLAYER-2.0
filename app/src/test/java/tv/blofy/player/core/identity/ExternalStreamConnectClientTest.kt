@@ -1,0 +1,20 @@
+package tv.blofy.player.core.identity
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class ExternalStreamConnectClientTest {
+    @Test fun pairingCodePreservesCaseAndDoesNotAcceptLegacyCodes() {
+        val code = "BC-AbCdEf0123456789_-xyZabc"
+        assertEquals(code, ExternalStreamConnectClient.normalizeCode(" $code "))
+        assertNull(ExternalStreamConnectClient.normalizeCode(code.uppercase().replace("BC-", "bc-")))
+        assertNull(ExternalStreamConnectClient.normalizeCode("12345678"))
+        assertNull(ExternalStreamConnectClient.normalizeCode("BC-short"))
+    }
+    @Test fun hostRequiresHttpsOrigin() {
+        assertNotNull(ExternalStreamConnectClient.parseHost("https://provider.example.com:8443"))
+        for (host in listOf("http://provider.example.com", "https://127.0.0.1", "https://[::1]", "https://localhost", "https://name.internal", "https://user:password@provider.example.com", "https://provider.example.com/path", "https://provider.example.com?x=1")) {
+            assertNull(host, ExternalStreamConnectClient.parseHost(host))
+        }
+    }
+}
