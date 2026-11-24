@@ -1696,14 +1696,44 @@ function livePlaybackProgress(record,video,now){
  // callback is stronger evidence even on older TVs that omit dimensions.
  var visualProgress=record.framePresentationObserved?advancedPresented:
   pictureDimensions&&(frameCounterUsable?advancedFrames:(advancedTime||advancedFrames));
+ // An unsampled interval (for example, a sleeping browser) cannot be
+ // counted as observed playback downtime. Do not change the recovery
+ // watchdog's lastProgressAt: a genuinely frozen decoder must still recover.
+ if(record.visualProgressSeen&&record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000)
+  record.visualOutageReported=true;
+ record.lastVisualSampleAt=now;
  if(record.framePresentationObserved)record.lastSampledPresentationAt=record.lastPresentedFrameAt;
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
  if(visualProgress){
+  // A recovered picture can close one measured outage.
+  countVisualOutage(record,video,now);
+  record.visualOutageReported=false;
+  record.visualProgressSeen=true;
   record.lastProgressAt=now;record.bufferSince=0;record.stallChecks=0;
   return {advanced:true,idleMs:0}
  }
  return {advanced:false,idleMs:Math.max(0,now-(record.lastProgressAt||record.started||now))}
+}
+function countVisualOutage(record,video,now){
+ // Record only gaps observed after actual picture, never during first play,
+ // an intentional pause/seek, hidden tab, or a channel preview.
+ if(!record.visualProgressSeen||record.visualOutageReported||!record.ready||
+    typeof S==='undefined'||S.route!=='player'||!S.playerView||
+    S.playerView.kind!=='live'||S.playerView.video!==video||
+    S.playerView.userPaused||video.paused||video.seeking||
+    typeof document!=='undefined'&&document.hidden)return false;
+ var gap=Math.max(0,now-(record.lastProgressAt||now));
+ if(gap<6500||!Number.isFinite(gap))return false;
+ // Timers cannot certify a gap if the whole tab was asleep.
+ if(record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000)return false;
+ var stats=S.playerView.stats;
+ if(!stats)return false;
+ stats.visualOutageCount=(stats.visualOutageCount||0)+1;
+ stats.visualOutageMs=(stats.visualOutageMs||0)+gap;
+ stats.longestVisualOutageMs=Math.max(stats.longestVisualOutageMs||0,gap);
+ record.visualOutageReported=true;
+ return true
 }
 /* Stop a silent ended/paused live decoder from requiring a full page reload.
  * Only act after the video was playing; honor explicit user Pause and a hidden
@@ -1867,6 +1897,9 @@ function playDirectMpegts(video,id,statusElement){
  }
  function fallback(msg){
   if(!alive()||record.fallback)return;
+  // Record a sustained picture loss even when the engine must be replaced
+  // before it can present another frame.
+  countVisualOutage(record,video,Date.now());
   record.fallback=true;
   if(state.stats){state.stats.recoveries=(state.stats.recoveries||0)+1;state.stats.lastRecoveryAt=Date.now()}
   recordLiveIncident('reconnect');
@@ -1926,7 +1959,13 @@ function playDirectMpegts(video,id,statusElement){
    // black. Never claim direct TS is healthy based only on onplaying().
    // This uses the same local visual-progress checks as the HLS watchdog.
    record.progressWatchdog=setInterval(function(){
-    if(!alive()||document.hidden||video.paused||state.userPaused||video.seeking)return;
+    if(!alive())return;
+    if(document.hidden||video.paused||state.userPaused||video.seeking){
+     record.lastProgressAt=Date.now();
+     record.lastVisualSampleAt=record.lastProgressAt;
+     record.visualProgressSeen=false;
+     return
+    }
     var now=Date.now();
     if(record.ready&&(!video.videoWidth||!video.videoHeight)){
      if(now-(record.lastProgressAt||record.started)>16000)
@@ -2077,6 +2116,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
   var state=S.playerView;
   if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
+  countVisualOutage(record,video,Date.now());
   record.reconnecting=true;
   if(state.stats){
    state.stats.recoveries=(state.stats.recoveries||0)+1;
@@ -2220,7 +2260,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     recoverConnection();return
    }
    if(video.paused||video.ended||video.seeking||document.hidden){
-    record.lastProgressAt=now;return
+    record.lastProgressAt=now;record.lastVisualSampleAt=now;
+    record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
    if(liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
@@ -2847,6 +2888,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,liveEvents:[],
+    visualOutageCount:0,visualOutageMs:0,longestVisualOutageMs:0,
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
  // The 20-minute acceptance uses existing decoded-frame and source health
  // observations. It never opens a new media, catalog or telemetry request.
@@ -3081,6 +3123,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     ' • الساقطة: '+(Number.isFinite(drops)?drops:'غير متوفرة'),
    'إعادة الاتصال: '+(st.recoveries||0)+' • أخطاء الفيديو: '+(st.errors||0),
    'انتظار التخزين: '+(st.bufferEvents||0)+' مرة',
+   'فترات غياب تقدم الصورة المرصودة: '+(st.visualOutageCount||0)+
+     ' • مجموعها التقريبي: '+Math.round((st.visualOutageMs||0)/1000)+' ثانية'+
+     ' • الأطول: '+Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية',
    'آخر أحداث البث (وقت UTC):'+(st.liveEvents&&st.liveEvents.length?
     st.liveEvents.slice(-6).map(function(item){
      var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
@@ -3090,7 +3135,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
      return ' '+new Date(item.at).toISOString().slice(11,19)+' '+(labels[item.code]||'تشغيل')
     }).join(' ؛ '):' لا توجد أحداث مسجلة'),
    'النتيجة الأولية: '+assessment,
-   'ملاحظة: التقرير يستبعد بيانات الاشتراك والروابط؛ النتيجة تقديرية وليست تشخيصًا قطعيًا.'
+   'ملاحظة: مدة غياب تقدم الصورة تقديرية من العينات، ولا تشمل بدء التشغيل أو فترات توقف المستخدم؛ التقرير يستبعد بيانات الاشتراك والروابط.'
   ].join(String.fromCharCode(10))
  }
  var diagnosticToggle=document.getElementById('player-diagnostic-toggle');
