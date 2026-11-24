@@ -101,6 +101,6 @@ test('app settings guard file save by epoch and exact profile, and avoid remote 
  assert.doesNotMatch(app,/api\('POST','\/api\/profile-transfer/);
  assert.match(srv,/p==='\/profile-transfer\.js'/);
  assert.match(html,/<script src="\/profile-transfer\.js"><\/script>[\s\S]*<script src="\/app\.js"><\/script>/);
- assert.match(docker,/COPY server\.ts index\.html app\.js profile-transfer\.js/);
+ assert.match(docker,/COPY server\.ts[^\n]*index\.html app\.js profile-transfer\.js/);
  assert.match(sw,/\/profile-transfer\.js/);
 });
