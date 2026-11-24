@@ -42,7 +42,7 @@ object ExternalStreamConnectVerifier {
             !(b[0] == 0x20 && b[1] == 0x01 && b[2] < 0x02)
     }
 
-    private val client = OkHttpClient.Builder()
+    internal val directClient = OkHttpClient.Builder()
         .dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 val addresses = Dns.SYSTEM.lookup(hostname)
@@ -77,7 +77,7 @@ object ExternalStreamConnectVerifier {
             val req = Request.Builder().url(url).get()
                 .header("Accept", "application/json").header("Cache-Control", "no-store").build()
             try {
-                client.newCall(req).awaitResponse().use { res ->
+                directClient.newCall(req).awaitResponse().use { res ->
                     if (res.code == 401 || res.code == 403) return@withContext Result(Status.INACTIVE)
                     if (!res.isSuccessful) return@withContext Result(Status.UNAVAILABLE)
                     val source = res.body?.source() ?: return@withContext Result(Status.UNAVAILABLE)
