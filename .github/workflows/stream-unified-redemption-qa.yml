@@ -5,6 +5,11 @@ on:
       - qa/stream-unified-server-redemption-20261125
     paths:
       - 'services/activation/src/stream-unified-code-redeem.mjs'
+      - 'services/activation/src/stream-code-namespace.mjs'
+      - 'services/activation/src/xtream-duration-codes.mjs'
+      - 'services/activation/src/xtream-code-commercial.mjs'
+      - 'services/activation/src/xtream-code-dual-link.mjs'
+      - 'services/activation/test/stream-code-namespace.test.mjs'
       - 'services/activation/src/stream-connect-pairing.mjs'
       - 'services/activation/src/xtream-gateway-hook.mjs'
       - 'services/activation/test/stream-unified-code-redeem.test.mjs'
@@ -44,7 +49,11 @@ jobs:
       - run: |
           node --check src/xtream-gateway-hook.mjs
           node --check src/stream-connect-pairing.mjs
-          node --test test/stream-unified-code-redeem.test.mjs test/stream-connect-pairing.test.mjs
+          node --check src/stream-code-namespace.mjs
+          node --check src/xtream-duration-codes.mjs
+          node --check src/xtream-code-commercial.mjs
+          node --check src/xtream-code-dual-link.mjs
+          node --test test/stream-unified-code-redeem.test.mjs test/stream-connect-pairing.test.mjs test/stream-code-namespace.test.mjs
       - name: Verify atomic device binding on isolated PostgreSQL
         env:
           DATABASE_URL: postgresql://qa:qa-local-only@127.0.0.1:5432/blofy_connect_qa
