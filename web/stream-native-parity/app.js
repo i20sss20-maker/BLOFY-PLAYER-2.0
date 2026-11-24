@@ -19,6 +19,17 @@ function deviceExperience(ua,touchPoints,coarse){
  if(/iPhone|iPad|iPod|Android|Mobile/i.test(agent)||/Macintosh/i.test(agent)&&touch>1||coarse||touch>0)return 'touch';
  return 'desktop'
 }
+/* Tap only the video canvas to show/hide the touch HUD. Never intercept
+ * TV remote actions, playback menus, native fullscreen, paused video or errors. */
+function touchPlayerTapDecision(inputMode,onVideo,hidden,locked){
+ if(inputMode!=='touch'||!onVideo)return 'reveal';
+ if(hidden)return 'reveal';
+ return locked?'reveal':'hide'
+}
+function appleTouchBrowser(ua,touchPoints){
+ return /iPhone|iPad|iPod/i.test(String(ua||''))||
+  /Macintosh/i.test(String(ua||''))&&Number(touchPoints)>1
+}
 function setDeviceInput(mode){
  if(mode!=='remote'&&mode!=='touch'&&mode!=='mouse')return;
  S.keyboardMode=mode==='remote';
@@ -2993,7 +3004,20 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span><span class="player-resolution-badge" id="player-resolution" aria-live="polite" hidden></span><span class="player-resolution-badge" id="player-source-mode" aria-live="polite" hidden></span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
  '<div class="native-player-timeline" dir="ltr"><span id="now-time">00:00</span><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled aria-label="موضع التشغيل"><span id="total-time">--:--</span></div>')+
- '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+(isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
+ '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+
+ (document.documentElement.getAttribute('data-blofy-device')==='touch'?
+  'المس الصورة لإظهار أو إخفاء أدوات التحكم':isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
+ '<div class="mobile-player-actions" id="mobile-player-actions" role="toolbar" aria-label="تحكم سريع باللمس">'+
+ '<button class="mobile-player-action" type="button" id="mobile-player-previous" aria-label="'+
+ (isLive?'القناة السابقة':previousEpisode?'الحلقة السابقة':'رجوع عشر ثوانٍ')+'">'+
+ '<span aria-hidden="true">⏮</span><small>'+(isLive?'قناة سابقة':previousEpisode?'الحلقة السابقة':'−10 ثوانٍ')+'</small></button>'+
+ '<button class="mobile-player-action mobile-player-primary" type="button" id="mobile-player-toggle" aria-label="إيقاف مؤقت">'+
+ '<span aria-hidden="true" id="mobile-player-toggle-icon">Ⅱ</span><small id="mobile-player-toggle-label">إيقاف</small></button>'+
+ '<button class="mobile-player-action" type="button" id="mobile-player-next" aria-label="'+
+ (isLive?'القناة التالية':nextEpisode?'الحلقة التالية':'تقديم عشر ثوانٍ')+'">'+
+ '<span aria-hidden="true">⏭</span><small>'+(isLive?'قناة تالية':nextEpisode?'الحلقة التالية':'+10 ثوانٍ')+'</small></button>'+
+ '<button class="mobile-player-action" type="button" id="mobile-player-fullscreen" aria-label="ملء الشاشة">'+
+ '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button></div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
  playerControl('player-subtitles','subtitles','الترجمة')+
@@ -3102,13 +3126,20 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(verifyStatus)verifyStatus.textContent='ابدأ تشغيل الفيديو حتى تظهر الصورة أولًا، ثم شغّل اختبار 20 دقيقة.'
   }
  };
- var toggle=document.getElementById('player-toggle');
+ var toggle=document.getElementById('player-toggle'),mobilePlay=document.getElementById('mobile-player-toggle');
  function syncToggle(){
-  if(!toggle)return;
-  var paused=video.paused;
-  toggle.innerHTML=playerIcon(paused?'play':'pause');
-  toggle.setAttribute('aria-label',paused?'تشغيل':'إيقاف مؤقت');
-  toggle.title=paused?'تشغيل':'إيقاف مؤقت'
+  var paused=video.paused,label=paused?'تشغيل':'إيقاف مؤقت';
+  if(toggle){
+   toggle.innerHTML=playerIcon(paused?'play':'pause');
+   toggle.setAttribute('aria-label',label);toggle.title=label
+  }
+  if(mobilePlay){
+   mobilePlay.setAttribute('aria-label',label);
+   var icon=document.getElementById('mobile-player-toggle-icon');
+   var title=document.getElementById('mobile-player-toggle-label');
+   if(icon)icon.textContent=paused?'▶':'Ⅱ';
+   if(title)title.textContent=paused?'تشغيل':'إيقاف'
+  }
  }
  video.addEventListener('play',syncToggle);
  video.addEventListener('pause',syncToggle);
@@ -3492,6 +3523,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   state.hudTimer=setTimeout(function(){
    state.hudTimer=null;
    if(S.route!=='player'||S.playerView!==state||!root.isConnected)return;
+   // When the viewer pauses with touch, keep the Resume button available.
+   if(document.documentElement.getAttribute('data-blofy-input')==='touch'&&video.paused)return;
    // The buffering notice lives outside the HUD; it remains readable while
    // transport controls fade, including when decoder events are inconsistent.
    var retry=document.getElementById('player-retry');
@@ -3509,14 +3542,34 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var focused=document.activeElement;
    if(focused&&hud.contains(focused)&&typeof focused.blur==='function')focused.blur();
    root.classList.add('controls-hidden')
-  },3800)
+  },document.documentElement.getAttribute('data-blofy-input')==='touch'?6200:3800)
  }
  state.revealControls=revealControls;
- root.addEventListener('pointermove',revealControls,{passive:true});
- root.addEventListener('pointerdown',revealControls,{passive:true});
+ function touchVideoPointer(e){
+  if(e&&e.target===video&&document.documentElement.getAttribute('data-blofy-input')==='touch')return;
+  revealControls()
+ }
+ root.addEventListener('pointermove',touchVideoPointer,{passive:true});
+ root.addEventListener('pointerdown',touchVideoPointer,{passive:true});
  root.addEventListener('keydown',revealControls);
  root.addEventListener('focusin',revealControls);
- video.addEventListener('click',revealControls);
+ video.addEventListener('click',function(){
+  var panels=['player-more-panel','player-info-panel','player-health-panel',
+   'player-diagnostic-panel','player-jump-panel','player-choice-panel','player-channel-panel'];
+  var open=false;
+  for(var i=0;i<panels.length;i++){
+   var p=document.getElementById(panels[i]);
+   if(p&&!p.hidden){open=true;break}
+  }
+  var retry=document.getElementById('player-retry');
+  var locked=open||video.paused||retry&&retry.style.display!=='none';
+  var action=touchPlayerTapDecision(document.documentElement.getAttribute('data-blofy-input'),
+    true,root.classList.contains('controls-hidden'),locked);
+  if(action==='hide'){
+   if(state.hudTimer){clearTimeout(state.hudTimer);state.hudTimer=null}
+   root.classList.add('controls-hidden')
+  }else revealControls()
+ });
  function refreshVideoResolution(){
   if(S.route!=='player'||S.playerView!==state)return;
   var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
@@ -4060,7 +4113,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   fullButton.textContent=on?'⤢ تصغير':'⛶ ملء الشاشة';
   fullButton.setAttribute('aria-label',on?'الخروج من ملء الشاشة':'ملء الشاشة');
   fullButton.setAttribute('aria-pressed',String(on));
-  fullButton.title=on?'الخروج من ملء الشاشة':'ملء الشاشة'
+  fullButton.title=on?'الخروج من ملء الشاشة':'ملء الشاشة';
+  var mobileFull=document.getElementById('mobile-player-fullscreen');
+  if(mobileFull){
+   mobileFull.setAttribute('aria-label',on?'الخروج من ملء الشاشة':'ملء الشاشة');
+   mobileFull.setAttribute('aria-pressed',String(on));
+   var shortLabel=mobileFull.querySelector('small');
+   if(shortLabel)shortLabel.textContent=on?'تصغير':'ملء الشاشة'
+  }
  }
  function enterViewportMode(){
   if(!root.isConnected||S.route!=='player')return;
@@ -4089,7 +4149,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     var p=request.call(root);
     if(p&&p.then){
      p.then(function(){updateFullButton()},function(){
-      if(/iPhone|iPad|iPod/i.test(navigator.userAgent||'')&&video.webkitEnterFullscreen){
+      if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)&&video.webkitEnterFullscreen){
        try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}
       }
       enterViewportMode()
@@ -4108,6 +4168,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  state.isFullscreen=isFull;state.exitFullscreen=exitFull;state.toggleFullscreen=toggleFull;
  if(fullButton)fullButton.onclick=toggleFull;
+ var mobileFullButton=document.getElementById('mobile-player-fullscreen');
+ if(mobileFullButton)mobileFullButton.onclick=function(){toggleFull();revealControls()};
  function fullscreenChanged(){updateFullButton()}
  var events=['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'];
  events.forEach(function(e){document.addEventListener(e,fullscreenChanged)});
@@ -4139,6 +4201,26 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var nextBtn=document.getElementById('player-next-episode'),previousBtn=document.getElementById('player-previous-episode');
  if(nextBtn&&nextEpisode)nextBtn.onclick=function(){jumpEpisode(nextEpisode)};
  if(previousBtn&&previousEpisode)previousBtn.onclick=function(){jumpEpisode(previousEpisode)};
+ var mobilePrevious=document.getElementById('mobile-player-previous'),
+  mobileNext=document.getElementById('mobile-player-next');
+ if(mobilePlay)mobilePlay.onclick=function(){
+  if(S.route!=='player'||S.playerView!==state||!state.toggle)return;
+  state.toggle();revealControls()
+ };
+ if(mobilePrevious)mobilePrevious.onclick=function(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  if(isLive&&state.switchChannel)state.switchChannel(-1);
+  else if(previousEpisode)jumpEpisode(previousEpisode);
+  else if(state.seekBy)state.seekBy(-10);
+  if(S.route==='player'&&S.playerView===state)revealControls()
+ };
+ if(mobileNext)mobileNext.onclick=function(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  if(isLive&&state.switchChannel)state.switchChannel(1);
+  else if(nextEpisode)jumpEpisode(nextEpisode);
+  else if(state.seekBy)state.seekBy(10);
+  if(S.route==='player'&&S.playerView===state)revealControls()
+ };
  var seek=document.getElementById('seek');
  if(seek)seek.onchange=function(){
   var duration=totalDuration(),target=Math.round(duration*Number(this.value)/1000);
