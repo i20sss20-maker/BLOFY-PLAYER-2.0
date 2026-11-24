@@ -1,4 +1,5 @@
 import {readCatalogPage} from './catalog-array-reader.mjs';
+import {preferAppleLiveStart} from './hls-ios-live-profile.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
@@ -295,11 +296,22 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
   if(!['source_copy','compatibility_transcode','ultra_transcode'].includes(mode))mode='unknown';
   var originResolution=response.headers.get('x-blofy-source-resolution')||'';
   if(!/^(?:[1-9][0-9]{1,3})x(?:[1-9][0-9]{1,3})$/.test(originResolution))originResolution='unknown';
-  return new Response(response.body,{status:200,headers:noCache({
+  const outHeaders=noCache({
    'Content-Type':match[7]==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t',
    'Accept-Ranges':'none','X-Blofy-Video-Mode':mode,
    'X-Blofy-Source-Resolution':originResolution
-  })});
+  });
+  // Safari on iPhone uses native AVFoundation HLS. Only rewrite its small
+  // LIVE media playlist with an RFC 8216 start preference: never copy/alter
+  // any authenticated segments, VOD playlists, Android/TV responses or SID.
+  // All viewers still share the existing one-source FFmpeg producer.
+  if(match[1]==='live'&&match[7]==='index.m3u8'&&
+     /\b(?:iPhone|iPad|iPod)\b/i.test(req.headers.get('user-agent')||'')){
+   const playlist=await response.text();
+   return new Response(preferAppleLiveStart(playlist,req.headers.get('user-agent')),
+    {status:200,headers:outHeaders})
+  }
+  return new Response(response.body,{status:200,headers:outHeaders});
  }catch(e){return json(502,{error:'hls_worker_unreachable'})}
 }
 if(p==='/api/compatible/health'&&method==='GET'){
