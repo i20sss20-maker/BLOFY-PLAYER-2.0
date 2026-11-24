@@ -1749,6 +1749,8 @@ function playDirectMpegts(video,id,statusElement){
    video.onplaying=function(){
     if(!alive())return;
     record.ready=true;
+    record.lastProgressAt=Date.now();
+    record.lastMediaTime=Number(video.currentTime)||0;
     if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
     status('● تشغيل MPEG-TS المباشر');
     if(statusElement)statusElement.style.display='none';
@@ -1767,6 +1769,22 @@ function playDirectMpegts(video,id,statusElement){
      if(Math.abs((Number(video.currentTime)||0)-last)<0.3)fallback('توقفت الصورة المباشرة؛ جار التحويل إلى HLS.')
     },18000)
    };
+   // On old decoders the audio time can advance while the picture stays
+   // black. Never claim direct TS is healthy based only on onplaying().
+   // This uses the same local visual-progress checks as the HLS watchdog.
+   record.progressWatchdog=setInterval(function(){
+    if(!alive()||document.hidden||video.paused||state.userPaused||video.seeking)return;
+    var now=Date.now();
+    if(record.ready&&(!video.videoWidth||!video.videoHeight)){
+     if(now-(record.lastProgressAt||record.started)>16000)
+      fallback('الصوت يعمل لكن صورة MPEG-TS غير ظاهرة؛ جار التحويل إلى HLS.');
+     return
+    }
+    if(!record.ready)return;
+    var progress=livePlaybackProgress(record,video,now);
+    if(!progress.advanced&&progress.idleMs>18000)
+     fallback('تجمّدت صورة MPEG-TS؛ جار العودة إلى HLS.')
+   },2000);
    video.defaultPlaybackRate=1;video.playbackRate=1;video.muted=false;
    video.playsInline=true;video.autoplay=true;
    transport.attachMediaElement(video);
