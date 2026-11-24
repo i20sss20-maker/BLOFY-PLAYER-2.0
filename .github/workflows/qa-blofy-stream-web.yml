@@ -67,9 +67,13 @@ jobs:
         run: |
           mkdir -p /tmp/blofy-qa-4k
           ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i color=c=blue:size=3840x2160:rate=2 -t 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 2 -f hls -hls_time 1 -hls_list_size 0 -hls_segment_filename '/tmp/blofy-qa-4k/seg-%06d.ts' -y /tmp/blofy-qa-4k/index.m3u8
-          test -s /tmp/blofy-qa-4k/seg-000000.ts
-          measured=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 /tmp/blofy-qa-4k/seg-000000.ts | head -n 1)
-          test "$measured" = "3840,2160"
+          echo 'UHD HLS generated files:'
+          ls -lh /tmp/blofy-qa-4k/
+          segment=$(find /tmp/blofy-qa-4k -maxdepth 1 -type f -name 'seg-*.ts' | sort | head -n 1)
+          test -n "$segment" && test -s "$segment"
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$segment" > /tmp/blofy-ci-4k-resolution.txt
+          cat /tmp/blofy-ci-4k-resolution.txt
+          grep -qx '3840,2160' /tmp/blofy-ci-4k-resolution.txt
       - name: Verify 11-minute live audio keeps natural commentator pitch
         run: cd web/stream-native-parity && node --test qa/audio-11min.test.mjs
       - name: Make video fixture
@@ -79,7 +83,9 @@ jobs:
           mkdir -p /tmp/blofy-qa-hls
           ffmpeg -hide_banner -loglevel error -i /tmp/blofy-qa-test.mp4 -c copy -f hls -hls_time 1 -hls_list_size 0 -hls_segment_filename '/tmp/blofy-qa-hls/seg-%06d.ts' -y /tmp/blofy-qa-hls/index.m3u8
           test -s /tmp/blofy-qa-hls/index.m3u8
-          test -s /tmp/blofy-qa-hls/seg-000000.ts
+          first_hls_segment=$(sed -n '/^seg-[0-9][0-9]*[.]ts$/ {p;q;}' /tmp/blofy-qa-hls/index.m3u8)
+          test -n "$first_hls_segment"
+          test -s "/tmp/blofy-qa-hls/$first_hls_segment"
       - name: Start isolated local web server
         run: |
           cd web/stream-native-parity
