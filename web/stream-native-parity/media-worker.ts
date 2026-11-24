@@ -523,7 +523,7 @@ async function hlsRequest(req,url){
    if(wait>0)return hlsError(503,'hls_origin_backoff',Math.ceil(wait/1000))
   }
   const start=liveShareAllowed(kind,viewerSid)?await startSharedLiveViewer(args):await startHls(args);
-  if(start.error)return hlsError(start.status,start.error);
+  if(start.error)return hlsError(start.status,start.error,start.status===429?5:0);
   sess=start.session
  }
  // Aliases have their own auth/SID and idle timer; only the producer owns
@@ -704,7 +704,7 @@ async function vodRequest(req,url){
   stopHls(sess,'vod_retry_after_interruption');sess=null
  }
  if(!sess&&file!=='index.m3u8'&&file!=='meta')return json(410,{error:'vod_session_expired'});
- if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return json(created.status||502,{error:created.error});sess=created.session}
+ if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return created.status===429?hlsError(429,created.error,5):json(created.status||502,{error:created.error});sess=created.session}
  touchHls(sess);
  if(file==='meta'){
   const until=Date.now()+6500;
@@ -943,7 +943,7 @@ async function fullVodRequest(req,url){
    if(session.chunkStart!==first||session.finished){
     if(req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
     const started=fullVodChunk(session,first);
-    if(started.error)return json(started.status||502,{error:started.error})
+    if(started.error)return started.status===429?hlsError(429,started.error,5):json(started.status||502,{error:started.error})
    }
   }
   const until=Date.now()+28000;
