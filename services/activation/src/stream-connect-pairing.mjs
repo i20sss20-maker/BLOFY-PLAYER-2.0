@@ -90,3 +90,19 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
  async function purgeExpired(){await ensureSchema();const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');return {removed:Number(result.rowCount||0)};}
  return {issue,redeem,ensureSchema,purgeExpired};
 }
+
+
+// Expired pairing credentials must be removed even if issuance traffic stops.
+// Keep a single bounded in-flight cleanup per process; DELETE is idempotent
+// across replicas. Never log credentials, codes, or database error details.
+export function createConnectExpiryMaintenance({pairing,enabled=false,onError=()=>{}}={}){
+ let running=false;
+ async function tick(){
+  if(!enabled||running)return {skipped:true};
+  running=true;
+  try{return await pairing.purgeExpired();}
+  catch{try{onError('connect_expiry_cleanup_failed')}catch{}return {failed:true};}
+  finally{running=false}
+ }
+ return {tick};
+}
