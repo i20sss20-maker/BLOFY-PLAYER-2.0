@@ -35,6 +35,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/local-engine-qoe.test.mjs
       - name: Verify privacy-safe local playback cause hints
         run: cd web/stream-native-parity && node --test qa/live-cause-hints.test.mjs
+      - name: Verify live buffer UI recovery and Android-inspired READY parity
+        run: cd web/stream-native-parity && node --test qa/live-buffer-ready-parity.test.mjs
       - name: Verify standalone device web-app installation and safe icon route
         run: cd web/stream-native-parity && node --test qa/pwa-device-install.test.mjs
       - name: Verify adaptive TV remote and mobile touch behavior
