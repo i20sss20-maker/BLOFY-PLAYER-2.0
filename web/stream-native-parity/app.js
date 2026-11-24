@@ -1671,10 +1671,13 @@ function livePlaybackProgress(record,video,now){
  if(advancedFrames)record.frameCounterObserved=true;
  var frameCounterUsable=!!record.frameCounterObserved&&frames!==null&&frames>=5;
  var advancedPresented=!!record.framePresentationObserved&&Number(record.lastPresentedFrameAt)>Number(record.lastSampledPresentationAt||0);
- // Prefer actual presented video callbacks (not the audio-only currentTime
- // clock) on browsers supporting requestVideoFrameCallback.
+ var pictureDimensions=Number(video&&video.videoWidth)>0&&Number(video&&video.videoHeight)>0;
+ // A live stream may be audio-only even while currentTime and readyState
+ // advance. Never report "visual progress" from that audio clock until
+ // the decoder actually exposes a video image. A real presented-frame
+ // callback is stronger evidence even on older TVs that omit dimensions.
  var visualProgress=record.framePresentationObserved?advancedPresented:
-  frameCounterUsable?advancedFrames:(advancedTime||advancedFrames);
+  pictureDimensions&&(frameCounterUsable?advancedFrames:(advancedTime||advancedFrames));
  if(record.framePresentationObserved)record.lastSampledPresentationAt=record.lastPresentedFrameAt;
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
@@ -2213,7 +2216,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     recoverConnection()
    }else if(progress.idleMs>=6500&&!record.bufferSince){
     record.bufferSince=Date.now();
-    status('تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')
+    status(!video.videoWidth||!video.videoHeight?
+     'وصل الصوت أو توقيت البث لكن الصورة لم تظهر؛ جار فحص الفيديو واستعادة التشغيل…':
+     'تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')
    }
   },2200);
  if(shouldUseNativeHls(video)){

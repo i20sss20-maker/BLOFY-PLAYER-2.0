@@ -274,6 +274,38 @@ test('known-duration MKV uses full VOD HLS rather than a one-minute live-style p
  await expect(page.locator('#player-root')).toBeVisible();
  movie.container_extension='mp4';delete movie.duration_secs;
 });
+test('long-live audio clock with no picture dimensions is never mistaken for a healthy video',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ // app.js is packaged in a closure, so the progress helper is intentionally
+ // not a global. Run its actual source in Chrome without changing Web globals.
+ const appSource=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ const begin=appSource.indexOf('function livePlaybackProgress(');
+ const end=appSource.indexOf('function liveExpiredSegmentRecovery(',begin);
+ expect(begin).toBeGreaterThan(0);expect(end).toBeGreaterThan(begin);
+ await page.addInitScript({content:'window.__qaLiveProgress=(function(){'+appSource.slice(begin,end)+
+  ';return livePlaybackProgress})()'});
+ await page.goto('http://127.0.0.1:3000/',{waitUntil:'domcontentloaded'});
+ const data=await page.evaluate(()=>{
+  const rec={started:1000,lastProgressAt:1000,lastMediaTime:10};
+  const audio={currentTime:11,readyState:4,videoWidth:0,videoHeight:0,
+   getVideoPlaybackQuality(){return {totalVideoFrames:0}}};
+  const missing1=window.__qaLiveProgress(rec,audio,5000);
+  audio.currentTime=47;
+  const missing2=window.__qaLiveProgress(rec,audio,18000);
+  const frozen=missing2.idleMs>=16000;
+  audio.videoWidth=1920;audio.videoHeight=1080;
+  audio.currentTime=48;
+  const restored=window.__qaLiveProgress(rec,audio,19000);
+  return {missing1,missing2,frozen,restored,firstVideoTime:rec.lastMediaTime}
+ });
+ expect(data.missing1.advanced).toBe(false);
+ expect(data.missing2.advanced).toBe(false);
+ expect(data.frozen).toBe(true);
+ expect(data.restored.advanced).toBe(true);
+ expect(data.firstVideoTime).toBe(48);
+ expect(errors).toEqual([])
+});
+
 test('audio-only playing cannot claim a video first frame in the health panel',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/media/movie/11.mp4',async route=>route.fulfill({
