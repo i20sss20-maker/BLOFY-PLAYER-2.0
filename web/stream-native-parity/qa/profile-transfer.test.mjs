@@ -79,6 +79,15 @@ test('import newer checkpoint beats older saved local checkpoint without deletin
  assert.equal(merged.watch['movie:11'].position,600);
  assert.equal(merged.watch['series:78'].position,300);
 });
+test('malicious old browser storage keys never change merged object prototypes',()=>{
+ const poisoned=JSON.parse('{"__proto__":{"polluted":true},"movie:11":true}');
+ const merged=transfer.merge(poisoned,{},poisoned,{favorites:[],watch:[]});
+ assert.equal(Object.getPrototypeOf(merged.favorites),null);
+ assert.equal(Object.getPrototypeOf(merged.favoriteItems),null);
+ assert.equal(Object.prototype.polluted,undefined);
+ assert.equal(Object.hasOwn(merged.favorites,'__proto__'),false);
+ assert.equal(merged.favorites['movie:11'],true)
+});
 test('app settings guard file save by epoch and exact profile, and avoid remote profile upload',()=>{
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  const srv=readFileSync(new URL('../server.ts',import.meta.url),'utf8');
