@@ -113,7 +113,8 @@ object ExternalStreamConnectCatalog {
             routes.add(hls, "m3u8").toString()
         } else null
         val client = guardedMediaClient(routes, routes::resolve)
-
+        return PlaybackTarget(primary.toString(),client,fallback)
+    }
 
     internal fun guardedMediaClient(
         routes: ExternalXtreamMediaRoutes,
@@ -162,6 +163,4 @@ object ExternalStreamConnectCatalog {
                     }
                 }
             }.build()
-        return PlaybackTarget(primary.toString(),client,fallback)
-    }
 }
