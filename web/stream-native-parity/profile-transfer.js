@@ -62,7 +62,7 @@
    if(e){f.push(e);seen[k]=true}
   }
   keys=Object.keys(watch||{}).sort(function(a,b){
-   return Number((watch[b]||{}).updated)||0-(Number((watch[a]||{}).updated)||0)
+   return (Number((watch[b]||{}).updated)||0)-(Number((watch[a]||{}).updated)||0)
   });
   seen=Object.create(null);
   for(i=0;i<keys.length&&w.length<160;i++){
