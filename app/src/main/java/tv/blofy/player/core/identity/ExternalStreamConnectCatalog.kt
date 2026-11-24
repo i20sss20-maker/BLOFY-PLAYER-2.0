@@ -6,6 +6,7 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
 import tv.blofy.player.core.network.awaitResponse
@@ -161,9 +162,15 @@ object ExternalStreamConnectCatalog {
                 } else {
                     try {
                         val body = response.body ?: throw IOException("External media response missing")
-                        val manifest = url.encodedPath.endsWith(".m3u8", ignoreCase = true) ||
-                            body.contentType()?.subtype?.contains("mpegurl", ignoreCase = true) == true ||
-                            response.peekBody(7L).string() == "#EXTM3U"
+                        // Progressive TS/MP4/MKV and byte ranges go directly
+                        // from the Xtream provider to Media3. Only HLS manifests
+                        // need their child URLs translated into local routes.
+                        val contentType = body.contentType()
+                        val declaredHls = contentType?.subtype?.contains("mpegurl", ignoreCase = true) == true
+                        val manifest = response.code != 206 && (declaredHls ||
+                            url.encodedPath.endsWith(".m3u8", ignoreCase = true) ||
+                            (contentType?.type !in setOf("video","audio") &&
+                                response.peekBody(7L).string() == "#EXTM3U"))
                         if (!manifest) sanitized.build()
                         else {
                             val source = body.source()
@@ -176,7 +183,7 @@ object ExternalStreamConnectCatalog {
                             sanitized.removeHeader("Content-Encoding").removeHeader("Transfer-Encoding")
                                 .header("Content-Length", bytes.size.toString())
                                 .header("Content-Type", "application/vnd.apple.mpegurl")
-                                .body(bytes.toResponseBody(null)).build()
+                                .body(bytes.toResponseBody("application/vnd.apple.mpegurl".toMediaType())).build()
                         }
                     } catch (_: Exception) {
                         response.close()
