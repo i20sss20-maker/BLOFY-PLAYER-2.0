@@ -72,8 +72,18 @@ internal object ExternalXtreamCatalogTransport {
                 val response = try {
                     chain.proceed(request.newBuilder().url(actual)
                         .removeHeader("Authorization").removeHeader("Cookie").build())
-                } catch (_: IOException) {
-                    throw IOException("External catalog connection failed")
+                } catch (failure: IOException) {
+                    // Preserve the failure category, not the provider URL or raw
+                    // exception/cause (which may contain account credentials).
+                    throw when (failure) {
+                        is javax.net.ssl.SSLHandshakeException -> javax.net.ssl.SSLHandshakeException("External catalog TLS handshake failed")
+                        is javax.net.ssl.SSLPeerUnverifiedException -> javax.net.ssl.SSLPeerUnverifiedException("External catalog peer verification failed")
+                        is java.net.SocketTimeoutException, is java.io.InterruptedIOException ->
+                            java.net.SocketTimeoutException("External catalog timed out")
+                        is java.io.EOFException -> java.io.EOFException("External catalog response ended early")
+                        is java.net.SocketException -> java.net.SocketException("External catalog connection reset")
+                        else -> IOException("External catalog connection failed")
+                    }
                 }
                 // Keep credentials out of Retrofit error URLs and redirect headers.
                 response.newBuilder().request(request)
