@@ -64,7 +64,7 @@ import {createDistributorCustomerCatalog}
   from './xtream-distributor-customer-catalog.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable,streamCodeProof} from './xtream-duration-codes.mjs';
 import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
-import {createUnifiedCodeRedeemer} from './stream-unified-code-redeem.mjs';
+import {createDatabaseUnifiedRedeemer} from './stream-unified-code-redeem.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {createStreamCodeXtreamLink} from './xtream-code-dual-link.mjs';
@@ -2750,17 +2750,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,
             enabled:['1','true'].includes(String(process.env.BLOFY_STREAM_CONNECT_ENABLED))});
           const pairing=unifiedConnectPairing;
-          let connectAttempt=null;
-          const redeem=createUnifiedCodeRedeemer({
-            paidExists:async code=>{
-              const proof=streamCodeProof(code,KEY_HEX);
-              if(!proof)return false;
-              const result=await pool.query('SELECT 1 FROM blofy_xtream_gateway_duration_codes WHERE code_hash=$1 LIMIT 1',[proof]);
-              return result.rows.length===1;
-            },
-            connectExists:async code=>{connectAttempt=await pairing.beginUnifiedAttempt(code);return connectAttempt.exists;},
-            redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true}),
-            redeemConnect:(_code,deviceKey)=>connectAttempt.redeem(deviceKey)
+          const redeem=createDatabaseUnifiedRedeemer({pool,pairing,
+            paidProof:code=>streamCodeProof(code,KEY_HEX),
+            redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true})
           });
           const input=await readJson(req);
           return json(res,201,await redeem({code:input.code,deviceKey:input.deviceKey,origin:xtreamOrigin(req)}),headers);
