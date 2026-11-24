@@ -314,7 +314,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 // the exact same code to retry if its first response was lost.
                 val binding = StreamCodeSession.installationKey(applicationContext)
                 val result = if (NativeExternalCatalogSession.qaEnabled(applicationContext)) {
-                    when (val unified = UnifiedStreamCodeClient.redeem(code, binding, syntheticLab = true)) {
+                    when (val unified = UnifiedStreamCodeClient.redeem(code, binding,
+                        syntheticLab = packageName == "tv.blofy.player.v2.stream.qa")) {
                         is UnifiedStreamCodeClient.Result.Paid -> unified.session
                         is UnifiedStreamCodeClient.Result.External -> {
                             // Keep the typed code until the encrypted profile is
