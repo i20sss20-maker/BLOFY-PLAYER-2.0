@@ -43,6 +43,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/ios-native-browser-gesture-play.test.mjs
       - name: Verify live buffer UI recovery and Android-inspired READY parity
         run: cd web/stream-native-parity && node --test qa/live-buffer-ready-parity.test.mjs
+      - name: Verify live and movie overlay dismissal only after decoded-picture recovery
+        run: cd web/stream-native-parity && node --test qa/live-vod-visible-overlay-recovery.test.mjs
       - name: Verify standalone device web-app installation and safe icon route
         run: cd web/stream-native-parity && node --test qa/pwa-device-install.test.mjs
       - name: Verify adaptive TV remote and mobile touch behavior
