@@ -1,0 +1,64 @@
+name: STREAM unified redemption isolated QA
+on:
+  push:
+    branches:
+      - qa/stream-unified-server-redemption-20261125
+    paths:
+      - 'services/activation/src/stream-unified-code-redeem.mjs'
+      - 'services/activation/src/stream-code-namespace.mjs'
+      - 'services/activation/src/xtream-duration-codes.mjs'
+      - 'services/activation/src/xtream-code-commercial.mjs'
+      - 'services/activation/src/xtream-code-dual-link.mjs'
+      - 'services/activation/test/stream-code-namespace.test.mjs'
+      - 'services/activation/src/stream-connect-pairing.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/stream-unified-code-redeem.test.mjs'
+      - 'services/activation/test/stream-connect-pairing.test.mjs'
+      - 'services/activation/test/stream-connect-postgres.smoke.mjs'
+      - 'services/activation/test/stream-unified-paid-postgres.smoke.mjs'
+      - '.github/workflows/stream-unified-redemption-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  redemption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: qa-local-only
+          POSTGRES_DB: blofy_connect_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d blofy_connect_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: |
+          node --check src/xtream-gateway-hook.mjs
+          node --check src/stream-connect-pairing.mjs
+          node --check src/stream-code-namespace.mjs
+          node --check src/xtream-duration-codes.mjs
+          node --check src/xtream-code-commercial.mjs
+          node --check src/xtream-code-dual-link.mjs
+          node --test test/stream-unified-code-redeem.test.mjs test/stream-connect-pairing.test.mjs test/stream-code-namespace.test.mjs
+      - name: Verify atomic device binding on isolated PostgreSQL
+        env:
+          DATABASE_URL: postgresql://qa:qa-local-only@127.0.0.1:5432/blofy_connect_qa
+          BLOFY_STREAM_EPHEMERAL_DB_QA: 'true'
+        run: |
+          node test/stream-connect-postgres.smoke.mjs
+          node test/stream-unified-paid-postgres.smoke.mjs

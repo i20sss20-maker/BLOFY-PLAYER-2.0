@@ -62,7 +62,9 @@ import { xtreamMediaReadIdleMs } from './xtream-media-read-deadline.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
   from './xtream-distributor-customer-catalog.mjs';
-import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
+import {createStreamDurationCodes,ensureStreamCodeTable,streamCodeProof} from './xtream-duration-codes.mjs';
+import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
+import {createDatabaseUnifiedRedeemer,handleUnifiedCodeHttp} from './stream-unified-code-redeem.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {createStreamCodeXtreamLink} from './xtream-code-dual-link.mjs';
@@ -168,6 +170,7 @@ let streamCodes=null;
 let streamCommercial=null;
 let streamRelogin=null;
 let streamDualLink=null;
+let unifiedConnectPairing=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 // Short numeric vouchers are more susceptible to distributed guessing.
 // Bound all public redemption attempts as well as each client IP.
@@ -2800,6 +2803,28 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           originalVoucherPreserved:true},{
           'referrer-policy':'no-referrer','cache-control':'no-store, private',
           pragma:'no-cache'
+        });
+      }
+      // Disabled by default; never change existing redemption endpoints.
+      if(url.pathname==='/api/v1/stream/app/unified-redeem'){
+        return handleUnifiedCodeHttp(req,res,url,{
+          enabled:process.env.BLOFY_STREAM_UNIFIED_LOGIN_QA==='1',
+          rateLimit:request=>{
+            const rate=streamCodeLimiter.consume(requestClientKey(request));
+            const overall=streamCodeGlobalLimiter.consume('all_redemptions');
+            return {allowed:rate.allowed&&overall.allowed,
+              retryAfterSeconds:Math.max(rate.retryAfterSeconds||0,overall.retryAfterSeconds||0)};
+          },
+          origin:xtreamOrigin,
+          resolveRedeemer:async()=>{
+            await ensureReady();
+            if(!unifiedConnectPairing)unifiedConnectPairing=createStreamConnectPairing({pool,
+              keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,
+              enabled:['1','true'].includes(String(process.env.BLOFY_STREAM_CONNECT_ENABLED))});
+            return createDatabaseUnifiedRedeemer({pool,pairing:unifiedConnectPairing,
+              paidProof:code=>streamCodeProof(code,KEY_HEX),
+              redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true})});
+          }
         });
       }
       if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem' ||
