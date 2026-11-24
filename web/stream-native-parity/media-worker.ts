@@ -122,7 +122,7 @@ function liveSourceRetryMs(identity,now=Date.now()){
 function recordLiveSourceFailure(session,reason,now=Date.now()){
  if(session.kind!=='live'||!session.sourceIdentity)return;
  if(!['live_source_finished','stale_manifest','ffmpeg_no_playlist','process_crashed',
-  'fetch_or_spawn_error','hls_source_failed'].includes(reason)&&!/^upstream_5[0-9]{2}$/.test(reason))return;
+  'fetch_or_spawn_error','hls_source_failed','live_no_initial_segment'].includes(reason)&&!/^upstream_5[0-9]{2}$/.test(reason))return;
  const key=session.sourceIdentity,old=liveSourceFailureWindows.get(key);
  const repeated=old&&now-old.lastAt<120000&&now-session.startedAt<90000;
  const failures=repeated?Math.min(6,old.failures+1):1;
@@ -267,6 +267,36 @@ function expiredLiveSegment(session,filename){
   return Number.isSafeInteger(earliest)&&Number(filename.slice(4,10))<earliest
  }catch{return false}
 }
+/* HLS.js cannot render a video from a bare #EXTM3U without any playable TS
+ * chunk. FFmpeg sometimes writes an initial index before the first segment
+ * has been atomically renamed out of *.tmp, or keeps an empty index while
+ * the upstream source sends no packets. Never return 200 for such an index.
+ * The first playable TS is bounded by the original manifest request's
+ * deadline; we do not wait 25s a second time after awaitHlsFile().
+ */
+function liveManifestHasPlayableSegment(session){
+ if(!session||session.stopped)return false;
+ const path=join(session.dir,'index.m3u8');
+ try{
+  if(!existsSync(path))return false;
+  const playlist=String(readFileSync(path,'utf8'));
+  if(!playlist.startsWith('#EXTM3U'))return false;
+  const lines=playlist.split(/\r?\n/);
+  // Only complete standalone relative TS lines produced by this worker.
+  // Ignore HLS comments and an incomplete .ts.tmp being written by FFmpeg.
+  return lines.some(line=>/^seg-[0-9]{6}\.ts$/.test(line)&&existsSync(join(session.dir,line)))
+ }catch{return false}
+}
+async function awaitPlayableLiveManifest(session,signal,deadlineMs){
+ while(Date.now()<deadlineMs){
+  if(session.stopped||signal?.aborted)return 'cancelled';
+  if(liveManifestHasPlayableSegment(session))return 'ready';
+  if(session.finished)return 'finished';
+  await nap(180)
+ }
+ if(session.stopped||signal?.aborted)return 'cancelled';
+ return liveManifestHasPlayableSegment(session)?'ready':session.finished?'finished':'timeout'
+}
 function staleLiveManifest(session,filename,now){
  if(!session||session.kind!=='live'||session.stopped||!filename)return false;
  try{
@@ -391,7 +421,22 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
      lifetimeSeconds:event.lifetimeSeconds??null,
      gapMs:event.gapMs??null,attempt:event.attempt??null}))
   }):upstream.body;
-  const sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts');
+  // Some providers respond with HTTP 200 headers but never deliver a TS
+  // packet. The H.264 prefix probe would otherwise await reader.read()
+  // forever, pinning a worker slot and keeping the client's manifest open.
+  // Use the same bounded startup budget as Hls.js; do not launch FFmpeg
+  // after the source was explicitly aborted.
+  const probeMs=kind==='live'?Math.max(500,27000-(Date.now()-session.startedAt)):27000;
+  const probeTimer=setTimeout(()=>controller.abort(),probeMs);
+  probeTimer.unref?.();
+  let sourceInput;
+  try{sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts')}
+  finally{clearTimeout(probeTimer)}
+  if(controller.signal.aborted){
+   try{await sourceInput.input.cancel()}catch{}
+   stopHls(session,'live_no_initial_segment');
+   return {error:'hls_source_probe_timeout',status:503}
+  }
   if(session.stopped||hlsSessions.get(key)!==session){
    try{await sourceInput.input.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
@@ -567,6 +612,9 @@ async function hlsRequest(req,url){
  const bearer=req.headers.get('authorization')||'';
  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
  const [whole,kind,id,ext,track,viewerSid,compat,filename]=match;
+ // The browser sets 30s for manifests; include source headers, FFmpeg
+ // startup, index creation AND a real TS chunk in one 27.5s deadline.
+ const manifestDeadline=kind==='live'&&filename==='index.m3u8'?Date.now()+27500:0;
  const key=hlsKey(bearer,kind,id,ext,track,!!compat,compat==='ultra',viewerSid||'');
  let sess=hlsSessions.get(key);
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
@@ -589,24 +637,42 @@ async function hlsRequest(req,url){
  const owner=sess.sharedProducer||sess;
  touchHls(sess);
  if(owner!==sess)touchHls(owner);
- if(kind==='live')noteLiveSourceHealthy(owner);
  if(kind==='live'&&expiredLiveSegment(owner,filename))
   return hlsError(410,'hls_segment_evicted');
- const ready=await awaitHlsFile(owner,filename,filename==='index.m3u8'?25000:8000);
- if(ready&&filename==='index.m3u8'&&kind==='live'){
-  // Avoid exposing an initialized playlist before its first segment is committed.
-  const playlistText=readFileSync(join(owner.dir,filename),'utf8');
-  const firstSegment=(playlistText.match(/seg-\d{6}\.ts/g)||[])[0];
-  if(firstSegment&&!existsSync(join(owner.dir,firstSegment))){
-   const available=await awaitHlsFile(owner,firstSegment,4500);
-   if(!available)return hlsError(503,'hls_playlist_not_ready');
+ const ready=await awaitHlsFile(owner,filename,manifestDeadline?
+  Math.max(0,manifestDeadline-Date.now()):
+  filename==='index.m3u8'?25000:8000);
+ if(ready&&manifestDeadline){
+  const playable=await awaitPlayableLiveManifest(owner,req.signal,manifestDeadline);
+  if(playable!=='ready'){
+   if(req.signal?.aborted)return hlsError(410,'hls_request_cancelled');
+   if(playable==='cancelled')return hlsError(503,'hls_session_closed',2);
+   if(!owner.stopped){
+    // A new source that never delivered even one playable segment may
+    // otherwise occupy an FFmpeg slot indefinitely as the TV keeps polling.
+    if(!owner.hadPlayableLiveManifest)
+     stopHls(owner,playable==='finished'?'live_source_finished':'live_no_initial_segment');
+    else if(staleLiveManifest(owner,join(owner.dir,filename),Date.now()))
+     stopHls(owner,'stale_manifest')
+   }
+   return hlsError(503,playable==='finished'?'hls_source_finished':
+    'hls_live_segment_not_ready',2)
   }
+  owner.hadPlayableLiveManifest=true
  }
  if(ready&&/^seg-\d{6}\.ts$/.test(filename)&&!sess.firstSegmentLogged){
   sess.firstSegmentLogged=true;
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
  if(!ready){
+  if(manifestDeadline&&req.signal?.aborted)return hlsError(410,'hls_request_cancelled');
+  if(manifestDeadline&&!owner.stopped&&!owner.hadPlayableLiveManifest){
+   // Covers an upstream HTTP stream that never produced even index.m3u8.
+   // Once the first playable-video deadline passes, free its slot and
+   // apply the same source-specific backoff as a bare/empty manifest.
+   stopHls(owner,'live_no_initial_segment');
+   return hlsError(503,'hls_live_segment_not_ready',2)
+  }
   if(kind==='live'&&expiredLiveSegment(owner,filename))
    return hlsError(410,'hls_segment_evicted');
   return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout')
@@ -626,6 +692,7 @@ async function hlsRequest(req,url){
    'X-Blofy-Source-Resolution':owner.sourceDimensions||'unknown'};
   if(!playlist){
    const streamed=await streamMediaFile(path,'video/mp2t','no-store, private',statusHeaders);
+   if(streamed&&kind==='live')noteLiveSourceHealthy(owner);
    return streamed||hlsError(503,'hls_segment_unavailable')
   }
   const data=readFileSync(path);

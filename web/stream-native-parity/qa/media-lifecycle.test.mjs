@@ -731,7 +731,7 @@ test('authenticated HLS manifest and segments fan out to two SID viewers using o
   noteLiveSourceHealthy(){},
   releaseHls(s){s.released=true},join:(...p)=>p.join('/'),
   secureEquals:()=>true,staleLiveManifest:()=>false,
-  touchHls(){},awaitHlsFile:async()=>true,existsSync:()=>true,expiredLiveSegment:()=>false,
+  touchHls(){},awaitHlsFile:async()=>true,awaitPlayableLiveManifest:async()=> 'ready',existsSync:()=>true,expiredLiveSegment:()=>false,
   readFileSync:(path,encoding)=>encoding==='utf8'?
    '#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:1,\nseg-000001.ts\n':
    Buffer.from(path.endsWith('.ts')?'video':'#EXTM3U\n#EXTINF:1,\nseg-000001.ts\n'),
@@ -865,7 +865,7 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
   readFileSync:(file,encoding)=>encoding==='utf8'?'#EXTM3U\n#EXT-X-VERSION:3\n':Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
   streamMediaFile:async(path,mime,cache,extra)=>new Response('video',{status:200,
    headers:{'Content-Type':mime,...extra}}),
-  existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,
+  existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,awaitPlayableLiveManifest:async()=> 'ready',
   expiredLiveSegment:()=>false,staleLiveManifest:()=>false,
   liveShareAllowed:()=>false,liveSourceIdentity:()=> 'synthetic-source',
   liveSourceRetryMs:()=>0,noteLiveSourceHealthy(){},

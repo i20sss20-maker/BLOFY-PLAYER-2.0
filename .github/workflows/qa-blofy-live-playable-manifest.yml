@@ -1,0 +1,34 @@
+name: BLOFY STREAM Live First Playable Segment QA
+on:
+  push:
+    branches: [fix/stream-web-live-playable-manifest-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-live-playable-manifest.yml'
+  pull_request:
+    branches: [release/blofy-stream-web-1-0-0-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-live-playable-manifest.yml'
+permissions:
+  contents: read
+jobs:
+  first-playable-segment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Prove live HLS manifest waits for actual playable TS and protects source capacity
+        run: node --test web/stream-native-parity/qa/live-playable-manifest.test.mjs
+      - name: Existing media lifecycle and shared-viewer isolation regressions
+        run: node --test web/stream-native-parity/qa/media-lifecycle.test.mjs
+      - name: Verify Web remains parseable for older TV browsers
+        run: node --check web/stream-native-parity/app.js
+      - name: Build live production worker and Web server without credentials
+        run: |
+          bun build web/stream-native-parity/media-worker.ts --target=bun --outdir=/tmp/blofy-live-playable-worker
+          bun build web/stream-native-parity/server.ts --target=bun --outdir=/tmp/blofy-live-playable-web
