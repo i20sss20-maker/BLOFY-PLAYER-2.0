@@ -60,7 +60,12 @@ test('live player reports audio-without-picture separately and recovers within a
  assert.match(hls,/progress.idleMs>=16000/);
  assert.match(hls,/!video.videoWidth\|\|!video.videoHeight/);
  assert.match(hls,/وصل الصوت أو توقيت البث لكن الصورة لم تظهر/);
- assert.match(hls,/recordLiveIncident\('picture_freeze'\)/);
+ assert.match(hls,/['"]picture_freeze['"]:['"]picture_missing['"]/,
+  'watchdog distinguishes an invisible picture from frozen picture frames');
+ assert.match(app,/picture_missing:'الصورة غير ظاهرة'/,
+  'private playback timeline explains the missing-picture incident');
+ assert.match(app,/picture_freeze:'تجمد الصورة'/,
+  'visible frozen-frame diagnosis remains available');
  assert.match(hls,/recoverConnection\(\)/);
  assert.match(hls,/if\(video.paused\|\|video.ended\|\|video.seeking\|\|document.hidden\)/,
   'never restart a user-paused or hidden TV player');
