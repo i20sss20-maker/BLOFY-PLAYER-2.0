@@ -73,5 +73,5 @@ test('tap-to-play only invokes video.play() on user click and preserves paused/s
  assert.match(app,/id="player-ios-tap-to-play"/);
  assert.match(app,/offerIosPlayGesture\(error,video,preview\)/);
  assert.match(css,/\.player-ios-tap-to-play\[hidden\]\{display:none!important\}/);
- assert.match(css,/data-blofy-ios="true".*\.player-ios-tap-to-play/not); // editor guard; replaced below
+ assert.match(css,/data-blofy-ios="true"\] \.player-ios-tap-to-play/);
 });
