@@ -32,3 +32,56 @@ test('player rejects upstream and credential-bearing URLs', () => {
   assert.throws(() => player.open({ url: 'https://user:pass@blofyplayer.com/file.m3u8', format: 'hls' }), /same-origin/);
   player.destroy();
 });
+
+test('transient error reconnects twice while preserving the player lifecycle', async () => {
+  const events = new Map();
+  const state = [];
+  let loads = 0;
+  const video = {
+    paused: false, ended: false, seeking: false, readyState: 0, currentTime: 0,
+    canPlayType: (mime) => mime.includes('mpegurl') ? 'maybe' : '',
+    addEventListener(name, callback) { events.set(name, callback); },
+    removeEventListener(name) { events.delete(name); },
+    pause() {}, load() { loads++; }, removeAttribute() {},
+    play() { return Promise.resolve(); }
+  };
+  const player = createBrowserStreamPlayer(video, {
+    origin: 'https://blofyplayer.com',
+    onStatus: (value) => state.push(value),
+    maxRetries: 3
+  });
+  try {
+    assert.equal(player.open({ url: '/api/authorized/live.m3u8', format: 'hls' }), true);
+    events.get('error')();
+    assert.ok(state.includes('reconnecting'));
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.ok(loads >= 3, 'first recovery must reload a media source');
+    const afterFirst = loads;
+    events.get('error')();
+    await new Promise(resolve => setTimeout(resolve, 1900));
+    assert.ok(loads > afterFirst, 'later recoveries must remain possible');
+  } finally {
+    player.destroy();
+  }
+});
+test('changing channel cancels pending reconnect and never loads a previous channel', async () => {
+  const events = new Map();
+  const video = {
+    paused: false, ended: false, seeking: false, readyState: 0, currentTime: 0,
+    canPlayType: () => 'maybe',
+    addEventListener(name, callback) { events.set(name, callback); },
+    removeEventListener(name) { events.delete(name); },
+    pause() {}, load() {}, removeAttribute() {},
+    play() { return Promise.resolve(); }
+  };
+  const player = createBrowserStreamPlayer(video, { origin: 'https://blofyplayer.com' });
+  try {
+    player.open({ url: '/api/authorized/a.m3u8', format: 'hls' });
+    events.get('error')();
+    player.open({ url: '/api/authorized/b.m3u8', format: 'hls' });
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.match(video.src, /\/b\.m3u8$/);
+  } finally {
+    player.destroy();
+  }
+});
