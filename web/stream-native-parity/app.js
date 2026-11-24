@@ -78,6 +78,8 @@ function initDeviceExperience(){
  try{coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches)}catch(e){}
  var family=deviceExperience(navigator.userAgent,navigator.maxTouchPoints,coarse);
  document.documentElement.setAttribute('data-blofy-device',family);
+ document.documentElement.setAttribute('data-blofy-ios',
+  appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)?'true':'false');
  setDeviceInput(family==='tv'?'remote':family==='touch'?'touch':'mouse')
 }
 initDeviceExperience();
@@ -1929,6 +1931,37 @@ function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
   return true
  }catch(e){record.liveLagSince=0;return false}
 }
+/* Native AVFoundation HLS can fall behind a sliding live window while the
+ * phone's decoder stays alive. Rejoin in the same authenticated session once,
+ * before restarting FFmpeg. Never seek on pause, hidden app, seek or backoff. */
+function nativeLiveHlsResync(record,video,now,userPaused,hidden,apple){
+ if(!apple||!record||!video||record.engine||record.reconnecting||
+    record.nativeResyncPending||!record.ready||!record.visualProgressSeen||
+    userPaused||hidden||video.paused||video.ended||video.seeking||
+    record.originTimer||record.capacityTimer||record.retryTimer||
+    now-(record.lastProgressAt||now)<7500||
+    record.nativeResyncAt&&now-record.nativeResyncAt<45000)return false;
+ var range=video.seekable;
+ if(!range||!range.length)return false;
+ var begin,edge,current;
+ try{
+  begin=Number(range.start(range.length-1));
+  edge=Number(range.end(range.length-1));
+  current=Number(video.currentTime)
+ }catch(err){return false}
+ if(!Number.isFinite(begin)||!Number.isFinite(edge)||
+    !Number.isFinite(current)||edge-begin<8||
+    edge-current<9||edge-current>180)return false;
+ var destination=Math.max(begin+0.5,edge-5);
+ if(destination-current<3||destination>edge-3)return false;
+ try{
+  video.currentTime=destination;
+  record.nativeResyncAt=now;
+  record.nativeResyncGraceUntil=now+7500;
+  record.nativeResyncPending=true;
+  return true
+ }catch(err){return false}
+}
 /* Browser live playback uses native Safari HLS or Hls.js, NOT Media3.
  * Mirror Android's stable-ready-vs-buffering policy without replacing the
  * browser decoder: tolerate brief stalls, act on confirmed picture progress,
@@ -2501,6 +2534,12 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     if(!preview)recordLiveIncident('decoder_paused');
     recoverConnection();return
    }
+   if(record.nativeResyncPending&&video.seeking&&!document.hidden&&!intentionalPause){
+    if(now>=record.nativeResyncGraceUntil){
+     record.nativeResyncPending=false;recoverConnection()
+    }
+    return
+   }
    if(video.paused||video.ended||video.seeking||document.hidden){
     clearLiveBufferWait(record,statusElement);
     record.lastProgressAt=now;record.lastVisualSampleAt=now;
@@ -2513,12 +2552,25 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     return
    }
    if(progress.advanced){
+    record.nativeResyncPending=false;
     if(!preview&&S.playerView&&S.playerView.video===video&&S.playerView.stats)
      finishObservedBuffer(S.playerView.stats,now);
     // Proven picture progress clears a stale "buffering" overlay even
     // when Safari/VIDAA never emits another "playing" event.
     if(record.waitingSince||record.bufferNoticeTimer||record.bufferStatusShown||record.stallTimer)
      clearLiveBufferWait(record,statusElement);
+    return
+   }
+   if(record.nativeResyncPending){
+    if(now<record.nativeResyncGraceUntil)return;
+    record.nativeResyncPending=false;
+    recoverConnection();return
+   }
+   if(!preview&&progress.idleMs>=7500&&
+      nativeLiveHlsResync(record,video,now,!!intentionalPause,document.hidden,
+        appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints))){
+    recordLiveIncident('live_edge_resync',now);
+    status('جار إعادة مزامنة البث على الآيفون دون قطع الاتصال…');
     return
    }
    if(progress.idleMs>=16000){
