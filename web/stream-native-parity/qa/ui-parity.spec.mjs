@@ -46,6 +46,30 @@ test('home matches STREAM palette and navigation is clickable',async({page})=>{
  await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
  expect(errors).toEqual([]);
 });
+test('home paints navigation immediately while series catalog is slow and keeps TV focus after filling shelves',async({page})=>{
+ let releaseSeries;
+ const seriesGate=new Promise(resolve=>{releaseSeries=resolve});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/api/page?*',async route=>{
+  const kind=new URL(route.request().url()).searchParams.get('kind'),items=kinds[kind]||[];
+  if(kind==='series')await seriesGate;
+  await route.fulfill({status:200,contentType:'application/json',
+   body:JSON.stringify({items,hasMore:false,nextOffset:items.length,kind})})
+ });
+ try{
+  await page.goto('http://127.0.0.1:3000/',{waitUntil:'domcontentloaded'});
+  await expect(page.locator('.home-hero')).toBeVisible();
+  await expect(page.locator('.story-row [data-go="live"]')).toBeVisible();
+  await expect(page.locator('.home-hero')).toContainText('BLOFY');
+  await expect(page.locator('.poster')).toHaveCount(1);
+  await page.keyboard.press('ArrowDown');
+  await page.locator('.story-row [data-go="movie"]').focus();
+  releaseSeries();
+  await expect(page.locator('.poster')).toHaveCount(2);
+  await expect(page.locator('.story-row [data-go="movie"]')).toBeFocused();
+  expect(errors).toEqual([])
+ }finally{releaseSeries()}
+});
 test('series details opens the season and episode list',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:3000/');
