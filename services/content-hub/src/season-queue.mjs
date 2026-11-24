@@ -113,7 +113,22 @@ export function createSeasonQueueStore({
  if(!connectionString)throw Error('season_queue_database_required');
  const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:'blofy-season-queue'});
- let initPromise,metricTablePromise;
+ let initPromise,metricTablePromise,auditTablePromise;
+ // Initialize the audit table before reads as well as writes. Single-flight
+ // per store; on transient database errors permit retry, never report empty
+ // audit alerts merely because schema initialization failed.
+ async function ensureAuditTable(){
+  if(!auditTablePromise){
+   auditTablePromise=pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits (',
+    'run_id TEXT PRIMARY KEY, code TEXT NOT NULL,',
+    'checked_parts INTEGER NOT NULL, total_parts INTEGER NOT NULL,',
+    'checked_bytes BIGINT NOT NULL,',
+    'checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+   ].join(' ')).catch(error=>{auditTablePromise=null;throw error});
+  }
+  await auditTablePromise;
+ }
  async function ensure(){
   if(!initPromise){
    initPromise=(async()=>{
@@ -850,13 +865,7 @@ export function createSeasonQueueStore({
       !Number.isSafeInteger(result.totalParts)||result.totalParts<0||
       !Number.isSafeInteger(result.checkedBytes)||result.checkedBytes<0)
     throw Error('season_storage_audit_invalid');
-   await pool.query([
-    'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits (',
-    'run_id TEXT PRIMARY KEY, code TEXT NOT NULL,',
-    'checked_parts INTEGER NOT NULL, total_parts INTEGER NOT NULL,',
-    'checked_bytes BIGINT NOT NULL,',
-    'checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
-   ].join(' '));
+   await ensureAuditTable();
    await pool.query([
     'INSERT INTO blofy_content_hub_season_audits',
     '(run_id,code,checked_parts,total_parts,checked_bytes)',
@@ -870,16 +879,14 @@ export function createSeasonQueueStore({
   // older unresolved damaged runs must still block new transfer sessions.
   async unresolvedAuditCounts(){
    await ensure();
+   await ensureAuditTable();
    const result=await pool.query([
     'SELECT code,COUNT(*)::text AS total',
     'FROM blofy_content_hub_season_audits',
     "WHERE code IN ('season_storage_checksum_mismatch',",
     "'season_storage_read_unavailable')",
     'GROUP BY code'
-   ].join(' ')).catch(error=>{
-    if(error?.code==='42P01')return {rows:[]};
-    throw error;
-   });
+   ].join(' '));
    return {
     mismatch:Number(result.rows.find(x=>
      x.code==='season_storage_checksum_mismatch')?.total||0),
@@ -888,15 +895,13 @@ export function createSeasonQueueStore({
    };
   },
   async recentAudits({limit=20}={}){
+   await ensureAuditTable();
    const n=Math.max(1,Math.min(20,Number(limit)||20));
    const response=await pool.query([
     'SELECT run_id,code,checked_parts,total_parts,checked_bytes,',
     'checked_at FROM blofy_content_hub_season_audits',
     'ORDER BY checked_at DESC LIMIT $1'
-   ].join(' '),[n]).catch(error=>{
-    if(error?.code==='42P01')return {rows:[]};
-    throw error;
-   });
+   ].join(' '),[n]);
    return (response.rows||[]).map(row=>({
     runId:row.run_id,code:row.code,
     checkedParts:Number(row.checked_parts),
