@@ -1,3 +1,4 @@
+import {conflictsWithConnect} from './stream-code-namespace.mjs';
 // Admin-only commercial lifecycle for BLOFY STREAM code subscriptions.
 // None of these endpoints are public. Device moves preserve activation time
 // and expiry; the previous bearer becomes invalid immediately after reissue.
@@ -144,6 +145,7 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
       const length=streamNumericCodeLength(total);
       for(let attempt=0;attempt<12;attempt++){
         const code=randomNumericStreamCode(length,randomBytes);
+        if(await conflictsWithConnect(db,code))continue;
         const hash=streamCodeProof(code,keyHex);
         const exists=(await db.query(`SELECT 1 FROM blofy_xtream_gateway_duration_codes
           WHERE code_hash=$1 LIMIT 1`,[hash])).rows.length>0;
@@ -224,6 +226,7 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
       const length=streamNumericCodeLength(total);
       for(let attempt=0;attempt<12;attempt++){
         const code=randomNumericStreamCode(length,randomBytes);
+        if(await conflictsWithConnect(db,code))continue;
         const hash=streamCodeProof(code,keyHex);
         const collision=(await db.query(`SELECT 1 FROM blofy_xtream_gateway_duration_codes
           WHERE code_hash=$1 LIMIT 1`,[hash])).rows.length>0;
