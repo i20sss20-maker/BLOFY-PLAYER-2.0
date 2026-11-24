@@ -69,6 +69,8 @@ export async function handleUnifiedCodeHttp(req,res,url,{enabled,rateLimit,resol
  const limit=rateLimit(req);
  if(!limit.allowed)return send(429,{ok:false,error:'stream_code_rate_limited'},{'retry-after':String(limit.retryAfterSeconds||1)});
  try{
+  const declared=Number(req.headers['content-length']||0);
+  if(declared>4096){req.resume();throw error('stream_code_invalid',413);}
   const chunks=[];let size=0;
   for await(const chunk of req){
    const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);
