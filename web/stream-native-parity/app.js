@@ -11,9 +11,47 @@ var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:
  watch:{},favoriteItems:{},lastPlaybackDiag:null,lastLongPlaybackTest:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var browserDepth=0,handlingBrowserPop=false;
 var pendingInstallPrompt=null;
-function webAppInstallGuide(ua,installed,canPrompt){
+var lastRemoteKeyAt=0;
+/* Adapt controls based on device/browser, not width alone. */
+function deviceExperience(ua,touchPoints,coarse){
+ var agent=String(ua||''),touch=Number(touchPoints)||0;
+ if(/VIDAA|Hisense|Toshiba|SmartTV|SMART-TV|Tizen|webOS|Web0S|HbbTV|Android TV|Google TV|AFT[A-Z0-9]{2,}/i.test(agent))return 'tv';
+ if(/iPhone|iPad|iPod|Android|Mobile/i.test(agent)||/Macintosh/i.test(agent)&&touch>1||coarse||touch>0)return 'touch';
+ return 'desktop'
+}
+function setDeviceInput(mode){
+ if(mode!=='remote'&&mode!=='touch'&&mode!=='mouse')return;
+ S.keyboardMode=mode==='remote';
+ if(document.documentElement)document.documentElement.setAttribute('data-blofy-input',mode);
+ if(mode!=='remote'){
+  var old=document.querySelector('.remote-focus');
+  if(old)old.classList.remove('remote-focus')
+ }
+ var label=document.getElementById('device-experience-result');
+ if(label&&label.isConnected)updateDeviceExperienceStatus()
+}
+function updateDeviceExperienceStatus(){
+ var label=document.getElementById('device-experience-result');
+ if(!label)return;
+ var family=document.documentElement.getAttribute('data-blofy-device')||'desktop',
+  mode=document.documentElement.getAttribute('data-blofy-input')||'mouse';
+ var kinds={tv:'شاشة تلفزيون',touch:'هاتف أو جهاز لمس',desktop:'كمبيوتر'},
+  inputs={remote:'ريموت أو لوحة مفاتيح',touch:'اللمس',mouse:'الماوس'};
+ label.textContent='وضع العرض: '+(kinds[family]||kinds.desktop)+
+  ' • التحكم الحالي: '+(inputs[mode]||inputs.mouse)+
+  ' • يمكنك تغيير طريقة التحكم فورًا دون إعادة تحميل أو مساس بالبث.'
+}
+function initDeviceExperience(){
+ var coarse=false;
+ try{coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches)}catch(e){}
+ var family=deviceExperience(navigator.userAgent,navigator.maxTouchPoints,coarse);
+ document.documentElement.setAttribute('data-blofy-device',family);
+ setDeviceInput(family==='tv'?'remote':family==='touch'?'touch':'mouse')
+}
+initDeviceExperience();
+function webAppInstallGuide(ua,installed,canPrompt,touchPoints){
  if(installed)return {mode:'installed',action:'تمت الإضافة',message:'BLOFY يعمل الآن كتطبيق مستقل على هذا الجهاز. المحتوى يحتاج اتصالاً بالإنترنت واشتراكاً فعالاً.'};
- if(/iPhone|iPad|iPod/i.test(String(ua||'')))
+ if(/iPhone|iPad|iPod/i.test(String(ua||''))||/Macintosh/i.test(String(ua||''))&&Number(touchPoints)>1)
   return {mode:'ios',action:'طريقة الإضافة للآيفون',message:'افتح tv.blofyplayer.com من Safari ثم مشاركة ← إضافة إلى الشاشة الرئيسية، وفَعِّل «فتح كتطبيق» إن ظهر. لا يُمكن للموقع تثبيت نفسه تلقائياً على iPhone.'};
  if(/VIDAA|Hisense|Toshiba/i.test(String(ua||'')))
   return {mode:'tv',action:'طريقة الإضافة للتلفزيون',message:'افتح tv.blofyplayer.com في متصفح التلفزيون. استخدم المفضلة أو «إضافة للرئيسية» إذا ظهرت في خيارات المتصفح؛ تثبيت تطبيق VIDAA رسمي يحتاج نشره عبر المنصة. اختبر التنقل بالريموت وتشغيل قناة فعلية.'};
@@ -30,7 +68,7 @@ function installedWebApp(){
 function updateInstallGuide(){
  var button=document.getElementById('install-blofy-web'),feedback=document.getElementById('install-blofy-help');
  if(!button||!feedback)return;
- var state=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt);
+ var state=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
  button.textContent=state.action;button.disabled=state.mode==='installed';
  feedback.textContent=state.message
 }
@@ -1300,7 +1338,7 @@ function settingsScreen(){
  '<button class="btn secondary" type="button" id="profile-import-cancel">إلغاء</button></div>'+
  '<p class="small muted" id="profile-transfer-status" role="status" aria-live="polite">الاستيراد يضيف المفضلة ويحافظ على تقدم مشاهدة أحدث لديك. استخدم الملف فقط مع الاشتراك ومصدر المحتوى نفسه؛ هذا نقل يدوي وليس مزامنة سحابية.</p></section>'+
  '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
- '<section class="setting-panel"><h3>استخدم BLOFY كتطبيق على جهازك</h3><p>إضافة للمفضلة أو للشاشة الرئيسية حسب إمكانيات الجهاز، دون APK أو تثبيت من مصادر مجهولة.</p><button class="btn secondary" type="button" id="install-blofy-web">طريقة إضافة BLOFY</button><p class="small muted" id="install-blofy-help" role="status" aria-live="polite"></p></section>'+ 
+ '<section class="setting-panel"><h3>استخدم BLOFY كتطبيق على جهازك</h3><p>إضافة للمفضلة أو للشاشة الرئيسية حسب إمكانيات الجهاز، دون APK أو تثبيت من مصادر مجهولة.</p><button class="btn secondary" type="button" id="install-blofy-web">طريقة إضافة BLOFY</button><p class="small muted" id="install-blofy-help" role="status" aria-live="polite"></p><p class="small muted" id="device-experience-result" role="status" aria-live="polite"></p></section>'+ 
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
@@ -1495,8 +1533,9 @@ function settingsScreen(){
  var installButton=document.getElementById('install-blofy-web');
  if(installButton){
   updateInstallGuide();
+  updateDeviceExperienceStatus();
   installButton.onclick=function(){
-   var guide=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt);
+   var guide=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
    if(guide.mode!=='prompt'||!pendingInstallPrompt){updateInstallGuide();return}
    var request=pendingInstallPrompt;pendingInstallPrompt=null;
    var feedback=document.getElementById('install-blofy-help');
@@ -4297,7 +4336,11 @@ function directional(e){
  var code=e.keyCode||e.which;
  var editable=e.target&&((e.target.tagName==='INPUT'&&e.target.type!=='range')||
   /^(TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable);
- if(code===37||code===38||code===39||code===40||code===13||code===27||code===461||code===10009||code===8)S.keyboardMode=true;
+ if(code===37||code===38||code===39||code===40||code===13||code===27||
+    code===461||code===10009||code===8&&!editable){
+  lastRemoteKeyAt=Date.now();
+  setDeviceInput('remote')
+ }
  if(code===27||code===461||code===10009||code===8){
   if(editable&&code===8)return;
   if(S.route==='login')return;
@@ -4424,9 +4467,15 @@ function directional(e){
   e.preventDefault()
  }
 }
-document.addEventListener('pointerdown',function(){
- S.keyboardMode=false;
- var old=document.querySelector('.remote-focus');if(old)old.classList.remove('remote-focus')
+document.addEventListener('pointerdown',function(e){
+ if(e&&(e.pointerType==='touch'||e.pointerType==='pen')){setDeviceInput('touch');return}
+ // Some TV remotes synthesize a mouse event after OK/Enter.
+ if(document.documentElement.getAttribute('data-blofy-device')==='tv'&&
+    Date.now()-lastRemoteKeyAt<600)return;
+ setDeviceInput('mouse')
+},true);
+if(!window.PointerEvent)document.addEventListener('touchstart',function(){
+ setDeviceInput('touch')
 },true);
 document.addEventListener('focusin',function(e){
  var old=document.querySelector('.remote-focus');
