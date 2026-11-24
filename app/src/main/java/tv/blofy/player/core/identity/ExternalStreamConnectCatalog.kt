@@ -99,20 +99,27 @@ object ExternalStreamConnectCatalog {
             .addPathSegment(credentials.password).addPathSegment(item.id+"."+extension).build()
     }
 
-    // Media3 receives an opaque URI, never a password-bearing URI. Rewrite only
-    // that exact URI at the last HTTP transport. No redirects or HLS child URLs.
-    class PlaybackTarget(val uri: String, val client: OkHttpClient)
+    // Media3 receives only per-player opaque routes. Provider URLs are
+    // resolved at the guarded HTTP layer; HLS children must remain same-origin.
+    class PlaybackTarget(val uri: String, val client: OkHttpClient, val fallbackUri: String? = null)
+
     fun playback(credentials: ExternalStreamConnectClient.Credentials, item: Item): PlaybackTarget {
         val actual = mediaUrl(credentials,item)
-        val opaque = HttpUrl.Builder().scheme("https").host("external-xtream.invalid").addPathSegment("__blofy_connect_media__")
-            .addPathSegment(item.kind.path).addPathSegment(item.id+"."+safeExtension(item.kind,item.extension)).build()
+        val routes = ExternalXtreamMediaRoutes(credentials.host)
+        val primary = routes.add(actual, requireNotNull(safeExtension(item.kind,item.extension)))
+        val fallback = if (item.kind == Kind.LIVE) {
+            val hls = actual.newBuilder()
+                .setPathSegment(actual.pathSegments.lastIndex, item.id + ".m3u8").build()
+            routes.add(hls, "m3u8").toString()
+        } else null
         val client = ExternalStreamConnectVerifier.directClient.newBuilder()
             .readTimeout(25,TimeUnit.SECONDS).callTimeout(0,TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request()
-                if(request.url != opaque || request.method != "GET") throw IOException("CONNECT media route denied")
+                if(request.method != "GET") throw IOException("CONNECT media method denied")
+                val url = routes.resolve(request.url)
                 val response = try {
-                    chain.proceed(request.newBuilder().url(actual).removeHeader("Authorization")
+                    chain.proceed(request.newBuilder().url(url).removeHeader("Authorization")
                         .removeHeader("Cookie").build())
                 } catch (_: IOException) { throw IOException("CONNECT media connection failed") }
                 val sanitized = response.newBuilder().request(request)
@@ -122,8 +129,32 @@ object ExternalStreamConnectCatalog {
                     response.close()
                     sanitized.headers(okhttp3.Headers.Builder().build())
                         .body(ByteArray(0).toResponseBody(null)).build()
-                } else sanitized.build()
+                } else {
+                    try {
+                        val body = response.body ?: throw IOException("External media response missing")
+                        val manifest = url.encodedPath.endsWith(".m3u8", ignoreCase = true) ||
+                            body.contentType()?.subtype?.contains("mpegurl", ignoreCase = true) == true ||
+                            response.peekBody(7L).string() == "#EXTM3U"
+                        if (!manifest) sanitized.build()
+                        else {
+                            val source = body.source()
+                            source.request(2L * 1024 * 1024 + 1)
+                            if (source.buffer.size > 2L * 1024 * 1024)
+                                throw IOException("External HLS manifest too large")
+                            val rewritten = routes.rewriteManifest(url, source.readUtf8())
+                            response.close()
+                            val bytes = rewritten.toByteArray(Charsets.UTF_8)
+                            sanitized.removeHeader("Content-Encoding").removeHeader("Transfer-Encoding")
+                                .header("Content-Length", bytes.size.toString())
+                                .header("Content-Type", "application/vnd.apple.mpegurl")
+                                .body(bytes.toResponseBody(null)).build()
+                        }
+                    } catch (_: Exception) {
+                        response.close()
+                        throw IOException("External media response invalid")
+                    }
+                }
             }.build()
-        return PlaybackTarget(opaque.toString(),client)
+        return PlaybackTarget(primary.toString(),client,fallback)
     }
 }
