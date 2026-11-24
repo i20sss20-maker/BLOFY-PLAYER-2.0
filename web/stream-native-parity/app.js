@@ -1729,6 +1729,7 @@ function stopPlayback(sendStop){
  try{
   if(old.timer)clearTimeout(old.timer);
   if(old.stallTimer)clearTimeout(old.stallTimer);
+  if(old.bufferNoticeTimer)clearTimeout(old.bufferNoticeTimer);
   if(old.progressWatchdog)clearInterval(old.progressWatchdog);
   // Cancel the per-frame observer before switching media nodes, or a delayed
   // callback from an old channel may be mistaken for recovery of the new one.
@@ -1926,6 +1927,32 @@ function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
   record.lastLiveCatchupAt=now;record.liveLagSince=0;
   return true
  }catch(e){record.liveLagSince=0;return false}
+}
+/* Browser live playback uses native Safari HLS or Hls.js, NOT Media3.
+ * Mirror Android's stable-ready-vs-buffering policy without replacing the
+ * browser decoder: tolerate brief stalls, act on confirmed picture progress,
+ * and coalesce repeated 'waiting' events instead of indefinitely resetting
+ * a recovery timer. No credentials, server requests, or global changes. */
+function liveBufferNoticeAllowed(record,video,now,hidden){
+ if(!record||!video||hidden||video.paused||video.ended||video.seeking||
+    record.reconnecting||record.originTimer||record.capacityTimer||record.retryTimer)return false;
+ if(record.ready&&record.visualProgressSeen&&
+   now-(record.lastProgressAt||record.started||now)<2900)return false;
+ return true
+}
+function clearLiveBufferWait(record,statusElement){
+ if(!record)return;
+ if(record.bufferNoticeTimer){clearTimeout(record.bufferNoticeTimer);record.bufferNoticeTimer=null}
+ if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+ record.waitingSince=0;record.bufferSince=0;record.stallChecks=0;
+ // Only remove a spinner that THIS waiting handler owns. Never hide errors,
+ // network backoff, manual controls or a newer channel's status.
+ if(record.bufferStatusShown&&statusElement&&
+   (statusElement.textContent==='جار استقبال البث…'||
+    statusElement.textContent==='جار انتظار أول صورة من البث…')){
+  statusElement.style.display='none'
+ }
+ record.bufferStatusShown=false
 }
 function liveTransientRetryMs(attempt){
  // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
@@ -2270,6 +2297,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  function recoverConnection(){
   if(!alive()||record.reconnecting)return;
+  // Superseding a stall must cancel its delayed spinner and timer.
+  clearLiveBufferWait(record,statusElement);
   if(preview){
    if(S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
    if(record.recoveryAttempt>=2){
@@ -2377,6 +2406,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }};
  video.onplaying=function(){
   if(!alive())return;
+  clearLiveBufferWait(record,statusElement);
   record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;
   record.lastProgressAt=Date.now();
   record.unexpectedPauseAt=0;
@@ -2400,24 +2430,44 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
  };
  video.onwaiting=video.onstalled=function(){
-  if(!alive()||video.paused)return;
-  if(!preview)recordLiveIncident('buffering');
-  if(!record.bufferSince)record.bufferSince=Date.now();
-  if(Date.now()-record.bufferSince>36000){recoverConnection();return}
-  status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
-  if(record.stallTimer)clearTimeout(record.stallTimer);
+  if(!alive()||video.paused||video.seeking||document.hidden)return;
+  var now=Date.now();
+  if(!record.waitingSince){
+   record.waitingSince=now;
+   if(!preview)recordLiveIncident('buffering',now)
+  }
+  if(!record.bufferSince)record.bufferSince=now;
+  if(now-record.waitingSince>36000){recoverConnection();return}
+  // Short browser rebuffer events are common on phones, even while
+  // the decoded picture continues. Don't instantly cover it with a spinner.
+  if(preview)status('جار تحميل المعاينة…');
+  else if(!record.bufferNoticeTimer&&!record.bufferStatusShown){
+   record.bufferNoticeTimer=setTimeout(function(){
+    record.bufferNoticeTimer=null;
+    if(!alive()||!record.waitingSince||
+       !liveBufferNoticeAllowed(record,video,Date.now(),document.hidden))return;
+    record.bufferStatusShown=true;
+    status(record.ready?'جار استقبال البث…':'جار انتظار أول صورة من البث…')
+   },1900)
+  }
+  // Multiple "waiting" and "stalled" events must NOT postpone recovery.
+  // The independent 2.2s visual watchdog remains authoritative.
+  if(record.stallTimer)return;
   record.stallTimer=setTimeout(function(){
    record.stallTimer=null;
-   if(!alive()||video.paused)return;
-   // Buffering can freeze with readyState=4: inspect actual progress.
+   if(!alive()||video.paused||video.seeking||document.hidden)return;
+   if(record.capacityTimer||record.originTimer||record.retryTimer)return;
+   // A decoder can report readyState=4 while the actual image is frozen.
    var progress=livePlaybackProgress(record,video,Date.now());
-   if(progress.advanced)return;
+   if(progress.advanced){clearLiveBufferWait(record,statusElement);return}
    record.stallChecks++;
    if(record.stallChecks>=3){recoverConnection();return}
    if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
    record.stallTimer=setTimeout(function(){
     record.stallTimer=null;
-    if(alive()&&!video.paused&&Date.now()-(record.lastProgressAt||record.started)>15000)recoverConnection()
+    if(alive()&&!video.paused&&!video.seeking&&!document.hidden&&
+       !record.capacityTimer&&!record.originTimer&&!record.retryTimer&&
+       Date.now()-(record.lastProgressAt||record.started)>15000)recoverConnection()
    },14000)
   },8500)
  };
@@ -2435,6 +2485,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     recoverConnection();return
    }
    if(video.paused||video.ended||video.seeking||document.hidden){
+    clearLiveBufferWait(record,statusElement);
     record.lastProgressAt=now;record.lastVisualSampleAt=now;
     record.visualProgressSeen=false;return
    }
@@ -2444,7 +2495,13 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
     return
    }
-   if(progress.advanced)return;
+   if(progress.advanced){
+    // Proven picture progress clears a stale "buffering" overlay even
+    // when Safari/VIDAA never emits another "playing" event.
+    if(record.waitingSince||record.bufferNoticeTimer||record.bufferStatusShown||record.stallTimer)
+     clearLiveBufferWait(record,statusElement);
+    return
+   }
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
     if(!preview)recordLiveIncident(Number(video.videoWidth)>0&&Number(video.videoHeight)>0?
