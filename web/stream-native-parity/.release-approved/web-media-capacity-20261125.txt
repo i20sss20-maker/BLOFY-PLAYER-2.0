@@ -1,0 +1,1 @@
+Targeted worker rollout: bounded encoder capacity 4, 60s live idle cleanup, startup cleanup and build-time compilation. Railway resource check showed peak 4.20 CPU / 24 and 0.97 GB / 24. Real concurrent long-play validation still pending.
