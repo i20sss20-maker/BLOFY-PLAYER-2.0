@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createStreamConnectPairing,normalizeConnectInput} from '../src/stream-connect-pairing.mjs';
+import {createStreamConnectPairing,normalizeConnectInput,createConnectExpiryMaintenance} from '../src/stream-connect-pairing.mjs';
 const input={host:'https://provider.example.com:8443',username:'synthetic-user',password:'synthetic-secret'};
 function fixture(){
  let now=Date.now();const rows=new Map();
@@ -44,4 +44,18 @@ test('expiry and authenticated encryption prevent stale or modified payloads',as
  const row=[...f.rows.values()][0];row.sealed[30]^=1;
  await assert.rejects(f.service.redeem({code:second.code}),/connect_pairing_unavailable/);
  assert.equal(f.rows.size,0);
+});
+
+test('expiry maintenance skips disabled and overlapping ticks and never reports raw errors',async()=>{
+ let calls=0,finish;const events=[];
+ const pairing={purgeExpired:()=>{calls++;return new Promise(resolve=>{finish=resolve})}};
+ const disabled=createConnectExpiryMaintenance({pairing});
+ assert.deepEqual(await disabled.tick(),{skipped:true});assert.equal(calls,0);
+ const active=createConnectExpiryMaintenance({pairing,enabled:true});
+ const first=active.tick();assert.deepEqual(await active.tick(),{skipped:true});assert.equal(calls,1);
+ finish({removed:2});assert.deepEqual(await first,{removed:2});
+ const failing=createConnectExpiryMaintenance({enabled:true,pairing:{purgeExpired:async()=>{throw Error('synthetic private password')}},onError:code=>events.push(code)});
+ assert.deepEqual(await failing.tick(),{failed:true});
+ assert.deepEqual(await failing.tick(),{failed:true});
+ assert.deepEqual(events,['connect_expiry_cleanup_failed','connect_expiry_cleanup_failed']);
 });
