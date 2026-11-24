@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
  * external-profile persistence and catalog/playback routes are audited.
  */
 object ExternalStreamConnectClient {
-    private val codePattern = Regex("(?:BC-[A-Za-z0-9_-]{24}|[0-9]{12})")
+    private val codePattern = Regex("(?:BC-[A-Za-z0-9_-]{24}|[0-9]{8}|[0-9]{12})")
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
