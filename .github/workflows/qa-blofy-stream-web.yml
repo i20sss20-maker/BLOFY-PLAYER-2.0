@@ -14,7 +14,7 @@ on:
 # Keep only the newest experimental QA run; obsolete push checks previously
 # piled up downloading browsers and apt packages while the site was iterating.
 concurrency:
-  group: blofy-native-web-qa-${{ github.ref }}
+  group: blofy-native-web-qa-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   ui:
@@ -42,11 +42,24 @@ jobs:
             cd web/stream-native-parity
             npx playwright install --with-deps chrome
           fi
-      - name: Install FFmpeg only if absent from the runner
+      - name: Install FFmpeg from pinned CI-only static binaries; bounded apt fallback
+        timeout-minutes: 4
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq ffmpeg
+            mkdir -p /tmp/blofy-web-ci-media
+            if timeout 120s npm install --no-audit --no-fund --no-save --prefix /tmp/blofy-web-ci-media @ffmpeg-installer/linux-x64@4.1.0 @ffprobe-installer/linux-x64@5.2.0; then
+              ffmpeg_bin=/tmp/blofy-web-ci-media/node_modules/@ffmpeg-installer/linux-x64
+              ffprobe_bin=/tmp/blofy-web-ci-media/node_modules/@ffprobe-installer/linux-x64
+              test -x "$ffmpeg_bin/ffmpeg" && test -x "$ffprobe_bin/ffprobe"
+              export PATH="$ffmpeg_bin:$ffprobe_bin:$PATH"
+              echo "$ffmpeg_bin" >> "$GITHUB_PATH"
+              echo "$ffprobe_bin" >> "$GITHUB_PATH"
+            else
+              # Network mirrors can stall apt indefinitely on ephemeral runners:
+              # cap each attempt and fail the job instead of never reaching UI QA.
+              timeout 75s sudo apt-get update -qq
+              timeout 75s sudo apt-get install -y -qq ffmpeg
+            fi
           fi
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
