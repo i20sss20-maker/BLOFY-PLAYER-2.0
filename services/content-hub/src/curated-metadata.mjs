@@ -2,6 +2,7 @@
 // object storage or a subscriber-facing catalog. Poster references are only
 // manually supplied TMDb image *paths*, not arbitrary remote URLs.
 import pg from 'pg';
+import {privateDbPoolOptions} from './private-db-pool-options.mjs';
 
 const MOVIE=/^movie:([A-Za-z0-9_-]{8,80})$/;
 const SERIES=/^series:([1-9][0-9]{0,14})$/;
@@ -37,7 +38,7 @@ const toItem=row=>({
 });
 export function createContentCatalogStore({connectionString,Pool=pg.Pool}={}){
  if(!connectionString)throw Error('content_catalog_database_required');
- const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
+ const pool=new Pool({...privateDbPoolOptions(connectionString),max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:'blofy-private-catalog'});
  let initPromise;
  function ensure(){
