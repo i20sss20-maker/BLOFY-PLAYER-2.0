@@ -314,7 +314,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 // the exact same code to retry if its first response was lost.
                 val binding = StreamCodeSession.installationKey(applicationContext)
                 val result = if (NativeExternalCatalogSession.qaEnabled(applicationContext)) {
-                    when (val unified = UnifiedStreamCodeClient.redeem(code, binding)) {
+                    when (val unified = UnifiedStreamCodeClient.redeem(code, binding, syntheticLab = true)) {
                         is UnifiedStreamCodeClient.Result.Paid -> unified.session
                         is UnifiedStreamCodeClient.Result.External -> {
                             // Keep the typed code until the encrypted profile is
