@@ -200,9 +200,29 @@ function stopHls(session,reason){
  if(ownsKey)hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
  try{session.sourceController?.abort()}catch{}
+ // All real FFmpeg jobs (live, VOD and compatibility HLS) own their
+ // CPU slot until the process actually exits. Releasing just after SIGTERM
+ // lets rapid stop/reopen churn exceed MAX_JOBS while old encoders linger.
+ const running=session.proc&&!session.finished&&!session.released?session.proc:null;
  try{session.proc?.kill()}catch{}
- releaseHls(session);
- try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ const cleanup=()=>{
+  releaseHls(session);
+  // Do not remove a chunk directory while its encoder might still be
+  // writing into it. Access is already denied because the SID is removed.
+  try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ };
+ if(running&&running.exited&&typeof running.exited.then==='function'){
+  // If FFmpeg ignores SIGTERM, escalate, but never declare capacity free
+  // while its process could still be alive.
+  const killTimer=setTimeout(()=>{
+   try{running.kill(9)}catch{}
+  },2500);killTimer.unref?.();
+  Promise.resolve(running.exited).then(()=>{
+   clearTimeout(killTimer);cleanup()
+  },()=>{
+   clearTimeout(killTimer);cleanup()
+  });
+ }else cleanup();
  if(reason!=='idle_timeout'&&reason!=='session_expired')console.info('VIDAA_HLS_SESSION_END',{kind:session.kind,reason})
 }
 function releaseHls(session){if(!session.released){session.released=true;active=Math.max(0,active-1)}}
@@ -831,16 +851,18 @@ function scheduleFullVodPrefetch(session,finishedChunk){
 }
 function fullVodChunk(session,first){
  if(session.proc&&!session.finished&&session.chunkStart===first)return {ok:true};
- if(session.proc&&!session.finished){
-  try{session.proc.kill()}catch{}
-  releaseHls(session)
- }
+ // Never "release" a slot on kill() before FFmpeg has actually exited.
+ // The active request handler retires a remote-seek encoder and waits for
+ // its exit; adjacent prefetch never preempts an unfinished chunk.
+ if(session.proc&&!session.finished)
+  return {status:503,error:'vod_previous_chunk_draining'};
  if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {status:429,error:'vod_capacity'}}
  const begin=first*FULL_SEGMENT_SECONDS;
  const seconds=Math.min(session.duration-begin,FULL_CHUNK_SEGMENTS*FULL_SEGMENT_SECONDS);
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
  session.released=false;active++;
  session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;session.chunkFinishedAt=0;
+ session.retiringProc=null;session.retireEscalated=false;session.retireStartedAt=0;
  session.prefetchNext=null;session.prefetchScheduled=null;
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
  pruneFullVod(session,first);
@@ -876,7 +898,16 @@ function fullVodChunk(session,first){
   proc.exited.then(code=>{
    if(session.proc!==proc)return;
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
+   const retiredOnSeek=session.retiringProc===proc;
+   session.retiringProc=null;session.retireStartedAt=0;session.retireEscalated=false;
    session.finished=true;session.exitCode=code;session.chunkFinishedAt=Date.now();
+   // The retired chunk is intentionally discarded after a distant seek;
+   // do not retry its segment or prefetch from an obsolete position.
+   if(retiredOnSeek){
+    session.error='vod_chunk_replaced';
+    releaseHls(session);
+    return
+   }
    // Source metadata can overstate runtime. A seek producing no TS segment
    // after a successful exit is not a recoverable HTTP buffering condition.
    const firstSegment=join(session.dir,'seg-'+String(first).padStart(6,'0')+'.ts');
@@ -962,12 +993,30 @@ async function fullVodRequest(req,url){
    // Hls.js can prefetch next 24 seconds before the previous encoder exits.
    // Never kill a still-encoding adjacent chunk; that can corrupt a segment
    // that is already being fetched, causing an avoidable black screen.
-   if(session.proc&&!session.finished&&first===session.chunkStart+FULL_CHUNK_SEGMENTS){
-    const old=session.proc,deadline=Date.now()+26000;
-    while(session.proc===old&&!session.finished&&!session.stopped&&!req.signal.aborted&&Date.now()<deadline)await nap(180);
+   if(session.proc&&!session.finished){
+    const old=session.proc;
+    const adjacent=first===session.chunkStart+FULL_CHUNK_SEGMENTS;
+    if(!adjacent&&session.retiringProc!==old){
+     // A distant seek needs a new ffmpeg source. Kill the old job only
+     // once, but hold its slot until proc.exited confirms termination.
+     session.retiringProc=old;session.retireStartedAt=Date.now();session.retireEscalated=false;
+     try{old.kill()}catch{}
+    }
+    const deadline=Date.now()+(adjacent?26000:5000);
+    while(session.proc===old&&!session.finished&&!session.stopped&&!req.signal.aborted&&Date.now()<deadline){
+     // A stalled FFmpeg can ignore SIGTERM. Escalate once after 2.2s,
+     // never repeatedly kill on simultaneous Hls.js segment retries.
+     if(!adjacent&&session.retiringProc===old&&!session.retireEscalated&&
+      Date.now()-session.retireStartedAt>=2200){
+      session.retireEscalated=true;
+      try{old.kill(9)}catch{}
+     }
+     await nap(160)
+    }
     if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
     if(session.proc===old&&!session.finished){
-     return json(503,{error:'vod_previous_chunk_still_encoding',retryAfter:2})
+     return hlsError(503,adjacent?'vod_previous_chunk_still_encoding':
+      'vod_previous_chunk_draining',2)
     }
    }
    if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
