@@ -319,9 +319,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                         is UnifiedStreamCodeClient.Result.External -> {
                             // Keep the typed code until the encrypted profile is
                             // durably saved. A Keystore failure must not lose it.
-                            val prepared = NativeExternalCatalogSession.prepare(applicationContext, unified) { p ->
+                            val prepared = NativeExternalCatalogSession.prepare(applicationContext, unified,
+                                onSaved = { withContext(Dispatchers.Main.immediate) { codeInput.text?.clear() } }) { p ->
                                 withContext(Dispatchers.Main.immediate) {
-                                    codeInput.text?.clear()
                                     statusText.text = "${getString(R.string.stream_ui_activating)} • ${p.percent}%"
                                 }
                             }
