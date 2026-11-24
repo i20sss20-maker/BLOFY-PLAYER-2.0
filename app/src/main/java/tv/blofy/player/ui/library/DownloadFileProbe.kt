@@ -26,7 +26,7 @@ internal object DownloadFileProbe {
 
     suspend fun sizeIfKnown(context: Context, url: String): Long? = withContext(Dispatchers.IO) {
         val uri = Uri.parse(url)
-        if (uri.scheme != "https" || uri.host.isNullOrBlank()) return@withContext null
+        if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.host == "external-xtream.invalid") return@withContext null
         runCatching {
             val request = Request.Builder().url(url).head()
                 .header("Accept-Encoding", "identity")
