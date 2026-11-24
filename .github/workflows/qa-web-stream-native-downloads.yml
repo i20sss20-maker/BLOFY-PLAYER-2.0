@@ -1,0 +1,30 @@
+name: BLOFY STREAM web native controls and downloads
+on:
+  push:
+    branches:
+      - feat/web-stream-native-controls-downloads-20261125
+    paths:
+      - 'web/stream-native-parity/app.js'
+      - 'web/stream-native-parity/server.ts'
+      - 'web/stream-native-parity/styles.css'
+      - 'web/stream-native-parity/vod-download-policy.mjs'
+      - 'web/stream-native-parity/qa/web-download-native-parity.test.mjs'
+      - '.github/workflows/qa-web-stream-native-downloads.yml'
+  pull_request:
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-web-stream-native-downloads.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-web-downloads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: node --check web/stream-native-parity/app.js
+      - run: node --check web/stream-native-parity/vod-download-policy.mjs
+      - run: node --test web/stream-native-parity/qa/web-download-native-parity.test.mjs
