@@ -795,3 +795,244 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
 @media(prefers-reduced-motion:reduce){
  .mobile-seek-feedback{transition:none!important}
 }
+
+
+/* BLOFY STREAM compact native-feeling mobile shell. This only changes layout
+ * under narrow touch viewports; VIDAA, remote and desktop use existing UI. */
+.mobile-catalog-nav{display:none}
+@media(max-width:730px){
+ html[data-blofy-device="touch"] .app,
+ html[data-blofy-device="touch"] .app.catalog-app{
+  height:100vh;height:100dvh;width:100%;min-width:0
+ }
+ html[data-blofy-device="touch"] .catalog-app .mobile-catalog-nav{display:contents}
+ html[data-blofy-device="touch"] .app .workspace{
+  min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  padding:calc(12px + env(safe-area-inset-top,0px))
+   max(14px,env(safe-area-inset-right,0px))
+   24px max(14px,env(safe-area-inset-left,0px))
+ }
+ html[data-blofy-device="touch"] .app .rail,
+ html[data-blofy-device="touch"] .catalog-app .mobile-catalog-nav .rail{
+  order:1;flex:0 0 auto;display:flex;align-items:center;justify-content:flex-start;
+  width:100%;height:calc(72px + env(safe-area-inset-bottom,0px));
+  min-height:calc(72px + env(safe-area-inset-bottom,0px));
+  max-height:calc(72px + env(safe-area-inset-bottom,0px));
+  padding:5px max(8px,env(safe-area-inset-right,0px))
+   calc(5px + env(safe-area-inset-bottom,0px))
+   max(8px,env(safe-area-inset-left,0px));
+  overflow-x:auto;overflow-y:hidden;gap:4px;
+  border-top:1px solid #72aaa662;
+  background:linear-gradient(180deg,#0a2c36f5,#071d27);
+  scroll-snap-type:x proximity;scrollbar-width:none
+ }
+ html[data-blofy-device="touch"] .app .rail-link{
+  flex:0 0 calc((100% - 20px)/5);
+  width:calc((100% - 20px)/5);min-width:59px;max-width:90px;
+  min-height:60px;height:60px;border-radius:13px;
+  color:#bfd7d7;font-weight:750;font-size:10px;line-height:1.3;
+  scroll-snap-align:start;touch-action:manipulation
+ }
+ html[data-blofy-device="touch"] .app .rail-link .symbol{
+  font-size:23px;line-height:1.1
+ }
+ html[data-blofy-device="touch"] .app .rail-link.active,
+ html[data-blofy-device="touch"] .app .rail-link[aria-current="page"]{
+  color:#eafffa;background:#16555c;border:1px solid #70e0c8ab
+ }
+ html[data-blofy-device="touch"] .app .toolbar{
+  top:calc(-12px - env(safe-area-inset-top,0px));
+  min-height:49px;padding:7px 0 10px;margin-bottom:12px;
+  border-bottom:1px solid #a0dfd22a;align-items:center;gap:8px
+ }
+ html[data-blofy-device="touch"] .app .toolbar h1{
+  font-size:clamp(17px,4.7vw,21px);font-weight:850;line-height:1.35;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+ }
+ html[data-blofy-device="touch"] .app .toolbar .row{gap:5px;flex-wrap:nowrap}
+ html[data-blofy-device="touch"] .app .toolbar .btn{
+  white-space:nowrap;font-size:11px;min-height:43px;
+  border-radius:12px;padding:7px 10px
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog-home{display:none}
+ html[data-blofy-device="touch"] .home-hero{
+  min-height:206px;height:auto;border-radius:21px;overflow:hidden;
+  background:radial-gradient(circle at 85% 12%,#278f9147,transparent 45%),
+   linear-gradient(130deg,#154652,#081c26)
+ }
+ html[data-blofy-device="touch"] .home-hero .hero-copy{
+  width:100%;max-width:100%;padding:22px 18px;position:relative
+ }
+ html[data-blofy-device="touch"] .home-hero .hero-title{
+  font-size:clamp(22px,6vw,29px);line-height:1.3;overflow-wrap:anywhere
+ }
+ html[data-blofy-device="touch"] .home-hero .hero-description{
+  font-size:12px;line-height:1.8;max-width:95%
+ }
+ html[data-blofy-device="touch"] .home-hero .hero-actions .btn{
+  min-height:44px;font-size:12px;border-radius:12px
+ }
+ html[data-blofy-device="touch"] .story{
+  min-height:82px;min-width:0;border-radius:15px;
+  border:1px solid #7cbbb853;background:#123640
+ }
+ html[data-blofy-device="touch"] .story-row{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px
+ }
+ html[data-blofy-device="touch"] .shelf-title{
+  align-items:center;gap:6px;min-width:0
+ }
+ html[data-blofy-device="touch"] .h-scroll{
+  scroll-snap-type:x proximity;
+  -webkit-overflow-scrolling:touch
+ }
+ html[data-blofy-device="touch"] .h-scroll .poster{
+  flex:0 0 clamp(116px,34vw,153px);scroll-snap-align:start
+ }
+ html[data-blofy-device="touch"] .poster,
+ html[data-blofy-device="touch"] .poster-grid .poster{
+  border-radius:15px;overflow:hidden;background:#0c2933
+ }
+ html[data-blofy-device="touch"] .poster-grid,
+ html[data-blofy-device="touch"] .search-result-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:11px
+ }
+ html[data-blofy-device="touch"] .poster-grid .poster-art{
+  aspect-ratio:2/3;height:auto
+ }
+ html[data-blofy-device="touch"] .poster-grid .poster-caption{
+  min-height:51px;padding:8px 10px;font-size:12px;line-height:1.45
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog{
+  display:flex;flex-direction:column;gap:11px;
+  height:auto;min-height:0;overflow:visible
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .cat-rail{
+  order:0;width:100%;height:auto;min-height:0;overflow:hidden;
+  border-radius:14px;background:#0d2b35
+ }
+ html[data-blofy-device="touch"] .cat-rail .pane-scroll{
+  max-height:64px;min-height:60px;padding:8px;
+  scroll-snap-type:x proximity;overscroll-behavior-inline:contain
+ }
+ html[data-blofy-device="touch"] .cat-rail .cat-item{
+  min-width:80px;min-height:44px;padding:8px 13px;
+  border-radius:999px;scroll-snap-align:start
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview{
+  order:1;width:100%;min-height:0;height:auto;overflow:hidden;
+  border-radius:17px;scroll-margin-top:75px
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview-video-wrap{
+  flex:0 0 auto;min-height:0;aspect-ratio:16/9;width:100%
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview-video-wrap video{
+  width:100%;height:100%;object-fit:contain
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview-controls{
+  padding:11px 13px;min-width:0
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview-controls h3{
+  font-size:16px;line-height:1.4;margin:5px 0
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview-action-row{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px
+ }
+ html[data-blofy-device="touch"] .preview-action-row .btn{
+  min-width:0;min-height:44px;font-size:11px;white-space:normal
+ }
+ html[data-blofy-device="touch"] .epg-panel{margin-top:8px}
+ html[data-blofy-device="touch"] .epg-content{max-height:82px}
+ html[data-blofy-device="touch"] .catalog-app .catalog .channels{
+  order:2;width:100%;min-width:0;height:auto;min-height:0;
+  border-radius:17px;overflow:hidden
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .channels .pane-scroll{
+  display:block;min-height:90px;max-height:min(46vh,410px);
+  overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain
+ }
+ html[data-blofy-device="touch"] .channel-item{
+  min-height:64px;gap:11px;padding:10px 13px
+ }
+ html[data-blofy-device="touch"] .channel-image{
+  width:50px;height:46px;flex-shrink:0
+ }
+ html[data-blofy-device="touch"] .channel-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog.posters .poster-panel{
+  order:1;min-width:0;overflow:visible;border:0;padding:4px 0;background:transparent
+ }
+ html[data-blofy-device="touch"] .poster-panel-header{
+  flex-wrap:wrap;gap:9px;align-items:center
+ }
+ html[data-blofy-device="touch"] .poster-panel-header h2{font-size:19px}
+ html[data-blofy-device="touch"] .sort-bar .btn{min-height:44px}
+ html[data-blofy-device="touch"] .detail-backdrop{
+  height:175px;border-radius:19px
+ }
+ html[data-blofy-device="touch"] .detail-content{
+  margin-top:-60px;padding:0 5px 22px;display:flex;
+  flex-direction:column;align-items:flex-start;gap:12px
+ }
+ html[data-blofy-device="touch"] .detail-poster{
+  width:105px;height:158px;border-radius:13px
+ }
+ html[data-blofy-device="touch"] .detail-body{width:100%;min-width:0}
+ html[data-blofy-device="touch"] .detail-title{
+  font-size:clamp(23px,6.5vw,30px);line-height:1.3;overflow-wrap:anywhere
+ }
+ html[data-blofy-device="touch"] .detail-plot{font-size:13px;line-height:1.95}
+ html[data-blofy-device="touch"] .detail-actions{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0
+ }
+ html[data-blofy-device="touch"] .detail-actions .btn{
+  min-height:46px;min-width:0;white-space:normal;font-size:12px
+ }
+ html[data-blofy-device="touch"] .episode-row{min-height:63px;gap:8px}
+ html[data-blofy-device="touch"] .settings-grid{grid-template-columns:minmax(0,1fr);gap:11px}
+ html[data-blofy-device="touch"] .setting-panel{
+  min-width:0;padding:16px 14px;border-radius:15px
+ }
+ html[data-blofy-device="touch"] .setting-panel h3{font-size:16px}
+ html[data-blofy-device="touch"] .setting-panel p{font-size:12px;line-height:1.85}
+ html[data-blofy-device="touch"] .search-screen .input,
+ html[data-blofy-device="touch"] .login-screen .input{
+  font-size:16px!important;min-height:49px;border-radius:13px
+ }
+ html[data-blofy-device="touch"] .login-screen{
+  min-height:100vh;min-height:100svh;height:auto;
+  padding:max(24px,env(safe-area-inset-top,0px))
+   max(14px,env(safe-area-inset-right,0px))
+   max(24px,env(safe-area-inset-bottom,0px))
+   max(14px,env(safe-area-inset-left,0px))
+ }
+ html[data-blofy-device="touch"] .login-panel{
+  padding:28px 18px;border-radius:22px;width:100%;max-width:440px
+ }
+ html[data-blofy-device="touch"] .login-brand{font-size:34px}
+ html[data-blofy-device="touch"] .login-panel .input{
+  width:100%;letter-spacing:2px;font-size:18px!important
+ }
+}
+@media(max-width:370px){
+ html[data-blofy-device="touch"] .app .rail-link{
+  flex-basis:calc((100% - 16px)/4);width:calc((100% - 16px)/4)
+ }
+ html[data-blofy-device="touch"] .app .toolbar{gap:5px}
+ html[data-blofy-device="touch"] .app .toolbar .btn{font-size:10px;padding:6px 8px}
+ html[data-blofy-device="touch"] .home-hero .hero-copy{padding:18px 14px}
+ html[data-blofy-device="touch"] .detail-actions{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:730px) and (orientation:landscape) and (max-height:450px){
+ html[data-blofy-device="touch"] .home-hero{min-height:170px}
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview{
+  scroll-margin-top:54px
+ }
+ html[data-blofy-device="touch"] .catalog-app .catalog .preview-video-wrap{
+  aspect-ratio:16/9;max-height:52vh
+ }
+}
