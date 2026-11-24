@@ -1,4 +1,4 @@
-import { databaseOptions } from './database-options.mjs';
+import { databaseOptions, observeIdleDatabaseErrors } from './database-options.mjs';
 import { withDatabaseStartRetry } from './startup-db-retry.mjs';
 import http from 'node:http';
 import { servePrivacyPage } from './privacy-pages.mjs';
@@ -63,6 +63,7 @@ if (!/^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)) {
 const pool = new Pool({
   ...databaseOptions(DATABASE_URL)
 });
+observeIdleDatabaseErrors(pool);
 
 const authIpLimiter = createFixedWindowLimiter({ limit: AUTH_IP_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
 const authDeviceLimiter = createFixedWindowLimiter({ limit: AUTH_DEVICE_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
