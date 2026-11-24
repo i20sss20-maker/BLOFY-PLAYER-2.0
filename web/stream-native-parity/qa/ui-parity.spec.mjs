@@ -1049,3 +1049,21 @@ test('VOD download controls respect default-off gate and never claim saved files
  await page.locator('[data-episodes="21"]').first().click();
  await expect(page.locator('[data-download="series:55"]')).toBeVisible();
 });
+
+test('commentators page opens the channel-specific protected voice menu without changing VOD',async({page})=>{
+ await page.route('**/api/audio/catalog?*',async route=>route.fulfill({
+  status:200,contentType:'application/json',
+  body:JSON.stringify({ok:true,tracks:[{id:'anis-max-01',label:'بلوفي سبورت • معلق 1',format:'progressive',delaySeconds:0}]})
+ }));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="commentators"]').first().click();
+ await expect(page.locator('.commentator-library h2')).toContainText('المعلقين');
+ await expect(page.locator('[data-commentator-channel="31"]')).toBeVisible();
+ await page.locator('[data-commentator-channel="31"]').click();
+ await expect(page.locator('#player-commentary')).toBeVisible();
+ await expect(page.locator('#player-choice-panel')).toContainText('الصوت الأصلي للقناة');
+ await expect(page.locator('#player-choice-panel')).toContainText('بلوفي سبورت');
+ await page.locator('#player-choice-close').click();
+ await page.locator('#player-back').click();
+ await expect(page.locator('[data-go="commentators"]')).toBeVisible();
+});
