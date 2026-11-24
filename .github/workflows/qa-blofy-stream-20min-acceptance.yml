@@ -1,0 +1,33 @@
+name: BLOFY STREAM Web real-device 20-minute acceptance QA
+on:
+  push:
+    branches: [feat/stream-web-20min-real-playback-acceptance-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-20min-acceptance.yml'
+  pull_request:
+    branches: [feature/blofy-stream-web-native-parity-20261122]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-20min-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-real-video-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify frontend syntax, privacy, and deterministic 20-minute clock
+        run: |
+          node --check web/stream-native-parity/playback-acceptance.js
+          node --check web/stream-native-parity/app.js
+          node --test web/stream-native-parity/qa/playback-acceptance.test.mjs
+      - name: Note test boundaries
+        if: always()
+        run: |
+          echo 'This deterministic test simulates 20 minutes of frame samples and false-positive cases.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Only a full 20-minute video played on an authorized real browser/TV validates that device. It does NOT measure audio pitch or license rights.' >> "$GITHUB_STEP_SUMMARY"
