@@ -2947,11 +2947,18 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
   if(rec.startupTimer){clearTimeout(rec.startupTimer);rec.startupTimer=null}
   if(rec.stallTimer){clearTimeout(rec.stallTimer);rec.stallTimer=null}
+  if(rec.bufferNoticeTimer){clearTimeout(rec.bufferNoticeTimer);rec.bufferNoticeTimer=null}
   ready()
  };
  video.onwaiting=video.onstalled=function(){
-  if(!alive()||video.paused)return;
-  playerStatus('جار تحميل الجزء المطلوب من الفيلم…');
+  if(!alive()||video.paused||video.seeking||document.hidden)return;
+  if(!rec.bufferNoticeTimer){
+   rec.bufferNoticeTimer=setTimeout(function(){
+    rec.bufferNoticeTimer=null;
+    if(alive()&&!video.paused&&!video.seeking&&!document.hidden&&
+       video.readyState<3)playerStatus('جار تحميل الجزء المطلوب من الفيلم…')
+   },1600)
+  }
   checkStall()
  };
  video.onended=function(){
@@ -3125,9 +3132,18 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  video.onplaying=function(){
   if(!alive())return;
   if(state.completed&&video.currentTime<5)state.completed=false;
-  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready()
+  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
+  if(rec.bufferNoticeTimer){clearTimeout(rec.bufferNoticeTimer);rec.bufferNoticeTimer=null}
+  ready()
  };
- video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ video.onwaiting=function(){
+  if(!alive()||!rec.ready||video.paused||video.seeking||document.hidden||rec.bufferNoticeTimer)return;
+  rec.bufferNoticeTimer=setTimeout(function(){
+   rec.bufferNoticeTimer=null;
+   if(alive()&&!video.paused&&!video.seeking&&!document.hidden&&
+      video.readyState<3)playerStatus('جار تحميل المقطع التالي من الفيلم…')
+  },1600)
+ };
  video.onended=function(){
   if(!alive())return;
   var absolute=at+Math.max(0,Number(video.currentTime)||0),
@@ -4625,6 +4641,30 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  // Register the player before starting its media engine. The native-like
  // quality dialog and first-frame callbacks need state during startup.
  S.playerView=state;
+ // All engines share this throttled decoded-frame observer. Safari may
+ // resume after waiting without a new 'playing' event. No media requests.
+ function scheduleNoticeFrame(){
+  if(S.route!=='player'||S.playerView!==state||!video.isConnected||
+     typeof video.requestVideoFrameCallback!=='function')return;
+  try{
+   state.noticeFrameId=video.requestVideoFrameCallback(function(){
+    state.noticeFrameId=null;
+    if(S.route!=='player'||S.playerView!==state||!video.isConnected)return;
+    state.noticePresentedFrames=(state.noticePresentedFrames||0)+1;
+    dismissRecoveredPlaybackNotice(state,Date.now());
+    state.noticeFrameRepeatTimer=setTimeout(function(){
+     state.noticeFrameRepeatTimer=null;scheduleNoticeFrame()
+    },450)
+   })
+  }catch(err){state.noticeFrameId=null}
+ }
+ scheduleNoticeFrame();
+ state.noticeObserverTimer=setInterval(function(){
+  dismissRecoveredPlaybackNotice(state,Date.now())
+ },950);
+ video.addEventListener('timeupdate',function(){
+  dismissRecoveredPlaybackNotice(state,Date.now())
+ });
  if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
  else if(ext==='mp4'){startDirect()}
  else{startWithMetadata(Math.round(resume))}
