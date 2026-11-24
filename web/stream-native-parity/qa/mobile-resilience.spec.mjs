@@ -23,16 +23,17 @@ test.beforeEach(async({page})=>{
 
 test('offline and restored notices are advisory, no playback or reload side effects',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const navigations=[];page.on('framenavigated',f=>{if(f===page.mainFrame())navigations.push(f.url())});
+ // history.replaceState may emit framenavigated without loading a new document.
  await page.goto('http://127.0.0.1:3000/',{waitUntil:'domcontentloaded'});
  await expect(page.locator('.home-hero')).toBeVisible();
+ await page.evaluate(()=>{window.__blofyNetworkProbe='same-document'})
  await page.evaluate(()=>window.dispatchEvent(new Event('offline')));
  await expect(page.locator('#blofy-connectivity-notice')).toContainText('غير متصل');
  await expect(page.locator('#blofy-connectivity-notice')).toHaveAttribute('data-connection','offline');
  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
  await expect(page.locator('#blofy-connectivity-notice')).toContainText('حسب المتصفح');
  await expect(page.locator('#blofy-connectivity-notice')).toHaveAttribute('data-connection','restored');
- expect(navigations).toHaveLength(1);
+ expect(await page.evaluate(()=>window.__blofyNetworkProbe)).toBe('same-document');
  expect(errors).toEqual([]);
 });
 
