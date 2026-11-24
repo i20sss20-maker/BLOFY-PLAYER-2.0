@@ -7,7 +7,7 @@ export function preferAppleLiveStart(manifest,userAgent){
     !/\b(?:iPhone|iPad|iPod)\b/i.test(String(userAgent||''))||
     !/^#EXTM3U(?:\r?\n)/.test(manifest)||
     !/^#EXT-X-MEDIA-SEQUENCE:\d+\s*$/m.test(manifest)||
-    /^#EXT-X-(?:ENDLIST|PLAYLIST-TYPE|START):/m.test(manifest))return manifest;
+    /^#EXT-X-(?:ENDLIST(?:\s|$)|PLAYLIST-TYPE:|START:)/m.test(manifest))return manifest;
  const target=manifest.match(/^#EXT-X-TARGETDURATION:(\d+)\s*$/m);
  const td=target?Number(target[1]):0;
  if(!(td>=1&&td<=10))return manifest;
