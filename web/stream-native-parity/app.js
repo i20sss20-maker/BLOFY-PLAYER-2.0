@@ -124,7 +124,7 @@ function redeem(){
  var btn=document.getElementById('redeem');btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
-  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true)}
+  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth()}
    else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
  })
@@ -1476,6 +1476,27 @@ function loadHls(done){
  script.onerror=function(){finish(false)};
  document.head.appendChild(script)
 }
+/* Reduce first-video startup latency on modern desktop browsers. The HLS
+ * library is first-party, and it is downloaded ONLY after a verified session.
+ * Never eagerly load it on resource-constrained TV/VIDAA browsers.
+ * Delayed callbacks carry an account epoch and cannot cross logout.
+ */
+function warmDesktopHlsAfterAuth(){
+ if(!S.userVerified||document.hidden||!window.MediaSource||
+    S.hlsState==='ready'||S.hlsState==='loading')return;
+ var ua=String(navigator.userAgent||'');
+ if(!/Chrome|Chromium|Edg|Firefox|OPR/i.test(ua)||
+    /VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android|iPhone|iPad/i.test(ua))return;
+ var account=S.accountEpoch;
+ var prepare=function(){
+  if(!S.userVerified||account!==S.accountEpoch||document.hidden||
+     S.route==='player'||S.route==='live')return;
+  loadHls(function(){})
+ };
+ if(typeof window.requestIdleCallback==='function'){
+  window.requestIdleCallback(prepare,{timeout:7500})
+ }else setTimeout(prepare,3000)
+}
 function loadMpegts(done){
  if(window.mpegts){done(true);return}
  if(S.mpegtsState==='loading'){S.mpegtsCallbacks.push(done);return}
@@ -1536,6 +1557,12 @@ function cleanupPlayer(){
   }
   if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
   if(S.playerView.healthTimer){clearInterval(S.playerView.healthTimer);S.playerView.healthTimer=null}
+  if(S.playerView.firstPictureWatchTimer){clearInterval(S.playerView.firstPictureWatchTimer);S.playerView.firstPictureWatchTimer=null}
+  if(S.playerView.firstPictureFrameId!==null&&S.playerView.firstPictureFrameId!==undefined&&
+     S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
+   try{S.playerView.video.cancelVideoFrameCallback(S.playerView.firstPictureFrameId)}catch(e){}
+   S.playerView.firstPictureFrameId=null
+  }
   S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
@@ -1791,7 +1818,7 @@ function playDirectMpegts(video,id,statusElement){
     status('● تشغيل MPEG-TS المباشر');
     if(statusElement)statusElement.style.display='none';
     state.ready=true;
-    if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
+    // Actual first-picture evidence is recorded by the frame observer below.
     if(state.refreshVideoResolution)state.refreshVideoResolution();
     if(state.revealControls)state.revealControls()
    };
@@ -2062,7 +2089,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
    var state=S.playerView,firstPlay=!state.ready;state.ready=true;
    if(firstPlay)recordLiveIncident('playing');
-   if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
+   // Actual first-picture evidence is recorded by the frame observer below.
    if(statusElement)statusElement.style.display='none';
    if(firstPlay&&state.revealControls)state.revealControls()
   }
@@ -2893,7 +2920,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['سرعة شبكة مقدّرة',bitrate],
    ['آخر مقطع HLS',recentSegment],
    ['آخر إطار معروض',lastPresented],
-   ['بدء الصورة',startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية'],
+   ['بدء الصورة',startup===null?'لم يؤكد الجهاز أول إطار':(startup/1000).toFixed(1)+' ثانية • '+(st.firstFrameBasis==='presented'?'معروض':'مفكوك')],
    ['أخطاء المشغل',String(st.errors||0)],
    ['استعادات تلقائية',String(st.recoveries||0)]
   ];
@@ -2980,6 +3007,48 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    state.healthTimer=setInterval(renderPlayerHealth,1700)
   }
  };
+ /* Count the *first actual decoded/presented video frame*, not an audio-only
+  * HTMLMediaElement 'playing' event. An audio clock can move with a black
+  * screen; claiming a fast picture before decoded pixels is misleading.
+  * Some older TVs expose neither requestVideoFrameCallback nor decoded
+  * frame counters; those devices explicitly report an unavailable metric.
+  */
+ function noteFirstPicture(basis){
+  if(S.route!=='player'||S.playerView!==state||state.stats.firstFrameAt||
+     !video.isConnected||!video.videoWidth||!video.videoHeight)return;
+  state.stats.firstFrameAt=Date.now();
+  state.stats.firstFrameBasis=basis;
+  if(state.firstPictureWatchTimer){clearInterval(state.firstPictureWatchTimer);state.firstPictureWatchTimer=null}
+  if(state.firstPictureFrameId!==null&&state.firstPictureFrameId!==undefined&&
+     typeof video.cancelVideoFrameCallback==='function'){
+   try{video.cancelVideoFrameCallback(state.firstPictureFrameId)}catch(e){}
+   state.firstPictureFrameId=null
+  }
+ }
+ function observeFirstPicture(){
+  if(S.route!=='player'||S.playerView!==state||state.stats.firstFrameAt||
+     state.pictureObservationAllowed===false||
+     !video.isConnected||!video.videoWidth||!video.videoHeight)return;
+  var quality=null;
+  try{quality=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality()}catch(e){}
+  if(quality&&Number(quality.totalVideoFrames)>0){
+   noteFirstPicture('decoded');return
+  }
+  var webkit=Number(video.webkitDecodedFrameCount)||0;
+  if(webkit>0){noteFirstPicture('decoded');return}
+  if(typeof video.requestVideoFrameCallback!=='function'||
+     state.firstPictureFrameId!==null&&state.firstPictureFrameId!==undefined)return;
+  try{
+   state.firstPictureFrameId=video.requestVideoFrameCallback(function(){
+    state.firstPictureFrameId=null;
+    if(S.route==='player'&&S.playerView===state&&video.isConnected&&
+       video.videoWidth>0&&video.videoHeight>0)noteFirstPicture('presented')
+   })
+  }catch(e){state.firstPictureFrameId=null}
+ }
+ // Run sparingly until the first video frame. This does not fetch media or
+ // consume any additional upstream player sessions.
+ state.firstPictureWatchTimer=setInterval(observeFirstPicture,800);
  function onBufferEvent(){
   var stats=state.stats;
   if(S.route!=='player'||S.playerView!==state||video.paused||!stats.firstFrameAt)return;
@@ -3069,7 +3138,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function onPlayingEvent(){
   var stats=state.stats,now=Date.now();
-  if(!stats.firstFrameAt)stats.firstFrameAt=now;
+  state.pictureObservationAllowed=true;
+  if(!stats.firstFrameAt)observeFirstPicture();
   if(stats.bufferSince){stats.bufferMs+=Math.max(0,now-stats.bufferSince);stats.bufferSince=0}
   confirmSeek()
  }
@@ -3784,12 +3854,17 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
-   if(state.stats){state.stats.liveEvents=[];recordLiveIncident('channel_switch')}
+   if(state.stats){state.pictureObservationAllowed=false;state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();recordLiveIncident('channel_switch')}
    if(state.refreshFavoriteButton)state.refreshFavoriteButton();
    var qualityPath=document.getElementById('player-source-mode');if(qualityPath)qualityPath.hidden=true;
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
+   if(state.firstPictureFrameId!==null&&state.firstPictureFrameId!==undefined&&
+      typeof video.cancelVideoFrameCallback==='function'){
+    try{video.cancelVideoFrameCallback(state.firstPictureFrameId)}catch(e){}
+    state.firstPictureFrameId=null
+   }
    playerStatus('جار التبديل إلى '+state.name+'…');
    if(state.channelSwitchTimer)clearTimeout(state.channelSwitchTimer);
    state.channelSwitchTimer=setTimeout(function(){
@@ -4108,7 +4183,7 @@ document.addEventListener('visibilitychange',function(){
 });
 try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
 api('GET','/api/session',null,function(st,json){
- if(st===200&&json.active&&useProfile(json.profileKey,json.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
+ if(st===200&&json.active&&useProfile(json.profileKey,json.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000)}
  else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
 });
 setInterval(checkCatalogVersion,10*60*1000);
