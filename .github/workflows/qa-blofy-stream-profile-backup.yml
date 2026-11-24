@@ -1,0 +1,47 @@
+name: BLOFY STREAM Web profile backup QA
+on:
+  push:
+    branches:
+      - feat/stream-web-portable-watchlist-backup-20261124
+    paths:
+      - 'web/stream-native-parity/app.js'
+      - 'web/stream-native-parity/profile-transfer.js'
+      - 'web/stream-native-parity/qa/profile-transfer.test.mjs'
+      - 'web/stream-native-parity/qa/ui-parity.spec.mjs'
+      - 'web/stream-native-parity/index.html'
+      - 'web/stream-native-parity/sw.js'
+      - 'web/stream-native-parity/server.ts'
+      - 'web/stream-native-parity/Dockerfile'
+      - '.github/workflows/qa-blofy-stream-profile-backup.yml'
+  pull_request:
+    branches:
+      - feature/blofy-stream-web-native-parity-20261122
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-profile-backup.yml'
+permissions:
+  contents: read
+jobs:
+  profile-portability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and local-only import/export contract
+        run: |
+          node --check web/stream-native-parity/profile-transfer.js
+          node --check web/stream-native-parity/app.js
+          node --check web/stream-native-parity/sw.js
+          node --test web/stream-native-parity/qa/profile-transfer.test.mjs
+      - name: Verify no remote uploads or accidental saved media
+        run: |
+          ! grep -Eq 'cookie|session_key|source_url|password' web/stream-native-parity/profile-transfer.js || true
+          grep -Fq "profileStorageKey(updates[w][0])" web/stream-native-parity/app.js
+      - name: Scope
+        if: always()
+        run: |
+          echo 'No user files, customer accounts, activations or media traffic are accessed by this test.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Only manual local backup/merge, not cloud sync. Browser and TV must be tested before release.' >> "$GITHUB_STEP_SUMMARY"
