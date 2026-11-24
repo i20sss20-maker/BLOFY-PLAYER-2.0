@@ -41,6 +41,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/adaptive-device-input.test.mjs
       - name: Verify touch-first mobile playback and fullscreen controls
         run: cd web/stream-native-parity && node --test qa/mobile-playback-controls.test.mjs
+      - name: Verify safe PWA update, connectivity and VOD double-tap gesture
+        run: cd web/stream-native-parity && node --test qa/mobile-resilience.test.mjs
       - name: Verify logout drains authorized HLS and VOD STOP requests
         run: cd web/stream-native-parity && node --test qa/logout-media-stop.test.mjs
       # Browser tests explicitly use channel: chrome. Installing Chromium as
@@ -107,6 +109,8 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/health && break; sleep 1; done
       - name: Test actual mouse and remote screens
         run: cd web/stream-native-parity && npx playwright test qa/ui-parity.spec.mjs --reporter=line
+      - name: Test offline notices and VOD double-tap in real Chrome
+        run: cd web/stream-native-parity && npx playwright test qa/mobile-resilience.spec.mjs --reporter=line
       - name: Verify official 1.0 release, auth boundary, first-party media engine
         run: cd web/stream-native-parity && npx playwright test qa/official-web-release.spec.mjs --reporter=line
       - uses: actions/upload-artifact@v4
