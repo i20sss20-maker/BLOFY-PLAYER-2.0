@@ -3004,7 +3004,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span><span class="player-resolution-badge" id="player-resolution" aria-live="polite" hidden></span><span class="player-resolution-badge" id="player-source-mode" aria-live="polite" hidden></span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
  '<div class="native-player-timeline" dir="ltr"><span id="now-time">00:00</span><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled aria-label="موضع التشغيل"><span id="total-time">--:--</span></div>')+
- '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+(isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
+ '<div id="player-control-hint" class="native-player-hint" aria-live="polite">'+
+ (document.documentElement.getAttribute('data-blofy-device')==='touch'?
+  'المس الصورة لإظهار أو إخفاء أدوات التحكم':isLive?'MENU / ↑ الصوتيات • OK القنوات':'')+'</div>'+
  '<div class="mobile-player-actions" id="mobile-player-actions" role="toolbar" aria-label="تحكم سريع باللمس">'+
  '<button class="mobile-player-action" type="button" id="mobile-player-previous" aria-label="'+
  (isLive?'القناة السابقة':previousEpisode?'الحلقة السابقة':'رجوع عشر ثوانٍ')+'">'+
@@ -4111,7 +4113,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   fullButton.textContent=on?'⤢ تصغير':'⛶ ملء الشاشة';
   fullButton.setAttribute('aria-label',on?'الخروج من ملء الشاشة':'ملء الشاشة');
   fullButton.setAttribute('aria-pressed',String(on));
-  fullButton.title=on?'الخروج من ملء الشاشة':'ملء الشاشة'
+  fullButton.title=on?'الخروج من ملء الشاشة':'ملء الشاشة';
+  var mobileFull=document.getElementById('mobile-player-fullscreen');
+  if(mobileFull){
+   mobileFull.setAttribute('aria-label',on?'الخروج من ملء الشاشة':'ملء الشاشة');
+   mobileFull.setAttribute('aria-pressed',String(on));
+   var shortLabel=mobileFull.querySelector('small');
+   if(shortLabel)shortLabel.textContent=on?'تصغير':'ملء الشاشة'
+  }
  }
  function enterViewportMode(){
   if(!root.isConnected||S.route!=='player')return;
@@ -4203,14 +4212,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(isLive&&state.switchChannel)state.switchChannel(-1);
   else if(previousEpisode)jumpEpisode(previousEpisode);
   else if(state.seekBy)state.seekBy(-10);
-  revealControls()
+  if(S.route==='player'&&S.playerView===state)revealControls()
  };
  if(mobileNext)mobileNext.onclick=function(){
   if(S.route!=='player'||S.playerView!==state)return;
   if(isLive&&state.switchChannel)state.switchChannel(1);
   else if(nextEpisode)jumpEpisode(nextEpisode);
   else if(state.seekBy)state.seekBy(10);
-  revealControls()
+  if(S.route==='player'&&S.playerView===state)revealControls()
  };
  var seek=document.getElementById('seek');
  if(seek)seek.onchange=function(){
