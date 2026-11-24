@@ -25,7 +25,8 @@ const ffmpeg=process.env.FFMPEG_BIN||'ffmpeg';
 const help=spawnSync(ffmpeg,['-hide_banner','-version'],{timeout:5000,encoding:'utf8'});
 assert.equal(help.status,0,'installed ffmpeg must be runnable');
 const base=mkdtempSync(join(tmpdir(),'blofy-ffmpeg-benchmark-'));
-const duration=4;
+// Thirty media-seconds exercise sustained CPU and RAM beyond first-GOP startup.
+const duration=30;
 const configs=[
  {kind:'live',size:'1280x720',frequency:400},
  {kind:'movie',size:'1920x1080',frequency:540},
