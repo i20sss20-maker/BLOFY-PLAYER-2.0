@@ -77,7 +77,7 @@ const publicIssue=row=>{
  };
 };
 export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,revealXtream,
-  rotateXtream=null,linkCodeToXtream=null,listCatalog,trialKeyHex,clock=Date.now,
+  rotateXtream=null,linkCodeToXtream=null,playbackSnapshot=null,listCatalog,trialKeyHex,clock=Date.now,
   rewardsStart='2026-11-24T05:00:00.000Z',rewardsRedemptionEnabled=false,rewardQuartersPerCredit=4}={}){
  if(typeof listCatalog!=='function'||!/^[0-9a-f]{64}$/i.test(String(trialKeyHex||'')))
    throw Error('stream_distributor_catalog_or_key_unconfigured');
@@ -523,6 +523,21 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
        [crypto.randomUUID(),actor.id,amount,next,JSON.stringify({reason:'reward_redemption',redemptionId:id,pointsUsed:quarters/4})]);
      return {ok:true,credits:amount,pointsUsed:quarters/4,balanceAfter:next};
    });
+ }
+ async function quality(token){
+  await session(token);
+  if(typeof playbackSnapshot!=='function')throw fail('distributor_quality_unavailable',503);
+  const source=await salehSource(),raw=await playbackSnapshot(source.id);
+  if(!raw||typeof raw!=='object')throw fail('distributor_quality_unavailable',503);
+  const count=v=>Number.isSafeInteger(v)&&v>=0?Math.min(v,10000000):0;
+  const ms=v=>Number.isFinite(v)&&v>=0?Math.min(Math.round(v),120000):null;
+  const byKind=Object.fromEntries(['live','movie','series'].map(k=>{
+   const v=raw.byKind?.[k]||{};return [k,{started:count(v.started),failed:count(v.failed),interrupted:count(v.interrupted),recovered:count(v.recovered)}];
+  }));
+  return {ok:true,scope:'shared_source_single_instance',windowMinutes:60,checkedAt:clock(),
+   decodedOnClient:false,byKind,started:count(raw.started),failed:count(raw.failed),interrupted:count(raw.interrupted),
+   recovered:count(raw.recovered),p95StartMs:ms(raw.p95StartMs),liveRecoveryGapSamples:count(raw.liveTsRecoveryGapSamples),
+   p95RecoveryGapMs:ms(raw.p95LiveTsRecoveryGapMs),sourceDrops:count(raw.liveTsSourceDrops)};
  }
  async function analytics(token){return analyticsFor(await session(token));}
  async function adminReport(id){
@@ -1084,5 +1099,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,updated,requested:ids.length,skipped:ids.length-updated,
    scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,adminReport,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues,redeemRewards};
+ return {ensureSchema,listAdmin,adminReport,quality,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues,redeemRewards};
 }
