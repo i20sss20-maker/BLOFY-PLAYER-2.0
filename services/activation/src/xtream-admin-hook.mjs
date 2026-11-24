@@ -99,7 +99,7 @@ import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamDistributors} from './stream-distributors.mjs';
-import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
+import {createStreamConnectPairing,createConnectExpiryMaintenance} from './stream-connect-pairing.mjs';
 import {createConnectHttp} from './stream-connect-http.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -3508,7 +3508,16 @@ async function callLocalGateway(method,path,body){
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
 const connectEnabled=process.env.BLOFY_STREAM_CONNECT_ENABLED==='1';
-const connectHttp=createConnectHttp({enabled:connectEnabled,pairing:createStreamConnectPairing({pool,keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,enabled:connectEnabled})});
+const connectPairing=createStreamConnectPairing({pool,keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,enabled:connectEnabled});
+const connectHttp=createConnectHttp({enabled:connectEnabled,pairing:connectPairing});
+if(connectEnabled){
+ const maintenance=createConnectExpiryMaintenance({pairing:connectPairing,enabled:true,
+  onError:code=>console.warn('BLOFY_CONNECT_MAINTENANCE',JSON.stringify({code}))});
+ const connectExpiryTimer=setInterval(()=>void maintenance.tick(),60000);
+ connectExpiryTimer.unref?.();
+ const connectExpiryStartup=setTimeout(()=>void maintenance.tick(),30000);
+ connectExpiryStartup.unref?.();
+}
 const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
   playbackSnapshot:sourceId=>xtreamPlaybackSnapshot(Date.now(),sourceId),
   rewardsRedemptionEnabled:process.env.BLOFY_DISTRIBUTOR_REWARDS_REDEMPTION==='1',
