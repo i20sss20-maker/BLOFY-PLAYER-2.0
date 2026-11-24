@@ -35,6 +35,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 /** Private QA entry point. Separate from the production BLOFY library and session. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class ExternalStreamConnectActivity : AppCompatActivity() {
+    companion object { const val EXTRA_CONNECT_CODE = "connect_code" }
     private lateinit var panel: LinearLayout
     private lateinit var status: TextView
     private lateinit var code: EditText
@@ -83,6 +84,10 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
             isSaveEnabled = false
             filters = arrayOf(android.text.InputFilter.LengthFilter(12))
         }
+        intent.getStringExtra(EXTRA_CONNECT_CODE)?.let { raw ->
+            ExternalStreamConnectClient.normalizeCode(raw)?.takeIf { it.all(Char::isDigit) }?.let { code.setText(it) }
+        }
+        intent.removeExtra(EXTRA_CONNECT_CODE)
         panel.addView(code)
         panel.addView(button("تبديل إلى الكود القديم / الرقمي") {
             val numeric = code.inputType == InputType.TYPE_CLASS_NUMBER
@@ -169,7 +174,10 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
                     ?: error("profile unavailable")
                 openLibrary(saved)
             } catch(cancelled: CancellationException){throw cancelled}
-            catch(_: Exception){status.text="تعذر الربط. تحقق من الكود واتصال الإنترنت"}
+            catch(error: Exception){status.text=when(error.message){
+                "انتهت صلاحية كود الربط أو استُخدم. أنشئ كودًا جديدًا", "محاولات كثيرة، أعد المحاولة لاحقًا", "خدمة CONNECT غير متاحة حاليًا" -> error.message
+                else -> "تعذر الربط. تحقق من الكود واتصال الإنترنت"
+            }}
             finally{pairButton.isEnabled=true; clearButton.isEnabled=true}
         }
     }
