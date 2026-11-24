@@ -39,6 +39,15 @@ jobs:
           grep -Eiq '^referrer-policy:.*no-referrer' "$RUNNER_TEMP/headers"
           if test "$ENABLED" = true; then
             jq -e '.ok==false and .error=="stream_code_invalid"' "$RUNNER_TEMP/body"
+            # A fresh 144-bit random BC identifier cannot match a paid voucher.
+            # Verify real pairing DB readiness and generic rejection without
+            # creating an account or sending any known customer code.
+            probe=$(node -e 'process.stdout.write("BC-"+require("crypto").randomBytes(18).toString("base64url"))')
+            device=$(openssl rand -hex 32)
+            jq -n --arg code "$probe" --arg device "$device" '{code:$code,deviceKey:$device}' > "$RUNNER_TEMP/probe.json"
+            status=$(curl -sS --connect-timeout 10 --max-time 25 -o "$RUNNER_TEMP/body" -w '%{http_code}' -H 'Content-Type: application/json' --data @"$RUNNER_TEMP/probe.json" "$root/api/v1/stream/app/unified-redeem")
+            test "$status" = 409
+            jq -e '.ok==false and .error=="stream_code_unavailable"' "$RUNNER_TEMP/body"
           else
             jq -e '.ok==false and .error=="stream_unified_unavailable"' "$RUNNER_TEMP/body"
           fi
