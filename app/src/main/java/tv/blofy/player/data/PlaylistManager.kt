@@ -577,6 +577,28 @@ class PlaylistManager(
     }
 
     companion object {
+        internal fun forProvider(
+            context: android.content.Context,
+            provider: ProviderEntity,
+            dao: BlofyDao,
+            episodeRequest: Boolean = false
+        ): PlaylistManager {
+            if (!BuildConfig.CODE_ONLY_LOGIN ||
+                !tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(provider.id)) {
+                val api = if (episodeRequest) tv.blofy.player.data.remote.XtreamClient.episodeApi
+                    else tv.blofy.player.data.remote.XtreamClient.api
+                return PlaylistManager(api, dao)
+            }
+            check(provider.baseUrl == ExternalXtreamCatalogTransport.ORIGIN &&
+                provider.username.isEmpty() && provider.password.isEmpty())
+            val staged = checkNotNull(tv.blofy.player.core.identity.ExternalStreamConnectStore.loadStaged(context))
+            check(staged.providerId == provider.id) { "External profile mismatch" }
+            val client = ExternalXtreamCatalogTransport.client(staged.credentials)
+            val api = tv.blofy.player.data.remote.XtreamClient.createApi(
+                if (episodeRequest) tv.blofy.player.data.remote.XtreamClient.episodeClient(client) else client)
+            return PlaylistManager(api, dao, externalCatalog = true)
+        }
+
         internal fun forExternal(credentials: ExternalStreamConnectClient.Credentials, dao: BlofyDao): PlaylistManager =
             PlaylistManager(ExternalXtreamCatalogTransport.api(credentials), dao, externalCatalog = true)
 
