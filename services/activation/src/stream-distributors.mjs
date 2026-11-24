@@ -70,7 +70,8 @@ const publicIssue=row=>{
  };
 };
 export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,revealXtream,
-  rotateXtream=null,listCatalog,trialKeyHex,clock=Date.now}={}){
+  rotateXtream=null,linkCodeToXtream=null,listCatalog,trialKeyHex,clock=Date.now,
+  rewardsStart='2026-11-24T05:00:00.000Z'}={}){
  if(typeof listCatalog!=='function'||!/^[0-9a-f]{64}$/i.test(String(trialKeyHex||'')))
    throw Error('stream_distributor_catalog_or_key_unconfigured');
  if(!pool||![issueCode,issueXtream,revealCode,revealXtream].every(x=>typeof x==='function'))
@@ -456,8 +457,21 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     FROM blofy_stream_distributor_issues WHERE distributor_id=$1
       AND created_at>NOW()-INTERVAL '24 hours'
       AND status IN ('pending','done','review')`,[actor.id])).rows[0]||{};
-  return {ok:true,stats:{
-    today:Number(row.today||0),month:Number(row.month||0),
+  // Separate earned rewards, based on durable successful debit events.
+   // App vouchers qualify only on activation. Quarter-points avoid rounding.
+   const rewards=(await pool.query(`SELECT COALESCE(SUM(CASE e.details->>'days'
+      WHEN '30' THEN 1 WHEN '90' THEN 2 WHEN '180' THEN 4 WHEN '365' THEN 8 ELSE 0 END),0)::int AS reward_quarters
+    FROM blofy_stream_distributor_credit_events e
+    JOIN blofy_stream_distributor_issues i ON i.id=e.issue_id AND i.distributor_id=e.distributor_id
+    LEFT JOIN blofy_xtream_gateway_duration_codes c ON i.kind='app' AND c.id=i.subject_id
+    WHERE e.distributor_id=$1 AND e.delta<0 AND e.type IN ('issue','renew') AND i.status='done'
+      AND (CASE WHEN e.type='issue' AND i.kind='app' THEN c.redeemed_at ELSE e.created_at END)>=$2::timestamptz
+      AND NOT EXISTS (SELECT 1 FROM blofy_stream_distributor_credit_events r
+       WHERE r.distributor_id=e.distributor_id AND r.issue_id=e.issue_id AND r.type='refund')`,
+    [actor.id,rewardsStart])).rows[0]||{};
+   return {ok:true,stats:{
+     rewardPointsEarned:Number(rewards.reward_quarters||0)/4,
+     today:Number(row.today||0),month:Number(row.month||0),
     trialsToday:Number(row.trials_today||0),trialsTotal:Number(row.trials_total||0),
     paidTotal:Number(row.paid_total||0),spentMonth:Number(row.spent_month||0),
     pendingReview:Number(row.under_review||0),
@@ -506,7 +520,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   if(!row)throw fail('distributor_issue_missing',404);
   return row;
  }
- async function reveal(token,issueId){
+ async function reveal(token,issueId,{includeXtream=false}={}){
   const row=await session(token),item=await showOwned(row.id,issueId);
   if(item.status!=='done'||!item.subject_id)
    throw fail('distributor_issue_not_ready',409);
@@ -514,8 +528,21 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     await revealXtream(item.subject_id);
   if(result.status!==200||result.body?.ok===false)
    throw fail('distributor_reveal_unavailable',result.status===404?404:503);
-  return {ok:true,issue:publicIssue(item),
-    ...(item.kind==='app'?{code:result.body.code}:{credentials:result.body.credentials})};
+  const response={ok:true,issue:publicIssue(item),
+     ...(item.kind==='app'?{code:result.body.code}:{credentials:result.body.credentials})};
+   if(includeXtream===true&&item.kind==='app'){
+    if(typeof linkCodeToXtream!=='function')throw fail('distributor_dual_access_unavailable',503);
+    // Only the authenticated owner's existing voucher is passed to the gateway.
+    const linked=await linkCodeToXtream(response.code);
+    if(linked.status!==200||linked.body?.ok!==true)
+      throw fail('distributor_dual_access_activate_first',409);
+    if(linked.body.codeId!==item.subject_id||!linked.body.credentials||linked.body.subscriptionUnchanged!==true)
+      throw fail('distributor_dual_access_mismatch',503);
+    response.credentials=linked.body.credentials;
+    response.dualAccess=true;
+    response.expiresAt=linked.body.expiresAt;
+   }
+   return response;
  }
  async function issue(token,{kind,label,durationDays,requestId,trialPhone,customerName,customerPhone}={}){
   const actor=await session(token);
