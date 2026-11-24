@@ -76,7 +76,7 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
         }
         panel.addView(status)
         code = EditText(this).apply {
-            hint = "أدخل 12 رقمًا"
+            hint = "أدخل 8 أرقام"
             inputType = InputType.TYPE_CLASS_NUMBER
             isSingleLine = true
             isSaveEnabled = false
@@ -88,7 +88,7 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
             code.text?.clear()
             code.inputType = if (numeric) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS else InputType.TYPE_CLASS_NUMBER
             code.filters = arrayOf(android.text.InputFilter.LengthFilter(if (numeric) 27 else 12))
-            code.hint = if (numeric) "BC-..." else "أدخل 12 رقمًا"
+            code.hint = if (numeric) "BC-..." else "أدخل 8 أرقام"
         })
         pairButton = button("ربط الاشتراك الخارجي") { pair() }
         panel.addView(pairButton)
