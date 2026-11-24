@@ -112,12 +112,19 @@ object ExternalStreamConnectCatalog {
                 .setPathSegment(actual.pathSegments.lastIndex, item.id + ".m3u8").build()
             routes.add(hls, "m3u8").toString()
         } else null
-        val client = ExternalStreamConnectVerifier.directClient.newBuilder()
+        val client = guardedMediaClient(routes, routes::resolve)
+
+
+    internal fun guardedMediaClient(
+        routes: ExternalXtreamMediaRoutes,
+        resolve: (HttpUrl) -> HttpUrl
+    ): OkHttpClient =
+        ExternalStreamConnectVerifier.directClient.newBuilder()
             .readTimeout(25,TimeUnit.SECONDS).callTimeout(0,TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request()
                 if(request.method != "GET") throw IOException("CONNECT media method denied")
-                val url = routes.resolve(request.url)
+                val url = resolve(request.url)
                 val response = try {
                     chain.proceed(request.newBuilder().url(url).removeHeader("Authorization")
                         .removeHeader("Cookie").build())
