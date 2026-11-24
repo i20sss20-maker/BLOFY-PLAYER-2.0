@@ -119,8 +119,16 @@ object ExternalStreamConnectCatalog {
     internal fun guardedMediaClient(
         routes: ExternalXtreamMediaRoutes,
         resolve: (HttpUrl) -> HttpUrl
+    ): OkHttpClient = guardedMediaClientForTransport(routes,ExternalStreamConnectVerifier.directClient,resolve)
+
+    /** Test seam for local HTTP fixtures; normal playback always uses guarded public DNS. */
+    internal fun guardedMediaClientForTransport(
+        routes: ExternalXtreamMediaRoutes,
+        transport: OkHttpClient,
+        resolve: (HttpUrl) -> HttpUrl
     ): OkHttpClient =
-        ExternalStreamConnectVerifier.directClient.newBuilder()
+        transport.newBuilder()
+            .followRedirects(false).followSslRedirects(false)
             .readTimeout(25,TimeUnit.SECONDS).callTimeout(0,TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request()
