@@ -1957,6 +1957,15 @@ function clearLiveBufferWait(record,statusElement){
  }
  record.bufferStatusShown=false
 }
+/* Like Media3 READY, confirmed frame/time progress ends a buffering sample
+ * even if Safari does not emit the matching "playing" DOM event. */
+function finishObservedBuffer(stats,now){
+ if(!stats||!stats.bufferSince)return false;
+ var elapsed=Math.max(0,Number(now)-stats.bufferSince);
+ if(!Number.isFinite(elapsed))elapsed=0;
+ stats.bufferMs=(stats.bufferMs||0)+elapsed;stats.bufferSince=0;
+ return true
+}
 function liveTransientRetryMs(attempt){
  // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
  // a home router/Wi-Fi connection to settle without hammering Railway.
@@ -2181,6 +2190,7 @@ function playDirectMpegts(video,id,statusElement){
     }
     if(!record.ready)return;
     var progress=livePlaybackProgress(record,video,now);
+    if(progress.advanced&&state.stats)finishObservedBuffer(state.stats,now);
     if(progress.advanced&&record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
     if(!progress.advanced&&progress.idleMs>18000)
      fallback('تجمّدت صورة MPEG-TS؛ جار العودة إلى HLS.')
@@ -2502,6 +2512,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     return
    }
    if(progress.advanced){
+    if(!preview&&S.playerView&&S.playerView.video===video&&S.playerView.stats)
+     finishObservedBuffer(S.playerView.stats,now);
     // Proven picture progress clears a stale "buffering" overlay even
     // when Safari/VIDAA never emits another "playing" event.
     if(record.waitingSince||record.bufferNoticeTimer||record.bufferStatusShown||record.stallTimer)
@@ -4093,7 +4105,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   progress();
   if(state.mode==='direct'&&state.directWaitingSince&&
      !video.paused&&video.readyState>=3&&
-     S.route==='player'&&S.playerView===state)clearDirectWaiting()
+     S.route==='player'&&S.playerView===state){
+   finishObservedBuffer(state.stats,Date.now());
+   clearDirectWaiting()
+  }
  };
  video.onpause=function(){
   clearDirectWaiting();releaseWakeLock();progress();
