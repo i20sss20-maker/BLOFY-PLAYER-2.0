@@ -2492,7 +2492,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   S.lastLongPlaybackTest=saved;profileSave('lastLongPlaybackTest',saved);
   var msg=acceptance?acceptance.message(result):'اكتمل الاختبار';
   if(verifyStatus)verifyStatus.textContent=msg;
-  if(S.route==='player'&&S.playerView===state)playerStatus(msg,result.status==='failed')
+  if(S.route==='player'&&S.playerView===state)playerStatus(msg,false)
  }
  function sampleAcceptance(){
   if(!state.longTest||!acceptance)return;
