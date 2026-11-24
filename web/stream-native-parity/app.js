@@ -324,10 +324,10 @@ function home(){
   '<div class="hero-dots">'+combined.slice(0,5).map(function(x,n){return '<span class="'+(n===S.heroIndex?'current':'')+'"></span>'}).join('')+'</div></div></div>':
   '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2><div class="hero-description">قنوات وأفلام ومسلسلات باستخدام كود اشتراكك.</div></div></div>';
   var shortcuts='<div class="shelf"><div class="shelf-title"><h2>وصول سريع</h2></div><div class="story-row">'+
-   '<button class="story" data-go="live"><strong>◉ البث المباشر</strong><small>القنوات المفضلة والتصنيفات</small></button>'+
-   '<button class="story" data-go="movie"><strong>▣ الأفلام</strong><small>الملصقات والتفاصيل</small></button>'+
-   '<button class="story" data-go="series"><strong>▤ المسلسلات</strong><small>المواسم والحلقات</small></button>'+
-   '<button class="story" data-go="search"><strong>⌕ البحث</strong><small>ابحث في المكتبة</small></button></div></div>';
+   '<button class="story" id="home-shortcut-live" data-go="live"><strong>◉ البث المباشر</strong><small>القنوات المفضلة والتصنيفات</small></button>'+
+   '<button class="story" id="home-shortcut-movie" data-go="movie"><strong>▣ الأفلام</strong><small>الملصقات والتفاصيل</small></button>'+
+   '<button class="story" id="home-shortcut-series" data-go="series"><strong>▤ المسلسلات</strong><small>المواسم والحلقات</small></button>'+
+   '<button class="story" id="home-shortcut-search" data-go="search"><strong>⌕ البحث</strong><small>ابحث في المكتبة</small></button></div></div>';
   var shelfMovies=film.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث الأفلام</h2><button class="btn secondary" data-go="movie">عرض الكل</button></div>'+shelves(film,'movie')+'</section>':'';
   var shelfSeries=show.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث المسلسلات</h2><button class="btn secondary" data-go="series">عرض الكل</button></div>'+shelves(show,'series')+'</section>':'';
   var recent=Object.keys(S.watch).map(function(key){
@@ -348,7 +348,7 @@ function home(){
    // scroll, or blank movie cards already visible.
    var hadScreen=!!target.querySelector('.story-row');
    var focus=hadScreen&&S.keyboardMode&&target.contains(document.activeElement)?
-    focusIdentity(document.activeElement):null;
+    (document.activeElement.id?['id',document.activeElement.id]:focusIdentity(document.activeElement)):null;
    if(hadScreen)rememberView();
    target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;
    restoreView('home',focus)
