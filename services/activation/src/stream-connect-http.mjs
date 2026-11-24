@@ -8,7 +8,7 @@ export function createConnectHttp({pairing,enabled=false}={}){
  const redeemLimit=createFixedWindowLimiter({limit:8,windowMs:60000,maxEntries:2000});
  const globalIssue=createFixedWindowLimiter({limit:60,windowMs:60000,maxEntries:1});
  const globalRedeem=createFixedWindowLimiter({limit:120,windowMs:60000,maxEntries:1});
- const allowed=new Set(['connect_input_invalid','connect_host_invalid','connect_code_invalid','connect_code_expired_or_used','connect_capacity','connect_disabled','connect_pairing_unavailable','connect_key_unconfigured','connect_store_unconfigured']);
+ const allowed=new Set(['connect_input_invalid','connect_host_invalid','connect_code_invalid','connect_code_expired_or_used','connect_capacity','connect_rate_limited','connect_disabled','connect_pairing_unavailable','connect_key_unconfigured','connect_store_unconfigured']);
  function reply(res,status,body,extra={}){
   res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store, private','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...extra});res.end(JSON.stringify(body));
  }
@@ -26,7 +26,7 @@ export function createConnectHttp({pairing,enabled=false}={}){
    for await(const raw of req){const buf=Buffer.isBuffer(raw)?raw:Buffer.from(raw);size+=buf.length;if(size>4096){reply(res,413,{ok:false,code:'connect_payload_too_large'});return true}chunks.push(buf)}
    let input;try{input=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{reply(res,400,{ok:false,code:'connect_input_invalid'});return true}
    if(!input||typeof input!=='object'||Array.isArray(input)){reply(res,400,{ok:false,code:'connect_input_invalid'});return true}
-   const result=isIssue?await pairing.issue({host:input.host,username:input.username,password:input.password,...(input.allowHttp===true?{allowHttp:true}:{}),...(input.numericCode===true?{numericCode:true}:{})}):await pairing.redeem({code:input.code});
+   const result=isIssue?await pairing.issue({host:input.host,username:input.username,password:input.password,...(input.allowHttp===true?{allowHttp:true}:{}),...(input.numericCode===true?{numericCode:true}:{}),...(input.shortCode===true?{shortCode:true}:{})}):await pairing.redeem({code:input.code});
    reply(res,isIssue?201:200,result);
   }catch(e){
    const code=allowed.has(e?.message)?e.message:'connect_pairing_unavailable';

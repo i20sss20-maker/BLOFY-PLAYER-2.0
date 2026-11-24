@@ -5,7 +5,8 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 const TTL_MS=15*60*1000;
 const CODE=/^BC-[A-Za-z0-9_-]{24}$/;
-const NUMERIC=/^[0-9]{12}$/;
+const NUMERIC=/^(?:[0-9]{8}|[0-9]{12})$/;
+const SHORT=/^[0-9]{8}$/;
 const error=(code,status=400)=>Object.assign(Error(code),{status});
 export function normalizeConnectInput(input={}){
  const {host,username,password}=input||{};
@@ -52,6 +53,7 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
     await db.query('SELECT pg_advisory_xact_lock(173921,25)');
     await db.query('CREATE TABLE IF NOT EXISTS blofy_connect_pairings (code_hash TEXT PRIMARY KEY, sealed BYTEA NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
     await db.query('CREATE INDEX IF NOT EXISTS idx_blofy_connect_pairings_expiry ON blofy_connect_pairings(expires_at)');
+    await db.query('CREATE TABLE IF NOT EXISTS blofy_connect_short_budget (id INTEGER PRIMARY KEY CHECK (id=1), minute TIMESTAMPTZ NOT NULL, attempts INTEGER NOT NULL)');
     await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
   })().catch(e=>{schema=null;throw e});
@@ -62,7 +64,8 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   if(credentials.host.startsWith('http:')&&input.allowHttp!==true)throw error('connect_host_invalid');
   await ensureSchema();
   let code;
-  const expiresAt=clock()+TTL_MS;
+  const short=input.shortCode===true;
+  const expiresAt=clock()+(short?5*60000:TTL_MS);
   const db=await pool.connect();
   try{
    await db.query('BEGIN');
@@ -70,9 +73,9 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
    await db.query("SELECT pg_advisory_xact_lock(173921,24)");
    await db.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');
    const n=Number((await db.query('SELECT COUNT(*)::int AS count FROM blofy_connect_pairings')).rows[0]?.count||0);
-   if(n>=2000)throw error('connect_capacity',429);
+   if(n>=(short?100:2000))throw error('connect_capacity',429);
    for(let attempt=0;attempt<8;attempt++){
-    const candidate=input.numericCode===true?String(crypto.randomInt(0,1_000_000_000_000)).padStart(12,'0'):'BC-'+crypto.randomBytes(18).toString('base64url');
+    const candidate=short?String(crypto.randomInt(0,100_000_000)).padStart(8,'0'):input.numericCode===true?String(crypto.randomInt(0,1_000_000_000_000)).padStart(12,'0'):'BC-'+crypto.randomBytes(18).toString('base64url');
     const id=hash(candidate,key);
     const inserted=await db.query('INSERT INTO blofy_connect_pairings(code_hash,sealed,expires_at) VALUES($1,$2,$3) ON CONFLICT (code_hash) DO NOTHING RETURNING code_hash',[id,encrypt(credentials,key,id),new Date(expiresAt)]);
     if(inserted.rows.length===1){code=candidate;break;}
@@ -86,6 +89,11 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   const key=gate();
   if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
   await ensureSchema();
+  if(SHORT.test(code)){
+   // Database-backed global budget across processes; no per-IP bypass.
+   const budget=await pool.query("INSERT INTO blofy_connect_short_budget(id,minute,attempts) VALUES(1,date_trunc('minute',NOW()),1) ON CONFLICT(id) DO UPDATE SET minute=EXCLUDED.minute, attempts=CASE WHEN blofy_connect_short_budget.minute=EXCLUDED.minute THEN blofy_connect_short_budget.attempts+1 ELSE 1 END WHERE blofy_connect_short_budget.minute<>EXCLUDED.minute OR blofy_connect_short_budget.attempts<20 RETURNING attempts");
+   if(budget.rows.length!==1)throw error('connect_rate_limited',429);
+  }
   const id=hash(code,key);
   // Atomically consume a code across concurrent replicas, never reveal it twice.
   const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() RETURNING sealed',[id]);
