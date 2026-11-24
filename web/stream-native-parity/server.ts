@@ -378,6 +378,10 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
   return json(400,{error:'invalid_download_path'});
  if(activeVodDownloads>=MAX_VOD_DOWNLOADS)
   return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
+ // Provider HEAD may fail or consume a licensed provider slot. Probe only
+ // the authenticated, local feature gate; do not claim this proves that
+ // the remote movie file is available or complete.
+ if(method==='HEAD')return new Response(null,{status:200,headers:noCache({'Accept-Ranges':'none'})});
  const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
  const ctrl=new AbortController();
  const cancel=()=>ctrl.abort();
