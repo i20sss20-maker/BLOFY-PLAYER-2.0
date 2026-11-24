@@ -120,9 +120,20 @@ async function commentaryForChannel(channel){
   redirect:'manual',signal:AbortSignal.timeout(9000)});
  if(!res.ok||res.status>=300||res.status<200||Number(res.headers.get('content-length')||0)>262144)
   return {status:res.status===401||res.status===403?403:res.status===429?429:503,tracks:[]};
- const raw=await res.text();
- if(raw.length>262144)return {status:502,tracks:[]};
- let body;try{body=JSON.parse(raw)}catch{return {status:502,tracks:[]}}
+ // Bound chunked catalogues as well as Content-Length; do not buffer
+ // an untrusted unlimited response from a third-party-backed catalogue.
+ const reader=res.body?.getReader();if(!reader)return {status:502,tracks:[]};
+ const parts=[];let size=0;
+ try{
+  while(true){
+   const next=await reader.read();if(next.done)break;
+   size+=next.value?.byteLength||0;
+   if(size>262144){try{await reader.cancel()}catch{};return {status:502,tracks:[]}}
+   parts.push(Buffer.from(next.value))
+  }
+ }finally{try{reader.releaseLock()}catch{}}
+ let body;try{body=JSON.parse(Buffer.concat(parts).toString('utf8'))}
+ catch{return {status:502,tracks:[]}}
  return {status:200,tracks:channelTracks(body,channel)};
 }
 if(p==='/api/audio/catalog'&&method==='GET'){
