@@ -1,5 +1,6 @@
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
+import {createCatalogPageCache} from './catalog-page-cache.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
@@ -17,6 +18,7 @@ function normalizeSearch(text){
   .replace(/[\u0622\u0623\u0625\u0671]/g,'ا')
   .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
 }
+const catalogPageCache=createCatalogPageCache();
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
@@ -144,6 +146,17 @@ if(p==='/api/page'&&method==='GET'){
  if(cat&&!/^[0-9]{1,18}$/.test(cat))return json(400,{error:'invalid_category'});
  const offset=Math.max(0,Math.min(10000,parseInt(u.searchParams.get('offset')||'0',10)||0));
  const limit=Math.max(1,Math.min(48,parseInt(u.searchParams.get('limit')||'30',10)||30));
+ // Only bounded browsing pages are eligible. Searches/credentials/media are
+ // never cached. A manual refresh explicitly bypasses this 45s cache.
+ const fresh=u.searchParams.get('fresh')==='1';
+ const pageCacheable=!query&&offset<=108&&!req.signal.aborted;
+ const pageCacheKey=pageCacheable?createHmac('sha256',KEY).update(
+  'blofy-web-catalog-page-v1\0'+h.Authorization+'\0'+k+'\0'+cat+'\0'+offset+'\0'+limit
+ ).digest('hex'):null;
+ if(pageCacheKey&&!fresh){
+  const pageHit=catalogPageCache.get(pageCacheKey);
+  if(pageHit)return json(200,pageHit,{'X-Blofy-Catalog-Cache':'HIT'})
+ }
  const target=new URL(ORIGIN+'/player_api.php');target.searchParams.set('action',action);
  if(cat)target.searchParams.set('category_id',cat);
  let upstream=null,reader=null;
@@ -191,7 +204,9 @@ if(p==='/api/page'&&method==='GET'){
    }
   }
   try{await reader.cancel()}catch(e){}
-  return json(200,{items:matches,hasMore,nextOffset:offset+matches.length,kind:k});
+  const result={items:matches,hasMore,nextOffset:offset+matches.length,kind:k};
+  if(pageCacheKey&&!req.signal.aborted)catalogPageCache.put(pageCacheKey,result);
+  return json(200,result,{'X-Blofy-Catalog-Cache':'MISS'});
  }catch(e){try{await reader?.cancel()}catch{};return json(502,{error:'catalog_page_failed'})}
  finally{clearTimeout(timer);req.signal.removeEventListener('abort',abort)}
 }
