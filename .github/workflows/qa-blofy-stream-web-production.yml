@@ -29,6 +29,8 @@ jobs:
       - run: cd web/stream-native-parity && npm install --no-audit --no-fund
       - name: Verify long-running HLS sessions and safe worker idle expiry
         run: cd web/stream-native-parity && node --test qa/media-lifecycle.test.mjs
+      - name: Verify logout drains authorized HLS and VOD STOP requests
+        run: cd web/stream-native-parity && node --test qa/logout-media-stop.test.mjs
       # Browser tests explicitly use channel: chrome. Installing Chromium as
       # well needlessly downloads a second browser and apt packages, and can
       # block the only UI release gate during installer network outages.
