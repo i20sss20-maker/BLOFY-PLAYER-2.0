@@ -104,22 +104,25 @@ object ExternalStreamConnectCatalog {
     class PlaybackTarget(val uri: String, val client: OkHttpClient)
     fun playback(credentials: ExternalStreamConnectClient.Credentials, item: Item): PlaybackTarget {
         val actual = mediaUrl(credentials,item)
-        val opaque = credentials.host.newBuilder().addPathSegment("__blofy_connect_media__")
+        val opaque = HttpUrl.Builder().scheme("https").host("external-xtream.invalid").addPathSegment("__blofy_connect_media__")
             .addPathSegment(item.kind.path).addPathSegment(item.id+"."+safeExtension(item.kind,item.extension)).build()
         val client = ExternalStreamConnectVerifier.directClient.newBuilder()
             .readTimeout(25,TimeUnit.SECONDS).callTimeout(0,TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request()
-                if(request.url != opaque) throw IOException("CONNECT media route denied")
+                if(request.url != opaque || request.method != "GET") throw IOException("CONNECT media route denied")
                 val response = try {
                     chain.proceed(request.newBuilder().url(actual).removeHeader("Authorization")
                         .removeHeader("Cookie").build())
                 } catch (_: IOException) { throw IOException("CONNECT media connection failed") }
+                val sanitized = response.newBuilder().request(request)
+                    .removeHeader("Location").removeHeader("Set-Cookie")
+                    .priorResponse(null).networkResponse(null).cacheResponse(null)
                 if (!response.isSuccessful) {
                     response.close()
-                    response.newBuilder().request(request).headers(okhttp3.Headers.Builder().build())
+                    sanitized.headers(okhttp3.Headers.Builder().build())
                         .body(ByteArray(0).toResponseBody(null)).build()
-                } else response.newBuilder().request(request).build()
+                } else sanitized.build()
             }.build()
         return PlaybackTarget(opaque.toString(),client)
     }
