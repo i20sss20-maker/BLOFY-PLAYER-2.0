@@ -3077,9 +3077,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['مسار الصورة',videoPath],
    ['زمن تشغيل الجلسة',uptime],
    ['انتظارات التخزين',(st.bufferEvents||0)+' مرة / '+Math.round(buffering/1000)+' ثانية'],
-   ['توقف الصورة المرصود',(st.visualOutageCount||0)+' مرة / '+Math.round((st.visualOutageMs||0)/1000)+' ثانية'],
-   ['أطول توقف للصورة',Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية'],
-   ['محرك التشغيل الحالي',state.mode==='mpegts'?'MPEG-TS مباشر':S.play&&S.play.video===video&&S.play.engine?'HLS.js':'HLS أصلي'],
    ['إطارات ساقطة',dropped===null?'غير متاح':dropped+(droppedPct?' / '+droppedPct:'')],
    ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
    ['سرعة شبكة مقدّرة',bitrate],
@@ -3087,10 +3084,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['آخر إطار معروض',lastPresented],
    ['بدء الصورة',startup===null?'لم يؤكد الجهاز أول إطار':(startup/1000).toFixed(1)+' ثانية • '+(st.firstFrameBasis==='presented'?'معروض':'مفكوك')],
    ['أخطاء المشغل',String(st.errors||0)],
-   ['استعادات تلقائية',String(st.recoveries||0)],
-   ['توقف الصورة حسب المحرك',
-    'HLS '+(((st.visualOutageByEngine||{}).hls||{}).count||0)+' / MPEG-TS '+(((st.visualOutageByEngine||{}).mpegts||{}).count||0)]
+   ['استعادات تلقائية',String(st.recoveries||0)]
   ];
+  if(isLive){
+   var byEngine=st.visualOutageByEngine||{};
+   metrics.push(['محرك التشغيل الحالي',state.mode==='mpegts'?'MPEG-TS مباشر':
+    liveRecord&&liveRecord.engine?'HLS.js':'HLS أصلي']);
+   metrics.push(['انقطاعات الصورة المرصودة',(st.visualOutageCount||0)+' مرة / '+Math.round((st.visualOutageMs||0)/1000)+' ثانية']);
+   metrics.push(['أطول انقطاع بالصورة',Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية']);
+   metrics.push(['الانقطاعات حسب المحرك','HLS '+((byEngine.hls||{}).count||0)+' / MPEG-TS '+((byEngine.mpegts||{}).count||0)]);
+  }
   box.innerHTML='<div class="playback-health-head"><strong>مراقبة جودة BLOFY المباشرة</strong>'+
    '<small>'+esc(status4k)+' • قياسات حقيقية وليست اسم القناة</small></div>'+
    '<div class="playback-health-grid">'+metrics.map(function(m){
@@ -3127,7 +3130,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    'دقة الفيديو المعروضة: '+(w&&h?w+'×'+h:'غير متوفرة'),
    'دقة المصدر: '+(r&&r.sourceDimensions||'غير متوفرة'),
    'المعالجة: '+mode,
-   'محرك التشغيل: '+(state.mode==='mpegts'?'MPEG-TS مباشر':r&&r.engine?'HLS.js':'HLS أصلي على الجهاز'),
+   'محرك التشغيل: '+(state.mode==='mpegts'?'MPEG-TS مباشر':r&&r.engine?'HLS.js':state.mode==='direct'?'MP4 أصلي':'HLS أصلي على الجهاز'),
    'آخر مقطع HLS: '+(r&&r.engine?(ms===null?'غير مرصود':Math.round(ms/1000)+' ثانية'):'غير متوفر في المحرك الأصلي'),
    'آخر تقدم للصورة: '+(idle===null?'غير مرصود':Math.round(idle/1000)+' ثانية'),
    'آخر إطار معروض على الشاشة: '+(r&&r.framePresentationObserved?Math.round((now-r.lastPresentedFrameAt)/1000)+' ثانية':'غير مدعوم'),
