@@ -1,5 +1,9 @@
 # BLOFY STREAM — Browser playback engine (candidate)
 
+## Confirmed customer scope (2026-11-25)
+**Movies and series (VOD) work perfectly. Only LIVE channels malfunction:** some devices never start playback and others start then cut out. Do NOT modify VOD routes, seek/resume, movie/series engines, HLS VOD configuration, or catalog. Treat VOD as a regression baseline. Web live-only investigation must isolate MPEG-TS vs live HLS output, device codec capability, browser-specific player support, 503 fanout handoff and media timeouts. Test live start, live 20-minute continuity and two different browsers/devices with the same authorized test feed. Roll out only a live-path fix.
+
+
 This branch adds **only** `services/activation/web/browser-playback-engine.mjs` plus isolated Node tests. It does NOT change existing Android/iOS APK code or production media routing.
 
 ## Research-backed browser strategy
