@@ -35,6 +35,18 @@ try{
  assert.equal((await call('redeem',{code:expired.code})).status,404);
  assert.equal((await a.purgeExpired()).removed,1);
  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM blofy_connect_pairings')).rows[0].count,0);
+ const bound=await a.issue(input);
+ const deviceA=crypto.randomBytes(32).toString('hex'),deviceB=crypto.randomBytes(32).toString('hex');
+ const races=await Promise.allSettled([a.redeem({code:bound.code,deviceKey:deviceA}),b.redeem({code:bound.code,deviceKey:deviceB})]);
+ assert.equal(races.filter(r=>r.status==='fulfilled').length,1);
+ const winner=races[0].status==='fulfilled'?deviceA:deviceB;
+ assert.deepEqual((await b.redeem({code:bound.code,deviceKey:winner})).credentials,input);
+ await assert.rejects(a.redeem({code:bound.code}),/connect_code_expired_or_used/);
+ const boundRow=(await pool.query('SELECT claimed_device_hash,expires_at FROM blofy_connect_pairings')).rows[0];
+ assert.notEqual(boundRow.claimed_device_hash,winner);assert.equal(new Date(boundRow.expires_at).getTime(),bound.expiresAt);
+ await pool.query("UPDATE blofy_connect_pairings SET expires_at=NOW()-INTERVAL '1 minute'");
+ await assert.rejects(a.redeem({code:bound.code,deviceKey:winner}),/connect_code_expired_or_used/);
+ assert.equal((await a.purgeExpired()).removed,1);
  const corrupt=await a.issue(input);await pool.query("UPDATE blofy_connect_pairings SET sealed=set_byte(sealed,30,(get_byte(sealed,30)+1)%256)");
  const bad=await call('redeem',{code:corrupt.code});assert.equal(bad.status,503);assert.equal(bad.body.code,'connect_pairing_unavailable');
  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM blofy_connect_pairings')).rows[0].count,0);
