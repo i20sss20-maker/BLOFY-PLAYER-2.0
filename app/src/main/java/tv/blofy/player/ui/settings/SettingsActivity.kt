@@ -186,10 +186,6 @@ class SettingsActivity : AppCompatActivity() {
         addSection(page, copy("اشتراكي والمكتبة", "Subscription & library"))
         addCard(actionCard(copy("اشتراكي", "My subscription"),
             copy("حالة الكود وتاريخ انتهاء الاشتراك", "Status and subscription expiry")) { showStreamSubscription() })
-        addCard(actionCard("BLOFY CONNECT",
-            copy("ربط اشتراك خارجي دون تغيير اشتراك BLOFY", "Connect an external subscription without changing BLOFY")) {
-            startActivity(Intent(this, tv.blofy.player.ui.login.ExternalStreamConnectActivity::class.java))
-        })
         refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
             copy("تحديث تلقائي في الخلفية • اضغط للفحص الآن",
                 "Automatically updated in background • tap to check now")) { refreshLibrary() }
