@@ -286,11 +286,14 @@ function navHtml(){
 }
 function shell(pageTitle,markup){
  var catalogPage=S.route==='live'||S.route==='movie'||S.route==='series';
+ var mobileCatalogNav=catalogPage&&window.innerWidth<=730&&
+  document.documentElement.getAttribute('data-blofy-device')==='touch';
  S.heading=pageTitle;
  // Each catalog is its own wide TV screen. The global app sidebar belongs
  // to Home, not to the Live/Movies/Series list, as in the native TV workflow.
  app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+'">'+
- (catalogPage?'<div class="mobile-catalog-nav">'+navHtml()+'</div>':navHtml())+'<main class="workspace" id="workspace">'+
+ (catalogPage?(mobileCatalogNav?'<div class="mobile-catalog-nav">'+navHtml()+'</div>':''):navHtml())+
+ '<main class="workspace" id="workspace">'+
  '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
  (S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+
  (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
