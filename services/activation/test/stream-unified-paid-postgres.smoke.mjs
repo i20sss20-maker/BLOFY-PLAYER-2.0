@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import pg from 'pg';
+import http from 'node:http';
+import {once} from 'node:events';
 import {createStreamDurationCodes,ensureStreamCodeTable,streamCodeProof} from '../src/xtream-duration-codes.mjs';
 import {ensureStreamCommercialSchema} from '../src/xtream-code-commercial.mjs';
 import {createStreamConnectPairing} from '../src/stream-connect-pairing.mjs';
-import {createDatabaseUnifiedRedeemer} from '../src/stream-unified-code-redeem.mjs';
+import {createDatabaseUnifiedRedeemer,handleUnifiedCodeHttp} from '../src/stream-unified-code-redeem.mjs';
 
 const url=new URL(process.env.DATABASE_URL||'postgresql://invalid');
 if(process.env.BLOFY_STREAM_EPHEMERAL_DB_QA!=='true'||url.hostname!=='127.0.0.1'||url.pathname!=='/blofy_connect_qa')
@@ -59,6 +61,39 @@ try{
  assert.deepEqual(retry.account,first.account);
  assert.equal(retry.recovered,true);
  assert.equal(await count(),1);
+ // Exercise the deployed route's actual HTTP handler over loopback, using
+ // the same database adapter and real paid account from above.
+ let enabled=false,limited=false,resolutions=0;
+ const server=http.createServer((req,res)=>handleUnifiedCodeHttp(req,res,new URL(req.url,'http://127.0.0.1'),{
+  enabled,rateLimit:()=>({allowed:!limited,retryAfterSeconds:7}),origin:()=>origin,
+  resolveRedeemer:async()=>{resolutions++;return b;}
+ }));
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const endpoint='http://127.0.0.1:'+server.address().port+'/api/v1/stream/app/unified-redeem';
+ const post=(data,path='',type='application/json')=>fetch(endpoint+path,{method:'POST',headers:{'content-type':type},body:JSON.stringify(data)});
+ try{
+  assert.equal((await post(request(issued.code,winner))).status,503);
+  enabled=true;
+  assert.equal((await fetch(endpoint)).status,400);
+  assert.equal((await post(request(issued.code,winner),'?code=invalid')).status,400);
+  assert.equal((await post(request(issued.code,winner),'','text/plain')).status,400);
+  assert.equal((await post({code:issued.code,deviceKey:'invalid'})).status,400);
+  assert.equal((await post({code:'x'.repeat(5000),deviceKey:winner})).status,413);
+  assert.equal(resolutions,0);
+  const response=await post(request(issued.code,winner));
+  assert.equal(response.status,201);
+  assert.equal(response.headers.get('cache-control'),'no-store, private');
+  assert.equal(response.headers.get('referrer-policy'),'no-referrer');
+  assert.equal((await response.json()).accessToken,first.accessToken);
+  const missing=await post(request('987654321',winner));
+  assert.equal(missing.status,409);
+  assert.deepEqual(await missing.json(),{ok:false,error:'stream_code_unavailable'});
+  limited=true;
+  const blocked=await post(request(issued.code,winner));
+  assert.equal(blocked.status,429);assert.equal(blocked.headers.get('retry-after'),'7');
+  assert.equal(resolutions,2);
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+ console.log('HTTP activation boundary: disabled gate, invalid bodies, query rejection, real paid redemption and rate limits passed');
  const ext=await a(request(external.code,deviceA));
  assert.equal(ext.type,'external_xtream');
  assert.equal(ext.accessToken,undefined);
