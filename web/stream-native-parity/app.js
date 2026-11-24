@@ -1752,6 +1752,7 @@ function cleanupPlayer(){
  if(S.playerView){
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
+  if(S.playerView.directBufferNoticeTimer){clearTimeout(S.playerView.directBufferNoticeTimer);S.playerView.directBufferNoticeTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
   if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
@@ -2153,9 +2154,11 @@ function playDirectMpegts(video,id,statusElement){
    video.onwaiting=video.onstalled=function(){
     if(!alive()||video.paused||record.fallback)return;
     var last=Number(video.currentTime)||0;
-    if(record.stallTimer)clearTimeout(record.stallTimer);
+    // Don't starve a real stall watchdog with repeated browser events.
+    if(record.stallTimer)return;
     record.stallTimer=setTimeout(function(){
-     if(!alive()||video.paused)return;
+     record.stallTimer=null;
+     if(!alive()||video.paused||video.seeking||document.hidden)return;
      if(Math.abs((Number(video.currentTime)||0)-last)<0.3)fallback('توقفت الصورة المباشرة؛ جار التحويل إلى HLS.')
     },18000)
    };
@@ -2178,6 +2181,7 @@ function playDirectMpegts(video,id,statusElement){
     }
     if(!record.ready)return;
     var progress=livePlaybackProgress(record,video,now);
+    if(progress.advanced&&record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
     if(!progress.advanced&&progress.idleMs>18000)
      fallback('تجمّدت صورة MPEG-TS؛ جار العودة إلى HLS.')
    },2000);
@@ -3980,6 +3984,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
   if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  if(state.directBufferNoticeTimer){clearTimeout(state.directBufferNoticeTimer);state.directBufferNoticeTimer=null}
+  state.directWaitingSince=0;state.directBufferStatusShown=false;
   // A user-specified seek is authoritative, including 0 and backward seeks.
   // A plain playback stall without a requested seek resumes at the furthest
   // reliable checkpoint as before.
@@ -4045,21 +4051,56 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    }
   },3500)
  };
+ function clearDirectWaiting(){
+  if(state.directBufferNoticeTimer){clearTimeout(state.directBufferNoticeTimer);state.directBufferNoticeTimer=null}
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  state.directWaitingSince=0;
+  if(state.directBufferStatusShown){
+   var label=document.getElementById('player-status');
+   // Only dismiss this handler's notice, not a newer seek/source error.
+   if(label&&label.textContent==='جار استقبال الفيديو…')playerStatus('');
+  }
+  state.directBufferStatusShown=false
+ }
  video.onwaiting=video.onstalled=function(){
-  if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
-  playerStatus('جار تعبئة مخزن الفيديو…');
-  if(state.directTimer)clearTimeout(state.directTimer);
+  if(state.mode!=='direct'||video.paused||video.seeking||state.directFallback||
+     !S.userVerified||document.hidden)return;
+  if(!state.directWaitingSince)state.directWaitingSince=Date.now();
+  if(!state.directBufferNoticeTimer&&!state.directBufferStatusShown){
+   state.directBufferNoticeTimer=setTimeout(function(){
+    state.directBufferNoticeTimer=null;
+    if(state.mode==='direct'&&!state.directFallback&&!video.paused&&
+       !video.seeking&&!document.hidden&&video.readyState<3&&
+       S.route==='player'&&S.playerView===state){
+     state.directBufferStatusShown=true;
+     playerStatus('جار استقبال الفيديو…')
+    }
+   },1700)
+  }
+  // Avoid restarting this 14s deadline for each 'waiting' event.
+  if(state.directTimer)return;
+  var observed=Number(video.currentTime)||0;
   state.directTimer=setTimeout(function(){
    state.directTimer=null;
-   if(state.mode==='direct'&&!video.paused&&video.readyState<3)state.recoverDirect()
+   if(state.mode!=='direct'||S.route!=='player'||S.playerView!==state||
+      state.directFallback||video.paused||video.seeking||document.hidden)return;
+   var progressed=Math.abs((Number(video.currentTime)||0)-observed)>0.5;
+   if(progressed&&video.readyState>=2){clearDirectWaiting();return}
+   if(video.readyState<3)state.recoverDirect()
   },14000)
  };
- video.ontimeupdate=progress;video.onpause=function(){
-  releaseWakeLock();progress();
+ video.ontimeupdate=function(){
+  progress();
+  if(state.mode==='direct'&&state.directWaitingSince&&
+     !video.paused&&video.readyState>=3&&
+     S.route==='player'&&S.playerView===state)clearDirectWaiting()
+ };
+ video.onpause=function(){
+  clearDirectWaiting();releaseWakeLock();progress();
   if(state.ready&&!isLive)saveResume(kind,id,checkpointPosition(state),totalDuration(),true)
  };
  video.onplaying=function(){
-  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  clearDirectWaiting();
   if(state.completed&&video.currentTime<5)state.completed=false;
   markReady()
  };
