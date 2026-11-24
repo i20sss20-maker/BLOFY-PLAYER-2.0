@@ -1271,11 +1271,38 @@ async function proxySharedLiveTicket(req,res,destination,observe){
     clearTimeout(timer);timer=null;
     if(response.status!==200||!response.body||
       !/^video\/mp2t(?:\s*;|$)/i.test(response.headers.get('content-type')||'')){
-      await response.body?.cancel().catch(()=>{});
-      observe('failed',{reason:'licensed_fanout_unavailable',upstreamStatus:response.status});
+      // Distinguish provider feed limits from server/encoder saturation.
+      // Inspect only a bounded, fixed-code response from our pinned relay.
+      let reason='licensed_fanout_unavailable';
       const code=[429,503].includes(response.status)?response.status:502;
-      return text(res,code,'Shared live feed unavailable','text/plain; charset=utf-8',
-        code===429||code===503?{'retry-after':'5'}:{});
+      const retry=Number(response.headers.get('retry-after')||0);
+      if(code===503&&response.body&&
+         /^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type')||'')){
+        const reader=response.body.getReader();
+        timer=setTimeout(cancel,2000);timer.unref?.();
+        try{
+          let size=0,parts=[];
+          while(true){
+            const part=await reader.read();
+            if(part.done){
+              const data=JSON.parse(Buffer.concat(parts).toString('utf8'));
+              if(data?.ok===false&&['fanout_source_channel_limit','fanout_source_handoff_pending',
+                'fanout_source_cooling_down'].includes(data.code))reason=data.code;
+              break;
+            }
+            size+=part.value?.byteLength||0;
+            if(size>512)break;
+            parts.push(Buffer.from(part.value));
+          }
+        }catch{}finally{try{await reader.cancel()}catch{};reader.releaseLock()}
+        clearTimeout(timer);timer=null;
+      }else await response.body?.cancel().catch(()=>{});
+      observe('failed',{reason,upstreamStatus:response.status});
+      console.info('BLOFY_SHARED_LIVE_ADMISSION',JSON.stringify({reason,status:code}));
+      return text(res,code,reason==='fanout_source_channel_limit'?
+        'Provider concurrent channel limit reached':'Shared live feed unavailable','text/plain; charset=utf-8',
+        code===429||code===503?{'retry-after':String(Number.isInteger(retry)&&retry>=1&&retry<=30?retry:5),
+          'x-blofy-live-status':reason}:{});
     }
     observe('started',{transport:'licensed_shared_ts',upstreamStatus:200});
     res.writeHead(200,{'content-type':'video/mp2t','cache-control':'no-store, no-transform',
