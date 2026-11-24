@@ -79,4 +79,54 @@ class NativeExternalMediaTransportTest {
         assertThrows(IllegalArgumentException::class.java) { transport.catchupRoute(id,"123",1441,"2026-11-24:20-00") }
     }
 
+    @Test fun actualMediaHttpTransportFollowsProviderCdnAndResolvesHlsSegments() {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.start()
+            val origin = server.url("/").newBuilder().host("provider.example.com").build()
+            val cdn = origin.newBuilder().host("cdn.example.net").build()
+            val profile = ExternalStreamConnectClient.Credentials(origin,"fixture-user","fixture-pass")
+            val routes = ExternalXtreamMediaRoutes(origin,providerDirectedCdn=true)
+            // Only this fixture transport maps public-looking hostnames to localhost.
+            val local = okhttp3.OkHttpClient.Builder().dns(object : okhttp3.Dns {
+                override fun lookup(hostname: String): List<java.net.InetAddress> {
+                    assertTrue(hostname in setOf("provider.example.com","cdn.example.net"))
+                    return listOf(java.net.InetAddress.getByName("127.0.0.1"))
+                }
+            }).proxy(java.net.Proxy.NO_PROXY).build()
+            val http = ExternalStreamConnectCatalog.guardedMediaClientForTransport(routes,local) { url ->
+                if (url.pathSegments.firstOrNull()=="native") transport.resolveRoot(url,id,profile)
+                else routes.resolve(url)
+            }
+            val root = transport.route(id,"live","123","m3u8")
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(307)
+                .setHeader("Location",cdn.resolve("/edge/index.m3u8?sig=fixture")!!))
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setHeader("Content-Type","application/vnd.apple.mpegurl")
+                .setHeader("Set-Cookie","session=fixture").setBody("#EXTM3U\n#EXTINF:4,\nsegment.ts\n#EXT-X-ENDLIST\n"))
+            val manifest = http.newCall(okhttp3.Request.Builder().url(root).header("Authorization","Bearer fixture").header("Cookie","x=fixture").build()).execute().use {
+                assertEquals(root,it.request.url.toString())
+                assertNull(it.header("Set-Cookie"))
+                it.body!!.string()
+            }
+            assertFalse(manifest.contains("cdn.example.net"))
+            assertFalse(manifest.contains("fixture"))
+            val segment = manifest.lineSequence().single { it.startsWith("https://") }
+            val first=server.takeRequest(2,java.util.concurrent.TimeUnit.SECONDS)!!
+            assertEquals("/live/fixture-user/fixture-pass/123.m3u8",first.path)
+            val second=server.takeRequest(2,java.util.concurrent.TimeUnit.SECONDS)!!
+            assertEquals("/edge/index.m3u8?sig=fixture",second.path)
+            for (request in listOf(first,second)) {
+                assertNull(request.getHeader("Authorization"))
+                assertNull(request.getHeader("Cookie"))
+            }
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setHeader("Content-Type","video/mp2t").setBody("fixture-transport-bytes"))
+            http.newCall(okhttp3.Request.Builder().url(segment).build()).execute().use {
+                assertEquals("fixture-transport-bytes",it.body!!.string())
+            }
+            assertEquals("/edge/segment.ts",server.takeRequest(2,java.util.concurrent.TimeUnit.SECONDS)!!.path)
+            server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(302).setHeader("Location","http://127.0.0.1/private"))
+            assertThrows(IOException::class.java) { http.newCall(okhttp3.Request.Builder().url(root).build()).execute().close() }
+            assertEquals(4,server.requestCount)
+        }
+    }
+
 }
