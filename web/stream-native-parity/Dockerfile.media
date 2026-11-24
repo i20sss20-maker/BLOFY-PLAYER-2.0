@@ -5,6 +5,7 @@ WORKDIR /app
 COPY media-worker.ts /app/media-worker.ts
 COPY live-source-continuity.mjs /app/live-source-continuity.mjs
 COPY stream-media-file.mjs /app/stream-media-file.mjs
+RUN bun build /app/media-worker.ts --target=bun --outfile=/tmp/media-worker-check.js && rm /tmp/media-worker-check.js
 ENV PORT=8080
 EXPOSE 8080
 USER bun
