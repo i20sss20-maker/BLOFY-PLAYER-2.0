@@ -8,7 +8,9 @@ class ExternalStreamConnectClientTest {
         val code = "BC-AbCdEf0123456789_-xyZabc"
         assertEquals(code, ExternalStreamConnectClient.normalizeCode(" $code "))
         assertNull(ExternalStreamConnectClient.normalizeCode(code.uppercase().replace("BC-", "bc-")))
-        assertNull(ExternalStreamConnectClient.normalizeCode("12345678"))
+        assertEquals("12345678",ExternalStreamConnectClient.normalizeCode("12345678"))
+        assertEquals("01234567",ExternalStreamConnectClient.normalizeCode("01234567"))
+        assertNull(ExternalStreamConnectClient.normalizeCode("1234567"))
         assertEquals("012345678901", ExternalStreamConnectClient.normalizeCode("012345678901"))
         assertNull(ExternalStreamConnectClient.normalizeCode("BC-short"))
     }
