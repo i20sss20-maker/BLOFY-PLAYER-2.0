@@ -1036,3 +1036,60 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
   aspect-ratio:16/9;max-height:52vh
  }
 }
+
+
+/* iPhone/PWA: separate navigation at the top from Android-style transport
+ * at the bottom. Honor the notch, landscape safe areas and native fullscreen.
+ * TV, Android, desktop and all decoder/source choices remain unchanged. */
+html[data-blofy-ios="true"] .player-overlay .native-player-topline{
+ position:fixed;z-index:2;
+ top:max(10px,env(safe-area-inset-top,0px));
+ left:max(10px,env(safe-area-inset-left,0px));
+ right:max(10px,env(safe-area-inset-right,0px));
+ display:flex;flex-wrap:nowrap;gap:7px;
+ min-height:44px;padding:5px 8px;
+ border-radius:15px;border:1px solid #6dc5bb55;
+ background:rgba(4,25,33,.84);
+ -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)
+}
+html[data-blofy-ios="true"] .native-player-topline .native-player-eyebrow{
+ flex:1;min-width:0;text-align:center;font-size:10px;letter-spacing:.07em
+}
+html[data-blofy-ios="true"] .native-player-topline button{
+ min-width:40px;min-height:42px;padding:6px 9px;white-space:nowrap
+}
+html[data-blofy-ios="true"] .player-overlay .player-hud.native-stream-hud{
+ padding-bottom:max(16px,env(safe-area-inset-bottom,0px));
+ padding-left:max(12px,env(safe-area-inset-left,0px));
+ padding-right:max(12px,env(safe-area-inset-right,0px));
+ max-height:min(67dvh,660px);overscroll-behavior-y:contain
+}
+html[data-blofy-ios="true"] .player-loading{
+ max-width:min(86vw,410px);line-height:1.65;
+ border:1px solid #4fa9a05c;box-shadow:0 8px 36px #0008
+}
+html[data-blofy-ios="true"] .native-stream-hud .native-player-dock{
+ width:100%;max-width:100%;justify-content:flex-start
+}
+@media(max-height:510px) and (orientation:landscape){
+ html[data-blofy-ios="true"] .player-overlay .native-player-topline{
+  top:max(4px,env(safe-area-inset-top,0px));min-height:36px;padding:3px 7px
+ }
+ html[data-blofy-ios="true"] .native-player-topline button{
+  min-height:35px;font-size:11px;padding:3px 7px
+ }
+ html[data-blofy-ios="true"] .player-overlay .player-hud.native-stream-hud{
+  max-height:68dvh;gap:4px;padding-top:4px;
+  padding-bottom:max(6px,env(safe-area-inset-bottom,0px))
+ }
+ html[data-blofy-ios="true"] .native-stream-hud .player-live-guide{display:none}
+}
+@media(max-width:390px){
+ html[data-blofy-ios="true"] .player-overlay .native-player-topline{
+  left:max(6px,env(safe-area-inset-left,0px));
+  right:max(6px,env(safe-area-inset-right,0px));gap:4px
+ }
+ html[data-blofy-ios="true"] .native-player-topline button{
+  padding:4px 6px;font-size:11px
+ }
+}
