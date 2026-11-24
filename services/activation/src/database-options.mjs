@@ -30,3 +30,30 @@ export function databaseOptions(connectionString, overrides = {}, env = process.
     ssl: disable ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) }
   };
 }
+
+
+// node-postgres removes a broken idle client before emitting pool "error".
+// Without a listener EventEmitter throws and may terminate the whole API
+// during a PostgreSQL restart or failover. Never replay a write transaction:
+// later requests acquire a fresh client through the existing pool.
+export function observeIdleDatabaseErrors(pool, {
+  clock = Date.now,
+  notify = event => console.warn('BLOFY_IDLE_DATABASE_DISCONNECT', JSON.stringify(event))
+} = {}) {
+  const known = new Set(['57P01','57P02','57P03','08006','08003','ECONNRESET','EPIPE','ETIMEDOUT','ECONNREFUSED','ENETUNREACH','EHOSTUNREACH']);
+  let last = null, suppressed = 0;
+  const listener = error => {
+    const now = clock();
+    if(last !== null && now >= last && now-last < 30000) {
+      suppressed = Math.min(Number.MAX_SAFE_INTEGER,suppressed+1);
+      return;
+    }
+    const code = known.has(error?.code) ? error.code : 'idle_connection_error';
+    const event = {code,suppressed};
+    last=now;suppressed=0;
+    // A failed telemetry sink must not turn a lost idle socket into a crash.
+    try { notify(event); } catch {}
+  };
+  pool.on('error', listener);
+  return () => pool.removeListener('error', listener);
+}
