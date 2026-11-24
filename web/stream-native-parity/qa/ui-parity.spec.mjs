@@ -1030,3 +1030,22 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
  await expect.poll(()=>events.filter(x=>x==='manifest-original').length,{timeout:12000}).toBeGreaterThan(previousOriginalManifests);
  expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(events.lastIndexOf('stop-ultra'));
 });
+
+test('VOD download controls respect default-off gate and never claim saved files',async({page})=>{
+ await page.route('**/api/download/**',async route=>route.fulfill({
+  status:503,contentType:'application/json',
+  body:'{"error":"downloads_not_enabled"}'
+ }));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await expect(page.locator('[data-download="movie:11"]')).toBeVisible();
+ await page.locator('[data-download="movie:11"]').click();
+ await expect(page.locator('#web-download-message')).toContainText('غير مفعلة');
+ await page.locator('[data-go="downloads"]').first().click();
+ await expect(page.locator('#downloads-history')).toContainText('ما بدأت أي تنزيلات');
+ await page.locator('[data-go="series"]').first().click();
+ await page.locator('[data-details="series:21"]').click();
+ await page.locator('[data-episodes="21"]').first().click();
+ await expect(page.locator('[data-download="series:55"]')).toBeVisible();
+});
