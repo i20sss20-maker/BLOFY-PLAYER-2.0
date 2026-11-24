@@ -4840,7 +4840,15 @@ window.addEventListener('beforeunload',function(){
  persistPlaybackCheckpoint();
  if(S.playerView)recordPlaybackQuality(S.playerView)
 });
-window.addEventListener('pagehide',persistPlaybackCheckpoint);
+window.addEventListener('pagehide',function(event){
+ persistPlaybackCheckpoint();
+ // Close only this tab's unique live SID on real navigation/close.
+ // Preserve bfcache restoration, paused VOD and other viewer sessions.
+ if(event.persisted||!S.play||S.play.kind!=='live')return;
+ var key=S.play.hlsKey||'';
+ if(!/^live\/[1-9][0-9]{0,14}\/ts\/[0-3]\/sid-[a-f0-9]{32}(?:\/(?:compat|ultra))?$/.test(key))return;
+ try{fetch('/api/hls/'+key+'/stop',{method:'POST',credentials:'same-origin',keepalive:true}).catch(function(){})}catch(e){}
+});
 /* Browser network indicators are advisory; never claim to know the quality
  * of Xtream or create another FFmpeg session when Wi-Fi reconnects. */
 var connectivityHideTimer=null;
