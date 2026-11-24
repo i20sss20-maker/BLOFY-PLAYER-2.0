@@ -150,8 +150,9 @@ test('compact iPhone preview reveals only after explicit preview tap without med
 
 test('vector bottom navigation remains operable without clipping, and active tab stays visible',async({page})=>{
  await touch(page);
- await expect(page.locator('.rail-link .nav-svg')).toHaveCount(10);
+ await expect(page.locator('.rail-link .nav-svg')).toHaveCount(11);
  await expect(page.locator('.rail-link[data-go="downloads"]')).toHaveCount(1);
+ await expect(page.locator('.rail-link[data-go="commentators"]')).toHaveCount(1);
  await page.locator('[data-go="settings"]').first().click();
  await expect(page.locator('.rail-link[data-go="settings"]')).toHaveAttribute('aria-current','page');
  const state=await page.evaluate(()=>{
