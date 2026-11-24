@@ -3424,7 +3424,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button><button class="btn secondary" id="player-direct-ts" type="button" title="تشغيل نفس مصدر القناة مباشرة على الأجهزة التي تدعم H.264/AAC؛ العودة تلقائيًا إلى HLS عند عدم الدعم">⚡ تشغيل MPEG-TS المباشر (بديل)</button>':'')+
  '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
  '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
- (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
+ (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button><button class="btn secondary" id="player-download-file" type="button">↓ تنزيل الملف</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
  '<section class="player-health-panel" id="player-health-panel" hidden role="status" aria-live="off"></section>'+
@@ -3625,6 +3625,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     select:function(){engine.currentLevel=index;playerStatus('الجودة: '+resolution)}})
   })(levels[i],i);
   showPlayerChoices('الجودة',options,this)
+ };
+ var playerDownloadButton=document.getElementById('player-download-file');
+ if(playerDownloadButton)playerDownloadButton.onclick=function(){
+  // Native parity: download never pauses or restarts the VOD playback session.
+  // The browser owns transfer completion, not the player HUD.
+  requestWebDownload(kind,id,ext,name||title(item))
  };
  var infoToggle=document.getElementById('player-info-toggle');
  if(infoToggle)infoToggle.onclick=function(){
