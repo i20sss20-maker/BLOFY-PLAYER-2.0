@@ -75,3 +75,15 @@ test('tap-to-play only invokes video.play() on user click and preserves paused/s
  assert.match(css,/\.player-ios-tap-to-play\[hidden\]\{display:none!important\}/);
  assert.match(css,/data-blofy-ios="true"\] \.player-ios-tap-to-play/);
 });
+
+
+test('iPhone channel tap opens real player, while preview is explicit and TV preview stays auto',()=>{
+ const select=app.slice(app.indexOf('function selectChannel('),app.indexOf('function decodeEpgField('));
+ assert.match(app,/if\(selected\)selectChannel\(itemId\(selected,'live'\),\s*!appleTouchBrowser/);
+ assert.match(select,/if\(activate\&\&!appleTouchBrowser\(navigator\.userAgent,navigator\.maxTouchPoints\)\)beginPreview\(item\)/);
+ const click=app.slice(app.indexOf('function clickHandler('),app.indexOf('function directional('));
+ assert.match(click,/if\(appleTouchBrowser\(navigator\.userAgent,navigator\.maxTouchPoints\)\&\&S\.route==='live'\)/);
+ assert.match(click,/S\.selected=ch;openPlayer\('live',ch,'ts',title\(appleChannel\),0\)/);
+ assert.match(click,/if\(node\.hasAttribute\('data-preview-play'\)\)\{var x=findItem\('live',S\.selected\);if\(x\)beginPreview\(x\)/);
+ assert.match(click,/selectChannel\(ch,true\)/,'unchanged TV and desktop preview controls');
+});
