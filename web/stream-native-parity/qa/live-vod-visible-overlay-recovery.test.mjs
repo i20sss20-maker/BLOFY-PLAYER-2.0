@@ -97,6 +97,12 @@ test('buffer notices are delayed for both VOD engines and cleaned on stop',()=>{
  const full=code.slice(code.indexOf('function playFullVod('),code.indexOf('function playVodSegments('));
  const fallback=code.slice(code.indexOf('function playVodSegments('),code.indexOf('function playerIcon('));
  assert.match(full,/rec\.bufferNoticeTimer=setTimeout\(function\(\)/);
+ assert.match(full,/if\(!alive\(\)\|\|video\.paused\|\|video\.seeking\|\|document\.hidden\|\|rec\.stallTimer\)return/,
+  'repeated waiting cannot reset full VOD recovery deadline');
+ assert.match(full,/state\.noticeLastProgressRecord===rec\)return/,
+  'new decoded frames rather than audio playback suppress movie reconnection');
+ assert.doesNotMatch(full,/if\(rec\.stallTimer\)clearTimeout\(rec\.stallTimer\);\s*\/\/ The worker/,
+  'do not cancel useful movie stall watchdog on every waiting event');
  assert.match(full,/video\.readyState<3\)playerStatus\('جار تحميل الجزء المطلوب من الفيلم…'\)/);
  assert.match(fallback,/rec\.bufferNoticeTimer=setTimeout\(function\(\)/);
  assert.match(fallback,/video\.readyState<3\)playerStatus\('جار تحميل المقطع التالي من الفيلم…'\)/);
