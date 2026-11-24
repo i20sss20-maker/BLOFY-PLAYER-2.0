@@ -34,21 +34,25 @@ if(p==='/'&&method==='GET')return new Response(HTML,{status:200,headers:noCache(
 
 
 if(p==='/app.webmanifest'&&method==='GET'){
- return new Response(JSON.stringify({id:'/',name:'BLOFY STREAM',short_name:'BLOFY',description:'BLOFY STREAM Web & VIDAA experimental edition',start_url:'/',scope:'/',display:'standalone',orientation:'landscape',background_color:'#09090c',theme_color:'#0b0b10',lang:'ar',dir:'rtl',icons:[{src:'/app-icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]}),{headers:{'Content-Type':'application/manifest+json; charset=utf-8','Cache-Control':'public,max-age=3600'}})
+ return new Response(JSON.stringify({id:'/',name:'BLOFY STREAM',short_name:'BLOFY',description:'BLOFY STREAM الرسمي عبر المتصفح والتلفزيون',start_url:'/',scope:'/',display:'standalone',orientation:'landscape',background_color:'#09090c',theme_color:'#0b0b10',lang:'ar',dir:'rtl',icons:[{src:'/app-icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]}),{headers:{'Content-Type':'application/manifest+json; charset=utf-8','Cache-Control':'public,max-age=3600'}})
 }
 if(p==='/app-icon.svg'&&method==='GET')return new Response("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" x2=\"1\" y1=\"0\" y2=\"1\"><stop stop-color=\"#49303a\"/><stop offset=\"1\" stop-color=\"#080a0f\"/></linearGradient></defs><rect width=\"512\" height=\"512\" rx=\"96\" fill=\"url(#g)\"/><rect x=\"40\" y=\"40\" width=\"432\" height=\"432\" rx=\"72\" fill=\"none\" stroke=\"#d6ad79\" stroke-width=\"8\"/><text x=\"256\" y=\"270\" text-anchor=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"121\" font-weight=\"bold\" letter-spacing=\"5\" fill=\"#efc587\">BLOFY</text><text x=\"256\" y=\"331\" text-anchor=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"44\" letter-spacing=\"18\" fill=\"#e8c18d\">STREAM</text></svg>",{headers:{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public,max-age=86400','X-Content-Type-Options':'nosniff'}});
 
-if(p==='/health'&&method==='GET')return json(200,{ok:true,app:'blofy-stream-web-native-parity',ready:Boolean(KEY),version:'0.1.0-native-parity'});
+if(p==='/health'&&method==='GET')return json(KEY?200:503,{ok:Boolean(KEY),app:'blofy-stream-web',ready:Boolean(KEY),version:'1.0.0'});
 
 if(p==='/vendor/mpegts.js'&&method==='GET'){
- for(const src of ['https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js','https://unpkg.com/mpegts.js@1.7.3/dist/mpegts.js']){
-  try{const r=await fetch(src,{redirect:'error',signal:AbortSignal.timeout(12000)});
-   if(r.ok&&r.body)return new Response(r.body,{status:200,headers:{'Content-Type':'application/javascript; charset=utf-8','Cache-Control':'public, max-age=21600','X-Content-Type-Options':'nosniff'}});
-  }catch(e){}
- }
- return json(503,{error:'video_engine_unavailable'});
+ // Serve the pinned, locally packaged JS player. No dependence on a third-
+ // party CDN at playback time; avoids extra DNS/TLS and blocked-TV outages.
+ const engine=Bun.file(new URL('./node_modules/mpegts.js/dist/mpegts.js',import.meta.url));
+ if(!await engine.exists())return json(503,{error:'video_engine_unavailable'});
+ return new Response(engine,{status:200,headers:{
+  'Content-Type':'application/javascript; charset=utf-8',
+  'Cache-Control':'public,max-age=86400',
+  'X-Content-Type-Options':'nosniff'
+ }});
 }
-if(!KEY)return json(503,{ok:false,error:'preview_not_configured'});
+
+if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
 if(p==='/api/logout'&&method==='POST')return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});
 if(p==='/api/redeem'&&method==='POST'){
  let input={};try{if(Number(req.headers.get('content-length')||0)>2048)return json(413,{error:'invalid_payload'});input=await req.json()}catch{return json(400,{error:'invalid_payload'})}
@@ -372,4 +376,4 @@ if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
 }
 return json(404,{error:'not_found'});
 }});
-console.info('BLOFY STREAM native-parity web preview running on',server.port);
+console.info('BLOFY STREAM Web 1.0 running on',server.port);
