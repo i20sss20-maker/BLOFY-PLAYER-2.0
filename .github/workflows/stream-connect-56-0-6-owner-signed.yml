@@ -101,7 +101,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          repo=https://repo.maven.apache.org/maven2
+          fetch_central() {
+            local relative="$1" target="$2" attempt base
+            for attempt in 1 2 3 4 5; do
+              for base in https://repo.maven.apache.org/maven2 https://repo1.maven.org/maven2; do
+                rm -f "$target"
+                if curl --fail --silent --show-error --location --connect-timeout 20 --max-time 240 "$base/$relative" -o "$target" && test -s "$target"; then
+                  return 0
+                fi
+              done
+              sleep "$((attempt * 15))"
+            done
+            echo "::error::Maven Central unavailable for $relative"
+            return 1
+          }
           group=org/robolectric/android-all-instrumented
           for version in 9-robolectric-4913185-2-i7 15-robolectric-12650502-i7; do
             dir="$HOME/.m2/repository/$group/$version"
@@ -109,12 +122,12 @@ jobs:
             name="android-all-instrumented-$version"
             for ext in jar pom; do
               file="$name.$ext"
-              url="$repo/$group/$version/$file"
-              curl --fail --silent --show-error --location --retry 6 --retry-all-errors --retry-max-time 180 --connect-timeout 15 --max-time 120 "$url.sha1" -o "$dir/$file.sha1.tmp"
+              relative="$group/$version/$file"
+              fetch_central "$relative.sha1" "$dir/$file.sha1.tmp"
               expected="$(awk '{print tolower($1)}' "$dir/$file.sha1.tmp")"
               [[ "$expected" =~ ^[a-f0-9]{40}$ ]]
-              if ! printf '%s  %s\n' "$expected" "$dir/$file" | sha1sum -c --status; then
-                curl --fail --silent --show-error --location --retry 6 --retry-all-errors --retry-max-time 240 --connect-timeout 15 --max-time 180 "$url" -o "$dir/$file.tmp"
+              if ! test -s "$dir/$file" || ! printf '%s  %s\n' "$expected" "$dir/$file" | sha1sum -c --status; then
+                fetch_central "$relative" "$dir/$file.tmp"
                 printf '%s  %s\n' "$expected" "$dir/$file.tmp" | sha1sum -c
                 mv "$dir/$file.tmp" "$dir/$file"
               fi
