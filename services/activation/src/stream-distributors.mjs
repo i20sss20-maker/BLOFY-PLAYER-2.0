@@ -523,16 +523,14 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   if(!['app','xtream'].includes(type))throw fail('distributor_type_invalid');
   const days=number(durationDays,1,365,'distributor_days_invalid');
   const cost=distributorPlanCost(days);
-  // One free trial per customer across resellers; no raw customer phone stored.
-  // Normalize Saudi local/international forms to the same anonymous proof.
-  // Otherwise 05... and +9665... would bypass one-trial-per-customer.
+  // Phone is contact metadata only for new distributor trials; the locked
+  // per-distributor quota is the issuance limit. Historical hashes stay intact.
   let phone=String(trialPhone||'').replace(/[^0-9]/g,'');
   if(phone.startsWith('00'))phone=phone.slice(2);
   if(/^05[0-9]{8}$/.test(phone))phone='966'+phone.slice(1);
   else if(/^5[0-9]{8}$/.test(phone))phone='966'+phone;
   if(cost===0&&!/^[0-9]{8,15}$/.test(phone))throw fail('distributor_trial_phone_required');
-  const trialHash=cost===0?crypto.createHmac('sha256',Buffer.from(trialKeyHex,'hex'))
-    .update('blofy-stream-distributor-trial-phone:v1:'+phone).digest('hex'):null;
+  const trialHash=null; // Existing partial unique index excludes NULL; no destructive migration.
   // Distributors always issue one connection. A stale/forged client cannot override it.
   const connections=1;
   const request=String(requestId||'').toLowerCase();
@@ -552,10 +550,6 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    if(existing)return {existing};
    if(Number(current.credits)<cost)throw fail('distributor_no_credits',409);
    if(cost===0){
-    const previous=(await db.query(`SELECT id FROM blofy_stream_distributor_issues
-      WHERE trial_customer_hash=$1 AND status IN ('pending','done','review') LIMIT 1`,
-      [trialHash])).rows;
-    if(previous.length)throw fail('distributor_trial_already_used',409);
     const daily=(await db.query(`SELECT COUNT(*)::int AS count
       FROM blofy_stream_distributor_issues WHERE distributor_id=$1
         AND duration_days=1 AND status IN ('pending','done','review')
