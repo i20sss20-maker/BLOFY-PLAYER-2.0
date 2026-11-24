@@ -3753,13 +3753,13 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,201,await streamDistributors.createAdmin(await readJson(req)),
       {'cache-control':'no-store'});
   const distributorAdminAction=p.match(
-    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits)$/i);
+    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits|bonus)$/i);
   if(req.method==='POST'&&distributorAdminAction){
     const id=distributorAdminAction[1],cmd=distributorAdminAction[2];
     const payload=await readJson(req);
     const settings=cmd==='credits'?{credits:payload.credits}:
       cmd==='status'?{enabled:payload.enabled===true}:
-      cmd==='limits'?{dailyLimit:payload.dailyLimit}:{resetPassword:true};
+      cmd==='limits'?{dailyLimit:payload.dailyLimit}:cmd==='bonus'?{bonusQuarters:payload.bonusQuarters,requestId:payload.requestId,reason:payload.reason}:{resetPassword:true};
     return json(res,200,await streamDistributors.setAdmin(id,settings),
       {'cache-control':'no-store'});
   }
