@@ -96,6 +96,25 @@ class CatalogSectionRetryTest {
         assertEquals(0, result.failureCount)
     }
 
+    @Test fun externalCatalogMovesToCategoryRecoveryAfterFirstTruncation() = runBlocking {
+        var fullAttempts = 0
+        var fallbackCalls = 0
+        val result = runXtreamSections(
+            sections = listOf(suspend { fullAttempts++; throw java.net.SocketTimeoutException("read timed out") }),
+            preferSegmentation = true,
+            onExhausted = { index, failure ->
+                assertEquals(0,index)
+                assertTrue(failure is java.net.SocketTimeoutException)
+                fallbackCalls++
+                true
+            }
+        )
+        assertEquals(1, fullAttempts)
+        assertEquals(1, fallbackCalls)
+        assertEquals(1, result.successCount)
+        assertEquals(0, result.failureCount)
+    }
+
     @Test fun oneSuccessfulSectionDoesNotHideAnotherSectionsAuthorizationFailure() = runBlocking {
         val result = runXtreamSections(listOf(
             suspend { },
