@@ -10,6 +10,31 @@ var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
  watch:{},favoriteItems:{},lastPlaybackDiag:null,lastLongPlaybackTest:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var browserDepth=0,handlingBrowserPop=false;
+var pendingInstallPrompt=null;
+function webAppInstallGuide(ua,installed,canPrompt){
+ if(installed)return {mode:'installed',action:'تمت الإضافة',message:'BLOFY يعمل الآن كتطبيق مستقل على هذا الجهاز. المحتوى يحتاج اتصالاً بالإنترنت واشتراكاً فعالاً.'};
+ if(/iPhone|iPad|iPod/i.test(String(ua||'')))
+  return {mode:'ios',action:'طريقة الإضافة للآيفون',message:'افتح tv.blofyplayer.com من Safari ثم مشاركة ← إضافة إلى الشاشة الرئيسية، وفَعِّل «فتح كتطبيق» إن ظهر. لا يُمكن للموقع تثبيت نفسه تلقائياً على iPhone.'};
+ if(/VIDAA|Hisense|Toshiba/i.test(String(ua||'')))
+  return {mode:'tv',action:'طريقة الإضافة للتلفزيون',message:'افتح tv.blofyplayer.com في متصفح التلفزيون. استخدم المفضلة أو «إضافة للرئيسية» إذا ظهرت في خيارات المتصفح؛ تثبيت تطبيق VIDAA رسمي يحتاج نشره عبر المنصة. اختبر التنقل بالريموت وتشغيل قناة فعلية.'};
+ if(canPrompt)return {mode:'prompt',action:'تثبيت BLOFY على الجهاز',message:'تثبيت التطبيق من المتصفح لا يحمّل القنوات ولا يضيف اشتراكاً جديداً.'};
+ if(/Android/i.test(String(ua||'')))
+  return {mode:'android',action:'طريقة الإضافة للأندرويد',message:'من Chrome افتح قائمة ⋮ واختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية» إذا كانت متاحة.'};
+ return {mode:'browser',action:'طريقة إضافة BLOFY',message:'افتح قائمة المتصفح وابحث عن «تثبيت التطبيق» أو «إنشاء اختصار». توفر الخيار يعتمد على الجهاز والمتصفح.'}
+}
+function installedWebApp(){
+ try{
+  return navigator.standalone===true||!!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)
+ }catch(e){return false}
+}
+function updateInstallGuide(){
+ var button=document.getElementById('install-blofy-web'),feedback=document.getElementById('install-blofy-help');
+ if(!button||!feedback)return;
+ var state=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt);
+ button.textContent=state.action;button.disabled=state.mode==='installed';
+ feedback.textContent=state.message
+}
+
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -1275,6 +1300,7 @@ function settingsScreen(){
  '<button class="btn secondary" type="button" id="profile-import-cancel">إلغاء</button></div>'+
  '<p class="small muted" id="profile-transfer-status" role="status" aria-live="polite">الاستيراد يضيف المفضلة ويحافظ على تقدم مشاهدة أحدث لديك. استخدم الملف فقط مع الاشتراك ومصدر المحتوى نفسه؛ هذا نقل يدوي وليس مزامنة سحابية.</p></section>'+
  '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
+ '<section class="setting-panel"><h3>استخدم BLOFY كتطبيق على جهازك</h3><p>إضافة للمفضلة أو للشاشة الرئيسية حسب إمكانيات الجهاز، دون APK أو تثبيت من مصادر مجهولة.</p><button class="btn secondary" type="button" id="install-blofy-web">طريقة إضافة BLOFY</button><p class="small muted" id="install-blofy-help" role="status" aria-live="polite"></p></section>'+ 
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
@@ -1466,6 +1492,27 @@ function settingsScreen(){
    ' متابعة، مع الاحتفاظ بـ '+stats.preservedCheckpoints+' متابعة أحدث على الجهاز.');
   document.getElementById('profile-import').focus()
  };
+ var installButton=document.getElementById('install-blofy-web');
+ if(installButton){
+  updateInstallGuide();
+  installButton.onclick=function(){
+   var guide=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt);
+   if(guide.mode!=='prompt'||!pendingInstallPrompt){updateInstallGuide();return}
+   var request=pendingInstallPrompt;pendingInstallPrompt=null;
+   var feedback=document.getElementById('install-blofy-help');
+   try{
+    request.prompt();
+    if(feedback)feedback.textContent='تم فتح نافذة التثبيت الخاصة بالمتصفح. يمكنك الموافقة أو الإلغاء.';
+    if(request.userChoice&&typeof request.userChoice.then==='function')
+     request.userChoice.then(function(result){
+      if(feedback&&feedback.isConnected)
+       feedback.textContent=result&&result.outcome==='accepted'?
+        'تم قبول طلب التثبيت من المتصفح.':'لم يتم تثبيت التطبيق؛ يمكنك استخدام الموقع مباشرة.';
+      updateInstallGuide()
+     });
+   }catch(e){if(feedback)feedback.textContent='لم يتمكن المتصفح من فتح التثبيت؛ استخدم قائمة المتصفح.'}
+  }
+ }
  var tvTest=document.getElementById('test-tv-capabilities');
  if(tvTest)tvTest.onclick=function(){
   var target=document.getElementById('tv-capabilities-result'),device=document.createElement('video');
@@ -4414,6 +4461,17 @@ api('GET','/api/session',null,function(st,json){
  else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
 });
 setInterval(checkCatalogVersion,10*60*1000);
+// Install prompts are optional browser capabilities: never fake a native
+// install on iOS or VIDAA. Only prompt after an explicit user gesture.
+window.addEventListener('beforeinstallprompt',function(event){
+ if(event&&event.preventDefault)event.preventDefault();
+ pendingInstallPrompt=event;
+ updateInstallGuide()
+});
+window.addEventListener('appinstalled',function(){
+ pendingInstallPrompt=null;
+ updateInstallGuide()
+});
 // Optional installable web shell. The worker never caches subscription tokens,
 // API responses, movie streams or account content.
 if('serviceWorker' in navigator&&window.isSecureContext){
