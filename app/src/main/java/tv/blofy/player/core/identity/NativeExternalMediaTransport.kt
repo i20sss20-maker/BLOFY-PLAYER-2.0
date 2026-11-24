@@ -65,7 +65,7 @@ internal object NativeExternalMediaTransport {
             }.build()
         }
         val credentials = profile.credentials
-        val children = ExternalXtreamMediaRoutes(credentials.host)
+        val children = ExternalXtreamMediaRoutes(credentials.host, providerDirectedCdn = true)
         return ExternalStreamConnectCatalog.guardedMediaClient(children) { url ->
             if (url.pathSegments.firstOrNull() == "native")
                 resolveRoot(url, providerId, credentials)
