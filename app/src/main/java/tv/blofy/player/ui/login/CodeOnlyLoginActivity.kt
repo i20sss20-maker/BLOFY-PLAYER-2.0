@@ -33,6 +33,8 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.UnifiedStreamCodeClient
+import tv.blofy.player.core.identity.NativeExternalCatalogSession
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -54,7 +56,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         buildPremiumScreen()
-        if (StreamCodeSession.isClaimed(this)) restoreSession() else focusFirst()
+        if (StreamCodeSession.isClaimed(this)) restoreSession()
+        else if (NativeExternalCatalogSession.hasStaged(this)) restoreNativeExternal()
+        else focusFirst()
     }
 
     private fun buildPremiumScreen() {
@@ -294,7 +298,22 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 // Generate the installation binding BEFORE redeeming, allowing
                 // the exact same code to retry if its first response was lost.
                 val binding = StreamCodeSession.installationKey(applicationContext)
-                val result = StreamCodeClient.redeem(code, binding)
+                val result = if (NativeExternalCatalogSession.qaEnabled(applicationContext)) {
+                    when (val unified = UnifiedStreamCodeClient.redeem(code, binding)) {
+                        is UnifiedStreamCodeClient.Result.Paid -> unified.session
+                        is UnifiedStreamCodeClient.Result.External -> {
+                            codeInput.text?.clear()
+                            val prepared = NativeExternalCatalogSession.prepare(applicationContext, unified) { p ->
+                                withContext(Dispatchers.Main.immediate) {
+                                    statusText.text = "${getString(R.string.stream_ui_activating)} • ${p.percent}%"
+                                }
+                            }
+                            NativeExternalCatalogSession.activatePrepared(applicationContext,prepared)
+                            openNativeHome()
+                            return@launch
+                        }
+                    }
+                } else StreamCodeClient.redeem(code, binding)
                 withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao()
                     dao.upsertProvider(ProviderEntity(
@@ -343,6 +362,39 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 setBusy(false)
                 codeInput.requestFocus()
             }
+        }
+    }
+
+    private fun openNativeHome() {
+        codeInput.text?.clear()
+        statusText.text = getString(R.string.stream_ui_activated)
+        startActivity(Intent(this, HomeActivity::class.java))
+        finish()
+    }
+
+    private fun restoreNativeExternal() {
+        if (busy) return
+        setBusy(true)
+        statusText.text = getString(R.string.stream_ui_restoring)
+        lifecycleScope.launch {
+            try {
+                val prepared = NativeExternalCatalogSession.resume(applicationContext) { p ->
+                    withContext(Dispatchers.Main.immediate) {
+                        statusText.text = "${getString(R.string.stream_ui_restoring)} • ${p.percent}%"
+                    }
+                }
+                if (prepared != null) {
+                    NativeExternalCatalogSession.activatePrepared(applicationContext,prepared)
+                    openNativeHome()
+                    return@launch
+                }
+                statusText.text = getString(R.string.stream_ui_restore_failed)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                statusText.text = getString(R.string.stream_ui_restore_failed)
+            }
+            setBusy(false)
+            codeInput.requestFocus()
         }
     }
 
