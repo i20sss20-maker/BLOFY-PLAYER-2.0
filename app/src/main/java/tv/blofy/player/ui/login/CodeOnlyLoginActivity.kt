@@ -139,8 +139,15 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             id = View.generateViewId()
             hint = "•••• ••••"
             inputType = InputType.TYPE_CLASS_NUMBER
+            if (NativeExternalCatalogSession.qaEnabled(context)) {
+                // Keep the numeric soft keyboard for TV and mobile, but allow
+                // Arabic digits and pasted case-sensitive legacy CONNECT codes.
+                keyListener = android.text.method.TextKeyListener.getInstance(false,
+                    android.text.method.TextKeyListener.Capitalize.NONE)
+                setRawInputType(InputType.TYPE_CLASS_NUMBER)
+            }
             // Leave room for pasted separators before the existing normalization.
-            filters = arrayOf(InputFilter.LengthFilter(32))
+            filters = arrayOf(InputFilter.LengthFilter(if (NativeExternalCatalogSession.qaEnabled(context)) 64 else 32))
             isSaveEnabled = false
             imeOptions = EditorInfo.IME_ACTION_DONE
             isSingleLine = true
@@ -291,7 +298,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             restoreNativeExternal()
             return
         }
-        val code = StreamCodeClient.normalizeCode(raw)
+        val code = if (NativeExternalCatalogSession.qaEnabled(this))
+            UnifiedStreamCodeClient.normalize(raw).orEmpty()
+        else StreamCodeClient.normalizeCode(raw)
         if (code.isEmpty()) {
             statusText.text = getString(R.string.stream_ui_code_length)
             codeInput.requestFocus()
@@ -308,9 +317,11 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     when (val unified = UnifiedStreamCodeClient.redeem(code, binding)) {
                         is UnifiedStreamCodeClient.Result.Paid -> unified.session
                         is UnifiedStreamCodeClient.Result.External -> {
-                            codeInput.text?.clear()
+                            // Keep the typed code until the encrypted profile is
+                            // durably saved. A Keystore failure must not lose it.
                             val prepared = NativeExternalCatalogSession.prepare(applicationContext, unified) { p ->
                                 withContext(Dispatchers.Main.immediate) {
+                                    codeInput.text?.clear()
                                     statusText.text = "${getString(R.string.stream_ui_activating)} • ${p.percent}%"
                                 }
                             }
