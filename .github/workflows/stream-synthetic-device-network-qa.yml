@@ -1,0 +1,49 @@
+name: STREAM synthetic device network QA
+on:
+  push:
+    branches: [feature/blofy-xtream-migration-lab-20261116]
+    paths: ['.github/workflows/stream-synthetic-device-network-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  network-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify isolated Railway activation, catalog and generated media
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://blofy-migration-device-preview-test.up.railway.app
+          mkdir -p "$RUNNER_TEMP/stream-synthetic"
+          cd "$RUNNER_TEMP/stream-synthetic"
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 15 --max-time 60 "$base/health" > health.json
+          jq -e '.ok and .synthetic and (.providerRequests == 0) and (.customerCutover == false) and (.samples | index("/live.ts") != null)' health.json
+          key=$(printf '%064d' 0)
+          jq -n --arg device "$key" '{code:"00000000",deviceKey:$device}' > request.json
+          curl -fsS --max-time 30 -H 'Content-Type: application/json' --data @request.json "$base/api/v1/stream/app/unified-redeem" > response.json
+          jq -e --arg host "$base" '.ok and .type=="external_xtream" and (.providerVerified==false) and .credentials.host==$host and .credentials.username=="synthetic-lab" and .credentials.password=="public-sample-only"' response.json
+          status=$(curl -sS --max-time 30 -o rejected.json -w '%{http_code}' -H 'Content-Type: application/json' --data '{"code":"00000001","deviceKey":"invalid"}' "$base/api/v1/stream/app/unified-redeem")
+          test "$status" = 409
+          api="$base/player_api.php?username=synthetic-lab&password=public-sample-only"
+          curl -fsS "$api" | jq -e '.user_info.auth==1 and .user_info.status=="Active"'
+          for action in get_live_categories get_vod_categories get_series_categories get_live_streams get_vod_streams get_series; do
+            curl -fsS "$api&action=$action" | jq -e 'type=="array" and length==1'
+          done
+          curl -fsS "$api&action=get_series_info&series_id=301" | jq -e '.episodes["1"][0].id=="401"'
+          curl -fsS "$base/live/synthetic-lab/public-sample-only/101.m3u8" | grep -Fx '101.ts'
+          curl -fsS "$base/live/synthetic-lab/public-sample-only/101.ts" > live.ts
+          curl -fsS "$base/movie/synthetic-lab/public-sample-only/201.mp4" > movie.mp4
+          curl -fsS "$base/series/synthetic-lab/public-sample-only/401.mp4" > episode.mp4
+          curl -fsS -D range-headers -H 'Range: bytes=0-1023' "$base/movie/synthetic-lab/public-sample-only/201.mp4" > movie-first.bin
+          grep -Ei '^HTTP/[^ ]+ 206' range-headers
+          grep -Ei '^content-range: bytes 0-1023/' range-headers
+          test "$(wc -c < movie-first.bin)" = 1024
+          cmp -n 1024 movie.mp4 movie-first.bin
+          command -v ffprobe || { sudo apt-get update -qq && sudo apt-get install -y ffmpeg; }
+          for file in live.ts movie.mp4 episode.mp4; do
+            ffprobe -v error -show_streams -of json "$file" | jq -e '(.streams | any(.codec_type=="video" and .codec_name=="h264")) and (.streams | any(.codec_type=="audio" and .codec_name=="aac"))'
+            ffmpeg -v error -xerror -i "$file" -f null -
+          done
+          echo 'Synthetic activation, catalog, TS, MP4, HLS segment, range and full media decode passed.' >> "$GITHUB_STEP_SUMMARY"

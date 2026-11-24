@@ -10,7 +10,7 @@ const safeName=e=>String(e?.name||e?.code||'unknown').replace(/[^a-zA-Z0-9_-]/g,
 export async function runIsolatedS3Smoke({
  env=process.env,makeStorage=createPrivateS3Adapter,
  makeS3=opts=>new S3Client(opts),generate=()=>randomBytes(M+127),
- verifyAvFromS3=null,now=()=>Date.now()
+ verifyAvFromS3=null,mediaKind='movie',now=()=>Date.now()
 }={}){
  const start=now();
  const out={ok:false,code:'qa_not_started',synthetic:true,privateOnly:true,
@@ -36,12 +36,15 @@ export async function runIsolatedS3Smoke({
   try{storageHostname=new URL(String(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||''))
    .hostname.toLowerCase()}catch{}
   if(storageHostname.endsWith('.storageapi.dev')&&
-     env.BLOFY_CONTENT_HUB_S3_BUCKET!=='blofy-mirror-s3-isolated-qa-pkbfbm')
+     !new Set([ 'blofy-mirror-s3-isolated-qa-pkbfbm',
+       'blofy-xtream-migration-test-media-obm-ml'
+     ]).has(env.BLOFY_CONTENT_HUB_S3_BUCKET))
    err('qa_production_bucket_reference_forbidden');
   if(env.BLOFY_CONTENT_HUB_S3_URL_STYLE!=='virtual-host')
    err('qa_requires_virtual_host');
   // Do not begin even S3 inventory or fixture generation if A/V QA lacks
   // its own explicit approval; never discover this after uploading parts.
+  if(!['movie','episode'].includes(mediaKind))err('qa_media_kind_invalid');
   if(verifyAvFromS3!==null&&(
      env.BLOFY_QA_SYNTHETIC_AV!=='1'||
      typeof verifyAvFromS3!=='function'))
@@ -56,7 +59,7 @@ export async function runIsolatedS3Smoke({
   if(!Buffer.isBuffer(data)||data.length!==M+127)
    err('qa_payload_invalid');
   const uid=randomUUID().toLowerCase();
-  key='saleh/movie/'+uid+'/qa_synthetic_'+uid.replaceAll('-','')+'.mp4';
+  key='saleh/'+mediaKind+'/'+uid+'/qa_synthetic_'+uid.replaceAll('-','')+'.mp4';
   const expectedHash=digest(data);
   let stage='begin';
   try{
