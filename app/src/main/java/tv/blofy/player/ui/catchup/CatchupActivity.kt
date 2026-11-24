@@ -20,7 +20,6 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpgEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
@@ -92,7 +91,7 @@ class CatchupActivity : ContentAccessActivity() {
             status.text = getString(R.string.catchup_channel_archive, stream.name, archiveDaysLabel)
             runCatching {
                 withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncCatchupEpg(provider, stream.remoteId)
+                    PlaylistManager.forProvider(applicationContext, provider, dao).syncCatchupEpg(provider, stream.remoteId)
                 }
             }
             val now = System.currentTimeMillis()
