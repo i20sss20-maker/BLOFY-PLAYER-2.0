@@ -99,6 +99,8 @@ import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamDistributors} from './stream-distributors.mjs';
+import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
+import {createConnectHttp} from './stream-connect-http.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -3505,6 +3507,8 @@ async function callLocalGateway(method,path,body){
 
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
+const connectEnabled=process.env.BLOFY_STREAM_CONNECT_ENABLED==='1';
+const connectHttp=createConnectHttp({enabled:connectEnabled,pairing:createStreamConnectPairing({pool,keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,enabled:connectEnabled})});
 const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
   playbackSnapshot:sourceId=>xtreamPlaybackSnapshot(Date.now(),sourceId),
   rewardsRedemptionEnabled:process.env.BLOFY_DISTRIBUTOR_REWARDS_REDEMPTION==='1',
@@ -3575,6 +3579,7 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+  if(p==='/internal/blofy-stream/connect/issue')return connectHttp.handle(req,res,{operation:'issue',bridgeAuthorized:true});
   // Authoritative code/reseller schema and read-permission proof WITHOUT
   // calling legacy GET handlers that may run CREATE/ALTER migrations.
   // Fixed path, owner bridge auth above, no rows/identities/data returned.
@@ -4623,6 +4628,7 @@ http.createServer = function withBlofyXtream(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if(url.pathname==='/api/v1/stream/connect/redeem')return await connectHttp.handle(req,res,{operation:'redeem'});
       if(url.pathname.startsWith('/internal/blofy-stream/')) {
         try{return await unifiedStreamBridge(req,res,url)}
         catch(error){
