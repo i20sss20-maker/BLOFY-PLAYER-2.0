@@ -219,6 +219,43 @@ class PlaylistManagerPersistenceTest {
         }
     }
 
+    @Test fun externalCatalogImportsBeyondPrototypeLimitWithoutStoringSourceUrls(): Unit = runBlocking(Dispatchers.IO) {
+        val external = ProviderEntity("external-fixture", "External fixture",
+            tv.blofy.player.data.remote.ExternalXtreamCatalogTransport.ORIGIN, "", "", enabled = false)
+        val requests = mutableListOf<String>()
+        val api = object : XtreamApi {
+            override suspend fun list(url: String): List<Map<String, Any?>> {
+                requests += url
+                return listOf(mapOf("category_id" to "1", "category_name" to "Category"))
+            }
+            override fun streamingCall(url: String): retrofit2.Call<ResponseBody> {
+                requests += url
+                val payload = when {
+                    url.contains("action=get_live_streams") ->
+                        "[{\"stream_id\":1,\"category_id\":1,\"name\":\"Live\",\"direct_source\":\"https://untrusted.example.com/secret\"}]"
+                    url.contains("action=get_vod_streams") ->
+                        (1..20001).joinToString(",", "[", "]") { id ->
+                            "{\"stream_id\":$id,\"category_id\":1,\"name\":\"Movie $id\",\"container_extension\":\"mkv\",\"stream_icon\":\"https://untrusted.example.com/secret\"}"
+                        }
+                    else -> "[{\"series_id\":1,\"category_id\":1,\"name\":\"Series\",\"cover\":\"https://untrusted.example.com/secret\"}]"
+                }
+                return FixtureCall(payload)
+            }
+            override suspend fun objectResponse(url: String): Map<String, Any?> = error("Unexpected EPG")
+            override suspend fun jsonResponse(url: String): JsonElement = error("Unexpected details")
+        }
+        val result = PlaylistManager(api, db.dao(), externalCatalog = true).syncAll(external)
+        assertEquals(0, result.failedSectionCount)
+        assertEquals(20003, result.freshItemCount)
+        assertEquals(20001, db.dao().catalogCountAll(external.id, "movie"))
+        assertNull(db.dao().stream("${external.id}:movie:20001")?.icon)
+        assertEquals("mkv", db.dao().stream("${external.id}:movie:20001")?.extension)
+        assertNull(db.dao().stream("${external.id}:live:1")?.directSource)
+        assertNull(db.dao().stream("${external.id}:series:1")?.icon)
+        assertTrue(requests.all { it.startsWith(external.baseUrl + "/player_api.php?action=") &&
+            !it.contains("username=") && !it.contains("password=") })
+    }
+
     private class FixtureApi(
         val liveCategories: List<Map<String, Any?>> = listOf(mapOf("category_id" to "1", "category_name" to "Category")),
         val liveStreams: String = "[{\"stream_id\":1,\"name\":\"Live item\",\"category_id\":1}]"
