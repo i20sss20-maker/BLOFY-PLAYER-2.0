@@ -1,3 +1,4 @@
+import {createDatabaseUnifiedRedeemer} from '../src/stream-unified-code-redeem.mjs';
 import {conflictsWithConnect,conflictsWithPaid,SHARED_CODE_LOCK_SQL} from '../src/stream-code-namespace.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -66,6 +67,30 @@ try{
   assert.equal(await conflictsWithPaid(tx,external.code,{enabled:true,keyHex:paidKey}),true);
   await tx.query('ROLLBACK');
  }finally{tx.release()}
- await a.redeem({code:external.code});
+ const paidHash=code=>crypto.createHmac('sha256',Buffer.from(paidKey,'hex')).update('blofy-stream-subscription:v1:').update(code).digest('hex');
+ const paidCode='123456789';
+ await pool.query('INSERT INTO blofy_xtream_gateway_duration_codes(code_hash) VALUES($1)',[paidHash(paidCode)]);
+ let paidCalls=0;
+ const adapter=pairing=>createDatabaseUnifiedRedeemer({pool,pairing,paidProof:paidHash,
+  redeemPaid:async(code,origin,deviceKey)=>{
+   paidCalls++;assert.equal(code,paidCode);assert.equal(deviceKey,deviceA);
+   return {ok:true,accessToken:'fixture',tokenType:'Bearer',account:{activatedAt:100,expiresAt:200}};
+  }});
+ const dispatchA=adapter(a),dispatchB=adapter(b);
+ const request=(code,deviceKey=deviceA)=>({code,deviceKey,origin:'https://blofyplayer.com'});
+ const paid=await dispatchA(request(paidCode));assert.equal(paid.type,'blofy_stream');assert.equal(paidCalls,1);
+ // A deliberately inserted historical collision must reject both claims.
+ await pool.query('INSERT INTO blofy_xtream_gateway_duration_codes(code_hash) VALUES($1)',[paidHash(external.code)]);
+ await assert.rejects(dispatchA(request(external.code)),{status:409});
+ assert.equal(paidCalls,1);
+ await pool.query('DELETE FROM blofy_xtream_gateway_duration_codes WHERE code_hash=$1',[paidHash(external.code)]);
+ const unifiedRace=await Promise.allSettled([dispatchA(request(external.code)),dispatchB(request(external.code,deviceB))]);
+ assert.equal(unifiedRace.filter(r=>r.status==='fulfilled').length,1);
+ const unifiedWinner=unifiedRace[0].status==='fulfilled'?deviceA:deviceB;
+ assert.deepEqual((await dispatchB(request(external.code,unifiedWinner))).credentials,input);
+ assert.equal(paidCalls,1);
+ await assert.rejects(dispatchA(request('987654321')),{status:409});
+ await assert.rejects(a.redeem({code:external.code}),{status:404});
+ console.log('Unified database dispatch: typed paid fixture, ambiguous code rejection, external device race and recovery passed');
  console.log('CONNECT PostgreSQL: schema race, protected issuance, encrypted storage, atomic redemption, expiry cleanup and tamper detection passed');
 }finally{await pool.end()}
