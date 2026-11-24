@@ -421,7 +421,8 @@ object ArtworkLoader {
             .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
             .header("Accept", "image/webp,image/jpeg,image/png,image/gif;q=0.8")
             .build()
-        val artworkClient = if (tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(download.url) != null)
+        val artworkClient = if (tv.blofy.player.core.identity.NativeExternalCatalogSession.qaEnabled(download.context) &&
+            tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(download.url) != null)
             tv.blofy.player.data.remote.ExternalArtworkPolicy.client else client
         val call = artworkClient.newCall(request)
         download.call = call
