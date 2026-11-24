@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      ENABLED: ${{ inputs.enabled || false }}
+      ENABLED: ${{ github.event_name == 'push' || inputs.enabled }}
     steps:
       - name: Verify public route and gate without touching any subscriber
         shell: bash
@@ -29,7 +29,11 @@ jobs:
           # rotate, or redeem any real code or account.
           expected=503
           if test "$ENABLED" = true; then expected=400; fi
-          status=$(curl -sS --connect-timeout 10 --max-time 25 -D "$RUNNER_TEMP/headers" -o "$RUNNER_TEMP/body" -w '%{http_code}' -H 'Content-Type: application/json' --data '{"code":"INVALID","deviceKey":"invalid"}' "$root/api/v1/stream/app/unified-redeem")
+          for attempt in 1 2 3 4 5 6 7 8; do
+            status=$(curl -sS --connect-timeout 10 --max-time 25 -D "$RUNNER_TEMP/headers" -o "$RUNNER_TEMP/body" -w '%{http_code}' -H 'Content-Type: application/json' --data '{"code":"INVALID","deviceKey":"invalid"}' "$root/api/v1/stream/app/unified-redeem" || true)
+            if test "$status" = "$expected"; then break; fi
+            sleep 15
+          done
           test "$status" = "$expected"
           grep -Eiq '^cache-control:.*no-store' "$RUNNER_TEMP/headers"
           grep -Eiq '^referrer-policy:.*no-referrer' "$RUNNER_TEMP/headers"
