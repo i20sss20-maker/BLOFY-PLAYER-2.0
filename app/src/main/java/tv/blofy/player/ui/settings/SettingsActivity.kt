@@ -30,6 +30,9 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.NativeExternalCatalogSession
+import tv.blofy.player.core.identity.NativeExternalMediaTransport
+import tv.blofy.player.core.identity.ExternalStreamConnectVerifier
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.device.StreamDeviceCompatibility
@@ -255,6 +258,24 @@ class SettingsActivity : AppCompatActivity() {
             ))
             .setNegativeButton(copy("إلغاء", "Cancel"), null)
             .setPositiveButton(copy("تسجيل الخروج", "Sign out")) { _, _ ->
+                if (!StreamCodeSession.isClaimed(applicationContext) &&
+                    NativeExternalCatalogSession.hasStaged(applicationContext)) {
+                    lifecycleScope.launch {
+                        try {
+                            NativeExternalCatalogSession.signOut(applicationContext)
+                            StartupEntryState.clear(applicationContext)
+                            startActivity(Intent(this@SettingsActivity, CodeOnlyLoginActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                            finish()
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                        catch (_: Exception) {
+                            android.widget.Toast.makeText(this@SettingsActivity,
+                                copy("تعذر تسجيل الخروج. حاول مجددًا.", "Could not sign out. Try again."),
+                                android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    return@setPositiveButton
+                }
                 // Keep installationKey intact: a redeemed code can be rebound to its
                 // original installation; removing it would incorrectly create a new device.
                 try {
@@ -579,6 +600,25 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showStreamSubscription() {
+        if (!StreamCodeSession.isClaimed(applicationContext) &&
+            NativeExternalCatalogSession.hasStaged(applicationContext)) {
+            lifecycleScope.launch {
+                val result = runCatching { NativeExternalCatalogSession.checkActive(applicationContext) }.getOrNull()
+                if (isFinishing || isDestroyed) return@launch
+                val expiry = result?.expiresAt?.let {
+                    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ENGLISH).format(Date(it))
+                } ?: getString(R.string.stream_ui_subscription_unknown)
+                val message = when (result?.status) {
+                    ExternalStreamConnectVerifier.Status.ACTIVE -> copy("الاشتراك نشط • انتهاء الاشتراك: $expiry", "Subscription active • Expires: $expiry")
+                    ExternalStreamConnectVerifier.Status.INACTIVE -> getString(R.string.stream_ui_subscription_stopped_hint)
+                    else -> getString(R.string.stream_ui_subscription_connection_failed)
+                }
+                AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle(getString(R.string.stream_ui_subscription_title))
+                    .setMessage(message).setPositiveButton(getString(R.string.stream_ui_ok),null).show()
+            }
+            return
+        }
         val token = StreamCodeSession.token(applicationContext)
         if (token == null) {
             AlertDialog.Builder(this)
@@ -722,6 +762,28 @@ class SettingsActivity : AppCompatActivity() {
                 "Finish the first playlist setup, then refresh content here."
             )
             updateSyncStatus()
+            return
+        }
+        if (BuildConfig.CODE_ONLY_LOGIN && NativeExternalMediaTransport.isExternal(active.id)) {
+            if (refreshRequested) return
+            refreshRequested = true
+            refreshNotice = copy("جار تحديث المحتوى…", "Refreshing content…")
+            refreshState = WorkInfo.State.RUNNING
+            updateSyncStatus()
+            lifecycleScope.launch {
+                try {
+                    NativeExternalCatalogSession.refresh(applicationContext)
+                    refreshState = WorkInfo.State.SUCCEEDED
+                    refreshNotice = copy("تم تحديث المحتوى", "Content updated")
+                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (_: Exception) {
+                    refreshState = WorkInfo.State.FAILED
+                    refreshNotice = copy("تعذر التحديث، تم الاحتفاظ بالمحتوى السابق.", "Refresh failed; previous library retained.")
+                } finally {
+                    refreshRequested = false
+                    if (!isDestroyed) updateSyncStatus()
+                }
+            }
             return
         }
         if (BuildConfig.CODE_ONLY_LOGIN) {
