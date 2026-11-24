@@ -42,7 +42,7 @@ function useProfile(id,legacy){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
  migrateLegacyProfile(id,legacy);
  var changed=S.profileKey!==id;
- if(changed)S.accountEpoch++;
+ if(changed){S.accountEpoch++;resetCatalogRefresh()}
  S.profileKey=id;
  S.library=readJson(profileStorageKey('favorites'),{});
  S.watch=readJson(profileStorageKey('watch'),{});
@@ -101,7 +101,7 @@ function deviceKey(){
  return key
 }
 function login(message){
- S.accountEpoch++;
+ S.accountEpoch++;resetCatalogRefresh();
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
@@ -1127,35 +1127,49 @@ function aiScreen(){
   if(node&&node!==this){var title=node.getAttribute('data-ai-result');S.aiSearchTitle=title;navigate('search')}
  };
 }
-function refreshCatalog(manual){
+function resetCatalogRefresh(){
+ S.refreshing=false;S.catalogVersion=null;S.lastCatalogCheck=0;
+ S.catalogVersionPending=null;S.catalogVersionChecking=false;
+}
+function refreshCatalog(manual,version){
  if(S.refreshing||!S.userVerified)return;
  S.refreshing=true;
- var kinds=['live','movie','series'],errors=[],done=0;
+ var epoch=S.accountEpoch,kinds=['live','movie','series'],errors=[],done=0;
  var button=document.getElementById('refresh-content');
  if(button)button.disabled=true;
+ function current(){return epoch===S.accountEpoch}
  function notify(message){
+  if(!current())return;
   var box=document.getElementById('refresh-progress');
   if(box)box.textContent=message
  }
  notify('جار تحديث المحتوى • 0٪');
  function finish(){
+  if(!current())return;
   S.refreshing=false;if(button)button.disabled=false;
   if(!errors.length){
-   // Keep the existing screen stable; lists are reused when user opens them.
-   S.cats={};S.pages={};S.catsInflight={};
+   if(version)S.catalogVersion=version;
+   if(S.catalogVersionPending===version)S.catalogVersionPending=null;
    notify('✓ اكتمل تحديث القنوات والأفلام والمسلسلات — 100٪');
-  }else notify('تم تحديث '+(3-errors.length)+' من 3 أقسام. تعذر: '+errors.join('، ')+' — حاول مرة أخرى');
+  }else{
+   // A partially failed refresh must not acknowledge a new revision.
+   // Recheck on the next scheduled poll, while keeping the last good lists.
+   notify('تم تحديث '+(3-errors.length)+' من 3 أقسام. تعذر: '+errors.join('، ')+' — حاول مرة أخرى')
+  }
  }
  function next(){
+  if(!current())return;
   if(done===kinds.length){finish();return}
   var kind=kinds[done],label=kindName(kind);
   notify('جار تحديث '+label+' • '+Math.round(done/3*100)+'٪');
   pageRequest(kind,'all',0,36,function(st,result){
+   if(!current())return;
    if(st===200&&result){
     S.loaded[keyOf(kind,'all')]=result;
-    // Other category caches are invalidated lazily, without disrupting a playing video.
     var keys=Object.keys(S.loaded);
     for(var i=0;i<keys.length;i++)if(keys[i].indexOf(kind+':')===0&&keys[i]!==kind+':all')delete S.loaded[keys[i]];
+    delete S.cats[kind];
+    // Do not clear unrelated in-flight callbacks; their callers still need completion.
    }else errors.push(label);
    done++;next()
   },null,true)
@@ -1163,18 +1177,23 @@ function refreshCatalog(manual){
  next()
 }
 function checkCatalogVersion(){
- if(!S.userVerified||S.refreshing||S.route==='player'||document.hidden)return;
+ if(!S.userVerified||S.refreshing||S.catalogVersionChecking||S.route==='player'||document.hidden)return;
  var now=Date.now();if(now-S.lastCatalogCheck<10*60*1000)return;S.lastCatalogCheck=now;
+ var epoch=S.accountEpoch;
+ S.catalogVersionChecking=true;
  api('GET','/api/catalog?action=get_blofy_catalog_version',null,function(st,v){
+  if(epoch!==S.accountEpoch)return;
+  S.catalogVersionChecking=false;
   if(st!==200||!v)return;
   var raw=v.version||v.epoch||v.catalogVersion||v.revision||v.lastModified;
   if(!raw||typeof raw!=='string'&&typeof raw!=='number')return;
   var version=String(raw);
-  if(S.catalogVersion&&S.catalogVersion!==version){
-   // Refresh in the background only while browsing non-live pages; never interrupt playback.
-   refreshCatalog(false)
-  }
-  S.catalogVersion=version
+  if(!S.catalogVersion){S.catalogVersion=version;return}
+  if(S.catalogVersion!==version){
+   S.catalogVersionPending=version;
+   // A playback session may have started while the version request was pending.
+   if(S.route!=='player'&&!document.hidden&&!S.refreshing)refreshCatalog(false,version)
+  }else S.catalogVersionPending=null
  })
 }
 function settingsScreen(){
