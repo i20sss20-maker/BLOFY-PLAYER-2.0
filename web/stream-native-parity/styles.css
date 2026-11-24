@@ -1776,3 +1776,15 @@ button,input,select,textarea{font-synthesis:none}
 @media(prefers-reduced-motion:reduce){
  .brand:before,.login-brand:before{transition:none;transform:none}
 }
+
+
+/* Native STREAM parity: downloads are separate from player/VOD controls. */
+.downloads-page{display:flex;flex-direction:column;gap:12px;max-width:980px;margin:8px auto;padding:clamp(12px,3vw,25px);background:rgba(8,29,36,.66);border:1px solid rgba(116,209,204,.28);border-radius:20px}
+.downloads-page h2{font-size:clamp(21px,3vw,30px);margin:0;color:#e9fff8}
+.download-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:rgba(5,22,29,.85);border:1px solid rgba(116,209,204,.26);border-radius:13px}
+.download-row strong{font-size:15px;flex:1 1 160px;overflow-wrap:anywhere}
+.download-row span{font-size:12px;color:var(--muted);flex:1 1 180px}
+.download-row button{min-height:42px}
+.episode-download{margin:2px 12px 14px;align-self:flex-start;min-height:40px}
+#web-download-message{max-width:940px;margin:12px 0;line-height:1.8}
+@media(max-width:730px){.download-row{align-items:stretch;flex-direction:column}.download-row .btn{width:100%}.episode-download{margin:4px 9px 13px}}
