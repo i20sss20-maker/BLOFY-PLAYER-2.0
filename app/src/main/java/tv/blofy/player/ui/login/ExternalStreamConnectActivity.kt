@@ -12,12 +12,12 @@ import android.widget.ListView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import tv.blofy.player.core.playback.BlofyPlaybackSession
+import tv.blofy.player.core.playback.createPlaybackPlayerWithTransport
+import tv.blofy.player.core.provider.ProviderProfile
+import tv.blofy.player.core.provider.ProviderKind
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +45,7 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
     private lateinit var list: ListView
     private lateinit var search: EditText
     private lateinit var playerView: PlayerView
-    private var player: ExoPlayer? = null
+    private var playbackSession: BlofyPlaybackSession? = null
     private var job: Job? = null
     private var credentials: ExternalStreamConnectClient.Credentials? = null
     private var items = emptyList<ExternalStreamConnectCatalog.Item>()
@@ -209,22 +209,39 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
         stopPlayer()
         try{
             val target=ExternalStreamConnectCatalog.playback(profile,item)
-            val media=ProgressiveMediaSource.Factory(OkHttpDataSource.Factory(target.client))
-                .createMediaSource(MediaItem.fromUri(target.uri))
-            val next=ExoPlayer.Builder(this).build()
-            player=next;playerView.player=next;playerView.visibility=View.VISIBLE
-            next.addListener(object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    status.text="تعذر تشغيل هذا العنصر مباشرة من المزود"
-                }
+            val kind = when(item.kind) {
+                ExternalStreamConnectCatalog.Kind.LIVE -> "live"
+                ExternalStreamConnectCatalog.Kind.EPISODE -> "series"
+                else -> "movie"
+            }
+            // Private QA only. The original engine now uses the exact guarded
+            // route, without forwarding BLOFY bearer credentials to a provider.
+            val session = BlofyPlaybackSession(
+                context = this,
+                profile = ProviderProfile(providerKey = "external-connect-qa", providerKind = ProviderKind.UNKNOWN),
+                contentKind = kind,
+                playerFactory = { context, _ ->
+                    createPlaybackPlayerWithTransport(context, OkHttpDataSource.Factory(target.client))
+                },
+                onTerminalError = { status.text = "تعذر تشغيل هذا العنصر من المزود" }
+            )
+            playbackSession = session
+            playerView.player = session.player
+            playerView.visibility = View.VISIBLE
+            session.player.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if(playbackState==Player.STATE_READY)status.text="جاهز للمشاهدة • CONNECT"
+                    if(playbackState == Player.STATE_READY) status.text = "جاهز للمشاهدة"
                 }
             })
-            next.setMediaSource(media);next.prepare();next.playWhenReady=true
+            session.play(target.uri)
         }catch(_: Exception){stopPlayer();status.text="صيغة التشغيل غير متوافقة مع النسخة التجريبية"}
     }
-    private fun stopPlayer(){playerView.player=null;player?.release();player=null;playerView.visibility=View.GONE}
+    private fun stopPlayer(){
+        val session = playbackSession
+        playbackSession = null
+        if (session != null) session.release { playerView.player = null } else playerView.player = null
+        playerView.visibility = View.GONE
+    }
     override fun onStop(){if(::playerView.isInitialized)stopPlayer();super.onStop()}
     override fun onDestroy(){job?.cancel();if(::playerView.isInitialized)stopPlayer();credentials=null;super.onDestroy()}
 }
