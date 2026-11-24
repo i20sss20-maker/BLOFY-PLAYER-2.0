@@ -66,11 +66,14 @@ test('safe-area, TV focus and foreground video remain available',()=>{
  assert.match(css,/\.player-overlay>#player-status\[style\*="display: none"\]\{display:none!important\}/);
  assert.doesNotMatch(css,/\.player-overlay\s*\{[^}]*display:none/);
 });
-test('cinema theme has no webfont or third-party CDN dependency',()=>{
+test('cinema theme uses only first-party local web fonts and no third-party CDN',()=>{
  const block=css.slice(css.indexOf('/* BLOFY STREAM CINEMA UI / 2026-11-25'));
  assert.ok(block.length>5000);
- assert.doesNotMatch(block,/@import|@font-face|https?:\/\//);
+ assert.doesNotMatch(block,/@import|https?:\/\//);
+ assert.match(block,/@font-face/);
  assert.match(block,/font-family:system-ui/);
+ assert.match(block,/font-family:var\(--font-stream-ar\)/);
+ assert.match(block,/src:url\("\/fonts\/IBMPlexSansArabic-Regular\.ttf"\)/);
  assert.match(block,/data-blofy-device="touch"/);
  assert.match(block,/prefers-reduced-motion:reduce/);
 });
