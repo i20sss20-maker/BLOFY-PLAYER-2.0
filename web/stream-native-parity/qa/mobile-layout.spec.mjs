@@ -66,7 +66,7 @@ test('iPhone-sized home has five accessible main tabs, hero and two-column tiles
  expect(errors).toEqual([]);
 });
 
-test('live catalog on a touch phone keeps bottom nav and places preview above channels',async({page})=>{
+test('live catalog on a touch phone prioritizes channels and keeps optional preview below',async({page})=>{
  await touch(page);
  await page.locator('[data-go="live"]').first().click();
  await expect(page.locator('.catalog-app .mobile-catalog-nav .rail')).toBeVisible();
@@ -82,8 +82,8 @@ test('live catalog on a touch phone keeps bottom nav and places preview above ch
    videoRatio:player.getBoundingClientRect().width/player.getBoundingClientRect().height}
  });
  expect(layout.nav).toBe('flex');
- expect(Number(layout.categoryOrder)).toBeLessThan(Number(layout.previewOrder));
- expect(Number(layout.previewOrder)).toBeLessThan(Number(layout.channelOrder));
+ expect(Number(layout.categoryOrder)).toBeLessThan(Number(layout.channelOrder));
+ expect(Number(layout.channelOrder)).toBeLessThan(Number(layout.previewOrder));
  expect(layout.videoRatio).toBeGreaterThan(1.5);
  expect(layout.videoRatio).toBeLessThan(1.95);
  await page.locator('[data-channel="32"]').click();
@@ -129,4 +129,37 @@ test('desktop and VIDAA-style view does not expose duplicate catalog bottom nav'
  await page.locator('[data-go="live"]').first().click();
  await expect(page.locator('.catalog-app .mobile-catalog-nav')).toBeHidden();
  await expect(page.locator('.catalog-app .catalog .cat-rail')).toBeVisible();
+});
+
+
+test('compact iPhone preview reveals only after explicit preview tap without media element rebuild',async({page})=>{
+ await touch(page);
+ await page.locator('[data-go="live"]').first().click();
+ await page.evaluate(()=>{
+  document.documentElement.setAttribute('data-blofy-ios','true');
+  document.querySelector('.preview').classList.add('preview-idle')
+ });
+ await expect(page.locator('.preview-video-wrap')).toBeHidden();
+ await expect(page.locator('[data-preview-play]')).toBeVisible();
+ await page.locator('[data-preview-play]').click();
+ await expect(page.locator('.preview')).not.toHaveClass(/preview-idle/);
+ await expect(page.locator('.preview-video-wrap')).toBeVisible();
+ await expect(page.locator('#live-video')).toHaveCount(1);
+});
+
+test('vector bottom navigation remains operable without clipping, and active tab stays visible',async({page})=>{
+ await touch(page);
+ await expect(page.locator('.rail-link .nav-svg')).toHaveCount(9);
+ await page.locator('[data-go="settings"]').first().click();
+ await expect(page.locator('.rail-link[data-go="settings"]')).toHaveAttribute('aria-current','page');
+ const state=await page.evaluate(()=>{
+  const nav=document.querySelector('.rail'),active=nav.querySelector('[aria-current="page"]');
+  const r=nav.getBoundingClientRect(),a=active.getBoundingClientRect();
+  return {visible:a.left>=r.left-1&&a.right<=r.right+1,
+   hit:a.width>=44&&a.height>=44,
+   overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}
+ });
+ expect(state.visible).toBe(true);
+ expect(state.hit).toBe(true);
+ expect(state.overflow).toBeLessThanOrEqual(1)
 });
