@@ -1,3 +1,4 @@
+import {conflictsWithConnect} from './stream-code-namespace.mjs';
 // BLOFY STREAM subscriptions: duration begins ONLY at first successful
 // redemption. New codes are numeric and grow gradually with issuance volume;
 // all codes are stored as HMAC proofs, and existing 24-hex codes remain valid.
@@ -177,6 +178,7 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         let inserted=false;
         for(let attempt=0;attempt<12;attempt++){
           const code=randomNumericStreamCode(streamNumericCodeLength(issued),randomBytes);
+          if(await conflictsWithConnect(client,code))continue;
           const hash=streamCodeProof(code,keyHex),id=uuid();
           const result=await client.query(`INSERT INTO blofy_xtream_gateway_duration_codes
             (id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,code_vault)
