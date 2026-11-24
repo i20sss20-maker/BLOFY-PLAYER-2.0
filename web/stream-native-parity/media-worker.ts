@@ -421,7 +421,22 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
      lifetimeSeconds:event.lifetimeSeconds??null,
      gapMs:event.gapMs??null,attempt:event.attempt??null}))
   }):upstream.body;
-  const sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts');
+  // Some providers respond with HTTP 200 headers but never deliver a TS
+  // packet. The H.264 prefix probe would otherwise await reader.read()
+  // forever, pinning a worker slot and keeping the client's manifest open.
+  // Use the same bounded startup budget as Hls.js; do not launch FFmpeg
+  // after the source was explicitly aborted.
+  const probeMs=kind==='live'?Math.max(500,27000-(Date.now()-session.startedAt)):27000;
+  const probeTimer=setTimeout(()=>controller.abort(),probeMs);
+  probeTimer.unref?.();
+  let sourceInput;
+  try{sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts')}
+  finally{clearTimeout(probeTimer)}
+  if(controller.signal.aborted){
+   try{await sourceInput.input.cancel()}catch{}
+   stopHls(session,'live_no_initial_segment');
+   return {error:'hls_source_probe_timeout',status:503}
+  }
   if(session.stopped||hlsSessions.get(key)!==session){
    try{await sourceInput.input.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
