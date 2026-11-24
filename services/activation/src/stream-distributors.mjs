@@ -567,7 +567,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      walletCredits:Number(actor.credits||0),
      rewardPointsAvailable:Math.max(0,rewards.earned-rewards.spent)/4,
      rewardPointsRedeemed:rewards.spent/4,
-     rewardRedemptionEnabled:rewardsRedemptionEnabled===true,
+     rewardRedemptionEnabled:rewardsRedemptionEnabled===true&&permissions(actor).redeem,
      rewardPointsPerCredit:rewardQuartersPerCredit/4,
      today:Number(row.today||0),month:Number(row.month||0),
     trialsToday:Number(row.trials_today||0),trialsTotal:Number(row.trials_total||0),
@@ -629,6 +629,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   const response={ok:true,issue:publicIssue(item),
      ...(item.kind==='app'?{code:result.body.code}:{credentials:result.body.credentials})};
    if(includeXtream===true&&item.kind==='app'){
+    requirePermission(row,'dualAccess');
     if(typeof linkCodeToXtream!=='function')throw fail('distributor_dual_access_unavailable',503);
     // Only the authenticated owner's existing voucher is passed to the gateway.
     const linked=await linkCodeToXtream(response.code);
