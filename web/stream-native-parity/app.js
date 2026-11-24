@@ -750,6 +750,22 @@ function beginPreview(item){
  video.playsInline=true;video.controls=false;
  playHls(video,'live',id,'ts',0,box,true)
 }
+function mergeCatalogPage(listing,result,kind){
+ var offset=Number(listing.nextOffset||listing.items.length),nextOffset=Number(result.nextOffset);
+ // A repeated cursor must never trigger an endless sequence of requests.
+ if(!isFinite(nextOffset)||Math.floor(nextOffset)!==nextOffset||nextOffset<offset||
+    (result.hasMore&&nextOffset<=offset))return null;
+ var seen=Object.create(null);
+ for(var i=0;i<listing.items.length;i++)seen[itemId(listing.items[i],kind)]=true;
+ var next=result.items.filter(function(item){
+  var id=itemId(item,kind);if(!id||seen[id])return false;seen[id]=true;return true
+ });
+ listing.items=listing.items.concat(next);listing.nextOffset=nextOffset;
+ // Duplicate-only pages can occur when the source changes during browsing.
+ // A forward cursor, not the number of newly unique items, determines whether more exists.
+ listing.hasMore=!!result.hasMore;
+ return next
+}
 function loadMore(kind){
  var cat=S.cat[kind]||'all',key=keyOf(kind,cat),listing=S.loaded[key];
  if(!listing||!listing.hasMore||listing.loadingMore)return;
@@ -764,11 +780,12 @@ function loadMore(kind){
    if(btn&&S.route===kind){btn.disabled=false;btn.textContent='تعذر التحميل، حاول مرة أخرى'}
    return
   }
-  var seen={};for(var i=0;i<listing.items.length;i++)seen[itemId(listing.items[i],kind)]=true;
-  var next=result.items.filter(function(item){var id=itemId(item,kind);if(seen[id])return false;seen[id]=true;return true});
-  listing.items=listing.items.concat(next);listing.nextOffset=result.nextOffset;
+  var next=mergeCatalogPage(listing,result,kind);
+  if(next===null){
+   if(btn){btn.disabled=false;btn.textContent='تعذر التحميل، حاول مرة أخرى'}
+   return
+  }
   touchListing(listing);pruneInactiveListings();
-  listing.hasMore=!!result.hasMore&&next.length>0;
   var list=kind==='live'?document.getElementById('channel-list'):(S.sort==='source'?document.querySelector('.poster-panel .poster-grid'):null);
   if(!list){buildCatalog(kind,listing);return}
   // Incremental append keeps the existing focus, scroll position and live preview player.
