@@ -2361,6 +2361,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   if(rec.timer)clearTimeout(rec.timer);
   if(rec.stallTimer)clearTimeout(rec.stallTimer);
   if(rec.startupTimer)clearTimeout(rec.startupTimer);
+  if(rec.retryTimer){clearTimeout(rec.retryTimer);rec.retryTimer=null}
   playerStatus(msg,true)
  }
  function recoverFilm(){
@@ -2479,6 +2480,9 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
     state.didResume=state.resume>30&&state.resume<seconds-5;
     if(state.onDuration)state.onDuration()
    };
+   hls.on(window.Hls.Events.FRAG_LOADED,function(){
+    if(alive())rec.capacityRetries=0
+   });
    hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
     if(!alive())return;
     if(state.onDuration)state.onDuration();
@@ -2507,7 +2511,22 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
      return
     }
     if(status===429){
-     fail('خادم معالجة الفيديو مشغول حاليًا. تم حفظ مكان المشاهدة؛ حاول لاحقًا.');
+     // The private worker has an enforced two-encoder capacity. A busy
+     // slot should not permanently fail a seek immediately, but repeated
+     // attempts must never storm the source or create extra FFmpeg jobs.
+     rec.capacityRetries=(rec.capacityRetries||0)+1;
+     if(rec.capacityRetries<=2){
+      var wait=rec.capacityRetries===1?5000:8500;
+      playerStatus('محرك الفيديو مشغول مؤقتًا؛ محاولة آمنة بعد '+Math.ceil(wait/1000)+' ثوانٍ…');
+      if(rec.retryTimer)clearTimeout(rec.retryTimer);
+      rec.retryTimer=setTimeout(function(){
+       rec.retryTimer=null;
+       if(!alive())return;
+       try{hls.startLoad()}catch(e){recoverFilm()}
+      },wait);
+      return
+     }
+     fail('لا تتوفر سعة تحويل إضافية الآن. تم حفظ مكان المشاهدة؛ حاول لاحقًا.');
      return
     }
     if(recovery<2&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
