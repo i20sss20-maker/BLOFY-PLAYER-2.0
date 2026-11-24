@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.FirstImportCheckpoint
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -74,6 +75,7 @@ internal object NativeExternalCatalogSession {
                     dao.deactivateProvider(profile.providerId)
                     dao.discardStagedCatalog(profile.providerId)
                     CatalogSyncState.clear(context,profile.providerId)
+                    FirstImportCheckpoint.clear(context,profile.providerId)
                 }
             }
         }
@@ -88,8 +90,8 @@ internal object NativeExternalCatalogSession {
     ): Prepared = gate.withLock {
         withContext(Dispatchers.IO) {
             val app = context.applicationContext
+            check(qaEnabled(app) && !StreamCodeSession.isClaimed(app))
             val credentials = result.credentials
-            verify(credentials)
             val previous = ExternalStreamConnectStore.loadStaged(app)
             val same = previous != null && previous.credentials.host == credentials.host &&
                 previous.credentials.username == credentials.username &&
@@ -100,14 +102,17 @@ internal object NativeExternalCatalogSession {
             if (previous != null && !same) {
                 check(dao.activeProviderId() != previous.providerId) { "Active external session cannot be replaced here" }
             }
+            // Persist the redeemed credential before any provider network call.
             ExternalStreamConnectStore.saveStaged(app, profile)
             if (previous != null && !same) {
                 val old = dao.provider(previous.providerId)
                 if (old != null && !old.enabled && old.baseUrl == ExternalXtreamCatalogTransport.ORIGIN) {
                     dao.discardStagedCatalog(previous.providerId)
                     CatalogSyncState.clear(app, previous.providerId)
+                    FirstImportCheckpoint.clear(app, previous.providerId)
                 }
             }
+            verify(profile.credentials)
             importStaged(app, profile, onProgress)
         }
     }
@@ -185,17 +190,27 @@ internal object NativeExternalCatalogSession {
         // Interrupted imports remain disabled and never replace the active paid catalog.
         CatalogSyncState.clear(app, id)
         CatalogSyncState.markPending(app, id)
-        dao.clearProviderCatalog(id)
-        val source = ProviderEntity(id, "BLOFY STREAM", ExternalXtreamCatalogTransport.ORIGIN,
+        val source = existing ?: ProviderEntity(id, "BLOFY STREAM", ExternalXtreamCatalogTransport.ORIGIN,
             "", "", enabled = false, preferredTransport = "http", allowCrossProtocolRedirects = false)
-        dao.upsertProvider(source)
+        if (existing == null) {
+            FirstImportCheckpoint.clear(app,id)
+            dao.clearProviderCatalog(id)
+            dao.upsertProvider(source)
+        }
+        // The random provider ID is authenticated together with the encrypted
+        // credentials and reused only for the same account. It scopes checkpoints.
+        val checkpoint = FirstImportCheckpoint.discardIncompleteSections(app,dao,source)
         val imported = PlaylistSyncPolicy.run {
-            PlaylistManager.forExternal(profile.credentials, dao).syncAll(source, onProgress = onProgress)
+            PlaylistManager.forExternal(profile.credentials, dao).syncAll(
+                source, completedSections = checkpoint.completed,
+                onSectionComplete = { FirstImportCheckpoint.markCompleted(app,source,it) },
+                onProgress = onProgress)
         }
         check(imported.failedSectionCount == 0 && imported.freshItemCount > 0 &&
             dao.hasCatalog(id)) { "تعذر تحميل مكتبة الاشتراك بالكامل" }
         check(ExternalStreamConnectStore.loadStaged(app)?.providerId == id)
         CatalogSyncState.markCatalogCommitted(app, id)
+        FirstImportCheckpoint.clear(app,id)
         return Prepared(id, dao.streamCountForProvider(id))
     }
 }
