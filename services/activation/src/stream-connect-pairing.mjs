@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 const TTL_MS=15*60*1000;
 const CODE=/^BC-[A-Za-z0-9_-]{24}$/;
+const NUMERIC=/^[0-9]{12}$/;
 const error=(code,status=400)=>Object.assign(Error(code),{status});
 export function normalizeConnectInput(input={}){
  const {host,username,password}=input||{};
@@ -13,10 +14,10 @@ export function normalizeConnectInput(input={}){
    /[\x00-\x1f\x7f]/.test(host+username+password))throw error('connect_input_invalid');
  let url;
  try{url=new URL(host.trim());}catch{throw error('connect_host_invalid')}
- // Initial supported mode is HTTPS only; no embedded auth, path, query, IP
+ // HTTP is permitted only with explicit consent at issuance; no embedded auth, path, query, IP
  // literals or local hostname. No DNS/network lookup is performed here.
  const name=url.hostname.toLowerCase();
- if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
+ if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||
     url.pathname!=='/'||name.endsWith('.')||net.isIP(name)||!name.includes('.')||
     !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(name)||
     /(?:^|\.)(localhost|local|internal|lan|home|test|invalid|example|onion)$/.test(name))
@@ -27,7 +28,7 @@ const keyFromHex=value=>{
  if(!/^[0-9a-f]{64}$/i.test(String(value||'')))throw error('connect_key_unconfigured',503);
  return Buffer.from(value,'hex');
 };
-const hash=code=>crypto.createHash('sha256').update(code).digest('hex');
+const hash=(code,key)=>NUMERIC.test(code)?crypto.createHmac('sha256',key).update('blofy-connect:numeric:v1:'+code).digest('hex'):crypto.createHash('sha256').update(code).digest('hex');
 function encrypt(data,key,id){
  const nonce=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',key,nonce);
  cipher.setAAD(Buffer.from('blofy-connect:v1:'+id));
@@ -58,8 +59,9 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
  }
  async function issue(input){
   const key=gate(),credentials=normalizeConnectInput(input);
+  if(credentials.host.startsWith('http:')&&input.allowHttp!==true)throw error('connect_host_invalid');
   await ensureSchema();
-  const code='BC-'+crypto.randomBytes(18).toString('base64url'),id=hash(code);
+  let code;
   const expiresAt=clock()+TTL_MS;
   const db=await pool.connect();
   try{
@@ -69,16 +71,22 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
    await db.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');
    const n=Number((await db.query('SELECT COUNT(*)::int AS count FROM blofy_connect_pairings')).rows[0]?.count||0);
    if(n>=2000)throw error('connect_capacity',429);
-   await db.query('INSERT INTO blofy_connect_pairings(code_hash,sealed,expires_at) VALUES($1,$2,$3)',[id,encrypt(credentials,key,id),new Date(expiresAt)]);
+   for(let attempt=0;attempt<8;attempt++){
+    const candidate=input.numericCode===true?String(crypto.randomInt(0,1_000_000_000_000)).padStart(12,'0'):'BC-'+crypto.randomBytes(18).toString('base64url');
+    const id=hash(candidate,key);
+    const inserted=await db.query('INSERT INTO blofy_connect_pairings(code_hash,sealed,expires_at) VALUES($1,$2,$3) ON CONFLICT (code_hash) DO NOTHING RETURNING code_hash',[id,encrypt(credentials,key,id),new Date(expiresAt)]);
+    if(inserted.rows.length===1){code=candidate;break;}
+   }
+   if(!code)throw error('connect_capacity',429);
    await db.query('COMMIT');
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
   return {ok:true,code,expiresAt,oneTime:true,providerVerified:false};
  }
  async function redeem({code}={}){
   const key=gate();
-  if(typeof code!=='string'||!CODE.test(code))throw error('connect_code_invalid');
+  if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
   await ensureSchema();
-  const id=hash(code);
+  const id=hash(code,key);
   // Atomically consume a code across concurrent replicas, never reveal it twice.
   const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() RETURNING sealed',[id]);
   if(result.rows.length!==1)throw error('connect_code_expired_or_used',404);
