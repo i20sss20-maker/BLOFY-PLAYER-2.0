@@ -28,7 +28,7 @@ export function createUnifiedCodeRedeemer({paidExists,connectExists,redeemPaid,r
    if(result?.ok!==true)throw error('stream_code_unavailable',409);
    return {...result,type:'blofy_stream'};
   }
-  const result=await redeemConnect(normalized);
+  const result=await redeemConnect(normalized,deviceKey);
   if(result?.ok!==true||result.type!=='external_xtream')throw error('stream_code_unavailable',409);
   return result;
  };
