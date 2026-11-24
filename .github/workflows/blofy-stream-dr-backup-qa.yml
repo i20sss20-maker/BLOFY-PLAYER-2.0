@@ -1,0 +1,109 @@
+name: BLOFY STREAM isolated PostgreSQL backup and restore QA
+on:
+  push:
+    branches:
+      - qa/blofy-stream-offsite-backup-restore-20261123
+    paths:
+      - 'services/activation/scripts/backup-to-s3.sh'
+      - 'services/activation/scripts/verify-s3-backup.sh'
+      - 'services/activation/scripts/exec-with-postgres-dsn.py'
+      - '.github/workflows/blofy-stream-dr-backup-qa.yml'
+      - 'ops/disaster-recovery/**'
+  pull_request:
+    branches:
+      - qa/blofy-stream-offsite-backup-restore-20261123
+    paths:
+      - 'ops/disaster-recovery/**'
+      - '.github/workflows/blofy-stream-dr-backup-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-smoke:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: synthetic_blofy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d synthetic_blofy"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: PostgreSQL backup safety syntax and client preparation
+        run: |
+          bash -n services/activation/scripts/backup-to-s3.sh
+          bash -n services/activation/scripts/verify-s3-backup.sh
+          python3 -m py_compile services/activation/scripts/exec-with-postgres-dsn.py
+          python3 -m unittest discover -s ops/disaster-recovery -p 'test_libpq_env.py' -v
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          pg_dump --version
+          pg_restore --version
+      - name: Produce and restore *synthetic only* subscriber fixture
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          export PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres
+          psql -X -v ON_ERROR_STOP=1 -d synthetic_blofy <<'SQL'
+          CREATE TABLE synthetic_subscriptions (
+            id integer PRIMARY KEY, code text NOT NULL, status text NOT NULL
+          );
+          INSERT INTO synthetic_subscriptions VALUES
+            (1, 'fake-code-000001', 'active'),
+            (2, 'fake-code-000002', 'active'),
+            (3, 'fake-code-000003', 'expired');
+          SQL
+          pg_dump -Fc --no-owner --no-acl -f /tmp/synthetic.dump synthetic_blofy
+          pg_restore --list /tmp/synthetic.dump >/dev/null
+          createdb scratch_restore
+          pg_restore --no-owner --no-acl --exit-on-error -d scratch_restore /tmp/synthetic.dump
+          count=$(psql -X -qAt -d scratch_restore -c 'SELECT COUNT(*) FROM synthetic_subscriptions')
+          test "$count" = 3
+          sha256sum /tmp/synthetic.dump | cut -d' ' -f1 > /tmp/synthetic-sha256.txt
+          test -s /tmp/synthetic-sha256.txt
+          echo 'PASS: local synthetic dump TOC can be read and all 3 synthetic rows restored'
+      - name: Exercise real backup scripts end-to-end using fake private S3 with corruption rejection
+        env:
+          PGPASSWORD: postgres
+        run: bash ops/disaster-recovery/test_backup_chain.sh
+      - name: Ensure backup fails closed with no real secrets configured
+        run: |
+          if env -u DATABASE_URL -u BLOFY_BACKUP_S3_BUCKET -u BLOFY_BACKUP_KMS_KEY_ID -u AWS_REGION bash services/activation/scripts/backup-to-s3.sh > /tmp/backup-missing-secrets.log 2>&1; then
+            echo 'ERROR: backup unexpectedly succeeded without secrets'; exit 1
+          fi
+          echo 'PASS: no production DB/S3 credentials, and incomplete configurations refuse to run'
+          if env -u BLOFY_BACKUP_S3_BUCKET -u BLOFY_BACKUP_OBJECT_KEY -u AWS_REGION bash services/activation/scripts/verify-s3-backup.sh >/tmp/verify-missing-secrets.log 2>&1; then
+            echo 'ERROR: verification unexpectedly succeeded without backup credentials'; exit 1
+          fi
+      - name: Publish clear proof limits
+        if: always()
+        run: |
+          echo 'No production DB was read, no customer or payment data was used, and no AWS bucket was contacted.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A passing synthetic restore does not mean an off-site production backup exists.' >> "$GITHUB_STEP_SUMMARY"
+
+  private-worker-restore:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build non-root isolated recovery worker
+        run: docker build -t blofy-dr-restore-qa ops/disaster-recovery/railway-worker
+      - name: Restore synthetic encrypted archive with no network access
+        run: docker run --rm --network none blofy-dr-restore-qa python3 /app/test_restore_local.py
+      - name: Rehearse fenced PostgreSQL replica promotion using synthetic records
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/ops/disaster-recovery/railway-worker/test_replica_failover.py:/tmp/test_replica_failover.py:ro" \
+            blofy-dr-restore-qa python3 /tmp/test_replica_failover.py
