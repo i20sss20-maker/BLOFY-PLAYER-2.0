@@ -62,7 +62,7 @@ test('decoded-video counters give evidence when a TV lacks frame callbacks',()=>
  const video={isConnected:true,readyState:4,videoWidth:1280,videoHeight:720,
   getVideoPlaybackQuality:()=>({totalVideoFrames:quality})};
  const S={route:'player',playerView:state};
- const observer=vm.runInNewContext(code+';observeFirstPicture',{S,state,video,Date,Number,clearInterval});
+ const observer=vm.runInNewContext(code+';observeFirstPicture',{S,state,video,Date,Number,setInterval,clearInterval});
  observer();assert.equal(state.stats.firstFrameAt,0);
  quality=2;observer();assert.ok(state.stats.firstFrameAt>0);assert.equal(state.stats.firstFrameBasis,'decoded')
 });
