@@ -164,7 +164,7 @@ test('HTTP 200 upstream with no TS bytes cannot keep a live FFmpeg slot pending 
  const start=source.indexOf('async function startHls(');
  const finish=source.indexOf('\n/* Preview-only fan-out',start);
  assert.ok(begin>0&&end>begin&&start>end&&finish>start);
- let active=0,controllerNumber=0,pendingReadReject,spawned=0,stopped=0,reason='',readerCancelled=false;
+ let active=0,controllerNumber=0,pendingReadReject,spawned=0,stopped=0,reason='',readerCancelled=false,sourceAborted=false;
  const timers=[],sessionMap=new Map();
  class FakeController{
   constructor(){
@@ -175,7 +175,7 @@ test('HTTP 200 upstream with no TS bytes cannot keep a live FFmpeg slot pending 
   }
   abort(){
    this.actual.abort();
-   if(this.ordinal===2&&pendingReadReject)pendingReadReject(new Error('source aborted'))
+   if(this.ordinal===2){sourceAborted=true;if(pendingReadReject)pendingReadReject(new Error('source aborted'))}
   }
  }
  const streamBody={
@@ -222,5 +222,7 @@ test('HTTP 200 upstream with no TS bytes cannot keep a live FFmpeg slot pending 
  assert.equal(stopped,1);
  assert.equal(reason,'live_no_initial_segment');
  assert.equal(active,0);
- assert.equal(readerCancelled,true,'release stalled upstream reader after abort');
+ assert.equal(sourceAborted,true,'upstream network source must be aborted before spawning FFmpeg');
+ // A stream that already closed after AbortSignal rejection need not invoke
+ // the optional reader.cancel hook a second time.
 });
