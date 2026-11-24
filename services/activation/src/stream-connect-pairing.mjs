@@ -52,6 +52,7 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
     await db.query('BEGIN');
     await db.query('SELECT pg_advisory_xact_lock(173921,25)');
     await db.query('CREATE TABLE IF NOT EXISTS blofy_connect_pairings (code_hash TEXT PRIMARY KEY, sealed BYTEA NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+    await db.query('ALTER TABLE blofy_connect_pairings ADD COLUMN IF NOT EXISTS claimed_device_hash TEXT');
     await db.query('CREATE INDEX IF NOT EXISTS idx_blofy_connect_pairings_expiry ON blofy_connect_pairings(expires_at)');
     await db.query('CREATE TABLE IF NOT EXISTS blofy_connect_short_budget (id INTEGER PRIMARY KEY CHECK (id=1), minute TIMESTAMPTZ NOT NULL, attempts INTEGER NOT NULL)');
     await db.query('COMMIT');
@@ -93,7 +94,8 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   const result=await pool.query('SELECT 1 FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() LIMIT 1',[hash(code,key)]);
   return result.rows.length===1;
  }
- async function redeem({code}={}){
+ async function redeem({code,deviceKey=null}={}){
+  if(deviceKey!==null&&(typeof deviceKey!=='string'||!/^[a-f0-9]{64}$/.test(deviceKey)))throw error('connect_code_invalid');
   const key=gate();
   if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
   await ensureSchema();
@@ -103,8 +105,13 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
    if(budget.rows.length!==1)throw error('connect_rate_limited',429);
   }
   const id=hash(code,key);
-  // Atomically consume a code across concurrent replicas, never reveal it twice.
-  const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() RETURNING sealed',[id]);
+  // A unified claim is retryable only for the same installation, until the
+  // original expiry (never extended). Old clients cannot consume a bound row.
+  const deviceHash=deviceKey===null?null:crypto.createHmac('sha256',key)
+   .update('blofy-connect:device:v1:').update(id).update(':').update(deviceKey).digest('hex');
+  const result=deviceHash===null
+   ?await pool.query('DELETE FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() AND claimed_device_hash IS NULL RETURNING sealed',[id])
+   :await pool.query('UPDATE blofy_connect_pairings SET claimed_device_hash=$2 WHERE code_hash=$1 AND expires_at>NOW() AND (claimed_device_hash IS NULL OR claimed_device_hash=$2) RETURNING sealed',[id,deviceHash]);
   if(result.rows.length!==1)throw error('connect_code_expired_or_used',404);
   let credentials;
   try{credentials=normalizeConnectInput(decrypt(result.rows[0].sealed,key,id));}
