@@ -334,6 +334,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             return
         }
         setBusy(true)
+        importPercent = 0
+        importStage = null
+        importItems = 0
         statusText.text = getString(R.string.stream_ui_activating)
         lifecycleScope.launch {
             try {
@@ -433,6 +436,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     private fun restoreNativeExternal() {
         if (busy) return
         setBusy(true)
+        importPercent = 0
+        importStage = null
+        importItems = 0
         statusText.text = getString(R.string.stream_ui_restoring)
         lifecycleScope.launch {
             try {
