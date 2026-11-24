@@ -1616,6 +1616,19 @@ function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
   return true
  }catch(e){record.liveLagSince=0;return false}
 }
+function liveTransientRetryMs(attempt){
+ // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
+ // a home router/Wi-Fi connection to settle without hammering Railway.
+ var n=Math.max(1,Math.min(3,Math.floor(Number(attempt)||1)));
+ return [0,950,1800,3600][n]
+}
+function hlsRemuxWorkerSupported(){
+ // MPEG-TS remuxing can block scrolling and remote response on desktop.
+ // Keep legacy VIDAA/Android TV on the known main-thread compatibility path.
+ var ua=String(navigator.userAgent||'');
+ return !!window.Worker&&!!window.Blob&&!!window.MediaSource&&
+  !/VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android 9|iPad|iPhone/i.test(ua)
+}
 function liveOriginRetryMs(attempt){
  // A temporary origin failure should not trigger a tight re-open loop.
  var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
@@ -2067,7 +2080,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
+   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
    // Network and decoder are separate signals. If HLS fragments arrive while
    // actual decoded frames remain frozen, the report can flag a TV decoder
@@ -2075,7 +2088,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    engine.on(window.Hls.Events.FRAG_LOADED,function(){
     if(alive()){
      record.lastFragmentAt=Date.now();
-     record.capacityRetries=0;record.originRetries=0;
+     record.capacityRetries=0;record.originRetries=0;record.transientRetries=0;
+     if(record.retryTimer){clearTimeout(record.retryTimer);record.retryTimer=null}
      if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
     }
    });
@@ -2122,8 +2136,17 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      },delay);
      return
     }
-    if(record.retries<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
-     record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
+    if((record.transientRetries||0)<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     record.transientRetries=(record.transientRetries||0)+1;
+     var pause=liveTransientRetryMs(record.transientRetries);
+     status('انقطاع شبكة مؤقت؛ إعادة الاتصال خلال '+Math.ceil(pause/1000)+' ثانية…');
+     if(record.retryTimer)clearTimeout(record.retryTimer);
+     record.retryTimer=setTimeout(function(){
+      record.retryTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){recoverConnection()}
+     },pause);
+     return
     }
     if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
      if(!preview)recordLiveIncident('decoder_error');
@@ -2344,7 +2367,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    fail('المتصفح لا يدعم تشغيل ملفات HLS القابلة للتقديم.');return
   }
   try{
-   var hls=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
+   var hls=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
     maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:68000,manifestLoadingTimeOut:30000,
     fragLoadingMaxRetry:2,manifestLoadingMaxRetry:2});
    rec.engine=hls;
@@ -2387,7 +2410,14 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
      fail('خادم معالجة الفيديو مشغول حاليًا. تم حفظ مكان المشاهدة؛ حاول لاحقًا.');
      return
     }
-    if(recovery<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovery++;try{hls.startLoad()}catch(e){};return}
+    if(recovery<2&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     recovery++;
+     rec.retryTimer=setTimeout(function(){
+      rec.retryTimer=null;
+      if(!alive())return;
+      try{hls.startLoad()}catch(e){recoverFilm()}
+     },liveTransientRetryMs(recovery));return
+    }
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
     recoverFilm()
    });
@@ -2477,7 +2507,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    fail('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:0,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});
+   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,startPosition:0,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});
    rec.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){
     if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيلم')})}catch(e){}
@@ -2486,8 +2516,13 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
     diagnose(kind,'hls_error','video',0);
-    if(recovered<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
-     recovered++;try{engine.startLoad()}catch(e){};return
+    if(recovered<2&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     recovered++;
+     rec.retryTimer=setTimeout(function(){
+      rec.retryTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){interrupted('network_retry_failed')}
+     },liveTransientRetryMs(recovered));return
     }
     if(recovered<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
      recovered++;try{engine.recoverMediaError()}catch(e){};return
