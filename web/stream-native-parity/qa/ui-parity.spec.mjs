@@ -554,7 +554,7 @@ test('read-only live fan-out health panel exposes no subscriber data and never t
  expect(checks).toBe(1);
  enabled=true;
  await button.click();
- await expect(status).toContainText('مفعلة في التجربة');
+ await expect(status).toContainText('مفعلة وفق إعدادات الخدمة');
  await expect(status).toContainText('المشاهدون المشاركون: 2');
  await expect(status).toContainText('بانتظار اتصال المصدر: 1');
  await expect(status).toContainText('مصادر في تهدئة الاتصال: 1');
