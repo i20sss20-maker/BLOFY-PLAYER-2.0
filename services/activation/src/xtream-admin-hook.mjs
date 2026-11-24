@@ -3506,6 +3506,7 @@ async function callLocalGateway(method,path,body){
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
 const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
+  playbackSnapshot:sourceId=>xtreamPlaybackSnapshot(Date.now(),sourceId),
   rewardsRedemptionEnabled:process.env.BLOFY_DISTRIBUTOR_REWARDS_REDEMPTION==='1',
   linkCodeToXtream:async code=>{
     const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/link/code-to-xtream',{code});
@@ -3775,6 +3776,7 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='logout')return json(res,200,await streamDistributors.logout(token));
     if(command==='list')return json(res,200,
       await streamDistributors.issued(token,payload),{'cache-control':'no-store'});
+    if(command==='quality')return json(res,200,await streamDistributors.quality(token),{'cache-control':'no-store, private'});
     if(command==='analytics')return json(res,200,
       await streamDistributors.analytics(token),{'cache-control':'no-store'});
      if(command==='redeem-rewards')return json(res,200,await streamDistributors.redeemRewards(token,payload),{'cache-control':'no-store'});
