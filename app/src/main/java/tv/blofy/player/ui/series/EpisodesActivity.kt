@@ -42,7 +42,6 @@ import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.ContentScreenStyle
@@ -349,7 +348,7 @@ class EpisodesActivity : ContentAccessActivity() {
             // The cached episode list remains visible; Room broadcasts any
             // newly added episodes without a second loading screen or spinner.
             val result = withContext(Dispatchers.IO) {
-                PlaylistManager(XtreamClient.episodeApi, BlofyDatabase.get(applicationContext).dao())
+                PlaylistManager.forProvider(applicationContext, provider, BlofyDatabase.get(applicationContext).dao(), episodeRequest = true)
                     .syncSeriesEpisodes(provider, seriesId, preserveCachedRows = true)
             }
             if (result.episodeCount > 0 && result.cacheUpdated) {
@@ -376,7 +375,7 @@ class EpisodesActivity : ContentAccessActivity() {
         val requestStartedAt = SystemClock.elapsedRealtime()
         val result = runCatching {
             withContext(Dispatchers.IO) {
-                PlaylistManager(XtreamClient.episodeApi, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId)
+                PlaylistManager.forProvider(applicationContext, provider, BlofyDatabase.get(applicationContext).dao(), episodeRequest = true).syncSeriesEpisodes(provider, seriesId)
             }
         }
         result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
