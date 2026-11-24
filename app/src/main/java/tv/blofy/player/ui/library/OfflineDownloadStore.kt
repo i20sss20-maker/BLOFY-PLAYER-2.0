@@ -8,6 +8,11 @@ import org.json.JSONObject
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
 import java.security.MessageDigest
+import java.util.UUID
+import androidx.work.*
+import java.util.concurrent.TimeUnit
+import tv.blofy.player.core.identity.NativeExternalCatalogSession
+import tv.blofy.player.core.identity.NativeExternalMediaTransport
 
 /**
  * Persistent user-requested transfers managed by Android DownloadManager.
@@ -33,6 +38,7 @@ internal object OfflineDownloadStore {
         val id: Long,
         val extension: String,
         val createdAt: Long,
+        val workerId: String? = null,
     )
     data class Progress(
         val record: Record,
@@ -62,7 +68,7 @@ internal object OfflineDownloadStore {
             Record(
                 o.getString("key"), o.getString("provider"), o.getString("kind"),
                 o.getString("title"), o.getLong("id"), o.getString("extension"),
-                o.getLong("created")
+                o.getLong("created"), o.optString("workerId").takeIf { it.isNotBlank() }
             )
         }.getOrNull()?.takeIf {
             it.contentKey.isNotBlank() && it.providerId.isNotBlank() &&
@@ -103,9 +109,31 @@ internal object OfflineDownloadStore {
         if(existing != null) {
             val current = progress(context,existing)
             if (current?.status !in setOf(null, DownloadManager.STATUS_FAILED)) return@runCatching existing
-            runCatching { dm.remove(existing.id) }
+            remove(context,existing)
         }
         check(records(context).size < MAX_RECORDS) { "Download list is full; remove old entries first" }
+        if (NativeExternalMediaTransport.isExternal(providerId)) {
+            check(NativeExternalCatalogSession.qaEnabled(context) &&
+                NativeExternalDownloadQueue.validRoute(providerId,kind,url,extension))
+            val work = OneTimeWorkRequestBuilder<NativeExternalDownloadWorker>()
+                .setInputData(workDataOf("provider" to providerId,"kind" to kind,"route" to url,"extension" to extension))
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(
+                    if (OfflineDownloadSettings.wifiOnly(context)) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
+                .build()
+            val record = Record(contentKey,providerId,kind,title.take(130),
+                (work.id.mostSignificantBits and Long.MAX_VALUE).coerceAtLeast(1L),extension,
+                System.currentTimeMillis(),work.id.toString())
+            save(context,record)
+            try {
+                WorkManager.getInstance(context.applicationContext).enqueue(work).result.get(10,TimeUnit.SECONDS)
+            } catch (error: Exception) {
+                WorkManager.getInstance(context.applicationContext).cancelWorkById(work.id)
+                prefs(context).edit().remove(storageKey(contentKey)).commit()
+                throw error
+            }
+            return@runCatching record
+        }
+        check(!hostIsNative(url)) { "External download route unavailable" }
         val host = Uri.parse(url).host.orEmpty()
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle(title.take(85))
@@ -134,19 +162,44 @@ internal object OfflineDownloadStore {
         }
         val id = dm.enqueue(request)
         val record = Record(contentKey, providerId,kind,title.take(130),id,extension.lowercase(),System.currentTimeMillis())
+        try { save(context,record) }
+        catch (error: Exception) { dm.remove(id); throw error }
+        record
+    }
+
+    private fun hostIsNative(url: String) = Uri.parse(url).host.equals("external-xtream.invalid",true)
+
+    private fun save(context: Context,record: Record) {
         val payload = JSONObject().apply {
             put("key",record.contentKey);put("provider",record.providerId)
             put("kind",record.kind);put("title",record.title)
             put("id",record.id);put("extension",record.extension);put("created",record.createdAt)
+            record.workerId?.let { put("workerId",it) }
         }.toString()
-        if (!prefs(context).edit().putString(storageKey(contentKey),payload).commit()) {
-            dm.remove(id)
-            throw IllegalStateException("Unable to save download status")
+        check(prefs(context).edit().putString(storageKey(record.contentKey),payload).commit()) {
+            "Unable to save download status"
         }
-        record
     }
 
     fun progress(context: Context, record: Record): Progress? {
+        record.workerId?.let { raw ->
+            return runCatching {
+                val id = UUID.fromString(raw)
+                val file = NativeExternalDownloadQueue.file(context,id,record.extension)
+                if (file.isFile && file.length()>0L)
+                    return@runCatching Progress(record,DownloadManager.STATUS_SUCCESSFUL,file.length(),file.length(),0,Uri.fromFile(file))
+                val info = WorkManager.getInstance(context.applicationContext).getWorkInfoById(id).get(2,TimeUnit.SECONDS)
+                    ?: return@runCatching null
+                val status = when(info.state) {
+                    WorkInfo.State.RUNNING -> DownloadManager.STATUS_RUNNING
+                    WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> DownloadManager.STATUS_PENDING
+                    WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> DownloadManager.STATUS_FAILED
+                    else -> STATUS_MISSING
+                }
+                Progress(record,status,info.progress.getLong("done",0),info.progress.getLong("total",-1),
+                    info.outputData.getInt("reason",DownloadManager.ERROR_UNKNOWN),null)
+            }.getOrNull()
+        }
         val dm = manager(context)
         dm.query(DownloadManager.Query().setFilterById(record.id))?.use { cursor ->
             if (!cursor.moveToFirst()) return null
@@ -169,8 +222,18 @@ internal object OfflineDownloadStore {
 
     @Synchronized
     fun remove(context: Context, record: Record) {
-        manager(context).remove(record.id)
+        if (record.workerId != null) {
+            val id = UUID.fromString(record.workerId)
+            WorkManager.getInstance(context.applicationContext).cancelWorkById(id)
+            val file = NativeExternalDownloadQueue.file(context,id,record.extension)
+            file.delete()
+            java.io.File(file.parentFile,file.name+".part").delete()
+        } else manager(context).remove(record.id)
         prefs(context).edit().remove(storageKey(record.contentKey)).apply()
+    }
+
+    @Synchronized fun removeNativeProvider(context: Context,providerId: String) {
+        records(context,providerId).filter { it.workerId != null }.forEach { remove(context,it) }
     }
 
     fun formatSize(bytes: Long): String = when {
