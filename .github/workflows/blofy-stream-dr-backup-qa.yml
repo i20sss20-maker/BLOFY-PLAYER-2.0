@@ -102,3 +102,8 @@ jobs:
         run: docker build -t blofy-dr-restore-qa ops/disaster-recovery/railway-worker
       - name: Restore synthetic encrypted archive with no network access
         run: docker run --rm --network none blofy-dr-restore-qa python3 /app/test_restore_local.py
+      - name: Rehearse fenced PostgreSQL replica promotion using synthetic records
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/ops/disaster-recovery/railway-worker/test_replica_failover.py:/tmp/test_replica_failover.py:ro" \
+            blofy-dr-restore-qa python3 /tmp/test_replica_failover.py
