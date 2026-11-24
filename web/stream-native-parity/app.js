@@ -1703,7 +1703,7 @@ function livePlaybackProgress(record,video,now){
   // Report visual outages only after an earlier verified picture, not cold
   // startup. This is a local sample-based estimate; no new fetch or telemetry.
   // A switched HLS engine has a new record, so do not bridge engine lifetimes.
-  if(record.visualProgressSeen&&record.ready&&S.route==='player'&&S.playerView&&
+  if(record.visualProgressSeen&&record.ready&&typeof S!=='undefined'&&S.route==='player'&&S.playerView&&
      S.playerView.kind==='live'&&S.playerView.video===video&&
      !video.paused&&!video.seeking&&!document.hidden){
    var visualGap=Math.max(0,now-(record.lastProgressAt||now));
