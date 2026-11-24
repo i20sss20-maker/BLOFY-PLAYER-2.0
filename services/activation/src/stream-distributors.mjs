@@ -64,6 +64,7 @@ const publicIssue=row=>{
  codeHint:String(row.code_hint||'').slice(0,25),
   accountUsername:String(row.account_username||'').slice(0,48),
  customerName:String(row.customer_name||'').slice(0,80),
+ customerNote:String(row.customer_note||'').slice(0,500),
  customerPhone:String(row.customer_phone||'').slice(0,22),
  createdAt:new Date(row.created_at).getTime(),
  accountId:row.status==='done'?row.subject_id:null
@@ -107,6 +108,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS trial_customer_hash TEXT');
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_name TEXT NOT NULL DEFAULT \'\'');
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_phone TEXT NOT NULL DEFAULT \'\'');
+   await pool.query("ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_note TEXT NOT NULL DEFAULT ''");
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS last_credential_rotation_at TIMESTAMPTZ');
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS credential_rotation_request_id UUID');
    await pool.query(`CREATE TABLE IF NOT EXISTS blofy_stream_distributor_actions(
@@ -187,8 +189,23 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    });
   }catch(e){if(e.code==='23505')throw fail('distributor_username_taken',409);throw e}
  }
- async function setAdmin(id,{credits,enabled,resetPassword,dailyLimit}={}){
+ async function setAdmin(id,{credits,enabled,resetPassword,dailyLimit,bonusQuarters,requestId,reason}={}){
   await ensureSchema();if(!UUID.test(String(id||'')))throw fail('distributor_invalid_id');
+  if(bonusQuarters!==undefined){
+   const quarters=number(bonusQuarters,1,4000,'distributor_bonus_invalid');
+   if(!UUID.test(String(requestId||'')))throw fail('distributor_request_id_invalid');
+   const description=clean(reason,160);if(!description)throw fail('distributor_bonus_reason_required');
+   return transaction(async db=>{
+    const current=(await db.query('SELECT * FROM blofy_stream_distributors WHERE id=$1 FOR UPDATE',[id])).rows[0];
+    if(!current)throw fail('distributor_missing',404);
+    const prior=(await db.query('SELECT * FROM blofy_stream_distributor_credit_events WHERE id=$1',[requestId])).rows[0];
+    if(prior){if(prior.distributor_id!==id||prior.details?.reason!=='admin_bonus'||Number(prior.details?.bonusQuarters)!==quarters)throw fail('distributor_request_conflict',409);return {ok:true,item:publicDistributor(current),repeated:true};}
+    await db.query(`INSERT INTO blofy_stream_distributor_credit_events
+      (id,distributor_id,type,delta,balance_after,details) VALUES($1,$2,'adjustment',$3,$4,$5::jsonb)`,
+      [requestId,id,0,Number(current.credits),JSON.stringify({reason:'admin_bonus',bonusQuarters:quarters,description})]);
+    return {ok:true,item:publicDistributor(current),bonusPoints:quarters/4};
+   });
+  }
   if(credits!==undefined){
    const increment=number(credits,-10000,10000,'distributor_credits_invalid');
    if(increment===0)throw fail('distributor_credits_invalid');
@@ -452,7 +469,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
       AND NOT EXISTS (SELECT 1 FROM blofy_stream_distributor_credit_events r
        WHERE r.distributor_id=e.distributor_id AND r.issue_id=e.issue_id AND r.type='refund')`,
     [id,rewardsStart])).rows[0]||{};
-   return {earned:Number(rewards.reward_quarters||0),spent:Number(redeemed.spent_quarters||0),pending:Number(pending.pending_quarters||0)};
+   const grants=(await db.query(`SELECT COALESCE(SUM((details->>'bonusQuarters')::int),0)::int AS granted_quarters FROM blofy_stream_distributor_credit_events WHERE distributor_id=$1 AND type='adjustment' AND details->>'reason'='admin_bonus'`,[id])).rows[0]||{};
+   return {earned:Number(rewards.reward_quarters||0)+Number(grants.granted_quarters||0),spent:Number(redeemed.spent_quarters||0),pending:Number(pending.pending_quarters||0)};
  }
  async function redeemRewards(token,{credits,requestId}={}){
    const actor=await session(token);
@@ -717,7 +735,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
  }
  // Update contacts only for an issuance owned by the logged-in distributor.
  // Trial fingerprint remains fixed so editing clients cannot bypass limits.
- async function customer(token,{issueId,name='',phone=''}={}){
+ async function customer(token,{issueId,name='',phone='',note}={}){
   const actor=await session(token);
   if(!UUID.test(String(issueId||'')))throw fail('distributor_issue_id_invalid');
   const newName=clean(name,80),newPhone=normalizedPhone(phone);
@@ -730,11 +748,12 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
       .update('blofy-stream-distributor-trial-phone:v1:'+newPhone).digest('hex');
     if(hash!==issue.trial_customer_hash)throw fail('distributor_trial_phone_locked',409);
    }
+   const newNote=note===undefined?String(issue.customer_note||''):clean(note,500);
    const updated=(await db.query(`UPDATE blofy_stream_distributor_issues
-     SET customer_name=$3,customer_phone=$4 WHERE id=$1 AND distributor_id=$2
-     RETURNING *`,[issueId,actor.id,newName,newPhone])).rows[0];
+     SET customer_name=$3,customer_phone=$4,customer_note=$5 WHERE id=$1 AND distributor_id=$2
+     RETURNING *`,[issueId,actor.id,newName,newPhone,newNote])).rows[0];
    return {ok:true,issueId:updated.id,customerName:updated.customer_name,
-     customerPhone:updated.customer_phone};
+     customerPhone:updated.customer_phone,customerNote:updated.customer_note};
   });
  }
  // Renew a redeemed code or direct Xtream account, debiting months atomically
