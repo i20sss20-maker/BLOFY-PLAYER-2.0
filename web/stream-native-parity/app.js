@@ -107,7 +107,7 @@ function updateInstallGuide(){
  feedback.textContent=state.message
 }
 
-var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['downloads','↓','التنزيلات'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
+var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['commentators','🎙','المعلقين'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['downloads','↓','التنزيلات'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
 function profileStorageKey(name){return 'blofy_web_profile_v1:'+S.profileKey+':'+name}
@@ -240,7 +240,7 @@ function viewKey(route){
 }
 function focusIdentity(node){
  if(!node||node===document.body)return null;
- var keys=['data-cat','data-channel','data-details','data-watch','data-more','data-season','data-go','data-episodes','data-sort','data-favorite','data-back'];
+ var keys=['data-cat','data-channel','data-commentator-channel','data-details','data-watch','data-more','data-season','data-go','data-episodes','data-sort','data-favorite','data-back'];
  for(var i=0;i<keys.length;i++)if(node.hasAttribute&&node.hasAttribute(keys[i]))return [keys[i],node.getAttribute(keys[i])];
  if(node.id)return ['id',node.id];
  return null
@@ -286,6 +286,7 @@ function restoreView(route,preferred){
 function navIcon(kind){
  var icons={
   home:'<path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+  commentators:'<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/>',
   live:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m8 2 4 3 4-3M8 16v-6l5 3-5 3z"/>',
   movie:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 5l3 5M15 5l3 5M10 14l5 3-5 3z"/>',
   series:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5M2 6v12M22 6v12"/>',
@@ -367,6 +368,7 @@ function navigate(route,opts,replace){
  else if(route==='episodes')episodesScreen(opts||{});
  else if(route==='favorites')favoritesScreen();
  else if(route==='downloads')downloadsScreen();
+ else if(route==='commentators')commentatorsScreen();
  else if(route==='search')searchScreen();
  else if(route==='ai')aiScreen();
  else if(route==='settings')settingsScreen();
@@ -1196,6 +1198,30 @@ function requestWebDownload(kind,id,ext,name){
   if(message)message.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.';
   if(S.route==='downloads')downloadsScreen();
  }).catch(function(){if(epoch===S.accountEpoch&&message)message.textContent='تعذر التحقق من التنزيل، حاول مرة أخرى.'})
+}
+
+
+function commentatorsScreen(){
+ S.route='commentators';
+ shell('المعلقين • صوتيات BLOFY','<section class="commentator-library">'+
+ '<h2>🎙 المعلقين</h2><p class="small muted">اختر القناة ثم اختر المعلق من قائمة صوتيات BLOFY. يظهر فقط الصوت المتاح والمصرح به لهذه القناة؛ ويمكن الرجوع إلى الصوت الأصلي في أي وقت.</p>'+
+ '<div id="commentator-channels">'+loading('جار تحميل القنوات')+'</div></section>');
+ var epoch=S.accountEpoch;
+ getListing('live','all',function(st,data){
+  if(S.route!=='commentators'||S.accountEpoch!==epoch)return;
+  var root=document.getElementById('commentator-channels');if(!root)return;
+  var rows=data&&Array.isArray(data.items)?data.items.slice(0,72):[];
+  if(st!==200||!rows.length){
+   root.innerHTML='<div class="empty-state">لا تتوفر قنوات للعرض حاليًا. افتح قسم البث المباشر لعرض التصنيفات.</div>'+
+    '<button class="btn secondary" data-go="live">◉ البث المباشر</button>';return}
+  root.innerHTML='<div class="commentator-channel-grid">'+rows.map(function(item){
+   var id=itemId(item,'live');if(!/^[1-9][0-9]{0,14}$/.test(id))return '';
+   return '<button class="commentator-channel" type="button" data-commentator-channel="'+esc(id)+'">'+
+    (art(item)?safeImg(art(item),'commentator-channel-art'):'<span class="commentator-channel-empty">◉</span>')+
+    '<span><strong>'+esc(title(item))+'</strong><small>فتح المعلقين ◂</small></span></button>'
+  }).join('')+'</div><p class="small muted">القنوات المعروضة هنا من أول صفحة؛ تصفح البث المباشر لرؤية بقية القنوات.</p>';
+  restoreView('commentators')
+ })
 }
 
 function favoritesScreen(){
@@ -4958,9 +4984,9 @@ window.addEventListener('error',function(e){
 },true);
 
 function clickHandler(event){
- var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-download')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload'))node=node.parentNode;
+ var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-commentator-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-download')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload'))node=node.parentNode;
  if(!node||node===document.body)return;
- var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),download=node.getAttribute('data-download'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
+ var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),commentatorChannel=node.getAttribute('data-commentator-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),download=node.getAttribute('data-download'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
  if(node.hasAttribute('data-back')){back();return}
  if(go){if(go!==S.route)navigate(go);return}
  if(download){var pair=download.split(':');requestWebDownload(pair[0],pair[1],node.getAttribute('data-ext')||'mp4',node.getAttribute('data-name')||'');return}
@@ -4969,6 +4995,12 @@ function clickHandler(event){
  if(det){var sep=det.indexOf(':'),kind=det.slice(0,sep),id=det.slice(sep+1);
   if(kind==='live'){var channel=findItem('live',id);openPlayer('live',id,'ts',title(channel),0);return}
   navigate('detail',{kind:kind,id:id});return}
+ if(commentatorChannel){
+  var selectedItem=findItem('live',commentatorChannel);
+  if(selectedItem){openPlayer('live',commentatorChannel,'ts',title(selectedItem),0);
+   var commentaryMenu=document.getElementById('player-commentary');if(commentaryMenu)commentaryMenu.click()}
+  return
+ }
  if(ch){
   if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)&&S.route==='live'){
    var appleChannel=findItem('live',ch);
