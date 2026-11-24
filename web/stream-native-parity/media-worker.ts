@@ -10,6 +10,8 @@ const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
 let active=0;
+// Never raise this from a synthetic CI benchmark. Only a measured Railway
+// resource profile + real subscribed-source long-play can justify scaling.
 const MAX_JOBS=2;
 /* Pilot quality profiles: never enlarge a low-resolution source.
  * The previous forced 854x480 / 900 kbit/s severely degraded every HD film
@@ -59,6 +61,41 @@ const liveSourceFailureWindows=new Map();
 const MAX_LIVE_SOURCE_WINDOWS=256;
 const MAX_SHARED_LIVE_VIEWERS=4;
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
+/* Anonymous rolling one-minute saturation metrics. Do not store stream IDs,
+ * subscriber credentials, hostnames or device identifiers in diagnostics.
+ * Health remains HTTP 200 even when capacity is fully occupied; a busy
+ * transcoder is not a failed service and must never cause Railway restart.
+ */
+const encoderCapacityWindow={startedAt:Date.now(),denied:0};
+function capacityWindowDenied(now=Date.now()){
+ if(now-encoderCapacityWindow.startedAt>=60000||now<encoderCapacityWindow.startedAt){
+  encoderCapacityWindow.startedAt=now;encoderCapacityWindow.denied=0
+ }
+ return encoderCapacityWindow.denied
+}
+function noteEncoderCapacityDenied(){
+ capacityWindowDenied();
+ encoderCapacityWindow.denied=Math.min(100000,encoderCapacityWindow.denied+1)
+}
+function encoderCapacitySnapshot(now=Date.now()){
+ const counts={live:0,legacyVod:0,fullVod:0,compatible:0};
+ for(const session of hlsSessions.values()){
+  if(session.stopped||session.released||session.sharedAlias)continue;
+  if(session.fullVod)counts.fullVod++;
+  else if(session.kind==='live')counts.live++;
+  else counts.legacyVod++
+ }
+ // The direct /convert path deliberately does not retain access tokens in
+ // session maps. Its active slots are the residual, not a customer counter.
+ counts.compatible=Math.max(0,active-counts.live-counts.legacyVod-counts.fullVod);
+ return {
+  activeJobs:active,limit:MAX_JOBS,
+  freeSlots:Math.max(0,MAX_JOBS-active),
+  busy:active>=MAX_JOBS,
+  deniedLastMinute:capacityWindowDenied(now),
+  jobKinds:counts
+ }
+}
 const hardTTL=9*60*1000;
 function hlsKey(bearer,kind,id,ext,track,forceCompat,ultra=false,viewerSid=''){
  const fields=[bearer,kind,id,ext,track];
@@ -281,11 +318,12 @@ function streamInputVideoDimensions(log){
 }
 
 async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=false}){
- if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
+ if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {error:'hls_capacity',status:429}}
  // A 4K software encoder can exhaust CPU and harm other preview viewers.
  // The full server has only two encoding slots; allow one UHD job at a time.
- if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped))
-  return {error:'ultra_capacity',status:429};
+ if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped)){
+  noteEncoderCapacityDenied();return {error:'ultra_capacity',status:429}
+ }
  active++;
  // One unique directory per decoder instance; a retired FFmpeg process
  // cannot overwrite a fresh channel playlist while it is shutting down.
@@ -640,7 +678,7 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
   if(s.kind===kind&&String(s.id)===String(id)&&s.track===track)
    stopHls(s,'legacy_position_changed')
  }
- if(active>=MAX_JOBS)return {status:429,error:'vod_capacity'};
+ if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {status:429,error:'vod_capacity'}}
  active++;
  const abort=new AbortController(),dir=join(hlsRoot,key);
  const session={key,vod:true,kind,id,ext,track,start,bearer,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
@@ -797,7 +835,7 @@ function fullVodChunk(session,first){
   try{session.proc.kill()}catch{}
   releaseHls(session)
  }
- if(active>=MAX_JOBS)return {status:429,error:'vod_capacity'};
+ if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {status:429,error:'vod_capacity'}}
  const begin=first*FULL_SEGMENT_SECONDS;
  const seconds=Math.min(session.duration-begin,FULL_CHUNK_SEGMENTS*FULL_SEGMENT_SECONDS);
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
@@ -1124,7 +1162,8 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
     pending:Array.from(sharedLiveGroups.values())
      .reduce((sum,group)=>sum+(group.pendingViewers?.size||0),0),
     maxPerGroup:MAX_SHARED_LIVE_VIEWERS},
-   originStability:{coolingSources,recentSources:liveSourceFailureWindows.size}})
+   originStability:{coolingSources,recentSources:liveSourceFailureWindows.size},
+   encoderCapacity:encoderCapacitySnapshot(now)})
  }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
@@ -1137,7 +1176,7 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
  const mode=url.searchParams.get('mode')==='video'?'video':'audio';
  const track=Number(url.searchParams.get('track')||'0');
  if(!Number.isSafeInteger(track)||track<0||track>3)return json(400,{error:'invalid_audio_track'});
- if(active>=MAX_JOBS)return json(429,{error:'compat_capacity',retryAfter:5});
+ if(active>=MAX_JOBS){noteEncoderCapacityDenied();return json(429,{error:'compat_capacity',retryAfter:5})}
  active++;
  let released=false;const release=()=>{if(!released){released=true;active=Math.max(0,active-1)}};
  const controller=new AbortController();
