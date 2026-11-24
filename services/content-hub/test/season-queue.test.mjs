@@ -543,3 +543,39 @@ test('client POST without session budget is still bounded by the controller',asy
   assert.equal(body.code,'owner_episode_browser_playback_not_confirmed');
  }finally{await new Promise(resolve=>hub.server.close(resolve))}
 });
+
+test('season audit reads initialize schema once before querying, even concurrently',async()=>{
+ const calls=[];
+ let ready=false;
+ class FakePool {
+  async query(sql){
+   calls.push(sql);
+   if(sql.startsWith('CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits')){
+    await sleep(5);ready=true;return {rows:[]};
+   }
+   if(sql.includes('FROM blofy_content_hub_season_audits')){
+    assert.equal(ready,true);
+    return {rows:[]};
+   }
+   return {rows:[]};
+  }
+ }
+ const store=createSeasonQueueStore({connectionString:'postgres://fake',Pool:FakePool});
+ assert.deepEqual(await Promise.all([store.recentAudits(),store.unresolvedAuditCounts()]),
+  [[],{mismatch:0,unavailable:0}]);
+ assert.equal(calls.filter(sql=>sql.startsWith('CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits')).length,1);
+});
+test('season audit schema failure is visible and retryable, not an empty safety result',async()=>{
+ let attempts=0;
+ class FakePool {
+  async query(sql){
+   if(sql.startsWith('CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits')&&++attempts===1)
+    throw Error('database_unavailable');
+   return {rows:[]};
+  }
+ }
+ const store=createSeasonQueueStore({connectionString:'postgres://fake',Pool:FakePool});
+ await assert.rejects(store.recentAudits(),/database_unavailable/);
+ assert.deepEqual(await store.recentAudits(),[]);
+ assert.equal(attempts,2);
+});
