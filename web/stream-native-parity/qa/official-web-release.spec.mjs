@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+test.use({channel:'chrome'});
 
 test('official Web 1.0 health, privacy headers and unauthenticated API boundary',async({page,request})=>{
  const health=await request.get('http://127.0.0.1:3000/health');
