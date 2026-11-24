@@ -43,6 +43,8 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.NativeExternalCatalogSession
+import tv.blofy.player.core.identity.ExternalStreamConnectVerifier
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.ui.login.CodeOnlyLoginActivity
 import tv.blofy.player.core.device.DeviceClass
@@ -158,7 +160,8 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (BuildConfig.CODE_ONLY_LOGIN && !StreamCodeSession.isClaimed(this)) {
+        if (BuildConfig.CODE_ONLY_LOGIN && !StreamCodeSession.isClaimed(this) &&
+            !NativeExternalCatalogSession.hasStaged(this)) {
             startActivity(Intent(this, CodeOnlyLoginActivity::class.java))
             finish()
             return
@@ -168,7 +171,7 @@ class HomeActivity : AppCompatActivity() {
         // paint the remote-focusable Home. An in-flight manual refresh may hold a
         // large SQLite transaction: show the sidebar immediately, then load its
         // durable source rows asynchronously. Auth is verified in onResume().
-        if (BuildConfig.CODE_ONLY_LOGIN &&
+        if (BuildConfig.CODE_ONLY_LOGIN && StreamCodeSession.isClaimed(this) &&
             CatalogSyncState.isReady(applicationContext, StreamCodeSession.providerId)) {
             scheduledProviderId = StreamCodeSession.providerId
             CatalogRefreshWorker.scheduleAutomatic(applicationContext, StreamCodeSession.providerId)
@@ -206,7 +209,9 @@ class HomeActivity : AppCompatActivity() {
             }
             try {
                 val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providersStored().first().firstOrNull() }
-                if (provider == null) {
+                if (provider == null || (BuildConfig.CODE_ONLY_LOGIN &&
+                    !StreamCodeSession.isClaimed(this@HomeActivity) &&
+                    NativeExternalCatalogSession.activeId(applicationContext) != provider.id)) {
                     returnToLogin()
                     return@launch
                 }
@@ -312,6 +317,25 @@ class HomeActivity : AppCompatActivity() {
                             finish()
                         }
                     } finally { codeSessionChecking=false }
+                }
+            }
+        }
+        if (BuildConfig.CODE_ONLY_LOGIN && !StreamCodeSession.isClaimed(this) &&
+            NativeExternalCatalogSession.hasStaged(this) && !codeSessionChecking) {
+            val now = SystemClock.elapsedRealtime()
+            if (codeSessionCheckMs == 0L || now - codeSessionCheckMs >= 120_000L) {
+                codeSessionCheckMs = now
+                codeSessionChecking = true
+                lifecycleScope.launch {
+                    try {
+                        val status = NativeExternalCatalogSession.checkActive(applicationContext)
+                        if (status == null || status.status == ExternalStreamConnectVerifier.Status.INACTIVE) {
+                            if (status != null) NativeExternalCatalogSession.signOut(applicationContext)
+                            returnToLogin()
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { returnToLogin() }
+                    finally { codeSessionChecking = false }
                 }
             }
         }
