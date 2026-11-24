@@ -105,10 +105,21 @@
   }
   return {favorites:favorites,watch:watch}
  }
+ function safeCopy(map,watchOnly){
+  // Never Object.assign untrusted localStorage JSON onto {}:
+  // a "__proto__" key must not turn into an object prototype setter.
+  var result=Object.create(null),keys=map&&typeof map==='object'?
+   Object.keys(map):[];
+  for(var i=0;i<keys.length;i++){
+   var key=keys[i];
+   if(validKey(key,watchOnly)&&own(map,key))result[key]=map[key]
+  }
+  return result
+ }
  function merge(favorites,watch,favoriteItems,imported){
-  var f=Object.assign({},favorites||{}),
-   w=Object.assign({},watch||{}),
-   items=Object.assign({},favoriteItems||{}),
+  var f=safeCopy(favorites,false),
+   w=safeCopy(watch,true),
+   items=safeCopy(favoriteItems,false),
    stats={newFavorites:0,newCheckpoints:0,updatedCheckpoints:0,preservedCheckpoints:0};
   var favoriteList=imported.favorites||[],watchList=imported.watch||[];
   for(var i=0;i<favoriteList.length;i++){
