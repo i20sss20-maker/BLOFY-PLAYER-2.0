@@ -36,7 +36,7 @@ export function createBrowserStreamPlayer(video, {
   let generation = 0, timer = null, watch = null, hls = null, tsPlayer = null;
   let current = null, attempts = 0, lastProgressAt = 0, lastTime = 0;
   let abortRefresh = null, disposed = false, intentionalPause = false, seekListener = null;
-  let stableSince = 0, lastObservedTime = 0;
+  let stableSince = 0, lastObservedTime = 0, internalTransition = false;
 
   const status = (state) => onStatus(state);
   // Deliberately do not include URLs, channel names, headers or exception messages.
@@ -57,9 +57,14 @@ export function createBrowserStreamPlayer(video, {
       try { tsPlayer.pause(); tsPlayer.unload(); tsPlayer.detachMediaElement(); tsPlayer.destroy(); } catch {}
       tsPlayer = null;
     }
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
+    internalTransition = true;
+    try {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    } finally {
+      internalTransition = false;
+    }
   }
   function safeMediaUrl(url) {
     if (!origin) throw new Error('known application origin required');
@@ -124,7 +129,7 @@ export function createBrowserStreamPlayer(video, {
     readyToPlay();
   }
   function scheduleRecovery(reason) {
-    if (disposed || !current || intentionalPause || timer !== null || (video.ended && !current.live)) return;
+    if (disposed || !current || intentionalPause || timer !== null || abortRefresh || (video.ended && !current.live)) return;
     diagnostic(reason);
     if (attempts >= maxRetries) { status('playback-unavailable'); return; }
     const version = generation;
@@ -151,6 +156,7 @@ export function createBrowserStreamPlayer(video, {
       if (disposed || version !== generation || !current) return;
       const resume = current.live ? 0 : (video.currentTime || current.resumeAt || 0);
       detach();
+      intentionalPause = false;
       current.url = url;
       installSource(resume);
     }, delay);
@@ -178,7 +184,7 @@ export function createBrowserStreamPlayer(video, {
   listen('stalled', () => { if (current && !intentionalPause) status('buffering'); });
   listen('error', () => scheduleRecovery('media-element-error'));
   listen('ended', () => { if (current && !current.live) status('ended'); else scheduleRecovery('unexpected-live-end'); });
-  listen('pause', () => { if (!video.ended && !video.seeking && current && !video.error && !disposed) intentionalPause = true; });
+  listen('pause', () => { if (!internalTransition && !video.ended && !video.seeking && current && !video.error && !disposed) intentionalPause = true; });
   listen('play', () => { intentionalPause = false; });
   function visibility() {
     if (!globalThis.document?.hidden && current && !video.paused && video.readyState < 3) {
@@ -230,5 +236,11 @@ export function createBrowserStreamPlayer(video, {
     for (const [name, fn] of listeners) video.removeEventListener(name, fn);
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', visibility);
   }
-  return { open, stop, destroy, retry: () => { attempts = 0; intentionalPause = false; scheduleRecovery('manual-retry'); } };
+  function resume() {
+    if (disposed || !current) return false;
+    intentionalPause = false;
+    readyToPlay();
+    return true;
+  }
+  return { open, stop, destroy, resume, retry: () => { attempts = 0; intentionalPause = false; scheduleRecovery('manual-retry'); } };
 }
