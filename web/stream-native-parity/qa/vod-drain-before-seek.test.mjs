@@ -74,6 +74,36 @@ test('distant-seek request kills old FFmpeg once, waits for exit, and only then 
  assert.equal(active,1)
 });
 
+test('unresponsive old FFmpeg is signalled once, escalated once, and never releases its live CPU slot before exit',async()=>{
+ let now=1000;
+ const signals=[],old={kill(signal){signals.push(signal===undefined?'TERM':signal)}};
+ const session={fullVod:true,kind:'movie',id:'11',ext:'mp4',duration:3600,
+  proc:old,dir:'/tmp/synthetic',chunkStart:0,finished:false,released:false,
+  chunkFinishedAt:0,stopped:false};
+ const context={
+  SECRET:'f'.repeat(64),secureEquals:()=>true,
+  hlsSessions:new Map([[stopKey,session]]),vodKey:()=>stopKey,
+  hlsRoot:'/synthetic',FULL_SEGMENT_SECONDS:4,FULL_CHUNK_SEGMENTS:6,
+  MAX_JOBS:2,active:1,Math,Number,Date:{now:()=>now},URL,Response,
+  mkdirSync(){},touchHls(){},join:(...parts)=>parts.join('/'),existsSync:()=>false,
+  json:(code,body)=>({status:code,body}),
+  hlsError:(status,error,retrySeconds)=>({status,error,retrySeconds}),
+  nap:async ms=>{now+=ms},
+  fullVodChunk(){throw Error('cannot spawn while old proc is still alive')}
+ };
+ const respond=vm.runInNewContext(handler+';fullVodRequest',context);
+ const first=await respond(request(),url(48));
+ assert.equal(first.status,503);
+ assert.equal(first.error,'vod_previous_chunk_draining');
+ assert.equal(first.retrySeconds,2);
+ assert.deepEqual(signals,['TERM',9],'SIGKILL escalates once after short grace period');
+ const second=await respond(request(),url(48));
+ assert.equal(second.status,503);
+ assert.deepEqual(signals,['TERM',9],'two HLS requests must not multiply process signals');
+ assert.equal(context.active,1,'the stuck encoder continues reserving its slot');
+ assert.equal(session.chunkStart,0,'do not restart transcoding while old FFmpeg is alive');
+});
+
 test('sequential adjacent chunk never kills a still-encoding FFmpeg',async()=>{
  let time=1000,kills=0,starts=0,available=false,waits=0;
  const proc={kill(){kills++}};
