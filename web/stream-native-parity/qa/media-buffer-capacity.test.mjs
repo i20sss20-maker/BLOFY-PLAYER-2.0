@@ -72,7 +72,7 @@ test('production API forwards ONLY numeric private-worker Retry-After between 1 
   end=server.indexOf('\nfunction noCache(',begin);
  assert.ok(begin>=0&&end>begin);
  const fn=vm.runInNewContext(server.slice(begin,end)+';verifiedWorkerRetryHeaders',{Number});
- const get=x=>fn(new Headers({'retry-after':String(x)}));
+ const get=x=>fn({get:()=>String(x)});
  assert.equal(get('5')['Retry-After'],'5');
  assert.equal(get('30')['Retry-After'],'30');
  for(const invalid of ['0','31','999','3.5','NaN','5\nX-Auth:password','foo']){
