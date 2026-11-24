@@ -2,6 +2,7 @@
 // One operator-approved episode chunk (8 MiB) per worker iteration.
 // PostgreSQL checkpoints + the underlying episode manifest allow safe resume.
 import pg from 'pg';
+import {privateDbPoolOptions} from './private-db-pool-options.mjs';
 import {randomBytes} from 'node:crypto';
 import {episodeCopyReadiness,runOneEpisodeChunk} from './episode-chunk-pilot.mjs';
 import {evaluatePrivateAppTestGate} from './private-test-gate.mjs';
@@ -111,7 +112,7 @@ export function validateSeasonSelection({seasonKey,episodes,candidates}={}){
 export function createSeasonQueueStore({
  connectionString,Pool=pg.Pool}={}){
  if(!connectionString)throw Error('season_queue_database_required');
- const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
+ const pool=new Pool({...privateDbPoolOptions(connectionString),max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:'blofy-season-queue'});
  let initPromise,metricTablePromise,auditTablePromise;
  // Initialize the audit table before reads as well as writes. Single-flight
