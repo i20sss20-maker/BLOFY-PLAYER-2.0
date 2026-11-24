@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {createStreamDistributors,distributorPlanCost} from '../src/stream-distributors.mjs';
 
-function fixture(){
+function fixture({redemption=false}={}){
+ const redemptions=[];
  const distributors=[],sessions=[],issues=[],calls=[],statements=[],actions=[],creditEvents=[];
  const accounts=[],codes=[],events=[];
  const now=new Date('2026-11-12T04:00:00Z');
@@ -41,6 +42,12 @@ function fixture(){
    creditEvents.push({id:args[0],distributor_id:args[1],issue_id:issueId,
     type,delta,balance_after:balance,details:args[5]?JSON.parse(args[5]):{},created_at:now});
    return {rows:[]};
+  }
+  if(sql.includes('AS spent_quarters'))return {rows:[{spent_quarters:redemptions.filter(x=>x.distributor_id===args[0]).reduce((n,x)=>n+x.quarters,0)}]};
+  if(sql.includes('SELECT * FROM blofy_stream_distributor_reward_redemptions'))return {rows:redemptions.filter(x=>x.distributor_id===args[0]&&x.request_id===args[1])};
+  if(sql.includes('INSERT INTO blofy_stream_distributor_reward_redemptions')){
+   const [id,distributor_id,request_id,quarters,credits,balance_after]=args;
+   redemptions.push({id,distributor_id,request_id,quarters,credits,balance_after});return {rows:[]};
   }
   if(sql.includes('AS reward_quarters')){
    const start=new Date(args[1]);
@@ -287,7 +294,7 @@ function fixture(){
  }
  const pool={query,async connect(){return {query,release(){}}}};
  const manager=createStreamDistributors({pool,clock:()=>now.getTime(),
-   trialKeyHex:'9'.repeat(64),rewardsStart:'2026-11-12T00:00:00Z',
+   trialKeyHex:'9'.repeat(64),rewardsStart:'2026-11-12T00:00:00Z',rewardsRedemptionEnabled:redemption,
    linkCodeToXtream:async code=>{
      if(code!==issuedToken||!codes[0].redeemed_at)return {status:409,body:{ok:false}};
      return {status:200,body:{ok:true,codeId,accountId,subscriptionUnchanged:true,credentials:{...credential},expiresAt:accounts[0].expires_at.getTime()}};
@@ -718,4 +725,22 @@ test('one owned activated code reveals both access methods without changing wall
  assert.equal(dual.code,issued.code);assert.equal(dual.dualAccess,true);assert.equal(dual.credentials.username,'reseller_generated');
  assert.equal(f.distributors[0].credits,0);assert.equal(f.issues.length,1);
  assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,2);
+});
+
+test('reward redemption is opt-in, scoped and idempotent; never creates credits twice',async()=>{
+ const f=fixture({redemption:true}),a=await f.manager.createAdmin({name:'Reward A',username:'reward-a',credits:12}),b=await f.manager.createAdmin({name:'Reward B',username:'reward-b',credits:0});
+ const ta=(await f.manager.login({username:'reward-a',password:a.password})).token,tb=(await f.manager.login({username:'reward-b',password:b.password})).token;
+ await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ const req=crypto.randomUUID();
+ await assert.rejects(f.manager.redeemRewards(tb,{credits:1,requestId:req}),/distributor_rewards_insufficient/);
+ const r=await f.manager.redeemRewards(ta,{credits:2,requestId:req});
+ assert.equal(r.pointsUsed,2);assert.equal(r.balanceAfter,2);
+ assert.equal((await f.manager.redeemRewards(ta,{credits:2,requestId:req})).repeated,true);
+ assert.equal(f.distributors[0].credits,2);
+ await assert.rejects(f.manager.redeemRewards(ta,{credits:1,requestId:req}),/distributor_request_conflict/);
+ await assert.rejects(f.manager.redeemRewards(ta,{credits:1,requestId:crypto.randomUUID()}),/distributor_rewards_insufficient/);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsAvailable,0);
+ const off=fixture(),made=await off.manager.createAdmin({name:'Off',username:'reward-off',credits:12});
+ const t=(await off.manager.login({username:'reward-off',password:made.password})).token;
+ await assert.rejects(off.manager.redeemRewards(t,{credits:1,requestId:crypto.randomUUID()}),/distributor_rewards_redemption_disabled/);
 });
