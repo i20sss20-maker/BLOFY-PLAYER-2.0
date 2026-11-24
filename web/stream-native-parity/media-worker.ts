@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {allowedSingleViewerLiveTsContinuity,liveTsSameSourceContinuity}
  from './live-source-continuity.mjs';
+import {streamMediaFile} from './stream-media-file.mjs';
 const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
@@ -522,7 +523,7 @@ async function hlsRequest(req,url){
    if(wait>0)return hlsError(503,'hls_origin_backoff',Math.ceil(wait/1000))
   }
   const start=liveShareAllowed(kind,viewerSid)?await startSharedLiveViewer(args):await startHls(args);
-  if(start.error)return hlsError(start.status,start.error);
+  if(start.error)return hlsError(start.status,start.error,start.status===429?5:0);
   sess=start.session
  }
  // Aliases have their own auth/SID and idle timer; only the producer owns
@@ -562,11 +563,19 @@ async function hlsRequest(req,url){
   return hlsError(503,'hls_source_stalled');
  }
  try{
-  const data=readFileSync(join(owner.dir,filename));
+  const path=join(owner.dir,filename),playlist=filename==='index.m3u8';
+  const statusHeaders={'X-Blofy-Video-Mode':owner.videoMode||'unknown',
+   'X-Blofy-Source-Resolution':owner.sourceDimensions||'unknown'};
+  if(!playlist){
+   const streamed=await streamMediaFile(path,'video/mp2t','no-store, private',statusHeaders);
+   return streamed||hlsError(503,'hls_segment_unavailable')
+  }
+  const data=readFileSync(path);
   if(!data.length)return hlsError(503,'hls_file_empty');
-  const playlist=filename==='index.m3u8';
-  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','X-Blofy-Video-Mode':owner.videoMode||'unknown','X-Blofy-Source-Resolution':owner.sourceDimensions||'unknown'};
-  return new Response(data,{status:200,headers});
+  return new Response(data,{status:200,headers:{
+   'Content-Type':'application/vnd.apple.mpegurl','Cache-Control':'no-store, private',
+   'X-Content-Type-Options':'nosniff',...statusHeaders
+  }})
  }catch{return hlsError(502,'hls_read_failed')}
 }
 
@@ -695,7 +704,7 @@ async function vodRequest(req,url){
   stopHls(sess,'vod_retry_after_interruption');sess=null
  }
  if(!sess&&file!=='index.m3u8'&&file!=='meta')return json(410,{error:'vod_session_expired'});
- if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return json(created.status||502,{error:created.error});sess=created.session}
+ if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return created.status===429?hlsError(429,created.error,5):json(created.status||502,{error:created.error});sess=created.session}
  touchHls(sess);
  if(file==='meta'){
   const until=Date.now()+6500;
@@ -715,8 +724,16 @@ async function vodRequest(req,url){
   if(first&&!existsSync(join(sess.dir,first)))return json(503,{error:'vod_playlist_not_ready'});
  }
  try{
-  const content=readFileSync(join(sess.dir,file));
-  return new Response(content,{status:200,headers:{'Content-Type':file.endsWith('.m3u8')?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'}})
+  const path=join(sess.dir,file);
+  if(file.endsWith('.ts')){
+   const streamed=await streamMediaFile(path,'video/mp2t','no-store, private');
+   return streamed||json(503,{error:'vod_segment_unavailable'})
+  }
+  const content=readFileSync(path);
+  return new Response(content,{status:200,headers:{
+   'Content-Type':'application/vnd.apple.mpegurl',
+   'Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'
+  }})
  }catch{return json(502,{error:'vod_segment_unavailable'})}
 }
 
@@ -926,7 +943,7 @@ async function fullVodRequest(req,url){
    if(session.chunkStart!==first||session.finished){
     if(req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
     const started=fullVodChunk(session,first);
-    if(started.error)return json(started.status||502,{error:started.error})
+    if(started.error)return started.status===429?hlsError(429,started.error,5):json(started.status||502,{error:started.error})
    }
   }
   const until=Date.now()+28000;
@@ -949,9 +966,8 @@ async function fullVodRequest(req,url){
   session.prefetchNext=nextChunk;
   if(session.finished)scheduleFullVodPrefetch(session,loadedChunk)
  }
- try{return new Response(readFileSync(filename),{status:200,
-  headers:{'Content-Type':'video/mp2t','Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'}})}
- catch{return json(502,{error:'vod_segment_read_failed'})}
+ const response=await streamMediaFile(filename,'video/mp2t','private, max-age=3600');
+ return response||json(503,{error:'vod_segment_unavailable'})
 }
 
 
