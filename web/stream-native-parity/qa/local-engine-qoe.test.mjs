@@ -56,7 +56,11 @@ test('no fabricated per-engine gap for paused/hidden/sleeping/preview playback',
 test('channel switch clears current channel QoE metrics while leaving engine routing intact',()=>{
  assert.match(app,/state\.stats\.visualOutageByEngine=\{hls:\{count:0,ms:0\},mpegts:\{count:0,ms:0\}\}/);
  assert.match(app,/state\.stats\.visualOutageCount=0;state\.stats\.visualOutageMs=0/);
- assert.match(app,/توقف الصورة حسب المحرك/);
+ assert.match(app,/الانقطاعات حسب المحرك/);
+ assert.match(app,/if\(isLive\)\{\s*var byEngine=st\.visualOutageByEngine/,
+  'QoE health cards are shown for live streams, not VOD');
+ assert.match(app,/state\.mode==='direct'\?'MP4 أصلي'/,
+  'VOD diagnostics retain direct MP4 engine labels');
  assert.match(app,/حسب المحرك: HLS/);
  assert.match(app,/محرك التشغيل الحالي/);
 });
