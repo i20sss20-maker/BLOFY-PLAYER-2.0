@@ -656,3 +656,37 @@ html.blofy-tv-immersive,body.blofy-tv-immersive{
 @media (pointer:coarse){
  .btn,.rail-link,.chip,.channel-item,.episode-row{touch-action:manipulation}
 }
+
+
+/* BLOFY adaptive input styles. Selection is client-only and never changes
+ * playback engine, streams, account or the TV's DPAD button semantics. */
+html[data-blofy-input="remote"] button:focus,
+html[data-blofy-input="remote"] [tabindex]:focus,
+html[data-blofy-input="remote"] .remote-focus{
+ outline:3px solid #d7fff3!important;
+ outline-offset:3px;
+ box-shadow:0 0 0 6px #2dbea861,0 6px 23px #0008
+}
+html[data-blofy-device="tv"] .rail-link,
+html[data-blofy-device="tv"] .btn,
+html[data-blofy-device="tv"] .cat-item,
+html[data-blofy-device="tv"] .channel-item{min-height:44px}
+html[data-blofy-device="touch"] button,
+html[data-blofy-device="touch"] .btn,
+html[data-blofy-device="touch"] .chip,
+html[data-blofy-device="touch"] .rail-link{
+ touch-action:manipulation
+}
+html[data-blofy-device="touch"] .settings-grid button{min-height:44px}
+html[data-blofy-device="touch"] .rail-link:active,
+html[data-blofy-device="touch"] .btn:active{
+ background-color:#185c67
+}
+#device-experience-result{line-height:1.8;overflow-wrap:anywhere}
+@media(max-width:730px){
+ html[data-blofy-device="touch"] .rail-link{min-height:44px}
+ html[data-blofy-device="touch"] .workspace{overscroll-behavior:contain}
+}
+@media(prefers-reduced-motion:reduce){
+ html[data-blofy-device="tv"] .remote-focus{transition:none}
+}
