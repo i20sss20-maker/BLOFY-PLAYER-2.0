@@ -13,6 +13,14 @@ class ExternalStreamConnectCatalogTest {
         val target=ExternalStreamConnectCatalog.playback(credentials,item)
         assertFalse(target.uri.contains("p%3Fss"))
         assertFalse(target.uri.contains("a%2Fb"))
+        assertFalse(target.uri.contains("provider.example.com"))
+        assertTrue(target.uri.startsWith("https://external-xtream.invalid/"))
+        assertEquals("https://provider.example.com:8443/movie/a%2Fb/p%3Fss%23word/321.mkv",
+            ExternalStreamConnectCatalog.mediaUrl(credentials,
+                ExternalStreamConnectCatalog.Item("321","Movie",ExternalStreamConnectCatalog.Kind.MOVIE,"mkv")).toString())
+        assertEquals("https://provider.example.com:8443/series/a%2Fb/p%3Fss%23word/456.mp4",
+            ExternalStreamConnectCatalog.mediaUrl(credentials,
+                ExternalStreamConnectCatalog.Item("456","Episode",ExternalStreamConnectCatalog.Kind.EPISODE,"mp4")).toString())
         assertFalse(target.client.followRedirects)
         assertFalse(target.client.followSslRedirects)
     }
