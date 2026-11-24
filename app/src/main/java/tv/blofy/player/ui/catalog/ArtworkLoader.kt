@@ -421,7 +421,9 @@ object ArtworkLoader {
             .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
             .header("Accept", "image/webp,image/jpeg,image/png,image/gif;q=0.8")
             .build()
-        val call = client.newCall(request)
+        val artworkClient = if (tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(download.url) != null)
+            tv.blofy.player.data.remote.ExternalArtworkPolicy.client else client
+        val call = artworkClient.newCall(request)
         download.call = call
         if (download.future.isCancelled) { call.cancel(); return null }
         // OkHttp already retries recoverable connection failures. Do not repeat 404s,
