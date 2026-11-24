@@ -400,3 +400,32 @@ test('clean TS EOF uses a shorter first retry without weakening other retries',a
  await iter.return();
  assert.equal(waits[0].firstAttemptBaseMs,300);
 });
+
+test('explicit TS empty EOF during recovery gets one bounded retry',async()=>{
+ const initial=response(),reader=initial.body.getReader(),first=(await reader.read()).value;
+ let calls=0;
+ const iter=liveTsRecoveryBytes({first,reader,controller:new AbortController(),
+  target:url,waitRetry:immediately,fetchImpl:async()=>{
+   calls++;
+   return calls===1?new Response(new ReadableStream({start(c){c.close();}}),
+    {headers:{'content-type':'video/mp2t'}}):response();
+  }});
+ assert.deepEqual((await iter.next()).value,ts());
+ assert.deepEqual((await iter.next()).value,ts());
+ assert.equal(calls,2);
+ await iter.return();
+});
+test('empty unknown MIME remains terminal; empty TS retries remain capped',async()=>{
+ for(const mime of ['text/html','video/mp2t']){
+  const initial=response(),reader=initial.body.getReader(),first=(await reader.read()).value;
+  let calls=0;
+  const iter=liveTsRecoveryBytes({first,reader,controller:new AbortController(),
+   target:url,waitRetry:immediately,fetchImpl:async()=>{
+    calls++;
+    return new Response(new ReadableStream({start(c){c.close();}}),{headers:{'content-type':mime}});
+   }});
+  await iter.next();
+  await assert.rejects(()=>iter.next(),mime==='video/mp2t'?/live_ts_reconnect_exhausted/:/live_ts_reconnect_denied/);
+  assert.equal(calls,mime==='video/mp2t'?2:1);
+ }
+});
