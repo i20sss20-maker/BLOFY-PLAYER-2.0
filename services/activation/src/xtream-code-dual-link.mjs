@@ -1,3 +1,4 @@
+import {conflictsWithConnect} from './stream-code-namespace.mjs';
 // BLOFY STREAM: operator-only, bidirectional access to ONE existing subscription.
 // Voucher -> BLOFY-issued Xtream credentials and Xtream account -> SAME voucher.
 // No upstream provider credentials, no duplicate subscriptions, no renewal.
@@ -164,6 +165,7 @@ export function createStreamCodeXtreamLink({pool,keyHex,clock=Date.now,
       let created=null;
       for(let tries=0;tries<16;tries++){
         const code=randomNumericStreamCode(digits,randomBytes);
+        if(await conflictsWithConnect(db,code))continue;
         const id=uuid(),proof=streamCodeProof(code,keyHex);
         const row=(await db.query(`INSERT INTO blofy_xtream_gateway_duration_codes
           (id,code_hash,code_hint,label,source_id,duration_days,max_connections,
