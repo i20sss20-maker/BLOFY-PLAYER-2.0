@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
- watch:{},favoriteItems:{},lastPlaybackDiag:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
+ watch:{},favoriteItems:{},lastPlaybackDiag:null,lastLongPlaybackTest:null,profileKey:'',accountEpoch:0,epgToken:0,epgTimer:null,epgCache:{},host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var browserDepth=0,handlingBrowserPop=false;
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
@@ -25,6 +25,7 @@ function useProfile(id){
  S.favoriteItems=readJson(profileStorageKey('favoriteItems'),{});
  S.recentSearches=readJson(profileStorageKey('recentSearches'),[]);
  S.lastPlaybackDiag=readJson(profileStorageKey('lastPlaybackDiag'),null);
+ S.lastLongPlaybackTest=readJson(profileStorageKey('lastLongPlaybackTest'),null);
  if(changed){
   if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
   S.epgToken++;S.epgCache={};
@@ -78,7 +79,7 @@ function deviceKey(){
 function login(message){
  S.accountEpoch++;
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
- S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;
+ S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
@@ -1128,6 +1129,10 @@ function settingsScreen(){
  '<section class="setting-panel"><h3>آخر اختبار مشاهدة فعلي</h3><p id="last-playback-diagnostic" role="status" aria-live="polite">'+esc(diagText)+'</p>'+
   '<button class="btn secondary" id="clear-playback-diagnostic">مسح بيانات التشخيص</button>'+
   '<p class="small muted">إحصاءات من المشاهدة داخل هذا المتصفح فقط؛ ليست اختبارًا لكل مصادر Xtream. لا نحفظ بيانات الاشتراك أو رابط المصدر.</p></section>'+
+ '<section class="setting-panel"><h3>اختبار جودة حقيقي لمدة 20 دقيقة</h3><p>شغّل قناة أو فيلمًا على جهازك، ثم من خيارات المشغّل اختر «بدء اختبار 20 دقيقة». يراقب المشغل الصورة والانقطاع دون اتصال إضافي بالمصدر. النتيجة لا تثبت جودة الصوت أو توافق كل القنوات.</p>'+
+ '<p id="last-long-playback-test" role="status" aria-live="polite">'+esc(S.lastLongPlaybackTest&&window.BlofyPlaybackAcceptance?
+   window.BlofyPlaybackAcceptance.message(S.lastLongPlaybackTest):'لم يكتمل اختبار مستمر لمدة 20 دقيقة على هذا الجهاز.')+'</p>'+
+ '<p class="small muted">النتيجة محلية لهذا الاشتراك والمتصفح، ولا تحتوي بيانات أكواد أو روابط أو معرفات للقنوات. يجب اختبار الصوت يدويًا.</p></section>'+
  '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
   '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
   '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
@@ -1425,6 +1430,7 @@ function stopPlayback(sendStop){
 }
 function cleanupPlayer(){
  if(S.playerView){
+  if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
@@ -2432,6 +2438,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
 
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
  (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button>':'')+
+ '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
+ '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -2447,6 +2455,78 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,liveEvents:[],
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
+ // The 20-minute acceptance uses existing decoded-frame and source health
+ // observations. It never opens a new media, catalog or telemetry request.
+ // Monotonic time avoids TV system-clock/date problems.
+ var acceptance=window.BlofyPlaybackAcceptance||null,
+  verifyButton=document.getElementById('player-verify-20m'),
+  verifyStatus=document.getElementById('player-verify-status');
+ function acceptanceClock(){
+  return window.performance&&typeof window.performance.now==='function'?
+   window.performance.now():Date.now()
+ }
+ function acceptanceSnapshot(){
+  var frames=null,rec=S.play&&S.play.video===video?S.play:null,quality=null;
+  try{quality=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality()}catch(e){}
+  if(quality&&isFinite(Number(quality.totalVideoFrames))&&Number(quality.totalVideoFrames)>0)
+   frames=Number(quality.totalVideoFrames);
+  var presented=rec&&rec.framePresentationObserved?Number(rec.presentedFrames)||0:null;
+  var bufferMs=(state.stats.bufferMs||0)+(state.stats.bufferSince?
+   Math.max(0,Date.now()-state.stats.bufferSince):0);
+  return {
+   at:acceptanceClock(),playing:!video.paused&&!video.ended&&video.readyState>=2,
+   hidden:document.hidden===true,width:Number(video.videoWidth)||0,height:Number(video.videoHeight)||0,
+   frames:frames,presented:presented,time:video.currentTime,
+   errors:state.stats.errors||0,recoveries:state.stats.recoveries||0,bufferMs:bufferMs
+  }
+ }
+ function acceptanceFinish(result){
+  if(!result||!state.longTest)return;
+  if(state.longTestTimer){clearInterval(state.longTestTimer);state.longTestTimer=null}
+  state.longTest=null;
+  if(verifyButton)verifyButton.textContent='◷ بدء اختبار 20 دقيقة';
+  var saved={kind:result.kind,status:result.status,reason:result.reason,
+   elapsedSeconds:result.elapsedSeconds,videoFramesObserved:result.videoFramesObserved,
+   timeProgressObserved:result.timeProgressObserved,bufferingSeconds:result.bufferingSeconds,
+   samples:result.samples,finishedAt:Date.now()};
+  S.lastLongPlaybackTest=saved;profileSave('lastLongPlaybackTest',saved);
+  var msg=acceptance?acceptance.message(result):'اكتمل الاختبار';
+  if(verifyStatus)verifyStatus.textContent=msg;
+  if(S.route==='player'&&S.playerView===state)playerStatus(msg,result.status==='failed')
+ }
+ function sampleAcceptance(){
+  if(!state.longTest||!acceptance)return;
+  if(S.route!=='player'||S.playerView!==state||!video.isConnected){
+   acceptanceFinish(acceptance.stop(state.longTest,acceptanceClock()));return
+  }
+  var result=acceptance.tick(state.longTest,acceptanceSnapshot());
+  if(result){acceptanceFinish(result);return}
+  var seconds=Math.max(0,Math.round((acceptanceClock()-state.longTest.startedAt)/1000));
+  if(verifyStatus)verifyStatus.textContent='جار فحص تشغيل الصورة: '+formatTime(seconds)+
+   ' من 00:20:00 • بدون طلبات فيديو إضافية. يمكن إيقاف الفحص من الزر نفسه.'
+ }
+ state.stopLongTest=function(){
+  if(!state.longTest||!acceptance)return;
+  acceptanceFinish(acceptance.stop(state.longTest,acceptanceClock()))
+ };
+ if(verifyButton)verifyButton.onclick=function(){
+  if(state.longTest){state.stopLongTest();return}
+  if(!acceptance||!S.userVerified||S.route!=='player'||S.playerView!==state){
+   if(verifyStatus)verifyStatus.textContent='الفحص غير متاح لهذا المشغل.';return
+  }
+  try{
+   var now=acceptanceClock(),snap=acceptanceSnapshot();
+   if(!state.ready||!snap.playing||!snap.width||!snap.height)
+    throw Error('not_ready');
+   state.longTest=acceptance.init(kind,now,snap);
+   verifyButton.textContent='■ إنهاء اختبار 20 دقيقة';
+   if(verifyStatus)verifyStatus.textContent='بدأ فحص الصورة المستمر. حافظ على تشغيل القناة وعدم إخفاء الصفحة لمدة 20 دقيقة.';
+   state.longTestTimer=setInterval(sampleAcceptance,2000);
+   sampleAcceptance()
+  }catch(e){
+   if(verifyStatus)verifyStatus.textContent='ابدأ تشغيل الفيديو حتى تظهر الصورة أولًا، ثم شغّل اختبار 20 دقيقة.'
+  }
+ };
  var toggle=document.getElementById('player-toggle');
  function syncToggle(){
   if(!toggle)return;
