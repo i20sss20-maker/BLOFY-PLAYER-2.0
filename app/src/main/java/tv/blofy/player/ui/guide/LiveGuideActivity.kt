@@ -45,7 +45,6 @@ import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
-import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
@@ -368,7 +367,7 @@ class LiveGuideActivity : AppCompatActivity() {
             if (epg.isEmpty() && !provider.providerType.equals("m3u", true)) {
                 epgRefreshJob?.cancel()
                 epgRefreshJob = lifecycleScope.launch {
-                    runCatching { PlaylistManager(XtreamClient.api, dao).syncShortEpg(provider, stream.remoteId) }
+                    runCatching { PlaylistManager.forProvider(applicationContext, provider, dao).syncShortEpg(provider, stream.remoteId) }
                 }
                 epgRefreshJob?.join()
                 if (selectedStream?.key != stream.key) return@launch
