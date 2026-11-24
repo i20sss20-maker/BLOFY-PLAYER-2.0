@@ -176,7 +176,7 @@ class PlaylistManager(
                         categoryId = row.id("category_id"),
                         kind = "live",
                         name = row.string("name") ?: "Channel $id",
-                        icon = if (externalCatalog) null else row.string("stream_icon"),
+                        icon = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("stream_icon")) else row.string("stream_icon"),
                         directSource = if (externalCatalog) null else row.string("direct_source"),
                         epgChannelId = row.string("epg_channel_id"),
                         streamType = row.string("stream_type"),
@@ -242,7 +242,7 @@ class PlaylistManager(
             categoryId = row.id("category_id"),
             kind = "movie",
             name = row.string("name") ?: "Movie $id",
-            icon = if (externalCatalog) null else row.string("stream_icon"),
+            icon = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("stream_icon")) else row.string("stream_icon"),
             extension = row.string("container_extension") ?: "mp4",
             directSource = if (externalCatalog) null else row.string("direct_source"),
             addedAt = row.string("added")?.toLongOrNull(),
@@ -252,7 +252,7 @@ class PlaylistManager(
             year = row.string("year"),
             rating = row.string("rating") ?: row.string("rating_5based"),
             duration = row.string("duration"),
-            backdrop = if (externalCatalog) null else backdrop?.takeIf { it.isNotBlank() && it != "null" },
+            backdrop = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(backdrop) else backdrop?.takeIf { it.isNotBlank() && it != "null" },
             favorite = false,
             locked = false
         )
@@ -295,7 +295,7 @@ class PlaylistManager(
                         categoryId = row.id("category_id"),
                         kind = "series",
                         name = row.string("name") ?: "Series $id",
-                        icon = if (externalCatalog) null else row.string("cover") ?: row.string("stream_icon"),
+                        icon = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("cover")) ?: tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("stream_icon")) else row.string("cover") ?: row.string("stream_icon"),
                         addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
                         plot = row.string("plot") ?: row.string("description"),
                         genre = row.string("genre"),
@@ -303,7 +303,7 @@ class PlaylistManager(
                         year = row.string("year"),
                         rating = row.string("rating") ?: row.string("rating_5based"),
                         duration = row.string("episode_run_time") ?: row.string("duration"),
-                        backdrop = if (externalCatalog) null else backdrop?.takeIf { it.isNotBlank() && it != "null" },
+                        backdrop = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(backdrop) else backdrop?.takeIf { it.isNotBlank() && it != "null" },
                         favorite = false,
                         locked = false
                     )
