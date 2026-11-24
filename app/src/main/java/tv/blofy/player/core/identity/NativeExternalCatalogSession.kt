@@ -23,9 +23,13 @@ import java.util.UUID
 internal object NativeExternalCatalogSession {
     private val gate = Mutex()
 
-    // Never allow this end-to-end candidate in the production application ID.
+    // QA and explicitly opted-in website STREAM releases only. PLAYER and
+    // ordinary builds keep their existing activation behavior.
     fun qaEnabled(context: Context): Boolean =
-        tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN && context.packageName.endsWith(".stream.qa")
+        tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN &&
+            (context.packageName == "tv.blofy.player.v2.stream.qa" ||
+                (tv.blofy.player.BuildConfig.UNIFIED_STREAM_RELEASE &&
+                    context.packageName == "tv.blofy.player.v2.stream"))
 
     fun hasStaged(context: Context): Boolean =
         qaEnabled(context) && context.getSharedPreferences("blofy_connect_profile", Context.MODE_PRIVATE)
