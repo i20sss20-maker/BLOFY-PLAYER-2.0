@@ -1732,6 +1732,13 @@ function countVisualOutage(record,video,now){
  stats.visualOutageCount=(stats.visualOutageCount||0)+1;
  stats.visualOutageMs=(stats.visualOutageMs||0)+gap;
  stats.longestVisualOutageMs=Math.max(stats.longestVisualOutageMs||0,gap);
+ // Per-engine counters remain aggregated only in this local player session;
+ // never send URLs, credentials, channel IDs, or playback events to servers.
+ var engineName=record.mode==='mpegts'?'mpegts':'hls';
+ if(!stats.visualOutageByEngine)stats.visualOutageByEngine={hls:{count:0,ms:0},mpegts:{count:0,ms:0}};
+ if(!stats.visualOutageByEngine[engineName])stats.visualOutageByEngine[engineName]={count:0,ms:0};
+ var bucket=stats.visualOutageByEngine[engineName];
+ bucket.count=(bucket.count||0)+1;bucket.ms=(bucket.ms||0)+gap;
  record.visualOutageReported=true;
  return true
 }
@@ -2889,6 +2896,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,liveEvents:[],
     visualOutageCount:0,visualOutageMs:0,longestVisualOutageMs:0,
+    visualOutageByEngine:{hls:{count:0,ms:0},mpegts:{count:0,ms:0}},
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
  // The 20-minute acceptance uses existing decoded-frame and source health
  // observations. It never opens a new media, catalog or telemetry request.
@@ -3069,6 +3077,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['مسار الصورة',videoPath],
    ['زمن تشغيل الجلسة',uptime],
    ['انتظارات التخزين',(st.bufferEvents||0)+' مرة / '+Math.round(buffering/1000)+' ثانية'],
+   ['توقف الصورة المرصود',(st.visualOutageCount||0)+' مرة / '+Math.round((st.visualOutageMs||0)/1000)+' ثانية'],
+   ['أطول توقف للصورة',Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية'],
+   ['محرك التشغيل الحالي',state.mode==='mpegts'?'MPEG-TS مباشر':S.play&&S.play.video===video&&S.play.engine?'HLS.js':'HLS أصلي'],
    ['إطارات ساقطة',dropped===null?'غير متاح':dropped+(droppedPct?' / '+droppedPct:'')],
    ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
    ['سرعة شبكة مقدّرة',bitrate],
@@ -3076,7 +3087,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['آخر إطار معروض',lastPresented],
    ['بدء الصورة',startup===null?'لم يؤكد الجهاز أول إطار':(startup/1000).toFixed(1)+' ثانية • '+(st.firstFrameBasis==='presented'?'معروض':'مفكوك')],
    ['أخطاء المشغل',String(st.errors||0)],
-   ['استعادات تلقائية',String(st.recoveries||0)]
+   ['استعادات تلقائية',String(st.recoveries||0)],
+   ['توقف الصورة حسب المحرك',
+    'HLS '+(((st.visualOutageByEngine||{}).hls||{}).count||0)+' / MPEG-TS '+(((st.visualOutageByEngine||{}).mpegts||{}).count||0)]
   ];
   box.innerHTML='<div class="playback-health-head"><strong>مراقبة جودة BLOFY المباشرة</strong>'+
    '<small>'+esc(status4k)+' • قياسات حقيقية وليست اسم القناة</small></div>'+
@@ -3114,7 +3127,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    'دقة الفيديو المعروضة: '+(w&&h?w+'×'+h:'غير متوفرة'),
    'دقة المصدر: '+(r&&r.sourceDimensions||'غير متوفرة'),
    'المعالجة: '+mode,
-   'محرك التشغيل: '+(r&&r.engine?'HLS.js':'تشغيل الجهاز الأصلي'),
+   'محرك التشغيل: '+(state.mode==='mpegts'?'MPEG-TS مباشر':r&&r.engine?'HLS.js':'HLS أصلي على الجهاز'),
    'آخر مقطع HLS: '+(r&&r.engine?(ms===null?'غير مرصود':Math.round(ms/1000)+' ثانية'):'غير متوفر في المحرك الأصلي'),
    'آخر تقدم للصورة: '+(idle===null?'غير مرصود':Math.round(idle/1000)+' ثانية'),
    'آخر إطار معروض على الشاشة: '+(r&&r.framePresentationObserved?Math.round((now-r.lastPresentedFrameAt)/1000)+' ثانية':'غير مدعوم'),
@@ -3126,6 +3139,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    'فترات غياب تقدم الصورة المرصودة: '+(st.visualOutageCount||0)+
      ' • مجموعها التقريبي: '+Math.round((st.visualOutageMs||0)/1000)+' ثانية'+
      ' • الأطول: '+Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية',
+   'حسب المحرك: HLS '+(((st.visualOutageByEngine||{}).hls||{}).count||0)+
+     ' مرة / '+Math.round(((((st.visualOutageByEngine||{}).hls||{}).ms)||0)/1000)+' ثانية'+
+     ' • MPEG-TS '+(((st.visualOutageByEngine||{}).mpegts||{}).count||0)+
+     ' مرة / '+Math.round(((((st.visualOutageByEngine||{}).mpegts||{}).ms)||0)/1000)+' ثانية',
    'آخر أحداث البث (وقت UTC):'+(st.liveEvents&&st.liveEvents.length?
     st.liveEvents.slice(-6).map(function(item){
      var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
@@ -4011,7 +4028,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
-   if(state.stats){state.pictureObservationAllowed=false;state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();recordLiveIncident('channel_switch')}
+   if(state.stats){state.pictureObservationAllowed=false;state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();
+    // Do not report the previous channel's frozen frames as this channel's QoE.
+    state.stats.visualOutageCount=0;state.stats.visualOutageMs=0;state.stats.longestVisualOutageMs=0;
+    state.stats.visualOutageByEngine={hls:{count:0,ms:0},mpegts:{count:0,ms:0}};
+    recordLiveIncident('channel_switch')}
    if(state.refreshFavoriteButton)state.refreshFavoriteButton();
    var qualityPath=document.getElementById('player-source-mode');if(qualityPath)qualityPath.hidden=true;
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
