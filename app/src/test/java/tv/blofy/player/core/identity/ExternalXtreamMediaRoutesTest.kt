@@ -52,6 +52,16 @@ class ExternalXtreamMediaRoutesTest {
         assertThrows(IOException::class.java) { routes.resolve("https://external-xtream.invalid/unknown".toHttpUrl()) }
     }
 
+    @Test fun providerDirectedPublicAddressMediaRedirectsAreAllowedWithoutOpeningPrivateNetworks() {
+        val routes = ExternalXtreamMediaRoutes(origin, providerDirectedCdn = true)
+        assertEquals("8.8.8.8", routes.redirect(manifest, "https://8.8.8.8:8443/media.ts").host)
+        for (target in listOf("https://127.0.0.1/live.ts", "https://10.0.0.1/live.ts",
+            "https://169.254.169.254/live.ts", "https://[::1]/live.ts",
+            "http://8.8.8.8/live.ts", "https://192.168.1.1/live.ts")) {
+            assertThrows(IOException::class.java) { routes.redirect(manifest,target) }
+        }
+    }
+
     @Test fun liveRouteProvidesHlsFallbackButVodDoesNot() {
         val credentials = ExternalStreamConnectClient.Credentials(origin, "user", "pass")
         val live = ExternalStreamConnectCatalog.playback(credentials,
