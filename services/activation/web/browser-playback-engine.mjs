@@ -35,7 +35,7 @@ export function createBrowserStreamPlayer(video, {
   const listeners = [];
   let generation = 0, timer = null, watch = null, hls = null, tsPlayer = null;
   let current = null, attempts = 0, lastProgressAt = 0, lastTime = 0;
-  let abortRefresh = null, disposed = false, intentionalPause = false;
+  let abortRefresh = null, disposed = false, intentionalPause = false, seekListener = null;
 
   const status = (state) => onStatus(state);
   // Deliberately do not include URLs, channel names, headers or exception messages.
@@ -46,7 +46,10 @@ export function createBrowserStreamPlayer(video, {
     timer = watch = null;
   }
   function detach() {
-    clearTimers();
+    // Preserve the recurring stall watchdog during reconnect. Only open/stop
+    // should remove it; otherwise later stalls will never be detected.
+    if (timer !== null) { clearTimeout(timer); timer = null; }
+    if (seekListener) { video.removeEventListener('loadedmetadata', seekListener); seekListener = null; }
     if (abortRefresh) { abortRefresh.abort(); abortRefresh = null; }
     if (hls) { try { hls.destroy(); } catch {} hls = null; }
     if (tsPlayer) {
@@ -67,7 +70,9 @@ export function createBrowserStreamPlayer(video, {
     return parsed.href;
   }
   function readyToPlay() {
-    const promise = video.play();
+    let promise;
+    try { promise = video.play(); }
+    catch { scheduleRecovery('play-threw'); return; }
     if (promise?.catch) promise.catch((error) => {
       if (error?.name === 'NotAllowedError') { status('tap-to-play'); diagnostic('autoplay-blocked'); }
       else if (error?.name !== 'AbortError') scheduleRecovery('play-rejected');
@@ -103,11 +108,13 @@ export function createBrowserStreamPlayer(video, {
       tsPlayer.load();
     }
     if (!current.live && startAt > 0) {
-      const seek = () => {
-        video.removeEventListener('loadedmetadata', seek);
-        if (Number.isFinite(video.duration) && startAt < video.duration) video.currentTime = startAt;
+      seekListener = () => {
+        const position = startAt;
+        video.removeEventListener('loadedmetadata', seekListener);
+        seekListener = null;
+        if (Number.isFinite(video.duration) && position < video.duration) video.currentTime = position;
       };
-      video.addEventListener('loadedmetadata', seek, { once: true });
+      video.addEventListener('loadedmetadata', seekListener, { once: true });
     }
     lastProgressAt = Date.now();
     lastTime = video.currentTime || 0;
@@ -167,7 +174,7 @@ export function createBrowserStreamPlayer(video, {
   listen('pause', () => { if (!video.ended && !video.seeking && current && !video.error && !disposed) intentionalPause = true; });
   listen('play', () => { intentionalPause = false; });
   function visibility() {
-    if (!document.hidden && current && !video.paused && video.readyState < 3) {
+    if (!globalThis.document?.hidden && current && !video.paused && video.readyState < 3) {
       lastProgressAt = Date.now();
     }
   }
@@ -186,6 +193,7 @@ export function createBrowserStreamPlayer(video, {
       nativeMp4: Boolean(video.canPlayType('video/mp4'))
     });
     generation++;
+    clearTimers();
     detach();
     attempts = 0;
     intentionalPause = false;
@@ -201,7 +209,7 @@ export function createBrowserStreamPlayer(video, {
     }, 2000);
     return true;
   }
-  function stop() { generation++; detach(); current = null; attempts = 0; intentionalPause = false; status('idle'); }
+  function stop() { generation++; clearTimers(); detach(); current = null; attempts = 0; intentionalPause = false; status('idle'); }
   function destroy() {
     if (disposed) return;
     stop();
