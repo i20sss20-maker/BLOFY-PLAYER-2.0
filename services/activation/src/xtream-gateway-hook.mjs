@@ -64,7 +64,7 @@ import {createDistributorCustomerCatalog}
   from './xtream-distributor-customer-catalog.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable,streamCodeProof} from './xtream-duration-codes.mjs';
 import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
-import {createDatabaseUnifiedRedeemer} from './stream-unified-code-redeem.mjs';
+import {createDatabaseUnifiedRedeemer,handleUnifiedCodeHttp} from './stream-unified-code-redeem.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {createStreamCodeXtreamLink} from './xtream-code-dual-link.mjs';
@@ -2734,35 +2734,25 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       // Disabled by default; never change existing redemption endpoints.
       if(url.pathname==='/api/v1/stream/app/unified-redeem'){
-        const headers={'cache-control':'no-store, private','referrer-policy':'no-referrer','pragma':'no-cache'};
-        if(process.env.BLOFY_STREAM_UNIFIED_LOGIN_QA!=='1')
-          return json(res,503,{ok:false,error:'stream_unified_unavailable'},headers);
-        if(req.method!=='POST'||url.search||!/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))
-          return json(res,400,{ok:false,error:'stream_code_invalid'},headers);
-        const rate=streamCodeLimiter.consume(requestClientKey(req));
-        const overall=streamCodeGlobalLimiter.consume('all_redemptions');
-        if(!rate.allowed||!overall.allowed)
-          return json(res,429,{ok:false,error:'stream_code_rate_limited'},{
-            ...headers,'retry-after':String(Math.max(rate.retryAfterSeconds||0,overall.retryAfterSeconds||0))});
-        try{
-          await ensureReady();
-          if(!unifiedConnectPairing)unifiedConnectPairing=createStreamConnectPairing({pool,
-            keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,
-            enabled:['1','true'].includes(String(process.env.BLOFY_STREAM_CONNECT_ENABLED))});
-          const pairing=unifiedConnectPairing;
-          const redeem=createDatabaseUnifiedRedeemer({pool,pairing,
-            paidProof:code=>streamCodeProof(code,KEY_HEX),
-            redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true})
-          });
-          const input=await readJson(req);
-          return json(res,201,await redeem({code:input.code,deviceKey:input.deviceKey,origin:xtreamOrigin(req)}),headers);
-        }catch(e){
-          const status=[400,409,413,429].includes(e?.status)?e.status:
-            e?.status===404?409:503;
-          return json(res,status,{ok:false,error:status===429?'stream_code_rate_limited':
-            status===400||status===413?'stream_code_invalid':
-            status===409?'stream_code_unavailable':'stream_unified_unavailable'},headers);
-        }
+        return handleUnifiedCodeHttp(req,res,url,{
+          enabled:process.env.BLOFY_STREAM_UNIFIED_LOGIN_QA==='1',
+          rateLimit:request=>{
+            const rate=streamCodeLimiter.consume(requestClientKey(request));
+            const overall=streamCodeGlobalLimiter.consume('all_redemptions');
+            return {allowed:rate.allowed&&overall.allowed,
+              retryAfterSeconds:Math.max(rate.retryAfterSeconds||0,overall.retryAfterSeconds||0)};
+          },
+          origin:xtreamOrigin,
+          resolveRedeemer:async()=>{
+            await ensureReady();
+            if(!unifiedConnectPairing)unifiedConnectPairing=createStreamConnectPairing({pool,
+              keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,
+              enabled:['1','true'].includes(String(process.env.BLOFY_STREAM_CONNECT_ENABLED))});
+            return createDatabaseUnifiedRedeemer({pool,pairing:unifiedConnectPairing,
+              paidProof:code=>streamCodeProof(code,KEY_HEX),
+              redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true})});
+          }
+        });
       }
       if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem' ||
           url.pathname === '/api/v1/stream/app/redeem')) {
