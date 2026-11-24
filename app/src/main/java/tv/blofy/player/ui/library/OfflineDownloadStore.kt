@@ -108,7 +108,7 @@ internal object OfflineDownloadStore {
         val existing = find(context,contentKey)
         if(existing != null) {
             val current = progress(context,existing)
-            if (current?.status !in setOf(null, DownloadManager.STATUS_FAILED)) return@runCatching existing
+            if (current?.status !in setOf(null, STATUS_MISSING, DownloadManager.STATUS_FAILED)) return@runCatching existing
             remove(context,existing)
         }
         check(records(context).size < MAX_RECORDS) { "Download list is full; remove old entries first" }
@@ -220,6 +220,14 @@ internal object OfflineDownloadStore {
         return null
     }
 
+    // Serialize the final atomic rename with cancellation/removal so a removed
+    // transfer cannot reappear as an orphan file.
+    @Synchronized
+    fun publishNativeFile(context: Context,providerId: String,id: UUID,partial: java.io.File,destination: java.io.File): Boolean {
+        if (!records(context,providerId).any { it.workerId == id.toString() }) return false
+        return partial.renameTo(destination)
+    }
+
     @Synchronized
     fun remove(context: Context, record: Record) {
         if (record.workerId != null) {
@@ -228,6 +236,7 @@ internal object OfflineDownloadStore {
             val file = NativeExternalDownloadQueue.file(context,id,record.extension)
             file.delete()
             java.io.File(file.parentFile,file.name+".part").delete()
+            java.io.File(file.parentFile,file.name+".etag").delete()
         } else manager(context).remove(record.id)
         prefs(context).edit().remove(storageKey(record.contentKey)).apply()
     }
