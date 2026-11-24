@@ -107,7 +107,7 @@ function updateInstallGuide(){
  feedback.textContent=state.message
 }
 
-var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
+var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['downloads','↓','التنزيلات'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
 function profileStorageKey(name){return 'blofy_web_profile_v1:'+S.profileKey+':'+name}
@@ -290,6 +290,7 @@ function navIcon(kind){
   movie:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 5l3 5M15 5l3 5M10 14l5 3-5 3z"/>',
   series:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5M2 6v12M22 6v12"/>',
   collections:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  downloads:'<path d="M12 3v13m0 0 5-5m-5 5-5-5M4 20h16"/>',
   favorites:'<path d="M20.8 8.5c0 4.5-8.8 10.6-8.8 10.6S3.2 13 3.2 8.5a4.6 4.6 0 0 1 8.8-1.7 4.6 4.6 0 0 1 8.8 1.7z"/>',
   search:'<circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 5 5"/>',
   ai:'<path d="m12 2 2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/><path d="m19 2 .7 2.3L22 5l-2.3.7L19 8l-.7-2.3L16 5l2.3-.7z"/>',
@@ -365,6 +366,7 @@ function navigate(route,opts,replace){
  else if(route==='detail')details(opts||{});
  else if(route==='episodes')episodesScreen(opts||{});
  else if(route==='favorites')favoritesScreen();
+ else if(route==='downloads')downloadsScreen();
  else if(route==='search')searchScreen();
  else if(route==='ai')aiScreen();
  else if(route==='settings')settingsScreen();
@@ -1079,6 +1081,7 @@ function details(o){
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
    (hasResume?'<button class="btn secondary" data-watch="movie:'+esc(id)+'" data-from="0">ابدأ من البداية</button>':''):
    '<button class="btn" data-episodes="'+esc(id)+'">▤ المواسم والحلقات</button>';
+  if(k==='movie')buttons+='<button class="btn secondary" data-download="movie:'+esc(id)+'" data-ext="'+esc(item.container_extension||info.container_extension||'mp4')+'">↓ تنزيل الفيلم</button>';
   buttons+='<button class="btn secondary" data-favorite="'+k+':'+esc(id)+'">'+(S.library[key]?'♥ إزالة من المفضلة':'♡ المفضلة')+'</button>';
   var genre=Array.isArray(gen)?gen.join(' • '):String(gen||'');
   var root=document.getElementById('detail-root');if(!root)return;
@@ -1130,13 +1133,69 @@ function episodesScreen(opts){
    '<span class="episode-meta">الموسم '+esc(S.selectedSeason)+
    (x.info&&x.info.duration||x.duration?' • '+esc(String(x.info&&x.info.duration||x.duration).slice(0,30)):'')+
    (pct?' • متابعة '+pct+'٪':' • اضغط للمشاهدة')+'</span>'+
-   (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'
+   (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'+
+   '<button class="btn secondary episode-download" type="button" data-download="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'">↓ تنزيل الحلقة</button>'
   }).join('')+'</section></div>';
   document.getElementById('episodes-root').innerHTML=html;restoreView('episodes');
  }
  if(S.episodes&&S.episodes.episodes)finish(S.episodes);
  else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(st===200)finish(d);else document.getElementById('episodes-root').innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div>'})
 }
+
+/* Web downloads: file delivery is delegated to the browser's download manager.
+ * A requested transfer is NOT claimed to be complete or available offline in
+ * this web app. All URLs stay same-origin and are reauthorized on the server.
+ * This feature never downloads live channels or entire HLS playlists. */
+function webDownloadPath(kind,id,ext){
+ var k=String(kind||''),n=String(id||''),x=String(ext||'').toLowerCase();
+ if((k!=='movie'&&k!=='series')||!/^[1-9][0-9]{0,14}$/.test(n)||
+   ['mp4','mkv','avi','mov','ts'].indexOf(x)<0)return '';
+ return '/api/download/'+k+'/'+n+'.'+x
+}
+function webDownloadHistory(){
+ var rows=S.profileKey?readJson(profileStorageKey('downloadRequests'),[]):[];
+ return Array.isArray(rows)?rows.filter(function(row){
+  return row&&webDownloadPath(row.kind,row.id,row.ext)&&
+    Number.isFinite(Number(row.at))&&String(row.name||'').length<200
+ }).slice(0,40):[]
+}
+function downloadsScreen(){
+ shell('التنزيلات','<section class="downloads-page"><h2>التنزيلات</h2>'+
+ '<p class="small muted">تنزيل الأفلام والحلقات المسموح بها إلى الجهاز من المتصفح. الملفات التي يبدأ تنزيلها تُدار من قائمة تنزيلات جهازك، وليست محفوظة داخل تطبيق الويب.</p>'+
+ '<p class="small muted">هذه القائمة تسجل طلبات التنزيل فقط، ولا تؤكد اكتمال حفظ الملف أو تشغيله دون إنترنت.</p>'+
+ '<div id="downloads-history"></div></section>');
+ var rows=webDownloadHistory(),root=document.getElementById('downloads-history');
+ if(root)root.innerHTML=rows.length?rows.map(function(x){
+  return '<div class="download-row"><strong>'+esc(x.name||'ملف')+'</strong><span>'+
+   (x.kind==='movie'?'فيلم':'حلقة')+' • '+esc(new Date(Number(x.at)).toLocaleString('ar-SA'))+
+   ' • طلب تنزيل</span><button class="btn secondary" type="button" data-download="'+esc(x.kind)+':'+esc(x.id)+'" data-ext="'+esc(x.ext)+'" data-name="'+esc(x.name)+'">↓ محاولة التنزيل مجددًا</button></div>'
+ }).join(''):'<div class="empty-state">ما بدأت أي تنزيلات بعد. افتح تفاصيل فيلم أو اختر حلقة لعرض زر التنزيل.</div>';
+ restoreView('downloads')
+}
+function requestWebDownload(kind,id,ext,name){
+ var url=webDownloadPath(kind,id,ext);
+ var message=document.getElementById('web-download-message');
+ if(!message){message=document.createElement('div');message.id='web-download-message';message.className='info';message.setAttribute('role','status');
+  var target=document.querySelector('#detail-root .detail-actions,.downloads-page,.episode-list');
+  if(target)target.insertAdjacentElement('afterend',message);
+  else document.querySelector('#screen')?.prepend(message)}
+ if(!url){if(message)message.textContent='صيغة هذا الملف لا تدعم التنزيل المباشر على الويب.';return}
+ if(!S.userVerified){if(message)message.textContent='فعّل اشتراكك أولًا.';return}
+ var epoch=S.accountEpoch;
+ if(message)message.textContent='جار التحقق من توفر ملف التنزيل…';
+ fetch(url,{method:'HEAD',credentials:'same-origin',cache:'no-store'}).then(function(res){
+  if(epoch!==S.accountEpoch||!S.userVerified)return;
+  if(!res.ok){if(message)message.textContent=res.status===503?'التنزيلات غير مفعلة على هذا السيرفر حاليًا.':res.status===429?'التنزيلات مشغولة حاليًا، حاول لاحقًا.':'هذا الملف غير متوفر للتنزيل المباشر حاليًا.';return}
+  var link=document.createElement('a');link.href=url;link.download='BLOFY-STREAM-'+kind+'-'+id+'.'+ext;
+  document.body.appendChild(link);link.click();link.remove();
+  var rows=webDownloadHistory(),safeName=String(name||((kind==='movie'?'فيلم ':'حلقة ')+id)).slice(0,160);
+  rows.unshift({kind:kind,id:id,ext:ext,name:safeName,at:Date.now()});
+  profileSave('downloadRequests',rows.slice(0,40));
+  if(message)message.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.';
+  if(S.route==='downloads')downloadsScreen();
+ }).catch(function(){if(epoch===S.accountEpoch&&message)message.textContent='تعذر التحقق من التنزيل، حاول مرة أخرى.'})
+}
+
 function favoritesScreen(){
  shell('المفضلة','<div id="fav-root"></div>');var keys=Object.keys(S.library),html='';
  for(var i=0;i<keys.length;i++){var p=keys[i].split(':'),item=findItem(p[0],p[1])||S.favoriteItems[keys[i]];if(item&&S.library[keys[i]])html+=posterCard(item,p[0])}
@@ -4855,11 +4914,12 @@ window.addEventListener('error',function(e){
 },true);
 
 function clickHandler(event){
- var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload'))node=node.parentNode;
+ var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-download')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload'))node=node.parentNode;
  if(!node||node===document.body)return;
- var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
+ var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),download=node.getAttribute('data-download'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
  if(node.hasAttribute('data-back')){back();return}
  if(go){if(go!==S.route)navigate(go);return}
+ if(download){var pair=download.split(':');requestWebDownload(pair[0],pair[1],node.getAttribute('data-ext')||'mp4',node.getAttribute('data-name')||'');return}
  if(cat){var parts=cat.split(':'),kind=parts[0];
   changeCatalogCategory(kind,parts[1]||'all');return}
  if(det){var sep=det.indexOf(':'),kind=det.slice(0,sep),id=det.slice(sep+1);
