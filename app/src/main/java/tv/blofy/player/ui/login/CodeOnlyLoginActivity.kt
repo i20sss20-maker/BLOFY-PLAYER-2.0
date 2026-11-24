@@ -215,8 +215,23 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isTv) 50 else 46)).apply {
                 topMargin = dp(18)
             })
+        val connectButton = Button(this).apply {
+            id = View.generateViewId()
+            text = "BLOFY CONNECT"
+            isAllCaps = false
+            isFocusable = true
+            setTextColor(BlofyTvDesign.TextPrimary)
+            background = BlofyTvDesign.secondaryButton(dp(14).toFloat())
+            setOnClickListener {
+                startActivity(Intent(this@CodeOnlyLoginActivity, ExternalStreamConnectActivity::class.java))
+            }
+        }
+        panel.addView(connectButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
         submitButton.nextFocusDownId = languageButton.id
         languageButton.nextFocusUpId = submitButton.id
+        languageButton.nextFocusDownId = connectButton.id
+        connectButton.nextFocusUpId = languageButton.id
 
         codeInput.nextFocusDownId = submitButton.id
         submitButton.nextFocusUpId = codeInput.id
