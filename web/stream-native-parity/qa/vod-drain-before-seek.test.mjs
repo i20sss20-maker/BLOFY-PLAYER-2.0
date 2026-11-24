@@ -104,6 +104,30 @@ test('sequential adjacent chunk never kills a still-encoding FFmpeg',async()=>{
  assert.equal(starts,1)
 });
 
+test('live channel STOP also reserves its slot and directory until FFmpeg actually exits',async()=>{
+ const map=new Map(),files=[],calls={kill:0,abort:0};
+ let resolveExit;
+ const exited=new Promise(resolve=>{resolveExit=resolve});
+ const session={key:'channel-owned',kind:'live',released:false,finished:false,stopped:false,
+  proc:{kill(){calls.kill++},exited},dir:'/tmp/synthetic-channel-1',
+  abort:{abort(){calls.abort++}},sourceController:{abort(){calls.abort++}}};
+ map.set(session.key,session);
+ const ctx={
+  hlsSessions:map,active:1,clearTimeout(){},setTimeout(){return {unref(){}}},
+  rmSync(path){files.push(path)},recordLiveSourceFailure(){},console:{info(){}}
+ };
+ const stop=vm.runInNewContext(stopSource+';stopHls',ctx);
+ stop(session,'viewer_stopped');
+ assert.equal(ctx.active,1,'decoder still exits after HTTP STOP');
+ assert.equal(files.length,0,'do not delete playlist while encoder is still writing');
+ assert.equal(calls.kill,1);assert.equal(calls.abort,2);
+ assert.equal(map.has(session.key),false,'viewer cannot reuse stopped session');
+ resolveExit(0);
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert.equal(ctx.active,0);
+ assert.deepEqual(files,['/tmp/synthetic-channel-1']);
+});
+
 test('viewer STOP retains the full-VOD slot while killed FFmpeg is still exiting',async()=>{
  const map=new Map(),dir='/synthetic/media',calls={kill:0,release:0};
  let resolveExit;
