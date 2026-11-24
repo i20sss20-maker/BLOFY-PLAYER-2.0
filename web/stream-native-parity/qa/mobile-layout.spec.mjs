@@ -135,6 +135,7 @@ test('desktop and VIDAA-style view does not expose duplicate catalog bottom nav'
 test('compact iPhone preview reveals only after explicit preview tap without media element rebuild',async({page})=>{
  await touch(page);
  await page.locator('[data-go="live"]').first().click();
+ await expect(page.locator('.catalog .preview')).toBeVisible();
  await page.evaluate(()=>{
   document.documentElement.setAttribute('data-blofy-ios','true');
   document.querySelector('.preview').classList.add('preview-idle')
