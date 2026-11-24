@@ -57,9 +57,9 @@ const u=new URL(req.url);const p=u.pathname;const method=req.method;
 // Serve only exact, first-party native brand fonts. Never accept an arbitrary
 // /fonts path or redirect to an external CDN from the video application.
 const isNativeArabicFont=p==='/fonts/IBMPlexSansArabic-Regular.ttf'||p==='/fonts/IBMPlexSansArabic-SemiBold.ttf';
-if(method==='GET'&&(isNativeArabicFont||p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
+if(method==='GET'&&(isNativeArabicFont||p==='/app.js'||p==='/stream-commentary.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
  const file=p.slice(1);
- const mime=isNativeArabicFont?'font/ttf':p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':(p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png')?'image/png':'application/manifest+json; charset=utf-8';
+ const mime=isNativeArabicFont?'font/ttf':p==='/app.js'||p==='/stream-commentary.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':(p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png')?'image/png':'application/manifest+json; charset=utf-8';
  const asset=Bun.file(new URL('./'+file,import.meta.url));
  if(!await asset.exists())return json(404,{error:'static_asset_missing'});
  const headers=noCache({'Content-Type':mime,...(p==='/sw.js'?{'Service-Worker-Allowed':'/'}:{})});
@@ -126,6 +126,7 @@ async function commentaryForChannel(channel){
  return {status:200,tracks:channelTracks(body,channel)};
 }
 if(p==='/api/audio/catalog'&&method==='GET'){
+ if(Bun.env.BLOFY_WEB_COMMENTARY_ENABLED!=='1')return json(503,{error:'commentary_not_enabled'});
  const channel=u.searchParams.get('channel')||'';
  if(!validCommentaryChannel(channel))return json(400,{error:'invalid_channel'});
  try{
@@ -135,6 +136,7 @@ if(p==='/api/audio/catalog'&&method==='GET'){
  }catch{return json(503,{error:'commentary_unavailable'})}
 }
 if(p.startsWith('/api/audio/track/')&&method==='GET'){
+ if(Bun.env.BLOFY_WEB_COMMENTARY_ENABLED!=='1')return json(503,{error:'commentary_not_enabled'});
  const match=/^\/api\/audio\/track\/([A-Za-z0-9_-]{1,64})$/.exec(p);
  const channel=u.searchParams.get('channel')||'';
  if(!match||!validCommentaryChannel(channel))return json(400,{error:'invalid_commentary_request'});
