@@ -1,4 +1,5 @@
 import {readCatalogPage} from './catalog-array-reader.mjs';
+import {validCommentaryChannel,channelTracks,publicCommentaryTracks,safeCommentaryUrl} from './commentary-policy.mjs';
 import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 import {preferAppleLiveStart} from './hls-ios-live-profile.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
@@ -110,6 +111,62 @@ if(p==='/vendor/hls.min.js'&&method==='GET'){
 }
 
 const h=auth(req);if(!h)return json(401,{ok:false,error:'activation_required'});
+
+/* Channel-scoped BLOFY commentary. These routes reuse the validated,
+ * HttpOnly STREAM session. Never return source URLs, tokens or Xtream data. */
+async function commentaryForChannel(channel){
+ const res=await fetch(ORIGIN+'/api/v1/stream/audio/catalog',{
+  headers:{Authorization:h.Authorization,Accept:'application/json'},
+  redirect:'manual',signal:AbortSignal.timeout(9000)});
+ if(!res.ok||res.status>=300||res.status<200||Number(res.headers.get('content-length')||0)>262144)
+  return {status:res.status===401||res.status===403?403:res.status===429?429:503,tracks:[]};
+ const raw=await res.text();
+ if(raw.length>262144)return {status:502,tracks:[]};
+ let body;try{body=JSON.parse(raw)}catch{return {status:502,tracks:[]}}
+ return {status:200,tracks:channelTracks(body,channel)};
+}
+if(p==='/api/audio/catalog'&&method==='GET'){
+ const channel=u.searchParams.get('channel')||'';
+ if(!validCommentaryChannel(channel))return json(400,{error:'invalid_channel'});
+ try{
+  const result=await commentaryForChannel(channel);
+  if(result.status!==200)return json(result.status,{error:'commentary_unavailable'});
+  return json(200,{ok:true,channel,tracks:publicCommentaryTracks(result.tracks)});
+ }catch{return json(503,{error:'commentary_unavailable'})}
+}
+if(p.startsWith('/api/audio/track/')&&method==='GET'){
+ const match=/^\/api\/audio\/track\/([A-Za-z0-9_-]{1,64})$/.exec(p);
+ const channel=u.searchParams.get('channel')||'';
+ if(!match||!validCommentaryChannel(channel))return json(400,{error:'invalid_commentary_request'});
+ try{
+  const lookup=await commentaryForChannel(channel);
+  if(lookup.status!==200)return json(lookup.status,{error:'commentary_unavailable'});
+  const track=lookup.tracks.find(t=>t.id===match[1]);
+  if(!track||!safeCommentaryUrl(track.source))return json(404,{error:'commentary_track_not_found'});
+  const upstream=await fetch(track.source,{
+   headers:{Authorization:h.Authorization,Accept:track.format==='hls'?'application/vnd.apple.mpegurl,audio/*;q=0.9':'audio/*,application/octet-stream;q=0.9'},
+   redirect:'manual',signal:req.signal});
+  if(!upstream.ok||upstream.status!==200||!upstream.body){
+   try{await upstream.body?.cancel()}catch{}
+   return json(upstream.status===401||upstream.status===403?403:upstream.status===429?429:502,
+     {error:'commentary_stream_unavailable'});
+  }
+  const contentType=String(upstream.headers.get('content-type')||'').toLowerCase();
+  if(!/^(audio\/(?:mpeg|aac|mp4|x-m4a|ogg|webm)|application\/(?:octet-stream|vnd\.apple\.mpegurl|x-mpegurl))\b/.test(contentType)){
+   try{await upstream.body?.cancel()}catch{}
+   return json(415,{error:'commentary_format_unsupported'});
+  }
+  // Only progressive audio is offered in this initial web gate. Rewriting
+  // relative HLS playlist/segment URLs must be separately authenticated.
+  if(track.format==='hls'){
+   try{await upstream.body?.cancel()}catch{}
+   return json(415,{error:'commentary_hls_not_ready'});
+  }
+  return new Response(upstream.body,{status:200,headers:noCache({
+   'Content-Type':contentType,'Accept-Ranges':'none','X-Content-Type-Options':'nosniff'})});
+ }catch{return json(502,{error:'commentary_stream_unavailable'})}
+}
+
 if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
