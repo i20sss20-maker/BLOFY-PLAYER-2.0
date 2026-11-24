@@ -122,6 +122,41 @@ internal object NativeExternalCatalogSession {
         }
     }
 
+    suspend fun refresh(
+        context: Context,
+        onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
+    ): Int = gate.withLock {
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            val id = checkNotNull(activeId(app))
+            val profile = checkNotNull(ExternalStreamConnectStore.loadStaged(app))
+            check(profile.providerId == id)
+            verify(profile.credentials)
+            check(tv.blofy.player.data.LocalStorageManager.prepareForCatalogRefresh(app))
+            val dao = BlofyDatabase.get(app).dao()
+            val current = checkNotNull(dao.provider(id))
+            val staged = current.copy(id = UUID.randomUUID().toString(), enabled = false)
+            try {
+                dao.upsertProvider(staged)
+                val result = PlaylistSyncPolicy.run {
+                    PlaylistManager.forExternal(profile.credentials,dao).syncAll(staged,onProgress = onProgress)
+                }
+                check(result.failedSectionCount == 0 && result.freshItemCount > 0)
+                check(activeId(app) == id)
+                // The DAO validates catalog integrity and preserves favorites,
+                // saved episodes and current provider selection atomically.
+                withContext(kotlinx.coroutines.NonCancellable) {
+                    dao.promoteStagedRefresh(staged.id,current.copy(updatedAt = System.currentTimeMillis()),
+                        activateTarget = false,expectedSource = current)
+                    CatalogSyncState.markSourceReplaced(app,id)
+                }
+                result.freshItemCount
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable) { dao.discardStagedCatalog(staged.id) }
+            }
+        }
+    }
+
     private suspend fun verify(credentials: ExternalStreamConnectClient.Credentials) {
         when (ExternalStreamConnectVerifier.verify(credentials).status) {
             ExternalStreamConnectVerifier.Status.ACTIVE -> Unit
