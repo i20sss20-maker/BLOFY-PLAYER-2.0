@@ -45,8 +45,14 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
  async function ensureSchema(){
   gate();
   if(!schema)schema=(async()=>{
-   await pool.query('CREATE TABLE IF NOT EXISTS blofy_connect_pairings (code_hash TEXT PRIMARY KEY, sealed BYTEA NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
-   await pool.query('CREATE INDEX IF NOT EXISTS idx_blofy_connect_pairings_expiry ON blofy_connect_pairings(expires_at)');
+   const db=await pool.connect();
+   try{
+    await db.query('BEGIN');
+    await db.query('SELECT pg_advisory_xact_lock(173921,25)');
+    await db.query('CREATE TABLE IF NOT EXISTS blofy_connect_pairings (code_hash TEXT PRIMARY KEY, sealed BYTEA NOT NULL, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+    await db.query('CREATE INDEX IF NOT EXISTS idx_blofy_connect_pairings_expiry ON blofy_connect_pairings(expires_at)');
+    await db.query('COMMIT');
+   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}finally{db.release()}
   })().catch(e=>{schema=null;throw e});
   return schema;
  }
@@ -81,5 +87,6 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   catch{throw error('connect_pairing_unavailable',503)}
   return {ok:true,type:'external_xtream',credentials,providerVerified:false};
  }
- return {issue,redeem,ensureSchema};
+ async function purgeExpired(){await ensureSchema();const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');return {removed:Number(result.rowCount||0)};}
+ return {issue,redeem,ensureSchema,purgeExpired};
 }
