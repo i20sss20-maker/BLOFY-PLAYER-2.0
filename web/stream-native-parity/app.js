@@ -1698,7 +1698,7 @@ function livePlaybackProgress(record,video,now){
   pictureDimensions&&(frameCounterUsable?advancedFrames:(advancedTime||advancedFrames));
  // After browser suspension a 2-second observer might resume minutes later.
  // Do not charge idle tab time as a video freeze or force an instant recovery.
- if(record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000){
+ if(record.visualProgressSeen&&record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000){
   record.lastProgressAt=now;record.visualProgressSeen=false;
   record.visualOutageReported=false
  }
