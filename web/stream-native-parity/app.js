@@ -532,7 +532,12 @@ function buildCatalog(kind,listing){
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
   var selected=findItem('live',S.selected)||source[0];
-  if(selected)selectChannel(itemId(selected,'live'),true);
+  if(selected)selectChannel(itemId(selected,'live'),
+   !appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints));
+  if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)){
+   var previewEmpty=document.getElementById('preview-empty');
+   if(previewEmpty){previewEmpty.style.display='flex';previewEmpty.textContent='اختر قناة لبدء المشاهدة • المعاينة اختيارية'}
+  }
   // Arrow navigation on a TV changes the highlighted channel as it settles.
   // A short delay avoids opening one transcoder for every rapid D-pad press.
   var channelList=document.getElementById('channel-list');
@@ -734,13 +739,19 @@ function selectChannel(id,activate){
  var item=findItem('live',id);if(!item)return;S.selected=id;
  var rows=document.querySelectorAll('[data-channel]');for(var i=0;i<rows.length;i++)rows[i].className='channel-item'+(rows[i].getAttribute('data-channel')===id?' selected':'');
  var name=document.getElementById('live-title'),desc=document.getElementById('live-desc');
- if(name)name.textContent=title(item);if(desc)desc.textContent='معاينة '+title(item)+' • التشغيل تلقائي عند التحديد';
+ if(name)name.textContent=title(item);
+ if(desc)desc.textContent=appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)?
+  'اضغط على القناة للمشاهدة مباشرة • المعاينة متاحة بالزر':
+  'معاينة '+title(item)+' • التشغيل تلقائي عند التحديد';
  var favorite=document.getElementById('live-favorite');if(favorite){
   favorite.setAttribute('data-favorite','live:'+id);
   favorite.textContent=S.library['live:'+id]?'♥ إزالة من المفضلة':'♡ المفضلة'
  }
  loadShortEpg(id);
- if(activate)beginPreview(item)
+ // Selecting channels on an iPhone never opens an unrequested FFmpeg
+ // preview. A single channel tap opens the actual player; preview stays
+ // available on demand via the dedicated button, with the same features.
+ if(activate&&!appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints))beginPreview(item)
 }
 function decodeEpgField(raw){
  var source=String(raw==null?'':raw).trim().slice(0,500);
@@ -4692,6 +4703,11 @@ function clickHandler(event){
   if(kind==='live'){var channel=findItem('live',id);openPlayer('live',id,'ts',title(channel),0);return}
   navigate('detail',{kind:kind,id:id});return}
  if(ch){
+  if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)&&S.route==='live'){
+   var appleChannel=findItem('live',ch);
+   if(appleChannel){S.selected=ch;openPlayer('live',ch,'ts',title(appleChannel),0)}
+   return
+  }
   selectChannel(ch,true);
   // On phones the video preview is deliberately above the channel list.
   // Bring that existing player into view after an explicit channel tap;
