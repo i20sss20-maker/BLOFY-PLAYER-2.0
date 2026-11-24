@@ -1,0 +1,36 @@
+name: BLOFY STREAM Web fast startup and private catalog cache QA
+on:
+  push:
+    branches: [feat/stream-web-speed-latency-cache-progressive-home-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-web-speed.yml'
+  pull_request:
+    branches: [feature/blofy-stream-web-native-parity-20261122]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-web-speed.yml'
+permissions:
+  contents: read
+jobs:
+  catalog-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Verify bounded authenticated cache, forced freshness and progressive home
+        run: |
+          node --check web/stream-native-parity/catalog-page-cache.mjs
+          node --check web/stream-native-parity/app.js
+          node --test web/stream-native-parity/qa/catalog-speed.test.mjs
+      - name: Verify complete Bun server compiles with new cache module
+        run: bun build web/stream-native-parity/server.ts --target=bun --outdir=/tmp/blofy-speed-build
+      - name: Safety limits
+        if: always()
+        run: |
+          echo 'The catalog cache is first-party only: opaque HMAC keys, 45s TTL, 40 entries, 160KiB per entry, browsing only; media/session/login/search are excluded.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No production customer services or subscriber data are modified.' >> "$GITHUB_STEP_SUMMARY"
