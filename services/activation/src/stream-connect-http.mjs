@@ -26,7 +26,7 @@ export function createConnectHttp({pairing,enabled=false}={}){
    for await(const raw of req){const buf=Buffer.isBuffer(raw)?raw:Buffer.from(raw);size+=buf.length;if(size>4096){reply(res,413,{ok:false,code:'connect_payload_too_large'});return true}chunks.push(buf)}
    let input;try{input=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{reply(res,400,{ok:false,code:'connect_input_invalid'});return true}
    if(!input||typeof input!=='object'||Array.isArray(input)){reply(res,400,{ok:false,code:'connect_input_invalid'});return true}
-   const result=isIssue?await pairing.issue({host:input.host,username:input.username,password:input.password}):await pairing.redeem({code:input.code});
+   const result=isIssue?await pairing.issue({host:input.host,username:input.username,password:input.password,...(input.allowHttp===true?{allowHttp:true}:{}),...(input.numericCode===true?{numericCode:true}:{})}):await pairing.redeem({code:input.code});
    reply(res,isIssue?201:200,result);
   }catch(e){
    const code=allowed.has(e?.message)?e.message:'connect_pairing_unavailable';
