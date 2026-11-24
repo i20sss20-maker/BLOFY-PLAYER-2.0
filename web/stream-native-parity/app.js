@@ -2991,6 +2991,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function observeFirstPicture(){
   if(S.route!=='player'||S.playerView!==state||state.stats.firstFrameAt||
+     state.pictureObservationAllowed===false||
      !video.isConnected||!video.videoWidth||!video.videoHeight)return;
   var quality=null;
   try{quality=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality()}catch(e){}
@@ -3101,6 +3102,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function onPlayingEvent(){
   var stats=state.stats,now=Date.now();
+  state.pictureObservationAllowed=true;
   if(!stats.firstFrameAt)observeFirstPicture();
   if(stats.bufferSince){stats.bufferMs+=Math.max(0,now-stats.bufferSince);stats.bufferSince=0}
   confirmSeek()
@@ -3816,7 +3818,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
-   if(state.stats){state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();recordLiveIncident('channel_switch')}
+   if(state.stats){state.pictureObservationAllowed=false;state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();recordLiveIncident('channel_switch')}
    if(state.refreshFavoriteButton)state.refreshFavoriteButton();
    var qualityPath=document.getElementById('player-source-mode');if(qualityPath)qualityPath.hidden=true;
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
