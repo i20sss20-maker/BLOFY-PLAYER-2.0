@@ -71,11 +71,12 @@ const publicIssue=row=>{
 };
 export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,revealXtream,
   rotateXtream=null,linkCodeToXtream=null,listCatalog,trialKeyHex,clock=Date.now,
-  rewardsStart='2026-11-24T05:00:00.000Z'}={}){
+  rewardsStart='2026-11-24T05:00:00.000Z',rewardsRedemptionEnabled=false,rewardQuartersPerCredit=4}={}){
  if(typeof listCatalog!=='function'||!/^[0-9a-f]{64}$/i.test(String(trialKeyHex||'')))
    throw Error('stream_distributor_catalog_or_key_unconfigured');
  if(!pool||![issueCode,issueXtream,revealCode,revealXtream].every(x=>typeof x==='function'))
    throw Error('stream_distributor_unconfigured');
+ if(!Number.isSafeInteger(rewardQuartersPerCredit)||rewardQuartersPerCredit<4||rewardQuartersPerCredit>400)throw Error('distributor_reward_rate_invalid');
  let schemaPromise;
  async function ensureSchema(){
   if(!schemaPromise)schemaPromise=(async()=>{
@@ -134,6 +135,11 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
    await pool.query(`CREATE INDEX IF NOT EXISTS idx_blofy_dist_credit_recent
      ON blofy_stream_distributor_credit_events(distributor_id,created_at DESC)`);
+   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_stream_distributor_reward_redemptions(
+      id UUID PRIMARY KEY, distributor_id UUID NOT NULL REFERENCES blofy_stream_distributors(id),
+      request_id UUID NOT NULL, quarters INTEGER NOT NULL CHECK(quarters>0),
+      credits INTEGER NOT NULL CHECK(credits>0), balance_after INTEGER NOT NULL CHECK(balance_after>=0),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(distributor_id,request_id))`);
    await pool.query(`CREATE TABLE IF NOT EXISTS blofy_stream_distributor_library(
      distributor_id UUID NOT NULL REFERENCES blofy_stream_distributors(id),
      media_type TEXT NOT NULL CHECK(media_type IN ('live','movie','series')),
@@ -423,6 +429,50 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     date:new Date(x.created_at).getTime()
   })),nextOffset:rows.length>100?page+100:null};
  }
+ async function rewardSummary(db,id){
+   const rewards=(await db.query(`SELECT COALESCE(SUM(CASE e.details->>'days'
+      WHEN '30' THEN 1 WHEN '90' THEN 2 WHEN '180' THEN 4 WHEN '365' THEN 8 ELSE 0 END),0)::int AS reward_quarters
+    FROM blofy_stream_distributor_credit_events e
+    JOIN blofy_stream_distributor_issues i ON i.id=e.issue_id AND i.distributor_id=e.distributor_id
+    LEFT JOIN blofy_xtream_gateway_duration_codes c ON i.kind='app' AND c.id=i.subject_id
+    WHERE e.distributor_id=$1 AND e.delta<0 AND e.type IN ('issue','renew') AND i.status='done'
+      AND (CASE WHEN e.type='issue' AND i.kind='app' THEN c.redeemed_at ELSE e.created_at END)>=$2::timestamptz
+      AND NOT EXISTS (SELECT 1 FROM blofy_stream_distributor_credit_events r
+       WHERE r.distributor_id=e.distributor_id AND r.issue_id=e.issue_id AND r.type='refund')`,
+    [id,rewardsStart])).rows[0]||{};
+   const redeemed=(await db.query(`SELECT COALESCE(SUM(quarters),0)::int AS spent_quarters
+     FROM blofy_stream_distributor_reward_redemptions WHERE distributor_id=$1`,[id])).rows[0]||{};
+   return {earned:Number(rewards.reward_quarters||0),spent:Number(redeemed.spent_quarters||0)};
+ }
+ async function redeemRewards(token,{credits,requestId}={}){
+   const actor=await session(token);
+   if(rewardsRedemptionEnabled!==true)throw fail('distributor_rewards_redemption_disabled',409);
+   const amount=number(credits,1,1000,'distributor_rewards_amount_invalid');
+   if(!UUID.test(String(requestId||'')))throw fail('distributor_request_id_invalid');
+   return transaction(async db=>{
+     const current=(await db.query('SELECT * FROM blofy_stream_distributors WHERE id=$1 FOR UPDATE',[actor.id])).rows[0];
+     if(!current?.enabled)throw fail('distributor_disabled',403);
+     const prior=(await db.query(`SELECT * FROM blofy_stream_distributor_reward_redemptions
+       WHERE distributor_id=$1 AND request_id=$2`,[actor.id,requestId])).rows[0];
+     if(prior){
+       if(Number(prior.credits)!==amount)throw fail('distributor_request_conflict',409);
+       return {ok:true,credits:amount,pointsUsed:Number(prior.quarters)/4,balanceAfter:Number(prior.balance_after),repeated:true};
+     }
+     const r=await rewardSummary(db,actor.id),quarters=amount*rewardQuartersPerCredit;
+     if(r.earned-r.spent<quarters)throw fail('distributor_rewards_insufficient',409);
+     const next=Number(current.credits)+amount;
+     if(next>100000)throw fail('distributor_rewards_wallet_limit',409);
+     const id=crypto.randomUUID();
+     await db.query(`INSERT INTO blofy_stream_distributor_reward_redemptions
+       (id,distributor_id,request_id,quarters,credits,balance_after) VALUES($1,$2,$3,$4,$5,$6)`,
+       [id,actor.id,requestId,quarters,amount,next]);
+     await db.query('UPDATE blofy_stream_distributors SET credits=credits+$2 WHERE id=$1',[actor.id,amount]);
+     await db.query(`INSERT INTO blofy_stream_distributor_credit_events
+       (id,distributor_id,type,delta,balance_after,details) VALUES($1,$2,'adjustment',$3,$4,$5::jsonb)`,
+       [crypto.randomUUID(),actor.id,amount,next,JSON.stringify({reason:'reward_redemption',redemptionId:id,pointsUsed:quarters/4})]);
+     return {ok:true,credits:amount,pointsUsed:quarters/4,balanceAfter:next};
+   });
+ }
  async function analytics(token){
   const actor=await session(token);
   const row=(await pool.query(`SELECT
@@ -459,18 +509,13 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
       AND status IN ('pending','done','review')`,[actor.id])).rows[0]||{};
   // Separate earned rewards, based on durable successful debit events.
    // App vouchers qualify only on activation. Quarter-points avoid rounding.
-   const rewards=(await pool.query(`SELECT COALESCE(SUM(CASE e.details->>'days'
-      WHEN '30' THEN 1 WHEN '90' THEN 2 WHEN '180' THEN 4 WHEN '365' THEN 8 ELSE 0 END),0)::int AS reward_quarters
-    FROM blofy_stream_distributor_credit_events e
-    JOIN blofy_stream_distributor_issues i ON i.id=e.issue_id AND i.distributor_id=e.distributor_id
-    LEFT JOIN blofy_xtream_gateway_duration_codes c ON i.kind='app' AND c.id=i.subject_id
-    WHERE e.distributor_id=$1 AND e.delta<0 AND e.type IN ('issue','renew') AND i.status='done'
-      AND (CASE WHEN e.type='issue' AND i.kind='app' THEN c.redeemed_at ELSE e.created_at END)>=$2::timestamptz
-      AND NOT EXISTS (SELECT 1 FROM blofy_stream_distributor_credit_events r
-       WHERE r.distributor_id=e.distributor_id AND r.issue_id=e.issue_id AND r.type='refund')`,
-    [actor.id,rewardsStart])).rows[0]||{};
+   const rewards=await rewardSummary(pool,actor.id);
    return {ok:true,stats:{
-     rewardPointsEarned:Number(rewards.reward_quarters||0)/4,
+     rewardPointsEarned:rewards.earned/4,
+     rewardPointsAvailable:Math.max(0,rewards.earned-rewards.spent)/4,
+     rewardPointsRedeemed:rewards.spent/4,
+     rewardRedemptionEnabled:rewardsRedemptionEnabled===true,
+     rewardPointsPerCredit:rewardQuartersPerCredit/4,
      today:Number(row.today||0),month:Number(row.month||0),
     trialsToday:Number(row.trials_today||0),trialsTotal:Number(row.trials_total||0),
     paidTotal:Number(row.paid_total||0),spentMonth:Number(row.spent_month||0),
@@ -982,5 +1027,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,updated,requested:ids.length,skipped:ids.length-updated,
    scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues};
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues,redeemRewards};
 }
