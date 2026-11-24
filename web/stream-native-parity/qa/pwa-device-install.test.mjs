@@ -45,11 +45,11 @@ test('PWA includes standalone metadata, a real PNG icon, secure server route',()
  assert.match(server,/p==='\/apple-touch-icon\.png'\?'image\/png'/);
  assert.match(sw,/blofy-stream-shell-v4/);
  assert.match(sw,/\/apple-touch-icon\.png/);
- assert.doesNotMatch(sw,/\/api\/|\/api\//,'service worker never caches API paths');
+ assert.match(sw,/if\(SHELL\.indexOf\(url\.pathname\)<0\)return/,'service worker fetch interception is limited to shell files');
 });
 test('home-screen install entry is optional and exposes accessible status',()=>{
- assert.match(app,/id=\\"install-blofy-web\\"/);
- assert.match(app,/id=\\"install-blofy-help\\" role=\\"status\\" aria-live=\\"polite\\"/);
+ assert.match(app,/id="install-blofy-web"/);
+ assert.match(app,/id="install-blofy-help" role="status" aria-live="polite"/);
  assert.match(app,/beforeinstallprompt/);
  assert.match(app,/request\.prompt\(\)/);
  assert.match(app,/appinstalled/);
