@@ -113,4 +113,25 @@ class ProviderDetailsRepositoryTest {
         assertFalse(ProviderDetailsRepository.refresh(context, provider.copy(providerType = "m3u"), stream()).failed)
         assertEquals(0, server.requestCount)
     }
+    @Test fun externalDetailsPreserveStoryAndPublicImagesWithoutUntrustedLinks() {
+        if (!tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN) return
+        val id = "external-12345678-1234-1234-1234-123456789abc"
+        val external = provider.copy(id=id,baseUrl="https://external-xtream.invalid",username="",password="")
+        val item = stream().copy(providerId=id,key="$id:movie:7")
+        val result = XtreamMetadataFallback.parseResponse(external,item,mapOf(
+            "info" to mapOf(
+                "plot" to "External story",
+                "cover" to "https://image.tmdb.org/t/p/w500/poster.jpg",
+                "backdrop_path" to "http://router.local/secret.jpg",
+                "trailer" to "https://provider.example.com/user/pass",
+                "cast" to listOf(mapOf("name" to "Actor","photo" to "https://provider.example.com/private.jpg"))
+            )
+        ),"movie")!!
+        assertEquals("External story",result.overview)
+        assertEquals("https://image.tmdb.org/t/p/w500/poster.jpg",result.posterUrl)
+        assertNull(result.backdropUrl)
+        assertNull(result.trailerUrl)
+        assertNull(result.cast.single().profileUrl)
+    }
+
 }
