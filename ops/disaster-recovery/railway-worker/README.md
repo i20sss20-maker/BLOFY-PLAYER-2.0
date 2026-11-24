@@ -43,3 +43,11 @@ Recommended production schedule: writer `0 */6 * * *` UTC; verifier
 `*/30 * * * *` UTC. Keep both tasks single-replica, no public domains, no
 persistent storage. Never start manual backups in a loop or extend connection
 limits to diagnose viewer problems.
+
+
+## Controlled recovery exercise — 2026-11-24
+
+- The isolated restore worker ran in Railway IAD, deployment `1ae62dcd-21bf-446f-b051-5c1a144ed0f7`, pinned to `ebe02eba845ca546a24b6cb9c69c0274d0a004a2`. It selects a recent verified encrypted backup, restores to a temporary local PostgreSQL 18 cluster with Unix sockets only, and publishes a separate private restore receipt only after restore and readback.
+- Independent receipt verifier deployment `f8d3f074-0c16-4100-9ad7-daf5be2b8e26`, pinned to `77dec0dc10c14644345e14ace08f1c62946c6f39`, reached SUCCESS at 17:12:38 UTC. Its configured mandatory pre-deploy command was `python3 /app/verify_latest.py --restore` with minimum receipt timestamp 17:08:15 UTC on that date. The verifier has no database URL or AES key. It rejects missing, stale, invalid or mismatched evidence, and independently checks the archived ciphertext's HEAD metadata.
+- This successful gated deployment is indirect operational evidence of a recent complete isolated restore with a positive user-table count; final stdout was blank in the available Railway log view. Exact table count, duration and application-level reconciliation were not independently retrieved and must not be invented. No production database restoration, routing change, or failover occurred. This is not proof of full application recovery, HA, real-time replication, or provider-independent offsite protection.
+- QA workflow 45445452871 passed both synthetic restore jobs. The recovery services are pinned, one-shot, restart NEVER, and are not scheduled for repeated real-data restores yet. The existing six-hour backup and 30-minute independent backup verifier remain unchanged.
