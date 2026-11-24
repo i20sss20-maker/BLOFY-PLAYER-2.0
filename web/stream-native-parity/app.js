@@ -1854,6 +1854,52 @@ function recordLiveIncident(code,now){
  if(events.length>12)events.splice(0,events.length-12);
  return true
 }
+/* Local, evidence-based LIVE playback hint. This is deliberately a symptom
+ * classification, not a claim about the upstream provider, router or device.
+ * It uses existing observations only and never sends telemetry or URLs. */
+function liveCauseHint(rec,video,stats,now,userPaused,hidden){
+ function hint(code,title,detail){return {code:code,title:title,detail:detail}}
+ if(!rec||!video)return hint('unknown','بيانات غير كافية','لم تتوفر قراءات من مشغل البث الحالي.');
+ if(userPaused||hidden||video.paused||video.seeking)
+  return hint('paused','المشاهدة متوقفة مؤقتًا','لن تُفسَّر فترة الإيقاف أو إخفاء الصفحة على أنها تقطيع.');
+ var last=Number(rec.lastProgressAt);
+ var idle=Number.isFinite(last)&&last>0?Math.max(0,now-last):null;
+ var seen=!!rec.visualProgressSeen;
+ var events=stats&&Array.isArray(stats.liveEvents)?stats.liveEvents:[];
+ // Only known, already-redacted incident types; do not trust arbitrary event text.
+ var fault=null;
+ for(var i=events.length-1;i>=0;i--){
+  var event=events[i],age=now-Number(event&&event.at);
+  if(!event||!Number.isFinite(age)||age<0||age>25000)continue;
+  if(event.code==='encoder_capacity'||event.code==='source_error'||event.code==='decoder_error'){
+   fault=event.code;break
+  }
+ }
+ // A recently recovered image outranks an old failure event.
+ if(seen&&idle!==null&&idle<6500)
+  return hint('progress','الصورة تتقدم حاليًا','لا توجد قرينة على تجمد الصورة الآن؛ الانقطاعات السابقة مسجلة منفصلة.');
+ if(fault==='encoder_capacity')
+  return hint('capacity','ازدحام محرك الوسائط','رُصد رفض سعة تشغيل سابقًا؛ ينتظر المشغل إعادة المحاولة التدريجية.');
+ if(fault==='source_error')
+  return hint('upstream_response','استجابة مؤقتة من مسار البث','رُصد رد 502–504؛ لا تكفي هذه القراءة للتمييز بين المصدر والشبكة والوسيط.');
+ if(fault==='decoder_error')
+  return hint('decoder_error','خطأ في فك ترميز الفيديو','سجّل مشغل HLS خطأ ترميز؛ قد يساعد مسار التوافق الموجود بالفعل.');
+ if(!seen)
+  return hint('first_picture','بانتظار أول صورة مؤكدة','لم تثبت بعد صورة فعلية؛ وقت فتح القناة ليس دليلًا على تقطيع سابق.');
+ if(idle===null||idle<8000)
+  return hint('unknown','قراءات غير كافية','لا يمكن تحديد نوع الانقطاع من آخر قياسات المشغل.');
+ // Fragment timestamps exist only for HLS.js; native HLS and MPEG-TS
+ // must never be blamed for missing a callback the engine cannot expose.
+ var fragmentAge=rec.engine&&rec.lastFragmentAt?
+  Math.max(0,now-Number(rec.lastFragmentAt)):null;
+ if(fragmentAge!==null&&fragmentAge<6000)
+  return hint('picture_pipeline','مقاطع تصل دون تقدم الصورة','وصل مقطع HLS مؤخرًا بينما الصورة متوقفة؛ افحص توافق فك الترميز، دون الجزم بسببه.');
+ if(fragmentAge!==null&&fragmentAge>=12000)
+  return hint('delivery_gap','تأخر وصول مقاطع HLS','لم يُرصد مقطع حديث؛ قد يكون التأخير من المصدر أو الاتصال أو وسيط البث.');
+ if(Number(video.videoWidth)<=0||Number(video.videoHeight)<=0)
+  return hint('picture_absent','الصورة غير ظاهرة','لم يعرض المتصفح أبعاد صورة صالحة؛ قد تكون المشكلة في ترميز الفيديو أو تهيئة المشغل.');
+ return hint('unknown_stall','توقف تقدم الصورة','الانقطاع مرصود، لكن الأدلة لا تكفي لتحديد الشبكة أو المصدر أو الجهاز.')
+}
 function liveUnexpectedPause(record,video,userPaused,hidden,now){
  if(userPaused||hidden||video.seeking||(!video.paused&&!video.ended)){
   record.unexpectedPauseAt=0;return false
@@ -3071,6 +3117,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var uptime=formatTime(Math.max(0,(now-st.openedAt)/1000));
   var status4k=height>=4300&&width>=7600?'8K معروض فعليًا':height>=2100&&width>=3800?'4K معروض فعليًا':
    'الدقة تعتمد على المصدر والجهاز';
+  var currentHint=isLive?liveCauseHint(liveRecord,video,st,now,!!state.userPaused,document.hidden):null;
   var metrics=[
    ['الصورة الفعلية',screenQuality],
    ['دقة المصدر',sourceQuality],
@@ -3093,12 +3140,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    metrics.push(['انقطاعات الصورة المرصودة',(st.visualOutageCount||0)+' مرة / '+Math.round((st.visualOutageMs||0)/1000)+' ثانية']);
    metrics.push(['أطول انقطاع بالصورة',Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية']);
    metrics.push(['الانقطاعات حسب المحرك','HLS '+((byEngine.hls||{}).count||0)+' / MPEG-TS '+((byEngine.mpegts||{}).count||0)]);
+   metrics.push(['مؤشر سبب التقطيع',currentHint.title]);
   }
   box.innerHTML='<div class="playback-health-head"><strong>مراقبة جودة BLOFY المباشرة</strong>'+
    '<small>'+esc(status4k)+' • قياسات حقيقية وليست اسم القناة</small></div>'+
    '<div class="playback-health-grid">'+metrics.map(function(m){
     return '<div class="playback-health-metric"><span>'+esc(m[0])+'</span><strong>'+esc(m[1])+'</strong></div>'
    }).join('')+'</div>'+
+   (isLive&&currentHint?'<p class="playback-health-note">'+esc(currentHint.detail)+' • قراءة احتمالية من المشغل وليست تأكيدًا للسبب.</p>':'')+
    (!isLive?'<p class="playback-health-note">التقديم: '+(st.seekReady||0)+' من '+(st.seekAttempts||0)+
    ' • مؤكد بالصورة: '+(st.verifiedSeekFrames||0)+'</p>':'')+
    (pending?'<p class="playback-health-note">جار الوصول إلى '+esc(formatTime(pending.target))+'</p>':'');
@@ -3115,12 +3164,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   }catch(e){}
   var ms=r&&r.lastFragmentAt?Math.max(0,now-r.lastFragmentAt):null;
   var idle=r&&r.lastProgressAt?Math.max(0,now-r.lastProgressAt):null;
-  var assessment='توجد بيانات غير كافية لتحديد سبب الانقطاع.';
-  if(r&&idle!==null&&idle>=8000){
-   if(r.engine&&ms!==null&&ms<6000)assessment='مقاطع البث تصل لكن الصورة لا تتقدم؛ افحص فك الترميز في الجهاز.';
-   else if(r.engine&&ms!==null&&ms>=10000)assessment='مقاطع البث توقفت مؤخرًا؛ افحص المصدر أو الشبكة.';
-   else assessment='توقف تقدم الصورة؛ فحص المحرك أو المصدر مطلوب.';
-  }else if(r&&idle!==null)assessment='الصورة تتقدم مؤخرًا؛ لا يوجد تجمد مثبت الآن.';
+  var evidence=state.kind==='live'?liveCauseHint(r,video,st,now,!!state.userPaused,document.hidden):null;
+  var assessment=evidence?evidence.title+' — '+evidence.detail:
+   'النتيجة تخص بث الفيديو المباشر فقط؛ لا يمكن تحديد سبب الانقطاع هنا.';
   var mode=r&&r.videoMode==='source_copy'?'أصلي دون إعادة ضغط':r&&r.videoMode==='ultra_transcode'?'تحويل 4K تجريبي':
    r&&r.videoMode==='compatibility_transcode'?'وضع توافق':'غير معروف';
   return [
