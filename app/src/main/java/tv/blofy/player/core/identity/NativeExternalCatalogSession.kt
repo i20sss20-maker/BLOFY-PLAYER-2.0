@@ -2,6 +2,7 @@ package tv.blofy.player.core.identity
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -206,11 +207,18 @@ internal object NativeExternalCatalogSession {
         // The random provider ID is authenticated together with the encrypted
         // credentials and reused only for the same account. It scopes checkpoints.
         val checkpoint = FirstImportCheckpoint.discardIncompleteSections(app,dao,source)
-        val imported = PlaylistSyncPolicy.run {
-            PlaylistManager.forExternal(profile.credentials, dao).syncAll(
-                source, completedSections = checkpoint.completed,
-                onSectionComplete = { FirstImportCheckpoint.markCompleted(app,source,it) },
-                onProgress = onProgress)
+        val imported = try {
+            PlaylistSyncPolicy.run {
+                PlaylistManager.forExternal(profile.credentials, dao).syncAll(
+                    source, completedSections = checkpoint.completed,
+                    onSectionComplete = { FirstImportCheckpoint.markCompleted(app,source,it) },
+                    onProgress = onProgress)
+            }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            // Preserve cancellation by the parent lifecycle, but surface an
+            // expired import deadline to the login's existing resume action.
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            error("Catalog import timed out; retry from saved sections")
         }
         check(imported.failedSectionCount == 0 && imported.freshItemCount > 0 &&
             dao.hasCatalog(id)) { "تعذر تحميل مكتبة الاشتراك بالكامل" }
