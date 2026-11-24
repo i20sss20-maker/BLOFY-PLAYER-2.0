@@ -74,20 +74,24 @@ function title(x){return x&&(x.name||x.title||x.episode_name)||'بدون عنو�
 function kindName(k){return k==='live'?'البث المباشر':k==='movie'?'الأفلام':k==='series'?'المسلسلات':'BLOFY STREAM'}
 function itemId(x,k){return String(x?(k==='series'?(x.series_id||x.id):(x.stream_id||x.id))||'':'')}
 function findItem(k,id){var sets=[];var keys=Object.keys(S.loaded);for(var i=0;i<keys.length;i++)if(keys[i].indexOf(k+':')===0)sets.push(S.loaded[keys[i]].items||[]);for(var a=0;a<sets.length;a++)for(var b=0;b<sets[a].length;b++)if(itemId(sets[a][b],k)===id)return sets[a][b];return S.favoriteItems[k+':'+id]||null}
+var pendingMediaStops=0;
 function api(method,endpoint,payload,cb){
+ var mediaStop=method==='POST'&&/\/stop(?:\?|$)/.test(endpoint);
+ if(mediaStop)pendingMediaStops++;
+ function finishMediaStop(){if(mediaStop){mediaStop=false;pendingMediaStops=Math.max(0,pendingMediaStops-1)}}
  var xhr=new XMLHttpRequest(),done=false,epoch=S.accountEpoch;
  try{xhr.open(method,endpoint,true);xhr.withCredentials=true;xhr.timeout=40000;
  xhr.setRequestHeader('Accept','application/json');if(method==='POST')xhr.setRequestHeader('Content-Type','application/json');
- xhr.onreadystatechange=function(){if(xhr.readyState===4&&!done){done=true;
+ xhr.onreadystatechange=function(){if(xhr.readyState===4&&!done){done=true;finishMediaStop();
    if(epoch!==S.accountEpoch)return;
    var json={};try{json=JSON.parse(xhr.responseText)}catch(e){}cb(xhr.status,json)
   }};
- xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;
+ xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;finishMediaStop();
    if(epoch===S.accountEpoch)cb(0,{error:'network_unavailable'})
   }};
  xhr.send(payload?JSON.stringify(payload):null);
   return xhr
- }catch(e){cb(0,{error:'request_failed'});return null}
+ }catch(e){finishMediaStop();cb(0,{error:'request_failed'});return null}
 }
 function setStatus(text,error){var box=document.getElementById('page-status')||document.getElementById('login-status');if(box){box.textContent=text;box.className=error?'info error':'info'}}
 function deviceKey(){
@@ -1492,7 +1496,21 @@ function settingsScreen(){
     '. قد يستخدم الفيديو الأصلي دقة أعلى عند تشغيله دون تحويل.'
   })
  };
- document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
+ document.getElementById('logout').onclick=function(){
+  if(S.loggingOut)return;
+  S.loggingOut=true;
+  var button=document.getElementById('logout');if(button)button.disabled=true;
+  // Close the video while the authenticated cookie is still valid. In-flight
+  // stop requests otherwise arrive after logout and get a 401, leaking a
+  // precious FFmpeg slot until the worker idle timeout.
+  cleanupPlayer();
+  var deadline=Date.now()+3500;
+  function finishLogout(){
+   if(pendingMediaStops>0&&Date.now()<deadline){setTimeout(finishLogout,100);return}
+   api('POST','/api/logout',{},function(){S.loggingOut=false;login('تم تسجيل الخروج')})
+  }
+  finishLogout()
+ }
 }
 function fmt(n){return n<10?'0'+n:String(n)}
 function formatTime(seconds){seconds=Math.max(0,Math.floor(Number(seconds)||0));return fmt(Math.floor(seconds/3600))+':'+fmt(Math.floor(seconds/60)%60)+':'+fmt(seconds%60)}
