@@ -50,7 +50,14 @@ def main():
             stale = False
             changed = False
             head_calls = 0
+            receipt = None
+            def put_object(self, **kwargs):
+                assert kwargs['Key'] == restore_audit.RESTORE_RECEIPT_KEY
+                self.receipt = kwargs['Body']
             def get_object(self, **kwargs):
+                if kwargs['Key'] == restore_audit.RESTORE_RECEIPT_KEY:
+                    assert self.receipt is not None
+                    return {'ContentLength': len(self.receipt), 'Body': io.BytesIO(self.receipt)}
                 assert kwargs['Key'] == 'blofy-dr/status/latest-verified.json'
                 when = datetime.now(timezone.utc) - timedelta(hours=9 if self.stale else 0)
                 data = json.dumps({
@@ -73,6 +80,7 @@ def main():
 
         values = {
             "BLOFY_RESTORE_AUDIT_ENABLED": "true",
+            "BLOFY_RESTORE_PUBLISH_RECEIPT": "true",
             "BLOFY_RESTORE_OBJECT_KEY": "latest-verified",
             "BLOFY_BACKUP_AES256_KEY_HEX": key.hex(),
             "BLOFY_BACKUP_ENDPOINT": "https://synthetic.example.invalid",
@@ -81,7 +89,8 @@ def main():
             "BLOFY_BACKUP_ACCESS_KEY_ID": "synthetic-only",
             "BLOFY_BACKUP_SECRET_ACCESS_KEY": "synthetic-only",
         }
-        with patch.dict(os.environ, {**values, 'PGHOSTADDR': '192.0.2.1', 'PGSERVICE': 'must-not-be-used'}, clear=True), patch("restore_audit.boto3.client", return_value=FakeS3()):
+        successful = FakeS3()
+        with patch.dict(os.environ, {**values, 'PGHOSTADDR': '192.0.2.1', 'PGSERVICE': 'must-not-be-used'}, clear=True), patch("restore_audit.boto3.client", return_value=successful):
             capture = io.StringIO()
             with contextlib.redirect_stdout(capture):
                 restore_audit.main()
@@ -89,6 +98,12 @@ def main():
             assert '"full_database_restore_verified":true' in output, output
             assert '"user_tables_restored":1' in output, output
             assert '"production_database_contacted":false' in output, output
+        receipt = json.loads(successful.receipt)
+        assert receipt['schema'] == 'blofy-dr-restore-audit-v1'
+        assert receipt['full_database_restore_verified'] is True
+        assert receipt['production_database_contacted'] is False
+        assert receipt['encrypted_sha256'] == checksum
+        assert receipt['user_tables_restored'] == 1
         for kind in ('stale', 'changed'):
             fake = FakeS3()
             setattr(fake, kind, True)
@@ -101,6 +116,7 @@ def main():
                     else:
                         raise AssertionError('unsafe receipt accepted')
                 download.assert_not_called()
+                assert fake.receipt is None
     print("PASS: encrypted fake S3 backup fully restored in disposable local PostgreSQL 18; no Railway or real subscriber contacted")
 
 

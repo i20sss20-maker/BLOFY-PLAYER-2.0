@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 
 import boto3
 from botocore.client import Config
@@ -37,6 +38,26 @@ def cmd(args, timeout=120, capture=False):
                           stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL, timeout=timeout,
                           env=env)
+
+
+RESTORE_RECEIPT_KEY = "blofy-dr/status/latest-restore-audit.json"
+
+
+def publish_restore_receipt(client, bucket, report):
+    # Separate from the backup receipt. Never overwrite a backup archive or
+    # represent a mere TOC check as a full restore.
+    body = json.dumps(report, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if len(body) > 4096:
+        raise ValueError("restore_receipt_too_large")
+    client.put_object(Bucket=bucket, Key=RESTORE_RECEIPT_KEY, Body=body,
+                      ContentType="application/json", CacheControl="no-store")
+    remote = client.get_object(Bucket=bucket, Key=RESTORE_RECEIPT_KEY)
+    stream = remote["Body"]
+    try:
+        if int(remote.get("ContentLength", -1)) != len(body) or stream.read(4097) != body:
+            raise ValueError("restore_receipt_readback_mismatch")
+    finally:
+        stream.close()
 
 
 def main():
@@ -120,13 +141,19 @@ def main():
                              "-m", "immediate", "-w", "stop"], timeout=45)
                     except Exception:
                         pass
-        print(json.dumps({
+        report = {
+            "schema": "blofy-dr-restore-audit-v1",
+            "verified_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "encrypted_sha256": expected_sha,
             "ok": True, "test": "isolated_full_restore",
             "object_key": object_key, "full_database_restore_verified": True,
             "user_tables_restored": table_count,
             "production_database_contacted": False,
             "elapsed_seconds": round(time.monotonic()-start, 2)
-        }, separators=(",", ":")), flush=True)
+        }
+        if os.getenv("BLOFY_RESTORE_PUBLISH_RECEIPT") == "true":
+            publish_restore_receipt(s3, bucket, report)
+        print(json.dumps(report, separators=(",", ":")), flush=True)
     except Exception as exc:
         die("restore_failed:"+type(exc).__name__)
 
