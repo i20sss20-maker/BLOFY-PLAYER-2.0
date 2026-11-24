@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { databaseOptions } from '../src/database-options.mjs';
+import { EventEmitter } from 'node:events';
+import { databaseOptions, observeIdleDatabaseErrors } from '../src/database-options.mjs';
 
 test('remote PostgreSQL always verifies TLS even when URL options request weaker modes',()=>{
   for(const mode of ['require','no-verify','prefer','verify-ca']) {
@@ -43,4 +44,26 @@ test('private Railway URL options cannot silently override the DSM limit',()=>{
     {max:2}, {PGSSLMODE:'disable'});
   assert.equal(explicit.max,2);
   assert.equal(explicit.options,'-c max_parallel_workers_per_gather=0');
+});
+
+
+test('idle database socket failures are handled without crashing or exposing error details',()=>{
+  const pool=new EventEmitter(),events=[];
+  let now=1000;
+  observeIdleDatabaseErrors(pool,{clock:()=>now,notify:event=>events.push(event)});
+  const error=Object.assign(new Error('postgres://secret@private.example/customer'),{code:'57P01'});
+  assert.doesNotThrow(()=>pool.emit('error',error));
+  assert.deepEqual(events,[{code:'57P01',suppressed:0}]);
+  now+=100;
+  pool.emit('error',error);
+  assert.equal(events.length,1);
+  now+=30000;
+  pool.emit('error',{code:'sensitive-provider-string',message:'private'});
+  assert.deepEqual(events[1],{code:'idle_connection_error',suppressed:1});
+  assert.doesNotMatch(JSON.stringify(events),/secret|private|sensitive/);
+});
+test('failure of idle database telemetry cannot crash the activation API',()=>{
+  const pool=new EventEmitter();
+  observeIdleDatabaseErrors(pool,{notify:()=>{throw Error('telemetry unavailable')}});
+  assert.doesNotThrow(()=>pool.emit('error',new Error('connection lost')));
 });
