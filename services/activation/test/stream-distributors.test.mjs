@@ -40,9 +40,11 @@ function fixture({redemption=false}={}){
    const delta=type==='opening'?args[2]:type==='adjustment'?args[2]:args[3];
    const balance=type==='opening'?args[2]:type==='adjustment'?args[3]:args[4];
    creditEvents.push({id:args[0],distributor_id:args[1],issue_id:issueId,
-    type,delta,balance_after:balance,details:args[5]?JSON.parse(args[5]):{},created_at:now});
+    type,delta,balance_after:balance,details:(type==='adjustment'?args[4]:args[5])?JSON.parse(type==='adjustment'?args[4]:args[5]):{},created_at:now});
    return {rows:[]};
   }
+  if(sql.includes('AS granted_quarters'))return {rows:[{granted_quarters:creditEvents.filter(x=>x.distributor_id===args[0]&&x.details?.reason==='admin_bonus').reduce((n,x)=>n+x.details.bonusQuarters,0)}]};
+  if(sql.includes('SELECT * FROM blofy_stream_distributor_credit_events WHERE id=$1'))return {rows:creditEvents.filter(x=>x.id===args[0])};
   if(sql.includes('AS spent_quarters'))return {rows:[{spent_quarters:redemptions.filter(x=>x.distributor_id===args[0]).reduce((n,x)=>n+x.quarters,0)}]};
   if(sql.includes('SELECT * FROM blofy_stream_distributor_reward_redemptions'))return {rows:redemptions.filter(x=>x.distributor_id===args[0]&&x.request_id===args[1])};
   if(sql.includes('INSERT INTO blofy_stream_distributor_reward_redemptions')){
@@ -203,7 +205,7 @@ function fixture({redemption=false}={}){
   }
   if(sql.includes('UPDATE blofy_stream_distributor_issues')&&sql.includes('SET customer_name=$3')){
    const item=issues.find(x=>x.id===args[0]&&x.distributor_id===args[1]);
-   item.customer_name=args[2];item.customer_phone=args[3];return {rows:[item]};
+   item.customer_name=args[2];item.customer_phone=args[3];item.customer_note=args[4];return {rows:[item]};
   }
   if(sql.includes('COUNT(*) FILTER')&&sql.includes('FROM blofy_stream_distributor_issues')){
    return {rows:[{total:issues.filter(x=>x.distributor_id===args[0]&&x.status==='done').length,
@@ -479,9 +481,11 @@ test('distributor can manage only own contacts, searchable ledger and customer d
  await assert.rejects(f.manager.customer(t2,{issueId:one.issue.id,name:'Other',
   phone:'0550000000'}),/distributor_issue_missing/);
  await f.manager.customer(t1,{issueId:one.issue.id,name:'Updated',
-  phone:'0558888888'});
+  phone:'0558888888',note:'Follow up next month'});
  assert.equal(f.issues[0].customer_name,'Updated');
  assert.equal(f.issues[0].customer_phone,'966558888888');
+ assert.equal((await f.manager.issued(t1)).items[0].customerNote,'Follow up next month');
+ assert.equal((await f.manager.issued(t2)).items.length,0);
 });
 test('renewal costs twelve credits, extends expiration atomically and does not double-charge retries',async()=>{
  const f=fixture();
@@ -747,4 +751,15 @@ test('reward redemption is opt-in, scoped and idempotent; never creates credits 
  const off=fixture(),made=await off.manager.createAdmin({name:'Off',username:'reward-off',credits:12});
  const t=(await off.manager.login({username:'reward-off',password:made.password})).token;
  await assert.rejects(off.manager.redeemRewards(t,{credits:1,requestId:crypto.randomUUID()}),/distributor_rewards_redemption_disabled/);
+});
+
+test('admin bonus is auditable, scoped and idempotent',async()=>{
+ const f=fixture({redemption:true}),a=await f.manager.createAdmin({name:'Bonus A',username:'bonus-a',credits:0}),b=await f.manager.createAdmin({name:'Bonus B',username:'bonus-b',credits:0});
+ const ta=(await f.manager.login({username:'bonus-a',password:a.password})).token,tb=(await f.manager.login({username:'bonus-b',password:b.password})).token;
+ const requestId=crypto.randomUUID(),data={bonusQuarters:8,reason:'Special offer',requestId};
+ await f.manager.setAdmin(a.item.id,data);await f.manager.setAdmin(a.item.id,data);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsAvailable,2);
+ assert.equal((await f.manager.analytics(tb)).stats.rewardPointsAvailable,0);
+ await assert.rejects(f.manager.setAdmin(b.item.id,data),/distributor_request_conflict/);
+ assert.equal((await f.manager.me(ta)).item.credits,0);
 });
