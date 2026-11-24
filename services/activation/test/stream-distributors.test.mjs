@@ -49,6 +49,16 @@ function fixture({redemption=false}={}){
    const [id,distributor_id,request_id,quarters,credits,balance_after]=args;
    redemptions.push({id,distributor_id,request_id,quarters,credits,balance_after});return {rows:[]};
   }
+  if(sql.includes('AS pending_quarters')){
+   const start=new Date(args[1]);let quarters=0;
+   for(const e of creditEvents){
+    const i=issues.find(x=>x.id===e.issue_id&&x.distributor_id===e.distributor_id);
+    const code=codes.find(x=>x.id===i?.subject_id);
+    if(e.distributor_id!==args[0]||!i||i.kind!=='app'||i.status!=='done'||e.delta>=0||e.type!=='issue'||!code||code.redeemed_at||code.revoked_at||e.created_at<start||creditEvents.some(r=>r.distributor_id===e.distributor_id&&r.issue_id===e.issue_id&&r.type==='refund'))continue;
+    quarters+=({30:1,90:2,180:4,365:8})[e.details.days]||0;
+   }
+   return {rows:[{pending_quarters:quarters}]};
+  }
   if(sql.includes('AS reward_quarters')){
    const start=new Date(args[1]);
    let quarters=0;
@@ -407,33 +417,25 @@ test('annual code deducts exactly twelve month credits and is locked to saleh',a
  assert.equal(f.calls.length,1,'never issue on a second source');
  assert.equal(f.distributors[0].credits,3,'no charge when saleh is unavailable');
 });
-test('one-day trials are free, phone-fingerprinted, limited, and repeat denied',async()=>{
+test('one-day trials permit repeated contact numbers but remain free, scoped and capped at 50',async()=>{
  const f=fixture();const created=await f.manager.createAdmin({
   name:'trial store',username:'trial-store',credits:0});
  const login=await f.manager.login({username:'trial-store',password:created.password});
  await assert.rejects(f.manager.issue(login.token,{kind:'xtream',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID()}),/distributor_trial_phone_required/);
+  requestId:crypto.randomUUID()}),/distributor_trial_phone_required/);
+ const requestId=crypto.randomUUID();
  const first=await f.manager.issue(login.token,{kind:'xtream',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'});
+  requestId,trialPhone:'0555555555'});
  assert.equal(first.issue.chargedCredits,0);
- assert.equal(f.distributors[0].credits,0);
- assert.match(f.issues[0].trial_customer_hash,/^[a-f0-9]{64}$/);
- assert.equal(JSON.stringify(f.issues).includes('0555555555'),false);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'}),
-  /distributor_trial_already_used/);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'+966555555555'}),
-  /distributor_trial_already_used/);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'00966555555555'}),
-  /distributor_trial_already_used/);
- for(let n=0;n<4;n++)
+ assert.equal(f.issues[0].trial_customer_hash,null);
+ await f.manager.issue(login.token,{kind:'xtream',durationDays:1,requestId,trialPhone:'0555555555'});
+ assert.equal(f.issues.length,1,'same request remains idempotent');
+ for(let n=0;n<49;n++)
   await f.manager.issue(login.token,{kind:'app',durationDays:1,
-   maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'055555555'+n});
+   requestId:crypto.randomUUID(),trialPhone:['0555555555','+966555555555','12345678'][n%3]});
+ assert.equal(f.issues.length,50);
  await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555560'}),
-  /distributor_trial_daily_limit/);
+  requestId:crypto.randomUUID(),trialPhone:'0555555555'}),/distributor_trial_daily_limit/);
  assert.equal(f.distributors[0].credits,0);
 });
 test('organization is private to distributor; only actual saleh titles are editable',async()=>{
@@ -715,9 +717,11 @@ test('one owned activated code reveals both access methods without changing wall
  const issued=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
  const id=f.issues[0].id;
  assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,0);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsPending,2);
  await assert.rejects(f.manager.reveal(ta,id,{includeXtream:true}),/distributor_dual_access_activate_first/);
  f.codes[0].redeemed_at=new Date('2026-11-12T04:00:00Z');
  assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,2);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsPending,0);
  assert.equal((await f.manager.analytics(tb)).stats.rewardPointsEarned,0);
  const plain=await f.manager.reveal(ta,id);assert.equal(plain.credentials,undefined);
  await assert.rejects(f.manager.reveal(tb,id,{includeXtream:true}),/distributor_issue_missing/);
