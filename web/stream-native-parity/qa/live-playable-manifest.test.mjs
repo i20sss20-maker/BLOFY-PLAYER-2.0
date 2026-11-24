@@ -188,7 +188,7 @@ test('HTTP 200 upstream with no TS bytes cannot keep a live FFmpeg slot pending 
   active,MAX_JOBS:2,
   BASE:'https://synthetic.example.invalid/media/',
   hlsRoot:'/tmp/fake-media',hardTTL:540000,
-  hlsSessions:sessionMap,Date,
+  hlsSessions:sessionMap,Date,ReadableStream,
   join:(...x)=>x.join('/'),mkdirSync(){},
   touchHls(){},clearTimeout(){},randomBytes:()=>Buffer.alloc(6),
   setTimeout(fn,ms){
