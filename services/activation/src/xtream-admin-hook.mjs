@@ -1,3 +1,4 @@
+import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
@@ -3505,6 +3506,7 @@ async function callLocalGateway(method,path,body){
 
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
+const streamConnectPairing=createStreamConnectPairing({pool,enabled:process.env.BLOFY_CONNECT_PAIRING_ENABLED==='1'});
 const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
   playbackSnapshot:sourceId=>xtreamPlaybackSnapshot(Date.now(),sourceId),
   rewardsRedemptionEnabled:process.env.BLOFY_DISTRIBUTOR_REWARDS_REDEMPTION==='1',
@@ -3575,6 +3577,18 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+  if(p==='/internal/blofy-stream/connect/issue'||p==='/internal/blofy-stream/connect/claim'){
+    const headers={'cache-control':'no-store, private','referrer-policy':'no-referrer'};
+    if(req.method!=='POST'||url.search)return json(res,405,{ok:false,code:'method_not_allowed'},headers);
+    try{
+      const data=await readJson(req);
+      const result=p.endsWith('/issue')?await streamConnectPairing.issue(data):await streamConnectPairing.claim(data);
+      return json(res,200,result,headers);
+    }catch(e){
+      const status=[400,404,429,503].includes(e?.status)?e.status:503;
+      return json(res,status,{ok:false,code:/^connect_[a-z_]+$/.test(e?.message||'')?e.message:'connect_unavailable'},headers);
+    }
+  }
   // Authoritative code/reseller schema and read-permission proof WITHOUT
   // calling legacy GET handlers that may run CREATE/ALTER migrations.
   // Fixed path, owner bridge auth above, no rows/identities/data returned.
