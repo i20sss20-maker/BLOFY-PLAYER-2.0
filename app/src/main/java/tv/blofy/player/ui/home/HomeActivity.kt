@@ -231,6 +231,7 @@ class HomeActivity : AppCompatActivity() {
                 }
                 provider?.let {
                     scheduledProviderId = it.id
+                    tv.blofy.player.data.NativeExternalCatalogRefreshWorker.schedule(applicationContext,it.id)
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
                     if (BuildConfig.CODE_ONLY_LOGIN) StreamCatalogDeltaWorker.schedule(applicationContext, it.id)
                     // No metadata/artwork crawler in STREAM, only quiet source checks.
@@ -364,6 +365,7 @@ class HomeActivity : AppCompatActivity() {
                 if (!homeResumed || activeId.isNullOrBlank()) return@launch
                 if (scheduledProviderId != activeId) {
                     scheduledProviderId = activeId
+                    tv.blofy.player.data.NativeExternalCatalogRefreshWorker.schedule(applicationContext,activeId)
                     observeManualRefresh(activeId)
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, activeId)
                     if (BuildConfig.CODE_ONLY_LOGIN) StreamCatalogDeltaWorker.schedule(applicationContext, activeId)
