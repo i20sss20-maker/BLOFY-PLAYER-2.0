@@ -1668,3 +1668,111 @@ body{
   transition:none!important;animation:none!important
  }
 }
+
+
+/* STREAM official Arabic font — reuse the exact native app typeface.
+ * Both fonts are served locally by the web app. No third-party CSS/CDN. */
+@font-face{
+ font-family:"BLOFY Plex Arabic";
+ src:url("/fonts/IBMPlexSansArabic-Regular.ttf") format("truetype");
+ font-style:normal;font-weight:400;font-display:swap
+}
+@font-face{
+ font-family:"BLOFY Plex Arabic";
+ src:url("/fonts/IBMPlexSansArabic-SemiBold.ttf") format("truetype");
+ font-style:normal;font-weight:700;font-display:swap
+}
+:root{
+ --font-stream-ar:"BLOFY Plex Arabic","Geeza Pro",Tahoma,Arial,sans-serif;
+ --font-stream-logo:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+}
+html,body,button,input,select,textarea,
+.mobile-player-action,.native-player-fullscreen,
+.player-diagnostic-panel,.player-ios-tap-to-play{
+ font-family:var(--font-stream-ar);
+}
+body{font-synthesis:none;-webkit-font-smoothing:antialiased;line-height:1.56}
+button,input,select,textarea{font-synthesis:none}
+.toolbar h1,.shelf-title h2,.pane-head strong,
+.poster-caption strong,.channel-name strong,.detail-title,
+.episode-name,.setting-panel h3,.preview-controls h3{
+ font-family:var(--font-stream-ar);font-weight:700;
+ letter-spacing:normal
+}
+.btn,.rail-link,.cat-item,.channel-item,
+.story,.chip,.native-player-choice-item{
+ font-family:var(--font-stream-ar);letter-spacing:normal
+}
+/* Native STREAM's circular-cyan/play identity remains recognizable while
+ * the SVG mark now has a refined bevel and better high-DPI rendering. */
+.brand,.login-brand{
+ color:#ecfffa;font-family:var(--font-stream-logo);
+ font-weight:900;line-height:1.1;direction:ltr;text-align:center;
+ text-shadow:0 2px 16px rgba(17,227,207,.25)
+}
+.brand{
+ font-size:23px;letter-spacing:.075em;
+ margin:7px auto 23px;overflow:visible;
+}
+.login-brand{font-size:clamp(33px,6vw,42px);letter-spacing:.07em}
+.brand:before,.login-brand:before{
+ content:"";display:block;background:url("/stream-icon.svg") center / contain no-repeat;
+ border-radius:23%;background-color:#082734;
+ border:1px solid rgba(151,238,222,.19);
+ box-shadow:0 10px 29px rgba(0,8,14,.36),
+  0 0 0 3px rgba(47,188,183,.07);
+ transform:translateZ(0)
+}
+.brand:before{width:54px;height:54px;margin:0 auto 10px}
+.login-brand:before{
+ width:99px;height:99px;margin:0 auto 18px;
+ box-shadow:0 16px 40px rgba(0,9,13,.42),
+  0 0 45px rgba(40,192,180,.13)
+}
+.brand em,.login-brand small{
+ display:block;color:#9beddf;font-family:var(--font-stream-logo);
+ font-style:normal;font-weight:750;
+ text-shadow:none;letter-spacing:.3em
+}
+.brand em{font-size:10px;margin-top:3px}
+.login-brand small{font-size:13px;margin-top:11px}
+/* Branded pictograms use consistent stroke/dimensions in every nav density. */
+.rail-link .nav-svg{width:24px;height:24px;stroke-linecap:round}
+.rail-link .symbol{display:grid;place-items:center}
+.native-player-control .native-player-icon{stroke-linecap:round}
+.native-player-control:focus-visible,
+.rail-link:focus-visible{
+ outline-color:#bbfff1!important;outline-offset:2px
+}
+.poster-badge,.chip.primary{
+ font-family:var(--font-stream-ar);font-weight:700
+}
+.input::placeholder{color:#a1c2c4;opacity:.87}
+.login-status{font-family:var(--font-stream-ar);font-size:13px;line-height:1.9}
+@media(max-width:730px){
+ html[data-blofy-device="touch"] .app .rail-link{
+  font-family:var(--font-stream-ar);font-size:10px;line-height:1.25;
+ }
+ html[data-blofy-device="touch"] .app .rail-link .nav-svg{width:23px;height:23px}
+ html[data-blofy-device="touch"] .login-brand{font-size:36px}
+ html[data-blofy-device="touch"] .login-brand:before{
+  width:86px;height:86px;margin-bottom:15px
+ }
+ html[data-blofy-device="touch"] .app .toolbar h1{
+  font-size:clamp(17px,4.8vw,22px);letter-spacing:0
+ }
+ html[data-blofy-device="touch"] .poster-caption strong{font-size:12px}
+ html[data-blofy-device="touch"] .channel-name strong{
+  font-weight:700;line-height:1.55
+ }
+ html[data-blofy-device="touch"] .native-stream-hud .player-title{
+  font-family:var(--font-stream-ar);font-weight:700
+ }
+}
+@media(max-width:380px){
+ html[data-blofy-device="touch"] .login-brand{font-size:33px}
+ html[data-blofy-device="touch"] .app .toolbar h1{font-size:17px}
+}
+@media(prefers-reduced-motion:reduce){
+ .brand:before,.login-brand:before{transition:none;transform:none}
+}
