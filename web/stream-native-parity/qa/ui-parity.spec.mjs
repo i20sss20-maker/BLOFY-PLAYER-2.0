@@ -280,7 +280,7 @@ test('long-live audio clock with no picture dimensions is never mistaken for a h
  // not a global. Run its actual source in Chrome without changing Web globals.
  const appSource=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  const begin=appSource.indexOf('function livePlaybackProgress(');
- const end=appSource.indexOf('\\nfunction liveExpiredSegmentRecovery(',begin);
+ const end=appSource.indexOf('function liveExpiredSegmentRecovery(',begin);
  expect(begin).toBeGreaterThan(0);expect(end).toBeGreaterThan(begin);
  await page.addInitScript({content:'window.__qaLiveProgress=(function(){'+appSource.slice(begin,end)+
   ';return livePlaybackProgress})()'});
