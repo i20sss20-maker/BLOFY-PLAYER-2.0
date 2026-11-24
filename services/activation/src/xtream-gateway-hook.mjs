@@ -2681,7 +2681,460 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
       const allowedName=String(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME||'').trim().toLowerCase();
       const result=await pool.query(`SELECT COUNT(*)::int AS matches,
         COUNT(*) FILTER (WHERE enabled=TRUE AND publish_catalog=TRUE)::int AS active,
-        COUNT(*) FILTER (WHERE account_info->>'isRestreamer'='true')::int AS restreamers
+        COUNT(*) FILTER (WHERE account_info->>'isRestreamer'='true')::int AS restreamers,
+        MIN(CASE WHEN account_info->>'maxConnections' ~ '^[0-9]{1,2}
+        WHERE lower(btrim(name))=$1 AND deletion_requested_at IS NULL`,[allowedName]);
+      const summary=result.rows[0]||{};
+      console.info('BLOFY_STREAM_NAMED_SOURCE_READINESS',JSON.stringify({
+        matchCount:Number(summary.matches||0),active:Number(summary.active||0),
+        restreamAuthorized:Number(summary.restreamers||0),
+        manuallyApproved:process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED==='1'&&
+          allowedName===String(process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME||'').trim().toLowerCase(),
+        exactSourceReady:Number(summary.matches)===1&&Number(summary.active)===1&&
+          (Number(summary.restreamers)===1||
+            (process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED==='1'&&
+              allowedName===String(process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME||'').trim().toLowerCase())),
+        codeSharedFanoutOptIn:process.env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1',
+        providerReportedFeedQuota:Number(summary.matches)===1&&Number.isSafeInteger(summary.reported_quota)&&summary.reported_quota>=1&&summary.reported_quota<=64?summary.reported_quota:null,
+        productionSharedOptIn:process.env.BLOFY_STREAM_LICENSED_LIVE_PRODUCTION==='1'
+      }));
+    }).catch(()=>{
+      console.warn('BLOFY_STREAM_NAMED_SOURCE_READINESS',JSON.stringify({
+        ok:false,reason:'source_readiness_query_unavailable'
+      }));
+    });
+  },14000);
+  readiness.unref?.();
+}
+
+
+const previousCreateServer = http.createServer.bind(http);
+http.createServer = function withBlofyXtreamGateway(listener) {
+  if (typeof listener !== 'function') return previousCreateServer(listener);
+  return previousCreateServer(async (req, res) => {
+    if (res.writableEnded || res.destroyed) return;
+    let url;
+    try { url = new URL(req.url || '/', 'http://localhost'); }
+    catch { return listener(req, res); }
+    try {
+      if(url.pathname.startsWith('/internal/blofy-content-hub/')){
+        await ensureReady();
+        return handlePrivateContentHubSource(req,res,url);
+      }
+      if (req.method === 'GET' && url.pathname === '/xtream-gateway-admin.js') {
+        const body = await readFile(new URL('../web/xtream-gateway-admin.js', import.meta.url));
+        res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+        return res.end(body);
+      }
+      if (req.method === 'GET' && (url.pathname === '/stream/activate' || url.pathname === '/redeem')) {
+        const page=await readFile(new URL('../web/stream-activate.html',import.meta.url));
+        res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':page.length,
+          'cache-control':'no-store','referrer-policy':'no-referrer',
+          'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+          'x-content-type-options':'nosniff'});
+        return res.end(page);
+      }
+      if (req.method === 'GET' && url.pathname === '/stream/activate.js') {
+        const asset=await readFile(new URL('../web/stream-activate.js',import.meta.url));
+        res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','content-length':asset.length,
+          'cache-control':'no-store','x-content-type-options':'nosniff'});
+        return res.end(asset);
+      }
+      // The public browser extraction page accepts ANY unused BLOFY STREAM
+      // or Xtream voucher. It starts the voucher's ORIGINAL period exactly
+      // once, exposes only its own newly minted Xtream credentials, and marks
+      // this same subscription dual-access for later app sign-in.
+      // Existing/used codes stay protected: signed-in ownership check is in
+      // the customer account handler; no anonymous password recovery.
+      if(req.method==='POST'&&url.pathname==='/api/v1/stream/extract'){
+        const allowed=new Set(['https://blofyplayer.com',
+          'https://www.blofyplayer.com','https://api.blofyplayer.com']);
+        if(!allowed.has(String(req.headers?.origin||''))||
+           req.headers?.['x-blofy-extraction']!=='1'||
+           !String(req.headers?.['content-type']||'').toLowerCase().startsWith('application/json'))
+          return json(res,403,{ok:false,error:'stream_extraction_origin_invalid'});
+        const clientRate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!clientRate.allowed)return json(res,429,{
+          ok:false,error:'stream_code_rate_limited'
+        },{'retry-after':String(clientRate.retryAfterSeconds)});
+        const globalRate=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!globalRate.allowed)return json(res,429,{
+          ok:false,error:'stream_code_rate_limited'
+        },{'retry-after':String(globalRate.retryAfterSeconds)});
+        const data=await readJson(req);
+        if(data?.confirmStart!==true)
+          return json(res,400,{ok:false,error:'stream_extraction_confirmation_required'});
+        await ensureReady();
+        const issued=await streamCodes.redeem(data.code,xtreamOrigin(req),{
+          appOnly:false,webDualAccess:true
+        });
+        return json(res,201,{...issued,universalExtraction:true,
+          originalVoucherPreserved:true},{
+          'referrer-policy':'no-referrer','cache-control':'no-store, private',
+          pragma:'no-cache'
+        });
+      }
+      if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem' ||
+          url.pathname === '/api/v1/stream/app/redeem')) {
+        const rate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!rate.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
+          {'retry-after':String(rate.retryAfterSeconds)});
+        const overall=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!overall.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
+          {'retry-after':String(overall.retryAfterSeconds)});
+        await ensureReady();
+        const data=await readJson(req);
+        const result=await streamCodes.redeem(data.code,xtreamOrigin(req),
+          {deviceKey:data.deviceKey??null,
+           appOnly:url.pathname==='/api/v1/stream/app/redeem'});
+        return json(res,201,result,{'referrer-policy':'no-referrer',
+          'cache-control':'no-store, private','pragma':'no-cache'});
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/stream/app/relogin-request') {
+        // Public request needs both the original voucher and an installation-
+        // local high-entropy device key. Approval requires admin auth separately.
+        const rate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!rate.allowed)return json(res,429,{ok:false,error:'stream_code_rate_limited'},
+          {'retry-after':String(rate.retryAfterSeconds)});
+        const overall=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!overall.allowed)return json(res,429,{ok:false,error:'stream_code_rate_limited'},
+          {'retry-after':String(overall.retryAfterSeconds)});
+        await ensureReady();
+        const data=await readJson(req);
+        return json(res,200,await streamRelogin.request({
+          code:data.code,deviceKey:data.deviceKey
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/stream/app/session'){
+        const account=await authenticateAppBearer(req);
+        if(!account)return json(res,401,{ok:false,error:'stream_app_session_invalid'},
+          {'cache-control':'no-store'});
+        const expiry=account.expires_at?new Date(account.expires_at).getTime():null;
+        const now=Date.now();
+        return json(res,200,{ok:true,active:true,
+          serverNow:now,expiresAt:expiry,
+          daysRemaining:expiry==null?null:Math.max(0,Math.ceil((expiry-now)/86400000))},
+          {'cache-control':'no-store'});
+      }
+      // Only active device-bound BLOFY STREAM code sessions can enumerate
+      // or play audio. The upstream host/token remain server-side.
+      // Production remains disabled until operator approval and source setup.
+      if(req.method==='GET'&&url.pathname==='/api/v1/stream/audio/catalog'){
+        if(!requirePublicBudget(req,res))return;
+        const account=await authenticateAppBearer(req);
+        if(!account)return json(res,401,{ok:false,error:'stream_app_session_invalid'});
+        const available=protectedArabicAudio.catalog();
+        return json(res,available.status,available.body,{'cache-control':'no-store, private'});
+      }
+      const streamAudio=url.pathname.match(
+        /^\/api\/v1\/stream\/media\/audio\/(anis-[a-z0-9-]{1,54})$/);
+      if(streamAudio&&(req.method==='GET'||req.method==='HEAD')){
+        if(!requirePublicBudget(req,res))return;
+        const account=await authenticateAppBearer(req);
+        if(!account)return text(res,401,'Unauthorized');
+        return protectedArabicAudio.stream(req,res,streamAudio[1],account.id);
+      }
+      const tokenMedia=url.pathname.match(
+        /^\/api\/v1\/stream\/media\/(live|movie|series)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
+      if(tokenMedia&&(req.method==='GET'||req.method==='HEAD')){
+        const account=await authenticateAppBearer(req);
+        if(!account)return text(res,401,'Unauthorized');
+        if(tokenMedia[3]?.toLowerCase()==='m3u8')
+          return text(res,415,'Protected HLS proxy not configured');
+        return proxyMedia(req,res,tokenMedia[1].toLowerCase(),'','',
+          tokenMedia[2],tokenMedia[3],account);
+      }
+      if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
+      if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return await handlePlayerApi(req, res, url);
+      if (req.method === 'GET' && url.pathname === '/get.php') return await handleM3u(req, res, url);
+      if (req.method === 'GET' && url.pathname === '/xmltv.php') {
+        const account = await authenticate(url.searchParams.get('username') || '', url.searchParams.get('password') || '');
+        return account ? text(res, 200, '<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', 'application/xml; charset=utf-8') : text(res, 401, 'Unauthorized');
+      }
+      const hlsMatch=url.pathname.match(/^\/(hls)\/([A-Za-z0-9_]{4,32})\/([A-Za-z0-9_-]{8,64})\/([1-9][0-9]{0,15})\/([A-Za-z0-9_-]{50,6000})$/);
+      if(hlsMatch && (req.method==='GET'||req.method==='HEAD'))
+        return handleAuthorizedXtreamHls(req,res,hlsMatch);
+      const mediaMatch = url.pathname.match(/^\/(live|movie|series)\/([^/]+)\/([^/]+)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
+      if (mediaMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+        return await proxyMedia(req, res, mediaMatch[1].toLowerCase(), decodeURIComponent(mediaMatch[2]), decodeURIComponent(mediaMatch[3]), mediaMatch[4], mediaMatch[5]);
+      }
+
+      if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
+      if (!requireAdmin(req, res)) return;
+      await ensureReady();
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/playback-probe') {
+        const body=await readJson(req);
+        const raw=String(body.itemId??'');
+        if(!/^[1-9][0-9]{0,14}$/.test(raw))
+          return json(res,400,{error:'xtream_media_probe_invalid'});
+        const result=await probeGatewayMedia(body.kind,Number(raw));
+        return json(res,200,result);
+      }
+      // Same seriesInfo() path that an existing Xtream subscriber code uses.
+      // Admin-only diagnostic: one bounded upstream JSON metadata request,
+      // no media files, no customer credentials, and no returned episode IDs.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/episode-delivery-audit'){
+        const body=await readJson(req);
+        const sourceId=String(body?.sourceId||'').trim().toLowerCase();
+        const rawId=String(body?.seriesSourceId??'');
+        if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(sourceId)||
+           !/^[A-Za-z0-9._-]{1,100}$/.test(rawId))
+          return json(res,400,{ok:false,code:'episode_audit_invalid_selection'});
+        const source=(await pool.query(`SELECT enabled,publish_catalog,name
+          FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL
+          LIMIT 1`,[sourceId])).rows[0];
+        if(!source||source.enabled!==true||source.publish_catalog!==true||
+          String(source.name||'').trim().toLowerCase()!=='saleh')
+          return json(res,403,{ok:false,code:'episode_audit_source_not_approved'});
+        try{
+          // Confirm that this series is actually published and visible to this
+          // source; gatewayItemById enforces the same source/category ACL.
+          const mapped=(await pool.query(`SELECT m.gateway_id
+            FROM blofy_xtream_gateway_item_map m
+            WHERE m.server_id=$1 AND m.media_type='series' AND m.source_id=$2
+            LIMIT 1`,[sourceId,rawId])).rows[0];
+          const gatewayId=Number(mapped?.gateway_id);
+          if(!Number.isSafeInteger(gatewayId)||gatewayId<1)
+            return json(res,404,{ok:false,code:'episode_audit_series_not_published'});
+          const item=await gatewayItemById('series',gatewayId,sourceId);
+          if(!item)return json(res,404,{ok:false,code:'episode_audit_series_not_published'});
+          const info=await seriesInfo(gatewayId,sourceId);
+          const seasonLists=Object.values(info?.episodes||{}).filter(Array.isArray);
+          const episodeCount=seasonLists.reduce((sum,rows)=>sum+rows.length,0);
+          const valid=seasonLists.every(rows=>rows.every(ep=>{
+            const id=String(ep?.id||'');
+            return /^[1-9][0-9]{0,14}$/.test(id)&&
+              Number(ep.stream_id)===Number(id)&&
+              String(ep.episode_id)===id;
+          }));
+          return json(res,200,{
+            ok:info!==null&&episodeCount>0&&valid,
+            code:episodeCount<=0?'episode_audit_no_playable_episode':
+              valid?'episode_audit_ids_mapped':'episode_audit_unmapped_episode',
+            mediaBytesRead:0,customerCodesChanged:0,
+            throughCustomerSeriesInfoPath:true,sourceApproved:true,
+            seasonCount:seasonLists.filter(x=>x.length>0).length,
+            episodeCount,mappedIdsValid:valid,
+            // Upstream timestamps and episode names may be sensitive; omit.
+            titlesReturned:false,customerCredentialsReturned:false
+          },{'cache-control':'no-store'});
+        }catch{
+          return json(res,503,{ok:false,code:'episode_audit_upstream_unavailable',
+            mediaBytesRead:0,customerCodesChanged:0});
+        }
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
+        const sourceId=url.searchParams.get('sourceId');
+        if(sourceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceId))
+          return json(res,400,{error:'xtream_source_id_invalid'});
+        return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot(Date.now(),sourceId||null)});
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/live-stability') {
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceId))
+          return json(res,400,{error:'xtream_source_id_invalid'});
+        const source=(await pool.query(`SELECT account_info FROM blofy_xtream_servers
+          WHERE id=$1 AND deletion_requested_at IS NULL`,[sourceId])).rows[0];
+        if(!source)return json(res,404,{error:'xtream_server_not_found'});
+        const metrics=xtreamPlaybackSnapshot(Date.now(),sourceId);
+        const state=summarizeXtreamLiveStability(metrics,source.account_info);
+        return json(res,200,{ok:true,...state,
+          mediaRecovery:{productionEnabled:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_PRODUCTION==='1',
+            onlyValidatedDirectTs:true,noFanoutEnabledByThisSetting:true},
+          sampledScope:'this_railway_replica_only',multiReplicaAggregate:false});
+      }
+      // Operator-only aggregate view: no media URLs, credentials, content
+      // names, gateway account identities or subscriber permissions.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media'){
+        const sourceId=url.searchParams.get('sourceId')||null;
+        const result=await unavailableMediaSummary(pool,sourceId);
+        return json(res,result.ok?200:400,result);
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media/recheck'){
+        if(!recoveryEnabled())
+          return json(res,409,{ok:false,error:'unavailable_recheck_disabled'});
+        // Recheck only DB-leased records already due. No client playback.
+        await runDueUnavailableMedia();
+        return json(res,200,await unavailableMediaSummary(pool));
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media/recheck-now'){
+        if(!recoveryEnabled())
+          return json(res,409,{ok:false,error:'unavailable_recheck_disabled'});
+        const body=await readJson(req);
+        const sourceId=String(body.sourceId||'').trim().toLowerCase();
+        if(!validUuid(sourceId)||!recoverySources().has(sourceId))
+          return json(res,400,{ok:false,error:'unavailable_source_not_allowed'});
+        const currentlyActive=await activePublishedSalehRecheckIds(pool,[sourceId]);
+        if(!currentlyActive.has(sourceId))
+          return json(res,409,{ok:false,error:'unavailable_source_paused_or_unpublished'});
+        // Source-specific manual button cannot override other source grants.
+        // SQL excludes leased and recently rechecked items automatically.
+        const expedited=await expediteUnavailableRecheck(pool,sourceId,{limit:2});
+        const result=await runDueUnavailableMedia({sourceId});
+        return json(res,200,{ok:true,expedited,...result,
+          scope:'verified_unavailable_media_only',subscriberCutover:false,
+          catalogMutation:false});
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
+        return json(res,200,await streamCodes.list({
+          limit:Number(url.searchParams.get('limit')||40),
+          offset:Number(url.searchParams.get('offset')||0)
+        }));
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
+        return json(res,201,await streamCodes.issue(await readJson(req)));
+      }
+      // Explicit, owner-confirmed activation of an UNUSED Xtream voucher.
+      // Issue alone never starts its clock. Existing redeem() is atomic and
+      // creates exactly one account under a database row lock.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/activate-xtream'){
+        const payload=await readJson(req);
+        if(payload?.confirmActivation!==true)
+          return json(res,400,{ok:false,error:'stream_activation_confirmation_required'});
+        const found=await streamCodes.lookup(payload.code);
+        if(!found.ok)
+          return json(res,404,{ok:false,error:'stream_code_not_found'});
+        if(found.item?.channel!=='xtream')
+          return json(res,409,{ok:false,error:'stream_code_wrong_product'});
+        if(found.item?.status!=='unused'||found.subscription?.redeemed)
+          return json(res,409,{ok:false,error:'stream_code_already_activated'});
+        const result=await streamCodes.redeem(payload.code,xtreamOrigin(req));
+        return json(res,201,{...result,manualActivation:true},{
+          'cache-control':'no-store, private','referrer-policy':'no-referrer',
+          'pragma':'no-cache'
+        });
+      }
+      // Global admin-only search: POST body keeps original numeric/legacy
+      // voucher secrets out of browser history, request URLs and access logs.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/search'){
+        const payload=await readJson(req);
+        return json(res,200,await streamCodes.search({
+          query:payload.query,status:payload.status,
+          limit:payload.limit,offset:payload.offset
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      const codeDetail=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})$/i);
+      if(req.method==='GET'&&codeDetail){
+        const result=await streamCodes.getRecord(codeDetail[1]);
+        return json(res,result.ok?200:404,result,
+          {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      const codeReveal=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/reveal$/i);
+      if(req.method==='GET'&&codeReveal){
+        const result=await streamCodes.reveal(codeReveal[1]);
+        return json(res,result.ok?200:result.code==='stream_code_not_found'?404:409,
+          result,{'cache-control':'no-store','referrer-policy':'no-referrer'});
+      }
+      const codeRevoke=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/revoke$/i);
+      if(req.method==='POST'&&codeRevoke)
+        return json(res,200,await streamCodes.revoke(codeRevoke[1]));
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/code-relogin/approve'){
+        const payload=await readJson(req);
+        return json(res,200,await streamRelogin.approve({
+          code:payload.code,requestCode:payload.requestCode
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      // Exact-code operator lookup is a read-only POST: the raw voucher never
+      // enters browser history, a server URL, analytics or gateway logs.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/lookup'){
+        const payload=await readJson(req);
+        const result=await streamCodes.lookup(payload.code);
+        return json(res,result.ok?200:404,result,{
+          'cache-control':'no-store, private','referrer-policy':'no-referrer'
+        });
+      }
+      // Owner-only batch diagnostics: up to 20 exact codes, never a credential
+      // dump. Reuse the gateway's existing admin session and read-only proof
+      // matching; do not redeem, rotate or extend customer subscriptions.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/inspect-batch'){
+        const payload=await readJson(req);
+        return json(res,200,await streamDualLink.inspectBatch({codes:payload.codes}),{
+          'cache-control':'no-store, private','referrer-policy':'no-referrer'
+        });
+      }
+      // Operator-only, exact voucher -> issued BLOFY Xtream account.
+      // Never perform voucher redemption or return the upstream saleh host.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/link/code-to-xtream'){
+        const payload=await readJson(req);
+        return json(res,200,await streamDualLink.codeToXtream({
+          code:payload.code,serverUrl:xtreamOrigin(req)
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      // Operator-only, Xtream account -> SAME original voucher (if linked)
+      // or one new voucher tied to that existing account and expiry.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/link/xtream-to-code'){
+        const payload=await readJson(req);
+        return json(res,200,await streamDualLink.xtreamToCode({
+          accountId:payload.accountId
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/sales-summary')
+        return json(res,200,await streamCommercial.salesSummary());
+      const commercialAction=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer|relogin|recover-xtream)$/i);
+      if(req.method==='POST'&&commercialAction){
+        const id=commercialAction[1],kind=commercialAction[2];
+        if(kind==='relogin')return json(res,200,
+          await streamCommercial.allowSameCodeRelogin(id),
+          {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+        if(kind==='transfer')return json(res,200,
+          await streamCommercial.reissueForDeviceTransfer(id),{'cache-control':'no-store'});
+        if(kind==='recover-xtream')return json(res,200,
+          await streamCommercial.reissueXtreamForRecovery(id),{
+            'cache-control':'no-store, private','referrer-policy':'no-referrer'
+          });
+        const body=await readJson(req);
+        if(kind==='extend')return json(res,200,await streamCommercial.extend(id,body));
+        if(kind==='sell')return json(res,200,await streamCommercial.markSold(id,body));
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
+        const items = await listAccounts();
+        return json(res, 200, { serverUrl: xtreamOrigin(req), items });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts') {
+        return json(res, 201, await createAccount(await readJson(req), req));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts/bulk') {
+        return json(res, 201, await createAccountsBulk(await readJson(req), req));
+      }
+      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials|rotate-credentials|change-credentials|compatibility))?$/i);
+      if (match) {
+        const id = match[1];
+        if (!validUuid(id)) return json(res, 400, { error: 'xtream_gateway_account_invalid' });
+        if (match[2] === 'reset' && req.method === 'POST') return json(res, 200, await resetAccountPassword(id, req));
+        if(match[2]==='change-credentials'&&req.method==='POST')
+          return json(res,200,await changeAccountCredentials(id,req,await readJson(req)),{
+            'cache-control':'no-store, private','referrer-policy':'no-referrer'
+          });
+        if(match[2]==='rotate-credentials'&&req.method==='POST')
+          return json(res,200,await rotateAccountCredentials(id,req,await readJson(req)),{
+            'cache-control':'no-store, private',
+            'referrer-policy':'no-referrer'
+          });
+        if (match[2] === 'credentials' && req.method === 'GET')
+          return json(res,200,await revealAccountCredentials(id,req),{
+            'cache-control':'no-store, private','referrer-policy':'no-referrer'
+          });
+        if (match[2] === 'compatibility' && req.method === 'GET')
+          return json(res,200,await checkAccountXtreamCompatibility(id));
+        if (!match[2] && req.method === 'PATCH') return json(res, 200, { item: await patchAccount(id, await readJson(req)) });
+        if (!match[2] && req.method === 'DELETE') {
+          const result = await pool.query('DELETE FROM blofy_xtream_gateway_accounts WHERE id=$1', [id]);
+          return json(res, result.rowCount ? 200 : 404, result.rowCount ? { deleted: true } : { error: 'xtream_gateway_account_not_found' });
+        }
+      }
+      return json(res, 404, { error: 'xtream_gateway_route_not_found' });
+    } catch (error) {
+      // A player leaving a large catalog is not a server failure.
+      if(error?.message==='xtream_client_disconnected')return;
+      console.error('xtream gateway request failed:', redactXtreamError(error));
+      if (res.writableEnded || res.destroyed) return;
+      if (res.headersSent) { res.destroy(); return; }
+      const status = Number(error?.status) || 503;
+      return json(res, status, { error: status === 503 ? 'xtream_gateway_unavailable' : String(error?.message || 'xtream_gateway_request_failed') });
+    }
+  });
+};
+ THEN (account_info->>'maxConnections')::integer ELSE NULL END)::int AS reported_quota
         FROM blofy_xtream_servers
         WHERE lower(btrim(name))=$1 AND deletion_requested_at IS NULL`,[allowedName]);
       const summary=result.rows[0]||{};
