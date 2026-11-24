@@ -281,7 +281,7 @@ function restoreView(route,preferred){
 }
 function navHtml(){
  return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
- NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
+ NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"'+(S.route===v[0]?' aria-current="page"':'')+'><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
  '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
 }
 function shell(pageTitle,markup){
@@ -290,7 +290,7 @@ function shell(pageTitle,markup){
  // Each catalog is its own wide TV screen. The global app sidebar belongs
  // to Home, not to the Live/Movies/Series list, as in the native TV workflow.
  app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+'">'+
- (catalogPage?'':navHtml())+'<main class="workspace" id="workspace">'+
+ (catalogPage?'<div class="mobile-catalog-nav">'+navHtml()+'</div>':navHtml())+'<main class="workspace" id="workspace">'+
  '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
  (S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+
  (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
@@ -4453,7 +4453,20 @@ function clickHandler(event){
  if(det){var sep=det.indexOf(':'),kind=det.slice(0,sep),id=det.slice(sep+1);
   if(kind==='live'){var channel=findItem('live',id);openPlayer('live',id,'ts',title(channel),0);return}
   navigate('detail',{kind:kind,id:id});return}
- if(ch){selectChannel(ch,true);return}
+ if(ch){
+  selectChannel(ch,true);
+  // On phones the video preview is deliberately above the channel list.
+  // Bring that existing player into view after an explicit channel tap;
+  // never rebuild the video, reopen HLS or move TV remote focus.
+  if(S.route==='live'&&window.innerWidth<=730&&
+     document.documentElement.getAttribute('data-blofy-device')==='touch'){
+   var livePreview=document.querySelector('.catalog .preview');
+   if(livePreview&&livePreview.scrollIntoView)try{
+    livePreview.scrollIntoView({behavior:'smooth',block:'start'})
+   }catch(e){livePreview.scrollIntoView()}
+  }
+  return
+ }
  if(more){loadMore(more);return}
  if(node.getAttribute('data-sort')){
   S.sort=S.sort==='source'?'new':S.sort==='new'?'alpha':'source';
