@@ -1250,6 +1250,49 @@ if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT==='1'){
  timer.unref?.();
 }
 
+// Serve only the validated, short-lived first-party relay ticket. Do not
+// redirect bearer clients (web and TV clients may reject cross-origin 307).
+// Closing one response cancels only its relay viewer; the shared feed remains
+// owned by the media plane. No origin retry on capacity or provider refusal.
+async function proxySharedLiveTicket(req,res,destination,observe){
+  const controller=new AbortController();
+  const cancel=()=>controller.abort();
+  req.once('aborted',cancel);res.once('close',cancel);
+  let timer=null,response=null;
+  try{
+    const target=new URL(destination);
+    if(target.origin!=='https://blofy-stream-api-production.up.railway.app'||
+      !/^\/relay\/[a-f0-9]{48}$/.test(target.pathname)||target.search||target.hash||
+      target.username||target.password)throw Error('shared_live_ticket_invalid');
+    if(req.aborted||res.destroyed)return;
+    timer=setTimeout(cancel,20000);timer.unref?.();
+    response=await fetch(target,{method:'GET',redirect:'manual',
+      signal:controller.signal,headers:{accept:'video/mp2t','accept-encoding':'identity'}});
+    clearTimeout(timer);timer=null;
+    if(response.status!==200||!response.body||
+      !/^video\/mp2t(?:\s*;|$)/i.test(response.headers.get('content-type')||'')){
+      await response.body?.cancel().catch(()=>{});
+      observe('failed',{reason:'licensed_fanout_unavailable',upstreamStatus:response.status});
+      const code=[429,503].includes(response.status)?response.status:502;
+      return text(res,code,'Shared live feed unavailable','text/plain; charset=utf-8',
+        code===429||code===503?{'retry-after':'5'}:{});
+    }
+    observe('started',{transport:'licensed_shared_ts',upstreamStatus:200});
+    res.writeHead(200,{'content-type':'video/mp2t','cache-control':'no-store, no-transform',
+      'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+    await pipeline(Readable.fromWeb(response.body),res);
+  }catch{
+    if(!res.destroyed&&!req.aborted){
+      observe(res.headersSent?'interrupted':'failed',{reason:'licensed_fanout_unavailable'});
+      if(!res.headersSent)return text(res,503,'Shared live relay unavailable','text/plain; charset=utf-8',{'retry-after':'5'});
+      res.destroy();
+    }
+  }finally{
+    if(timer)clearTimeout(timer);
+    cancel();req.off('aborted',cancel);res.off('close',cancel);
+  }
+}
+
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension, authorizedAccount=null) {
   if (!requirePublicBudget(req, res)) return;
   const account = await authenticate(username, password, { touch: false }) || authorizedAccount;
@@ -1341,12 +1384,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             ?row.source_reported_max_connections:null
       });
       observe('shared_grant'); // capability issued, not proven playback
-      res.writeHead(307,{'location':destination,'cache-control':'no-store',
-        'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
-      return res.end();
+      return await proxySharedLiveTicket(req,res,destination,observe);
     }catch{
-      // Shared grant failure does not imply the legacy video is down.
-      observe('shared_fallback',{reason:'licensed_fanout_unavailable'});
+      // Opening a direct feed here can interrupt an existing shared viewer.
+      // Retain all source and account authorization; never bypass a refusal.
+      observe('failed',{reason:'licensed_fanout_unavailable'});
+      return text(res,503,'Shared live relay unavailable','text/plain; charset=utf-8',{'retry-after':'5'});
     }
   }
   // Optional one-account canary: transfer the data plane to the isolated
