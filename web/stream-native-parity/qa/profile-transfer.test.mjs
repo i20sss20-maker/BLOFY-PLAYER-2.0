@@ -41,7 +41,7 @@ test('parse strictly refuses foreign versions, invalid keys, duplicates, oversiz
   {favorites:[...data.favorites,data.favorites[0]]},
   {watch:[...data.watch,data.watch[0]]},
   {watch:[{...data.watch[0],position:999999}]},
-  {watch:[{...data.watch[0],duration:500}]},
+  {watch:[{...data.watch[0],duration:1}]},
   {watch:[{...data.watch[0],key:'live:31'}]},
   {favorites:[{key:'__proto__',name:'attack',ext:'mp4'}]},
   {password:'must never be imported'},
