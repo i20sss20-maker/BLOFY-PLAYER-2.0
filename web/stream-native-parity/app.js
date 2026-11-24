@@ -1799,6 +1799,7 @@ function recordLiveIncident(code,now){
  var names={
   playing:'الصورة بدأت تعمل',buffering:'انتظار مقاطع البث',
   decoder_paused:'توقف مفاجئ في المشغل',picture_freeze:'تجمد الصورة',
+  picture_missing:'توقيت البث يتحرك لكن لم تظهر أبعاد الصورة',
   reconnect:'بدء استعادة اتصال القناة',decoder_error:'خطأ فك ترميز الصورة',
   source_error:'فشل مؤقت في اتصال المصدر',encoder_capacity:'المحرك مشغول',
   live_edge_resync:'تجاوز مقطع قديم إلى البث الحي',live_catchup:'اللحاق بالبث المباشر',
@@ -2230,7 +2231,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(progress.advanced)return;
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
-    if(!preview)recordLiveIncident('picture_freeze');
+    if(!preview)recordLiveIncident(Number(video.videoWidth)>0&&Number(video.videoHeight)>0?
+      'picture_freeze':'picture_missing',now);
     recoverConnection()
    }else if(progress.idleMs>=6500&&!record.bufferSince){
     record.bufferSince=Date.now();
@@ -3082,7 +3084,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    'آخر أحداث البث (وقت UTC):'+(st.liveEvents&&st.liveEvents.length?
     st.liveEvents.slice(-6).map(function(item){
      var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
-      picture_freeze:'تجمد الصورة',reconnect:'استعادة الاتصال',decoder_error:'فك الترميز',
+      picture_freeze:'تجمد الصورة',picture_missing:'الصورة غير ظاهرة',reconnect:'استعادة الاتصال',decoder_error:'فك الترميز',
       source_error:'المصدر',encoder_capacity:'ازدحام المعالجة',
       live_edge_resync:'العودة للبث المباشر',live_catchup:'تسريع اللحاق بالبث',channel_switch:'تغيير القناة'};
      return ' '+new Date(item.at).toISOString().slice(11,19)+' '+(labels[item.code]||'تشغيل')
