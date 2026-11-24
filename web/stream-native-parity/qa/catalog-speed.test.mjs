@@ -25,7 +25,7 @@ test('cache has a hard LRU entry limit and never leaks a different account key',
  assert.equal(c.get(key('1')).items[0].stream_id,1);
  assert.equal(c.stats().entries,2);
  const hmac=(bearer)=>createHmac('sha256',Buffer.alloc(32,7))
-  .update('blofy-web-catalog-page-v1\0'+bearer+'\0movie\0all\00\036').digest('hex');
+  .update('blofy-web-catalog-page-v1\0'+bearer+'\0movie\0all\0'+'0\0'+'36').digest('hex');
  assert.notEqual(hmac('Bearer v1.user-A'),hmac('Bearer v1.user-B'),
   'each authenticated bearer must have its own key partition')
 });
