@@ -16,7 +16,7 @@ test('official Web 1.0 health, privacy headers and unauthenticated API boundary'
  expect(doc.headers()['content-security-policy']).toContain("script-src 'self'");
  expect(doc.headers()['content-security-policy']).toContain("object-src 'none'");
  await page.goto('http://127.0.0.1:3000/',{waitUntil:'domcontentloaded'});
- await expect(page.locator('title')).toHaveText('BLOFY STREAM — Web');
+ expect(await page.title()).toBe('BLOFY STREAM — Web');
  await expect(page.locator('body')).toBeVisible();
 });
 
