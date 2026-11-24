@@ -1815,6 +1815,18 @@ function cleanupPlayer(){
 /* Real decoded/presented frames, not HTMLMediaElement "playing", prove
  * that the image has resumed. Audio clocks alone may move over black video.
  * Old TVs without video-frame APIs use a bounded time+dimensions fallback. */
+function activePlaybackNoticeRecord(state){
+ if(!state||!state.video)return null;
+ if(S.play&&S.play.video===state.video)return S.play;
+ // Direct HTML5 MP4 is an authenticated <video src> stream without a
+ // separate S.play media-worker record; it still needs stale-text recovery.
+ if(state.mode==='direct'&&!state.directFallback){
+  if(!state.directNoticeRecord)
+   state.directNoticeRecord={video:state.video,mode:'direct',id:state.id};
+  return state.directNoticeRecord
+ }
+ return null
+}
 function playbackNoticeProgress(previous,current){
  if(!previous||!current||previous.record!==current.record||
     current.paused||current.userPaused||current.hidden||current.ended||
@@ -1845,7 +1857,7 @@ function playbackNoticeSample(state,record,video){
 function dismissRecoveredPlaybackNotice(state,now){
  if(!state||S.route!=='player'||S.playerView!==state||
     !state.video||!state.video.isConnected)return false;
- var record=S.play,video=state.video;
+ var video=state.video,record=activePlaybackNoticeRecord(state);
  if(!record||record.video!==video)return false;
  var observed=playbackNoticeSample(state,record,video),
   advanced=playbackNoticeProgress(state.noticePreviousSample,observed);
@@ -1875,8 +1887,8 @@ function playerStatus(message,error){
      now=Date.now(),copy=String(message||'');
  // Silent recovery and informational notices must not cover advancing video.
  // Real errors, paused media, seeks, hidden tabs and new sources are exempt.
- if(!error&&copy&&state&&video&&S.play&&
-    state.noticeLastProgressRecord===S.play&&
+ if(!error&&copy&&state&&video&&activePlaybackNoticeRecord(state)&&
+    state.noticeLastProgressRecord===activePlaybackNoticeRecord(state)&&
     now-(state.noticeLastProgressAt||0)<2000&&
     !state.userPaused&&!state.pendingSeek&&!state.seekIncomplete&&
     !video.paused&&!video.seeking&&!document.hidden&&
