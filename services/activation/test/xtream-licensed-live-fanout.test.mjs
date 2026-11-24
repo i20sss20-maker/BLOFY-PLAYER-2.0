@@ -239,3 +239,19 @@ test('production shared admission requires explicit operator opt-in and known pr
  const scope=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('// Optional one-account canary:'));
  assert.ok(scope.indexOf('permittedLicensedLiveFanout({')<scope.indexOf('permittedLicensedLiveProduction({'));
 });
+
+test('shared source channel limit preserves retry hint and returns only a fixed safe status',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const fn=gateway.slice(gateway.indexOf('async function proxySharedLiveTicket('),gateway.indexOf('async function proxyMedia('));
+ let reason,headers;
+ const run=new Function('fetch','text','pipeline','Readable',fn+'\nreturn proxySharedLiveTicket;')(
+   async()=>new Response(JSON.stringify({ok:false,code:'fanout_source_channel_limit',private:'not forwarded'}),{status:503,headers:{'content-type':'application/json','retry-after':'2'}}),
+   (res,status,body,ct,h)=>{res.status=status;res.body=body;headers=h},
+   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x});
+ const req={once(){},off(){},aborted:false};
+ const res={once(){},off(){},destroyed:false,headersSent:false};
+ await run(req,res,'https://blofy-stream-api-production.up.railway.app/relay/'+'a'.repeat(48),(phase,d)=>{reason=d.reason});
+ assert.equal(res.status,503);assert.equal(reason,'fanout_source_channel_limit');
+ assert.equal(headers['retry-after'],'2');assert.equal(headers['x-blofy-live-status'],reason);
+ assert.equal(res.body,'Provider concurrent channel limit reached');
+});
