@@ -22,6 +22,61 @@ import java.util.UUID
 internal object NativeExternalCatalogSession {
     private val gate = Mutex()
 
+    // Never allow this end-to-end candidate in the production application ID.
+    fun qaEnabled(context: Context): Boolean =
+        tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN && context.packageName.endsWith(".stream.qa")
+
+    fun hasStaged(context: Context): Boolean =
+        qaEnabled(context) && context.getSharedPreferences("blofy_connect_profile", Context.MODE_PRIVATE)
+            .contains("native_stage_v1")
+
+    suspend fun activeId(context: Context): String? = withContext(Dispatchers.IO) {
+        if (!qaEnabled(context) || StreamCodeSession.isClaimed(context)) return@withContext null
+        val profile = ExternalStreamConnectStore.loadStaged(context) ?: return@withContext null
+        val dao = BlofyDatabase.get(context.applicationContext).dao()
+        val row = dao.provider(profile.providerId)
+        profile.providerId.takeIf {
+            row?.enabled == true && row.baseUrl == ExternalXtreamCatalogTransport.ORIGIN &&
+                dao.activeProviderId() == it && CatalogSyncState.isReady(context,it) && dao.hasCatalog(it)
+        }
+    }
+
+    suspend fun activatePrepared(context: Context, prepared: Prepared) = gate.withLock {
+        withContext(Dispatchers.IO) {
+            check(qaEnabled(context) && !StreamCodeSession.isClaimed(context))
+            val profile = checkNotNull(ExternalStreamConnectStore.loadStaged(context))
+            check(profile.providerId == prepared.providerId)
+            val dao = BlofyDatabase.get(context.applicationContext).dao()
+            val row = checkNotNull(dao.provider(prepared.providerId))
+            check(row.baseUrl == ExternalXtreamCatalogTransport.ORIGIN &&
+                CatalogSyncState.isReady(context,row.id) && dao.hasCatalog(row.id))
+            dao.activateExistingProvider(row.id)
+        }
+    }
+
+    suspend fun checkActive(context: Context): ExternalStreamConnectVerifier.Result? {
+        val id = activeId(context) ?: return null
+        val profile = withContext(Dispatchers.IO) { ExternalStreamConnectStore.loadStaged(context) }
+        if (profile?.providerId != id) return null
+        return ExternalStreamConnectVerifier.verify(profile.credentials)
+    }
+
+    suspend fun signOut(context: Context) = gate.withLock {
+        withContext(Dispatchers.IO) {
+            val profile = ExternalStreamConnectStore.loadStaged(context)
+            ExternalStreamConnectStore.clearStaged(context)
+            if (profile != null) {
+                val dao = BlofyDatabase.get(context.applicationContext).dao()
+                val row = dao.provider(profile.providerId)
+                if (row?.baseUrl == ExternalXtreamCatalogTransport.ORIGIN) {
+                    dao.deactivateProvider(profile.providerId)
+                    dao.discardStagedCatalog(profile.providerId)
+                    CatalogSyncState.clear(context,profile.providerId)
+                }
+            }
+        }
+    }
+
     class Prepared(val providerId: String, val itemCount: Int)
 
     suspend fun prepare(
@@ -84,10 +139,11 @@ internal object NativeExternalCatalogSession {
         val id = profile.providerId
         val existing = dao.provider(id)
         if (existing != null) {
-            check(!existing.enabled && existing.baseUrl == ExternalXtreamCatalogTransport.ORIGIN &&
+            check(existing.baseUrl == ExternalXtreamCatalogTransport.ORIGIN &&
                 existing.username.isEmpty() && existing.password.isEmpty()) { "Invalid staged provider" }
             if (CatalogSyncState.isReady(app, id) && dao.hasCatalog(id))
                 return Prepared(id, dao.streamCountForProvider(id))
+            check(!existing.enabled) { "Active library cannot be overwritten by staging" }
         }
         // Interrupted imports remain disabled and never replace the active paid catalog.
         CatalogSyncState.clear(app, id)
