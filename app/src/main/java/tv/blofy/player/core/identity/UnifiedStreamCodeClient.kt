@@ -67,7 +67,12 @@ internal object UnifiedStreamCodeClient {
         }
     }
 
-    suspend fun redeem(rawCode: String, deviceKey: String): Result = withContext(Dispatchers.IO) {
+    suspend fun redeem(rawCode: String, deviceKey: String): Result =
+        redeemRequest(rawCode,deviceKey,client,StreamCodeSession.HOST)
+
+    // Internal test seam: production always uses the pinned first-party origin.
+    internal suspend fun redeemRequest(rawCode: String, deviceKey: String,
+        transport: OkHttpClient, origin: String): Result = withContext(Dispatchers.IO) {
         val code = requireNotNull(normalize(rawCode)) { "كود غير صحيح" }
         require(deviceKey.matches(Regex("[a-f0-9]{64}")))
         val body = JsonObject().apply {
@@ -75,10 +80,10 @@ internal object UnifiedStreamCodeClient {
             addProperty("deviceKey", deviceKey)
         }
         val request = Request.Builder()
-            .url("${StreamCodeSession.HOST}/api/v1/stream/app/unified-redeem")
+            .url("$origin/api/v1/stream/app/unified-redeem")
             .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
             .header("Accept", "application/json").header("Cache-Control", "no-store").build()
-        client.newCall(request).awaitResponse().use { response ->
+        transport.newCall(request).awaitResponse().use { response ->
             if (!response.isSuccessful) error(when (response.code) {
                 409 -> "الكود مستخدم أو غير متاح. تواصل مع المسؤول"
                 429 -> "محاولات كثيرة، أعد المحاولة لاحقًا"
