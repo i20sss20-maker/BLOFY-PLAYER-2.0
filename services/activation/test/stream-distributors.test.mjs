@@ -39,8 +39,20 @@ function fixture(){
    const delta=type==='opening'?args[2]:type==='adjustment'?args[2]:args[3];
    const balance=type==='opening'?args[2]:type==='adjustment'?args[3]:args[4];
    creditEvents.push({id:args[0],distributor_id:args[1],issue_id:issueId,
-    type,delta,balance_after:balance,details:{},created_at:now});
+    type,delta,balance_after:balance,details:args[5]?JSON.parse(args[5]):{},created_at:now});
    return {rows:[]};
+  }
+  if(sql.includes('AS reward_quarters')){
+   const start=new Date(args[1]);
+   let quarters=0;
+   for(const e of creditEvents){
+    const i=issues.find(x=>x.id===e.issue_id&&x.distributor_id===e.distributor_id);
+    if(e.distributor_id!==args[0]||!i||i.status!=='done'||e.delta>=0||!['issue','renew'].includes(e.type))continue;
+    const at=e.type==='issue'&&i.kind==='app'?codes.find(x=>x.id===i.subject_id)?.redeemed_at:e.created_at;
+    if(!at||at<start||creditEvents.some(r=>r.distributor_id===e.distributor_id&&r.issue_id===e.issue_id&&r.type==='refund'))continue;
+    quarters+=({30:1,90:2,180:4,365:8})[e.details.days]||0;
+   }
+   return {rows:[{reward_quarters:quarters}]};
   }
   if(sql.includes('FROM blofy_stream_distributor_credit_events')&&sql.includes('ORDER BY')){
    const credits=creditEvents.filter(x=>x.distributor_id===args[0]);
@@ -275,7 +287,11 @@ function fixture(){
  }
  const pool={query,async connect(){return {query,release(){}}}};
  const manager=createStreamDistributors({pool,clock:()=>now.getTime(),
-   trialKeyHex:'9'.repeat(64),
+   trialKeyHex:'9'.repeat(64),rewardsStart:'2026-11-12T00:00:00Z',
+   linkCodeToXtream:async code=>{
+     if(code!==issuedToken||!codes[0].redeemed_at)return {status:409,body:{ok:false}};
+     return {status:200,body:{ok:true,codeId,accountId,subscriptionUnchanged:true,credentials:{...credential},expiresAt:accounts[0].expires_at.getTime()}};
+   },
    rotateXtream:async id=>{
       calls.push({type:'rotation',id});
       if(id!==accountId)return {status:404,body:{ok:false}};
@@ -683,4 +699,23 @@ test('merchant delivery preview is source-scoped, exact and read-only',async()=>
  await assert.rejects(f.manager.libraryDeliveryPreview(ta,{type:'invalid'}),
    /distributor_library_type_invalid/);
  assert.equal(f.statements.some(sql=>/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/.test(sql)),false);
+});
+
+test('one owned activated code reveals both access methods without changing wallet or issuance',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Dual A',username:'dual-test-a',credits:12}),b=await f.manager.createAdmin({name:'Dual B',username:'dual-test-b',credits:12});
+ const ta=(await f.manager.login({username:'dual-test-a',password:a.password})).token,tb=(await f.manager.login({username:'dual-test-b',password:b.password})).token;
+ f.codes[0].redeemed_at=null;
+ const issued=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ const id=f.issues[0].id;
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,0);
+ await assert.rejects(f.manager.reveal(ta,id,{includeXtream:true}),/distributor_dual_access_activate_first/);
+ f.codes[0].redeemed_at=new Date('2026-11-12T04:00:00Z');
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,2);
+ assert.equal((await f.manager.analytics(tb)).stats.rewardPointsEarned,0);
+ const plain=await f.manager.reveal(ta,id);assert.equal(plain.credentials,undefined);
+ await assert.rejects(f.manager.reveal(tb,id,{includeXtream:true}),/distributor_issue_missing/);
+ const dual=await f.manager.reveal(ta,id,{includeXtream:true});
+ assert.equal(dual.code,issued.code);assert.equal(dual.dualAccess,true);assert.equal(dual.credentials.username,'reseller_generated');
+ assert.equal(f.distributors[0].credits,0);assert.equal(f.issues.length,1);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,2);
 });
