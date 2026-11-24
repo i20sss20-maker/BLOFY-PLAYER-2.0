@@ -9,15 +9,36 @@ import java.util.UUID
  * Per-player opaque routes for TS, VOD and same-origin HLS children.
  * No arbitrary host, cross-origin CDN or redirect is accepted in this QA adapter.
  */
-internal class ExternalXtreamMediaRoutes(private val origin: HttpUrl) {
+internal class ExternalXtreamMediaRoutes(
+    private val origin: HttpUrl,
+    private val providerDirectedCdn: Boolean = false
+) {
     private val entries = LinkedHashMap<HttpUrl, HttpUrl>(128, .75f, true)
     private val reverse = HashMap<HttpUrl, HttpUrl>()
     private val opaqueOrigin = "https://external-xtream.invalid/".toHttpUrl()
     private val uriAttribute = Regex("""\bURI="([^"]*)"""")
 
     private fun allowed(url: HttpUrl): Boolean =
-        url.scheme == origin.scheme && url.host == origin.host && url.port == origin.port &&
-            url.username.isEmpty() && url.password.isEmpty() && url.fragment == null
+        (providerDirectedCdn || (url.scheme == origin.scheme && url.host == origin.host && url.port == origin.port)) &&
+            validHop(origin, url)
+
+    internal fun redirect(from: HttpUrl, location: String): HttpUrl {
+        if (!providerDirectedCdn || location.length !in 1..4096)
+            throw IOException("External redirect denied")
+        val target = from.resolve(location) ?: throw IOException("External redirect invalid")
+        if (!allowed(target) || !validHop(from,target))
+            throw IOException("External redirect denied")
+        return target
+    }
+
+    private fun validHop(from: HttpUrl, target: HttpUrl): Boolean {
+        if (target.username.isNotEmpty() || target.password.isNotEmpty() || target.fragment != null ||
+            (from.scheme == "https" && target.scheme != "https")) return false
+        // Only DNS hosts accepted by the original provider policy. The actual
+        // connection also resolves every address through the public-only DNS guard.
+        return ExternalStreamConnectClient.parseHost(target.newBuilder()
+            .encodedPath("/").query(null).fragment(null).build().toString()) != null
+    }
 
     @Synchronized fun add(actual: HttpUrl, extension: String = ""): HttpUrl {
         if (!allowed(actual)) throw IOException("External media origin denied")
@@ -47,6 +68,7 @@ internal class ExternalXtreamMediaRoutes(private val origin: HttpUrl) {
         if (value.isBlank() || value.contains("{\$") || value.startsWith("data:", ignoreCase = true))
             throw IOException("External HLS URI unsupported")
         val actual = base.resolve(value) ?: throw IOException("External HLS URI invalid")
+        if (!validHop(base,actual)) throw IOException("External HLS URI denied")
         val extension = actual.pathSegments.lastOrNull()?.substringAfterLast('.', "").orEmpty()
         return add(actual, extension).toString()
     }
