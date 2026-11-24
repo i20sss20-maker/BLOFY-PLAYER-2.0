@@ -164,3 +164,35 @@ test('vector bottom navigation remains operable without clipping, and active tab
  expect(state.hit).toBe(true);
  expect(state.overflow).toBeLessThanOrEqual(1)
 });
+
+
+test('actual browser loads native Arabic font and brand assets from app origin with no external CDN',async({page,request})=>{
+ await touch(page);
+ const fonts=await page.evaluate(async()=>{
+  await document.fonts.load('400 18px "BLOFY Plex Arabic"','الصفحة الرئيسية');
+  await document.fonts.load('700 18px "BLOFY Plex Arabic"','البث المباشر');
+  await document.fonts.ready;
+  return {
+   regular:document.fonts.check('400 18px "BLOFY Plex Arabic"','العربية'),
+   bold:document.fonts.check('700 18px "BLOFY Plex Arabic"','العربية'),
+   family:getComputedStyle(document.body).fontFamily,
+   brand:getComputedStyle(document.querySelector('.app .brand'),'::before').backgroundImage
+  }
+ });
+ expect(fonts.regular).toBe(true);
+ expect(fonts.bold).toBe(true);
+ expect(fonts.family).toContain('BLOFY Plex Arabic');
+ expect(fonts.brand).toContain('stream-icon.svg');
+ for(const asset of [
+  ['fonts/IBMPlexSansArabic-Regular.ttf','font/ttf'],
+  ['fonts/IBMPlexSansArabic-SemiBold.ttf','font/ttf'],
+  ['apple-touch-icon.png','image/png'],
+  ['icon-192.png','image/png'],
+  ['icon-512.png','image/png'],
+  ['stream-icon.svg','image/svg+xml']
+ ]){
+  const response=await request.get('http://127.0.0.1:3000/'+asset[0]);
+  expect(response.status(),asset[0]).toBe(200);
+  expect(response.headers()['content-type'],asset[0]).toContain(asset[1])
+ }
+});

@@ -76,7 +76,7 @@ test('updates are offered without reloading while a player is active',()=>{
  assert.match(scoped,/window\.location\.reload\(\)/);
  assert.match(app,/if\(previousShellController\&\&current\&\&current!==previousShellController\)/);
  assert.match(app,/now-lastShellCheckAt<30\*60\*1000/);
- assert.match(sw,/blofy-stream-shell-v5/);
+ assert.match(sw,/blofy-stream-shell-v6/);
  assert.match(sw,/if\(SHELL\.indexOf\(url\.pathname\)<0\)return/);
  assert.doesNotMatch(sw,/['"]\/api\//);
 });
