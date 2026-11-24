@@ -11,7 +11,7 @@ const DAY=86400000;
 const SESSION_MS=12*60*60*1000;
 // Distributor panel offers up to one year. Existing historic 2-year subscriptions stay valid.
 const PLANS=new Map([[1,0],[30,1],[90,3],[180,6],[365,12]]);
-const TRIALS_PER_24H=5;
+const TRIALS_PER_24H=50;
 export function distributorPlanCost(durationDays){
  const plan=Number(durationDays);
  if(!Number.isSafeInteger(plan)||!PLANS.has(plan))throw Object.assign(
@@ -442,7 +442,17 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     [id,rewardsStart])).rows[0]||{};
    const redeemed=(await db.query(`SELECT COALESCE(SUM(quarters),0)::int AS spent_quarters
      FROM blofy_stream_distributor_reward_redemptions WHERE distributor_id=$1`,[id])).rows[0]||{};
-   return {earned:Number(rewards.reward_quarters||0),spent:Number(redeemed.spent_quarters||0)};
+   const pending=(await db.query(`SELECT COALESCE(SUM(CASE e.details->>'days'
+      WHEN '30' THEN 1 WHEN '90' THEN 2 WHEN '180' THEN 4 WHEN '365' THEN 8 ELSE 0 END),0)::int AS pending_quarters
+    FROM blofy_stream_distributor_credit_events e
+    JOIN blofy_stream_distributor_issues i ON i.id=e.issue_id AND i.distributor_id=e.distributor_id
+    JOIN blofy_xtream_gateway_duration_codes c ON i.kind='app' AND c.id=i.subject_id
+    WHERE e.distributor_id=$1 AND e.delta<0 AND e.type='issue' AND i.status='done'
+      AND c.redeemed_at IS NULL AND c.revoked_at IS NULL AND e.created_at>=$2::timestamptz
+      AND NOT EXISTS (SELECT 1 FROM blofy_stream_distributor_credit_events r
+       WHERE r.distributor_id=e.distributor_id AND r.issue_id=e.issue_id AND r.type='refund')`,
+    [id,rewardsStart])).rows[0]||{};
+   return {earned:Number(rewards.reward_quarters||0),spent:Number(redeemed.spent_quarters||0),pending:Number(pending.pending_quarters||0)};
  }
  async function redeemRewards(token,{credits,requestId}={}){
    const actor=await session(token);
@@ -512,6 +522,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    const rewards=await rewardSummary(pool,actor.id);
    return {ok:true,stats:{
      rewardPointsEarned:rewards.earned/4,
+     rewardPointsPending:rewards.pending/4,
+     walletCredits:Number(actor.credits||0),
      rewardPointsAvailable:Math.max(0,rewards.earned-rewards.spent)/4,
      rewardPointsRedeemed:rewards.spent/4,
      rewardRedemptionEnabled:rewardsRedemptionEnabled===true,
@@ -595,16 +607,13 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   if(!['app','xtream'].includes(type))throw fail('distributor_type_invalid');
   const days=number(durationDays,1,365,'distributor_days_invalid');
   const cost=distributorPlanCost(days);
-  // One free trial per customer across resellers; no raw customer phone stored.
-  // Normalize Saudi local/international forms to the same anonymous proof.
-  // Otherwise 05... and +9665... would bypass one-trial-per-customer.
+  // Phone is contact metadata; per-distributor quota controls new trials.
   let phone=String(trialPhone||'').replace(/[^0-9]/g,'');
   if(phone.startsWith('00'))phone=phone.slice(2);
   if(/^05[0-9]{8}$/.test(phone))phone='966'+phone.slice(1);
   else if(/^5[0-9]{8}$/.test(phone))phone='966'+phone;
   if(cost===0&&!/^[0-9]{8,15}$/.test(phone))throw fail('distributor_trial_phone_required');
-  const trialHash=cost===0?crypto.createHmac('sha256',Buffer.from(trialKeyHex,'hex'))
-    .update('blofy-stream-distributor-trial-phone:v1:'+phone).digest('hex'):null;
+  const trialHash=null; // Preserve the old partial index and historic records.
   // Distributors always issue one connection. A stale/forged client cannot override it.
   const connections=1;
   const request=String(requestId||'').toLowerCase();
@@ -624,10 +633,6 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    if(existing)return {existing};
    if(Number(current.credits)<cost)throw fail('distributor_no_credits',409);
    if(cost===0){
-    const previous=(await db.query(`SELECT id FROM blofy_stream_distributor_issues
-      WHERE trial_customer_hash=$1 AND status IN ('pending','done','review') LIMIT 1`,
-      [trialHash])).rows;
-    if(previous.length)throw fail('distributor_trial_already_used',409);
     const daily=(await db.query(`SELECT COUNT(*)::int AS count
       FROM blofy_stream_distributor_issues WHERE distributor_id=$1
         AND duration_days=1 AND status IN ('pending','done','review')
