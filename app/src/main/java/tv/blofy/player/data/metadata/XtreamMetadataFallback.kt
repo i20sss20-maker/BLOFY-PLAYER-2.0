@@ -35,16 +35,30 @@ object XtreamMetadataFallback {
         kind: String
     ): ProviderMetadata.Metadata? {
         if (!provider.providerType.equals("xtream", true) || stream.remoteId.isBlank()) return null
+        val external = tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN &&
+            tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(provider.id)
         val url = runCatching {
             (provider.baseUrl.trim().trimEnd('/') + "/player_api.php").toHttpUrl().newBuilder()
-                .addQueryParameter("username", provider.username)
-                .addQueryParameter("password", provider.password)
+                .apply {
+                    if (!external) {
+                        addQueryParameter("username", provider.username)
+                        addQueryParameter("password", provider.password)
+                    }
+                }
                 .addQueryParameter("action", action)
                 .addQueryParameter(idKey, stream.remoteId)
                 .build().toString()
         }.getOrNull() ?: return null
 
-        val root = withTimeout(8_000L) { XtreamClient.api.objectResponse(url) }
+        val api = if (external) {
+            val context = checkNotNull(BlofyApp.contextOrNull())
+            check(tv.blofy.player.core.identity.NativeExternalCatalogSession.activeId(context) == provider.id)
+            val profile = checkNotNull(tv.blofy.player.core.identity.ExternalStreamConnectStore.loadStaged(context))
+            check(profile.providerId == provider.id && stream.providerId == provider.id)
+            XtreamClient.createApi(XtreamClient.episodeClient(
+                tv.blofy.player.data.remote.ExternalXtreamCatalogTransport.client(profile.credentials)))
+        } else XtreamClient.api
+        val root = withTimeout(if (external) 15_000L else 8_000L) { api.objectResponse(url) }
         check(root.isNotEmpty()) { "Provider returned no details" }
         return parseResponse(provider, stream, root, kind)
     }
@@ -116,7 +130,9 @@ object XtreamMetadataFallback {
             posterUrl = poster,
             backdropUrl = backdrop,
             logoUrl = logo,
-            trailerUrl = text(source, "youtube_trailer", "trailer").ifBlank { null },
+            trailerUrl = if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN &&
+                tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(provider.id)) null
+                else text(source, "youtube_trailer", "trailer").ifBlank { null },
             cast = cast,
             crew = crew,
             countries = country,
@@ -241,6 +257,9 @@ object XtreamMetadataFallback {
 
     private fun imageUrl(raw: String?, provider: ProviderEntity): String? {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) } ?: return null
+        if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN &&
+            tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(provider.id))
+            return tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(value)
         val parsed = value.toHttpUrlOrNull() ?: provider.baseUrl.toHttpUrlOrNull()?.resolve(value)
         return parsed?.takeIf { it.username.isEmpty() && it.password.isEmpty() }?.toString()
     }
