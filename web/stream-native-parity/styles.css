@@ -640,3 +640,19 @@ html.blofy-tv-immersive,body.blofy-tv-immersive{
 @media(max-width:700px){
  .player-diagnostic-panel{max-height:38vh;font-size:11px;line-height:1.7;padding:10px}
 }
+
+/* iPhone/iPad web-app standalone safe area and responsive touch targets.
+ * Older TV engines ignore env() and keep the established dimensions. */
+@media (max-width:730px){
+ .app .workspace{padding-top:max(10px,env(safe-area-inset-top,0px));
+  padding-inline-start:max(13px,env(safe-area-inset-left,0px));
+  padding-inline-end:max(13px,env(safe-area-inset-right,0px))}
+ .app .rail{height:calc(76px + env(safe-area-inset-bottom,0px));
+  min-height:calc(76px + env(safe-area-inset-bottom,0px));
+  padding-bottom:calc(4px + env(safe-area-inset-bottom,0px))}
+ .setting-panel #install-blofy-web{min-height:44px;touch-action:manipulation}
+ .setting-panel #install-blofy-help{line-height:1.9;overflow-wrap:anywhere}
+}
+@media (pointer:coarse){
+ .btn,.rail-link,.chip,.channel-item,.episode-row{touch-action:manipulation}
+}
