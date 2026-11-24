@@ -33,6 +33,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/visual-outage-qoe.test.mjs
       - name: Verify per-engine live health metrics and channel reset
         run: cd web/stream-native-parity && node --test qa/local-engine-qoe.test.mjs
+      - name: Verify privacy-safe local playback cause hints
+        run: cd web/stream-native-parity && node --test qa/live-cause-hints.test.mjs
       - name: Verify logout drains authorized HLS and VOD STOP requests
         run: cd web/stream-native-parity && node --test qa/logout-media-stop.test.mjs
       # Browser tests explicitly use channel: chrome. Installing Chromium as
