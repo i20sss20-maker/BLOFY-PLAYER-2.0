@@ -121,6 +121,31 @@ def main():
                 pass
             else:
                 raise AssertionError("invalid restore report accepted")
+        # Periodic gate requires both a recent rehearsal and a fresh snapshot
+        # at the time it was restored. Use fixed fixture time rather than
+        # depending on the CI runner's actual calendar date.
+        rehearsal = datetime(2026, 11, 23, 17, 0, tzinfo=timezone.utc)
+        periodic_receipt = {**receipt, "verified_at": rehearsal.isoformat().replace("+00:00", "Z")}
+        successful.receipt = json.dumps(periodic_receipt).encode()
+        for days, accepted in ((7, True), (8, True), (9, False)):
+            now = rehearsal + timedelta(days=days)
+            try:
+                result = inspect_restore_receipt(successful, values["BLOFY_BACKUP_BUCKET"],
+                    now=now, not_before=now-timedelta(days=8), require_recent_snapshot=True)
+            except ValueError:
+                assert not accepted
+            else:
+                assert accepted and result["full_database_restore_verified"]
+        later = rehearsal + timedelta(hours=9)
+        successful.receipt = json.dumps({**periodic_receipt,
+            "verified_at": later.isoformat().replace("+00:00", "Z")}).encode()
+        try:
+            inspect_restore_receipt(successful, values["BLOFY_BACKUP_BUCKET"],
+                now=later, not_before=later-timedelta(days=8), require_recent_snapshot=True)
+        except ValueError as exc:
+            assert str(exc) == "restore_snapshot_not_recent_at_rehearsal"
+        else:
+            raise AssertionError("old snapshot accepted as fresh rehearsal")
         successful.receipt = original
         for kind in ('stale', 'changed'):
             fake = FakeS3()

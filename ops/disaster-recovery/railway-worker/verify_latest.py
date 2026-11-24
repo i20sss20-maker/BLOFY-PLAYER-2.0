@@ -75,7 +75,7 @@ def inspect_latest_receipt(client, bucket, *, now=None, freshness_hours=8, inclu
     }
 
 
-def inspect_restore_receipt(client, bucket, *, not_before, now=None):
+def inspect_restore_receipt(client, bucket, *, not_before, now=None, require_recent_snapshot=False):
     """Read-only independent verification of the isolated recovery report."""
     now = now or datetime.now(timezone.utc)
     if not_before.tzinfo is None:
@@ -110,6 +110,12 @@ def inspect_restore_receipt(client, bucket, *, not_before, now=None):
     checksum = receipt.get("encrypted_sha256")
     if not isinstance(archive, str) or not ARCHIVE_KEY.fullmatch(archive) or not isinstance(checksum, str) or not SHA256.fullmatch(checksum):
         raise ValueError("restore_archive_identity_invalid")
+    if require_recent_snapshot:
+        # A recent rehearsal of a years-old dump is not fresh recovery evidence.
+        # The writer uses UTC archive names and the audit selects its latest receipt.
+        snapshot = datetime.strptime(archive.split("/")[2]+"/"+archive.split("/")[3]+"/"+archive.split("/")[4]+"/"+archive.split("/")[5].split("-")[0], "%Y/%m/%d/%H%M%SZ").replace(tzinfo=timezone.utc)
+        if snapshot > when + timedelta(minutes=2) or when - snapshot > timedelta(hours=8):
+            raise ValueError("restore_snapshot_not_recent_at_rehearsal")
     head = client.head_object(Bucket=bucket, Key=archive)
     if int(head.get("ContentLength", -1)) < 1000 or (head.get("Metadata") or {}).get("sha256") != checksum:
         raise ValueError("restore_archive_head_mismatch")
@@ -139,6 +145,10 @@ def main():
         if sys.argv[1:] == ["--restore"]:
             minimum = datetime.fromisoformat(os.environ["BLOFY_RESTORE_AUDIT_NOT_BEFORE"].replace("Z", "+00:00"))
             result = inspect_restore_receipt(client, bucket, not_before=minimum)
+        elif sys.argv[1:] == ["--restore-periodic"]:
+            now = datetime.now(timezone.utc)
+            result = inspect_restore_receipt(client, bucket, now=now,
+                not_before=now-timedelta(days=8), require_recent_snapshot=True)
         elif not sys.argv[1:]:
             result = inspect_latest_receipt(client, bucket)
         else:
