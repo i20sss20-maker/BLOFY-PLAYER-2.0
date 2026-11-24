@@ -314,6 +314,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                         }
                     }
                 } else StreamCodeClient.redeem(code, binding)
+                if (NativeExternalCatalogSession.hasStaged(applicationContext))
+                    NativeExternalCatalogSession.signOut(applicationContext)
                 withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao()
                     dao.upsertProvider(ProviderEntity(
