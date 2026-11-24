@@ -36,6 +36,7 @@ export function createBrowserStreamPlayer(video, {
   let generation = 0, timer = null, watch = null, hls = null, tsPlayer = null;
   let current = null, attempts = 0, lastProgressAt = 0, lastTime = 0;
   let abortRefresh = null, disposed = false, intentionalPause = false, seekListener = null;
+  let stableSince = 0, lastObservedTime = 0;
 
   const status = (state) => onStatus(state);
   // Deliberately do not include URLs, channel names, headers or exception messages.
@@ -117,7 +118,9 @@ export function createBrowserStreamPlayer(video, {
       video.addEventListener('loadedmetadata', seekListener, { once: true });
     }
     lastProgressAt = Date.now();
+    stableSince = 0;
     lastTime = video.currentTime || 0;
+    lastObservedTime = lastTime;
     readyToPlay();
   }
   function scheduleRecovery(reason) {
@@ -156,8 +159,12 @@ export function createBrowserStreamPlayer(video, {
     if (!current || disposed) return;
     if (video.currentTime > lastTime + 0.05) {
       lastTime = video.currentTime;
-      lastProgressAt = Date.now();
-      attempts = 0;
+      const now = Date.now();
+      if (!stableSince) stableSince = now;
+      lastProgressAt = now;
+      // A brief second of resumed video is not proof of a stable stream;
+      // avoid unlimited fast retry loops on feeds that die repeatedly.
+      if (now - stableSince >= 8000) attempts = 0;
       if (timer !== null) { clearTimeout(timer); timer = null; }
     }
   }
@@ -205,7 +212,13 @@ export function createBrowserStreamPlayer(video, {
     installSource(resumeAt);
     watch = setInterval(() => {
       if (!current || disposed || video.paused || video.seeking || globalThis.document?.hidden) return;
-      if (Date.now() - lastProgressAt >= stallMs && video.readyState < 3) scheduleRecovery('stall-timeout');
+      // A frozen frame may still advertise readyState=4. Judge actual
+      // playback position, not only buffered data / network state.
+      if (Number.isFinite(video.currentTime) && video.currentTime > lastObservedTime + 0.05) {
+        lastObservedTime = video.currentTime;
+        lastProgressAt = Date.now();
+      }
+      if (Date.now() - lastProgressAt >= stallMs) scheduleRecovery('stall-timeout');
     }, 2000);
     return true;
   }
