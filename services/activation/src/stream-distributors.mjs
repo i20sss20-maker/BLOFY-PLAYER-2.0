@@ -11,7 +11,7 @@ const DAY=86400000;
 const SESSION_MS=12*60*60*1000;
 // Distributor panel offers up to one year. Existing historic 2-year subscriptions stay valid.
 const PLANS=new Map([[1,0],[30,1],[90,3],[180,6],[365,12]]);
-const TRIALS_PER_24H=5;
+const TRIALS_PER_24H=50;
 export function distributorPlanCost(durationDays){
  const plan=Number(durationDays);
  if(!Number.isSafeInteger(plan)||!PLANS.has(plan))throw Object.assign(
