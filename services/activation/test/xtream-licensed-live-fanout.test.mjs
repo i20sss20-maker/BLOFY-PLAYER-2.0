@@ -227,3 +227,15 @@ test('shared live uses same-origin response for bearer and Xtream clients, with 
  assert.equal(calls[0].opts.redirect,'manual');
  assert.equal(calls[0].opts.headers.authorization,undefined);
 });
+
+test('production shared admission requires explicit operator opt-in and known provider limit',async()=>{
+ const {permittedLicensedLiveProduction}=await import('../src/xtream-licensed-live-fanout-policy.mjs');
+ const env={BLOFY_STREAM_LICENSED_LIVE_PRODUCTION:'1'};
+ assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:1},env),true);
+ assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:4},env),true);
+ for(const v of [null,0,-1,65,'4',1.5])assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:v},env),false);
+ assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:4},{}),false);
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const scope=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('// Optional one-account canary:'));
+ assert.ok(scope.indexOf('permittedLicensedLiveFanout({')<scope.indexOf('permittedLicensedLiveProduction({'));
+});
