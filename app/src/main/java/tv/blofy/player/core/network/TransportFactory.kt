@@ -29,8 +29,9 @@ object TransportFactory {
         val appContext = context.applicationContext
         // Never send external media through BLOFY bearer transport or its disk cache.
         if (BuildConfig.CODE_ONLY_LOGIN && NativeExternalMediaTransport.isExternal(profile.providerKey)) {
-            return OkHttpDataSource.Factory(NativeExternalMediaTransport.client(appContext, profile.providerKey))
+            val http = OkHttpDataSource.Factory(NativeExternalMediaTransport.client(appContext, profile.providerKey))
                 .setUserAgent("BLOFY STREAM/${BuildConfig.VERSION_NAME}")
+            return DefaultDataSource.Factory(appContext,http)
         }
         val upstreamHttp: HttpDataSource.Factory =
             if (BuildConfig.CODE_ONLY_LOGIN) secureStreamHttp(appContext)
