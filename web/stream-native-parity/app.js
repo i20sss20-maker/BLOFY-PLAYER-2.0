@@ -30,6 +30,27 @@ function appleTouchBrowser(ua,touchPoints){
  return /iPhone|iPad|iPod/i.test(String(ua||''))||
   /Macintosh/i.test(String(ua||''))&&Number(touchPoints)>1
 }
+/* A double tap only seeks VOD when both taps are on the same outer third
+ * of the video, close in time and position. LIVE never creates a seek.
+ * Pure helper: no network work, timers or account state. */
+function touchSeekDecision(previous,now,x,y,width,kind,blocked){
+ var position=Number(x),screenWidth=Number(width),at=Number(now),up=Number(y);
+ if(blocked||kind==='live'||!Number.isFinite(at)||!Number.isFinite(position)||
+    !Number.isFinite(screenWidth)||screenWidth<90||
+    position<0||position>screenWidth||!Number.isFinite(up))
+  return {last:null,step:0};
+ var side=position<screenWidth*0.34?-1:position>screenWidth*0.66?1:0;
+ if(!side)return {last:null,step:0};
+ var close=previous&&previous.side===side&&
+  at-previous.at>=45&&at-previous.at<=340&&
+  Math.abs(previous.x-position)<=46&&Math.abs(previous.y-up)<=46;
+ return {last:close?null:{at:at,x:position,y:up,side:side},step:close?side*10:0}
+}
+function browserConnectionCopy(online){
+ return online===false?
+  'الجهاز يبدو غير متصل بالإنترنت. لن يُعاد تشغيل القناة تلقائيًا؛ تحقق من اتصال Wi-Fi أو البيانات.':
+  'عاد اتصال الجهاز حسب المتصفح. إذا استمر التقطيع فقد يكون السبب بالمصدر أو الشبكة.'
+}
 function setDeviceInput(mode){
  if(mode!=='remote'&&mode!=='touch'&&mode!=='mouse')return;
  S.keyboardMode=mode==='remote';
@@ -275,6 +296,7 @@ function shell(pageTitle,markup){
  (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
  '<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
  '<div id="screen">'+markup+'</div></main></div>';
+ showWebShellUpdateHint();
  // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
 function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
@@ -2992,8 +3014,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    opts:{kind:kind,id:id,extension:ext,name:name,from:resume}},'',window.location.href)}catch(err){}
  }else pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
  S.route='player';
+ showWebShellUpdateHint();
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
  '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+
+ '<div class="mobile-seek-feedback" id="mobile-seek-feedback" hidden role="status" aria-live="polite"></div>'+
  '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
  '<div class="player-hud native-stream-hud">'+
  '<div class="native-player-topline"><button class="native-player-back" id="player-back" type="button">↶ رجوع</button>'+
@@ -3554,6 +3578,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  root.addEventListener('keydown',revealControls);
  root.addEventListener('focusin',revealControls);
  video.addEventListener('click',function(){
+  // A recognized double-tap already applied one VOD seek. Don't let the
+  // synthetic click immediately re-hide the controls.
+  if(state.touchSkipClickUntil&&Date.now()<state.touchSkipClickUntil){
+   revealControls();return
+  }
   var panels=['player-more-panel','player-info-panel','player-health-panel',
    'player-diagnostic-panel','player-jump-panel','player-choice-panel','player-channel-panel'];
   var open=false;
@@ -3570,6 +3599,47 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    root.classList.add('controls-hidden')
   }else revealControls()
  });
+ function showTouchSeekFeedback(step){
+  var note=document.getElementById('mobile-seek-feedback');
+  if(!note||!note.isConnected)return;
+  note.textContent=(step>0?'+':'−')+Math.abs(step)+' ثوانٍ';
+  note.hidden=false;
+  if(state.touchSeekFeedbackTimer)clearTimeout(state.touchSeekFeedbackTimer);
+  state.touchSeekFeedbackTimer=setTimeout(function(){
+   state.touchSeekFeedbackTimer=null;
+   if(note.isConnected)note.hidden=true
+  },1150)
+ }
+ function handleTouchVideoGesture(clientX,clientY){
+  if(S.route!=='player'||S.playerView!==state||isLive||!state.seekBy||!state.ready)return;
+  if(document.documentElement.getAttribute('data-blofy-input')!=='touch')return;
+  var retry=document.getElementById('player-retry');
+  if(video.paused||video.seeking||retry&&retry.style.display!=='none')return;
+  var panels=['player-more-panel','player-info-panel','player-health-panel',
+   'player-diagnostic-panel','player-jump-panel','player-choice-panel','player-channel-panel'];
+  for(var i=0;i<panels.length;i++){
+   var item=document.getElementById(panels[i]);
+   if(item&&!item.hidden){state.touchSeekLastTap=null;return}
+  }
+  var rect=video.getBoundingClientRect();
+  var decision=touchSeekDecision(state.touchSeekLastTap,Date.now(),
+    Number(clientX)-rect.left,Number(clientY)-rect.top,rect.width,kind,false);
+  state.touchSeekLastTap=decision.last;
+  if(decision.step){
+   state.touchSkipClickUntil=Date.now()+420;
+   state.seekBy(decision.step);
+   showTouchSeekFeedback(decision.step);
+   revealControls()
+  }
+ }
+ video.addEventListener('pointerup',function(event){
+  if(event&&event.pointerType==='touch')
+   handleTouchVideoGesture(event.clientX,event.clientY)
+ },{passive:true});
+ if(!window.PointerEvent)video.addEventListener('touchend',function(event){
+  var t=event&&event.changedTouches&&event.changedTouches[0];
+  if(t)handleTouchVideoGesture(t.clientX,t.clientY)
+ },{passive:true});
  function refreshVideoResolution(){
   if(S.route!=='player'||S.playerView!==state)return;
   var w=Math.max(0,Number(video.videoWidth)||0),h=Math.max(0,Number(video.videoHeight)||0);
@@ -4580,6 +4650,26 @@ window.addEventListener('beforeunload',function(){
  if(S.playerView)recordPlaybackQuality(S.playerView)
 });
 window.addEventListener('pagehide',persistPlaybackCheckpoint);
+/* Browser network indicators are advisory; never claim to know the quality
+ * of Xtream or create another FFmpeg session when Wi-Fi reconnects. */
+var connectivityHideTimer=null;
+function showBrowserConnectionNotice(online){
+ var box=document.getElementById('blofy-connectivity-notice');
+ if(!box){
+  box=document.createElement('div');box.id='blofy-connectivity-notice';
+  box.setAttribute('role','status');box.setAttribute('aria-live','polite');
+  document.body.appendChild(box)
+ }
+ if(connectivityHideTimer){clearTimeout(connectivityHideTimer);connectivityHideTimer=null}
+ box.textContent=browserConnectionCopy(online);box.hidden=false;
+ box.setAttribute('data-connection',online?'restored':'offline');
+ if(online)connectivityHideTimer=setTimeout(function(){
+  connectivityHideTimer=null;if(box.isConnected)box.hidden=true
+ },5000)
+}
+window.addEventListener('offline',function(){showBrowserConnectionNotice(false)});
+window.addEventListener('online',function(){showBrowserConnectionNotice(true)});
+if(navigator.onLine===false)showBrowserConnectionNotice(false);
 document.addEventListener('visibilitychange',function(){
  if(document.hidden){
   persistPlaybackCheckpoint();
@@ -4603,11 +4693,57 @@ window.addEventListener('appinstalled',function(){
  pendingInstallPrompt=null;
  updateInstallGuide()
 });
-// Optional installable web shell. The worker never caches subscription tokens,
-// API responses, movie streams or account content.
+/* A newly activated shell must never interrupt an active film or TV
+ * channel. Offer reload only on a non-player page and only when an existing
+ * controller was genuinely replaced (not first-install activation). */
+var freshShellAvailable=false,previousShellController=null,lastShellCheckAt=0;
+function showWebShellUpdateHint(){
+ var note=document.getElementById('blofy-shell-update');
+ if(!freshShellAvailable||S.route==='player'){
+  if(note)note.hidden=true;return
+ }
+ if(!note){
+  note=document.createElement('div');note.id='blofy-shell-update';
+  note.setAttribute('role','status');note.setAttribute('aria-live','polite');
+  note.innerHTML='<span>يتوفر تحديث جديد لواجهة BLOFY STREAM.</span> '+
+   '<button type="button" id="blofy-reload-shell">تحديث الآن</button>';
+  document.body.appendChild(note);
+  var apply=document.getElementById('blofy-reload-shell');
+  apply.onclick=function(){
+   if(S.route==='player')return; // A click cannot interrupt a video.
+   try{window.location.reload()}catch(e){}
+  }
+ }
+ note.hidden=false
+}
+// Shell-only service worker: it never caches customer data, Xtream,
+// subscription APIs or media. Browser detection is optional on older TVs.
 if('serviceWorker' in navigator&&window.isSecureContext){
+ previousShellController=navigator.serviceWorker.controller||null;
+ navigator.serviceWorker.addEventListener('controllerchange',function(){
+  var current=navigator.serviceWorker.controller||null;
+  if(previousShellController&&current&&current!==previousShellController){
+   freshShellAvailable=true;showWebShellUpdateHint()
+  }
+  previousShellController=current
+ });
  window.addEventListener('load',function(){
-  navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){})
+  navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(function(reg){
+   if(!reg||!reg.update)return;
+   // Coalesce one low-priority update check per 30 minutes; never during
+   // active playback or while the device reports offline.
+   function checkShellUpdate(){
+    var now=Date.now();
+    if(S.route==='player'||navigator.onLine===false||
+      now-lastShellCheckAt<30*60*1000)return;
+    lastShellCheckAt=now;
+    try{var pending=reg.update();if(pending&&pending.catch)pending.catch(function(){})}catch(e){}
+   }
+   checkShellUpdate();
+   document.addEventListener('visibilitychange',function(){
+    if(!document.hidden)checkShellUpdate()
+   })
+  }).catch(function(){})
  })
 }
 })();
