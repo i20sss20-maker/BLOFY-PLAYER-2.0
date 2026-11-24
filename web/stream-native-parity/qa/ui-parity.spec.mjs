@@ -631,6 +631,46 @@ test('profile importer rejects malformed or credential-bearing files without tou
  expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k))['movie:11'].position,key)).toBe(950)
 });
 
+test('20-minute hardware acceptance starts only with real decoded picture; cancelled runs are never marked as passed',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const media=readFileSync('/tmp/blofy-qa-test.mp4');
+ await page.route('**/api/media/movie/11.mp4',async route=>{
+  const range=route.request().headers()['range'];let start=0,end=media.length-1,status=200;
+  if(range){const m=range.match(/bytes=(\\d+)-(\\d*)/);if(m){start=Number(m[1]);end=m[2]?Math.min(Number(m[2]),end):end;status=206}}
+  const headers={'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':String(end-start+1)};
+  if(status===206)headers['Content-Range']='bytes '+start+'-'+end+'/'+media.length;
+  await route.fulfill({status,headers,body:media.subarray(start,end+1)})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:7000}).toBeGreaterThan(1);
+ await page.locator('#player-options-toggle').click();
+ const button=page.locator('#player-verify-20m'),info=page.locator('#player-verify-status');
+ await expect(button).toBeVisible();
+ await button.click();
+ await expect(info).toContainText('جار فحص تشغيل الصورة');
+ await expect(button).toContainText('إنهاء اختبار');
+ await button.click();
+ await expect(info).toContainText('لم يجتز الفحص');
+ await expect(button).toContainText('بدء اختبار');
+ await page.locator('#player-back').click();
+ await page.locator('[data-go="settings"]').first().click();
+ await expect(page.locator('#last-long-playback-test')).toContainText('لم يجتز');
+ const report=await page.evaluate(()=>{
+  const profile='blofy_web_profile_v1:0123456789abcdef01234567:lastLongPlaybackTest';
+  return JSON.parse(localStorage.getItem(profile)||'null')
+ });
+ expect(report.reason).toBe('stopped');
+ const value=JSON.stringify(report);
+ expect(value).not.toContain('movie:11');
+ expect(value).not.toContain('Bearer ');
+ expect(value).not.toContain('https://');
+ expect(errors).toEqual([])
+});
+
 test('Hls.js vendor loader retries after transient TV Wi-Fi script failure',async({page})=>{
  let loads=0;
  await page.route('**/vendor/hls.min.js',async route=>{
