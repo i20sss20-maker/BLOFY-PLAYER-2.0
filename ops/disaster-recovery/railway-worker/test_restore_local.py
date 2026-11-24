@@ -104,6 +104,24 @@ def main():
         assert receipt['production_database_contacted'] is False
         assert receipt['encrypted_sha256'] == checksum
         assert receipt['user_tables_restored'] == 1
+        from verify_latest import inspect_restore_receipt
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+        result = inspect_restore_receipt(successful, values["BLOFY_BACKUP_BUCKET"], not_before=cutoff)
+        assert result["full_database_restore_verified"] is True
+        assert result["user_tables_restored"] == 1
+        original = successful.receipt
+        for mutation in ({"verified_at": "2020-01-01T00:00:00Z"},
+                         {"production_database_contacted": True},
+                         {"encrypted_sha256": "0"*64},
+                         {"full_database_restore_verified": False}):
+            successful.receipt = json.dumps({**receipt, **mutation}).encode()
+            try:
+                inspect_restore_receipt(successful, values["BLOFY_BACKUP_BUCKET"], not_before=cutoff)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("invalid restore report accepted")
+        successful.receipt = original
         for kind in ('stale', 'changed'):
             fake = FakeS3()
             setattr(fake, kind, True)
