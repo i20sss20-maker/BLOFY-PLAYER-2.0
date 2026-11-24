@@ -78,3 +78,12 @@ export function createFirstAccountSharedLiveTestPilot(){
   return true;
  };
 }
+
+// Production admission is a separate operator switch, not a grant of rights.
+// The caller MUST still pass permittedLicensedLiveFanout and account/catalog
+// authorization. Require a known provider quota; never invent extra slots.
+export function permittedLicensedLiveProduction({providerMaxConcurrentFeeds}={},env=process.env){
+ return env.BLOFY_STREAM_LICENSED_LIVE_PRODUCTION==='1'&&
+  Number.isSafeInteger(providerMaxConcurrentFeeds)&&
+  providerMaxConcurrentFeeds>=1&&providerMaxConcurrentFeeds<=64;
+}

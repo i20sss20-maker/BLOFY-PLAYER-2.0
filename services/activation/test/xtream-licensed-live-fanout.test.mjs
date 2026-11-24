@@ -204,3 +204,38 @@ test('two-code mode cannot enable without first-account operator gate',()=>{
   BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh'};
  assert.equal(guard({accountId:source,gatewayId:'1312446',sourceName:'saleh'},cfg),false);
 });
+
+test('shared live uses same-origin response for bearer and Xtream clients, with no direct fallback',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const start=gateway.indexOf('async function proxyMedia(');
+ const scope=gateway.slice(start,gateway.indexOf('// Optional one-account canary:',start));
+ assert.match(scope,/return await proxySharedLiveTicket\(req,res,destination,observe\)/);
+ assert.doesNotMatch(scope,/writeHead\(307/);
+ assert.match(scope,/return text\(res,503,'Shared live relay unavailable'/);
+ const fn=gateway.slice(gateway.indexOf('async function proxySharedLiveTicket('),start);
+ const calls=[];
+ const run=new Function('fetch','text','pipeline','Readable',fn+'\nreturn proxySharedLiveTicket;')(
+   async(url,opts)=>{calls.push({url:String(url),opts});return new Response('busy',{status:429})},
+   (res,status,body,ct,headers)=>{res.status=status;res.retry=headers?.['retry-after']},
+   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x});
+ const req={once(){},off(){},aborted:false};
+ const res={once(){},off(){},destroyed:false,headersSent:false};
+ await run(req,res,'https://example.invalid/relay/'+'a'.repeat(48),()=>{});
+ assert.equal(calls.length,0);assert.equal(res.status,503);
+ await run(req,res,'https://blofy-stream-api-production.up.railway.app/relay/'+'a'.repeat(48),()=>{});
+ assert.equal(calls.length,1);assert.equal(res.status,429);assert.equal(res.retry,'5');
+ assert.equal(calls[0].opts.redirect,'manual');
+ assert.equal(calls[0].opts.headers.authorization,undefined);
+});
+
+test('production shared admission requires explicit operator opt-in and known provider limit',async()=>{
+ const {permittedLicensedLiveProduction}=await import('../src/xtream-licensed-live-fanout-policy.mjs');
+ const env={BLOFY_STREAM_LICENSED_LIVE_PRODUCTION:'1'};
+ assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:1},env),true);
+ assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:4},env),true);
+ for(const v of [null,0,-1,65,'4',1.5])assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:v},env),false);
+ assert.equal(permittedLicensedLiveProduction({providerMaxConcurrentFeeds:4},{}),false);
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const scope=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('// Optional one-account canary:'));
+ assert.ok(scope.indexOf('permittedLicensedLiveFanout({')<scope.indexOf('permittedLicensedLiveProduction({'));
+});
