@@ -31,7 +31,6 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
-import tv.blofy.player.core.identity.ExternalStreamConnectClient
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.CatalogSyncState
@@ -136,7 +135,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             id = View.generateViewId()
             hint = "•••• ••••"
             inputType = InputType.TYPE_CLASS_NUMBER
-            filters = arrayOf(InputFilter.LengthFilter(12))
+            // Leave room for pasted separators before the existing normalization.
+            filters = arrayOf(InputFilter.LengthFilter(32))
+            isSaveEnabled = false
             imeOptions = EditorInfo.IME_ACTION_DONE
             isSingleLine = true
             textSize = if (isTv) 27f else 24f
@@ -216,26 +217,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isTv) 50 else 46)).apply {
                 topMargin = dp(18)
             })
-        val connectButton = Button(this).apply {
-            id = View.generateViewId()
-            text = if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") "ربط كود الموقع • BLOFY CONNECT" else "Use website code • BLOFY CONNECT"
-            isAllCaps = false
-            isFocusable = true
-            setTextColor(BlofyTvDesign.TextPrimary)
-            background = BlofyTvDesign.secondaryButton(dp(14).toFloat())
-            setOnClickListener {
-                if (busy) return@setOnClickListener
-                val intent = Intent(this@CodeOnlyLoginActivity, ExternalStreamConnectActivity::class.java)
-                ExternalStreamConnectClient.normalizeCode(codeInput.text.toString())?.let { intent.putExtra(ExternalStreamConnectActivity.EXTRA_CONNECT_CODE, it) }
-                startActivity(intent)
-            }
-        }
-        panel.addView(connectButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) })
         submitButton.nextFocusDownId = languageButton.id
         languageButton.nextFocusUpId = submitButton.id
-        languageButton.nextFocusDownId = connectButton.id
-        connectButton.nextFocusUpId = languageButton.id
 
         codeInput.nextFocusDownId = submitButton.id
         submitButton.nextFocusUpId = codeInput.id
@@ -286,9 +269,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     }
 
     private fun focusFirst() {
-        // A TV remote should land directly on the primary action; the user
-        // can move up to enter the code without cycling through decoration.
-        if (DeviceClass.isTv(this)) submitButton.requestFocus() else codeInput.requestFocus()
+        // Start on the single code field on both TV and mobile.
+        codeInput.requestFocus()
     }
 
     private fun setBusy(working: Boolean) {
@@ -349,9 +331,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     classified != StreamConnectionDiagnostics.Cause.OTHER ->
                         StreamConnectionDiagnostics.guidance(this@CodeOnlyLoginActivity, classified)
                     message == "الكود مستخدم أو غير متاح. تواصل مع المسؤول" ->
-                        if (ExternalStreamConnectClient.normalizeCode(code) != null) {
-                            if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") "هذا الكود غير متاح كتفعيل BLOFY. إذا أنشأته من موقع CONNECT فاضغط زر ربط كود الموقع أدناه." else "Not available as a BLOFY activation code. If it came from CONNECT, use the website code button below."
-                        } else getString(R.string.stream_ui_code_used)
+                        getString(R.string.stream_ui_code_used)
                     message == "محاولات كثيرة، أعد المحاولة لاحقًا" ->
                         getString(R.string.stream_ui_too_many_attempts)
                     message == "كود غير صحيح" ->
