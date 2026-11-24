@@ -256,6 +256,39 @@ class PlaylistManagerPersistenceTest {
             !it.contains("username=") && !it.contains("password=") })
     }
 
+    @Test fun interruptedExternalImportKeepsCompletedSectionsAndRebuildsOnlyMissingRows(): Unit = runBlocking(Dispatchers.IO) {
+        val context = RuntimeEnvironment.getApplication()
+        val external = ProviderEntity("external-" + java.util.UUID.randomUUID(), "External",
+            tv.blofy.player.data.remote.ExternalXtreamCatalogTransport.ORIGIN,"","",enabled = false)
+        val dao = db.dao()
+        dao.upsertProvider(external)
+        val first = PlaylistManager(FixtureApi(),dao,externalCatalog = true)
+        first.syncLive(external)
+        FirstImportCheckpoint.markCompleted(context,external,"live")
+        // A partial movie batch has no completion marker. It must be removed.
+        val partial = StreamEntity("${external.id}:movie:999",external.id,"999","1","movie","Partial")
+        dao.insertCatalogBatch(listOf(partial),listOf(StreamSearchFtsEntity(partial.key,partial.providerId,partial.kind,partial.name)))
+        try {
+            val checkpoint = FirstImportCheckpoint.discardIncompleteSections(context,dao,external)
+            assertEquals(setOf("live"),checkpoint.completed)
+            assertEquals(1,dao.catalogCountAll(external.id,"live"))
+            assertNull(dao.stream(partial.key))
+            assertFalse(CatalogSyncState.isReady(context,external.id))
+            // A fresh manager cannot fetch live; the validated checkpoint must skip it.
+            val resumed = PlaylistManager(FixtureApi(liveCategories = emptyList(),liveStreams = "invalid"),dao,externalCatalog = true)
+                .syncAll(external,completedSections = checkpoint.completed,
+                    onSectionComplete = { FirstImportCheckpoint.markCompleted(context,external,it) })
+            assertEquals(0,resumed.failedSectionCount)
+            assertEquals(3,resumed.freshItemCount)
+            assertEquals(setOf("live","movie","series"),FirstImportCheckpoint.state(context,external).completed)
+            assertFalse(dao.provider(external.id)!!.enabled)
+            assertFalse(CatalogSyncState.isReady(context,external.id))
+            // If durable rows disappear the checkpoint cannot hide the missing section.
+            dao.clearStreams(external.id,"live")
+            assertEquals(setOf("movie","series"),FirstImportCheckpoint.discardIncompleteSections(context,dao,external).completed)
+        } finally { FirstImportCheckpoint.clear(context,external.id) }
+    }
+
     private class FixtureApi(
         val liveCategories: List<Map<String, Any?>> = listOf(mapOf("category_id" to "1", "category_name" to "Category")),
         val liveStreams: String = "[{\"stream_id\":1,\"name\":\"Live item\",\"category_id\":1}]"
