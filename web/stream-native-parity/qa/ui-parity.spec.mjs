@@ -562,6 +562,75 @@ test('VIDAA settings work without browser popup and show local HLS/fullscreen ca
 });
 
 
+
+test('profile backup UI exports a credential-free local file and restores saved favorites only after approval',async({page})=>{
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="settings"]').first().click();
+ await expect(page.locator('#profile-export')).toBeVisible();
+ const file=page.waitForEvent('download');
+ await page.locator('#profile-export').click();
+ const download=await file;
+ expect(download.suggestedFilename()).toMatch(/^BLOFY-STREAM-Web-Profile-.*\.json$/);
+ const exported=readFileSync(await download.path(),'utf8');
+ expect(JSON.parse(exported).format).toBe('blofy-stream-web-portable-profile');
+ expect(exported).not.toContain('Bearer ');
+ expect(exported).not.toContain('http://');
+ expect(exported).not.toContain('https://');
+ expect(exported).not.toContain('deviceKey');
+ const body=JSON.stringify({format:'blofy-stream-web-portable-profile',version:1,
+  createdAt:1795500000000,
+  favorites:[{key:'movie:11',name:'فيلم تجريبي',ext:'mp4'}],
+  watch:[{key:'series:55',position:350,duration:1400,updated:1795500000000,
+   name:'حلقة محفوظة',ext:'mp4',seriesId:'21'}]});
+ await page.locator('#profile-import-file').setInputFiles({
+  name:'BLOFY-Web-backup.json',mimeType:'application/json',buffer:Buffer.from(body)
+ });
+ await expect(page.locator('#profile-import-confirm')).toBeVisible();
+ await expect(page.locator('#profile-import-summary')).toContainText('1 عنصرًا');
+ const storageKey='blofy_web_profile_v1:0123456789abcdef01234567:favorites';
+ expect(await page.evaluate(key=>localStorage.getItem(key),storageKey)).toBeNull();
+ await page.locator('#profile-import-accept').click();
+ await expect(page.locator('#profile-transfer-status')).toContainText('تم دمج 1 مفضلة');
+ await expect(page.locator('#profile-import-confirm')).toBeHidden();
+ await page.reload();
+ await page.locator('[data-go="favorites"]').first().click();
+ await expect(page.locator('.poster-grid .poster')).toHaveCount(1);
+ const checkpoint=await page.evaluate(()=>{
+  const prefix='blofy_web_profile_v1:0123456789abcdef01234567:';
+  return JSON.parse(localStorage.getItem(prefix+'watch')||'{}')['series:55']
+ });
+ expect(checkpoint.position).toBe(350);
+ expect(checkpoint.art).toBe('');
+ expect(errors).toEqual([])
+});
+test('profile importer rejects malformed or credential-bearing files without touching existing watch data',async({page})=>{
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="settings"]').first().click();
+ const key='blofy_web_profile_v1:0123456789abcdef01234567:watch';
+ await page.evaluate(k=>localStorage.setItem(k,JSON.stringify({'movie:11':{position:950,updated:1795500000000}})),key);
+ const hostile=JSON.stringify({format:'blofy-stream-web-portable-profile',
+  version:1,createdAt:1795500000000,
+  favorites:[{key:'__proto__',name:'attack',ext:'mp4'}],watch:[]});
+ await page.locator('#profile-import-file').setInputFiles({
+  name:'not-safe.json',mimeType:'application/json',buffer:Buffer.from(hostile)
+ });
+ await expect(page.locator('#profile-transfer-status')).toContainText('رفض الملف');
+ await expect(page.locator('#profile-import-confirm')).toBeHidden();
+ expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k))['movie:11'].position,key)).toBe(950);
+ const safe=JSON.stringify({format:'blofy-stream-web-portable-profile',version:1,
+  createdAt:1795500000000,favorites:[],
+  watch:[{key:'movie:11',position:10,duration:7200,updated:1795400000000,
+   name:'old checkpoint',ext:'mp4',seriesId:''}]});
+ await page.locator('#profile-import-file').setInputFiles({
+  name:'old.json',mimeType:'application/json',buffer:Buffer.from(safe)
+ });
+ await expect(page.locator('#profile-import-confirm')).toBeVisible();
+ await page.locator('#profile-import-cancel').click();
+ await expect(page.locator('#profile-import-confirm')).toBeHidden();
+ expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k))['movie:11'].position,key)).toBe(950)
+});
+
 test('Hls.js vendor loader retries after transient TV Wi-Fi script failure',async({page})=>{
  let loads=0;
  await page.route('**/vendor/hls.min.js',async route=>{

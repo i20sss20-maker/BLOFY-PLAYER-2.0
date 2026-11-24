@@ -26,9 +26,9 @@ const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categor
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
 
-if(method==='GET'&&(p==='/app.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/sw.js')){
+if(method==='GET'&&(p==='/app.js'||p==='/profile-transfer.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/sw.js')){
  const file=p.slice(1);
- const mime=p==='/app.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':'application/manifest+json; charset=utf-8';
+ const mime=p==='/app.js'||p==='/profile-transfer.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':'application/manifest+json; charset=utf-8';
  const asset=Bun.file(new URL('./'+file,import.meta.url));
  if(!await asset.exists())return json(404,{error:'static_asset_missing'});
  return new Response(asset,{headers:noCache({'Content-Type':mime,...(p==='/sw.js'?{'Service-Worker-Allowed':'/'}:{})})});

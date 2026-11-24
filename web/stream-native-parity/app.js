@@ -1131,6 +1131,14 @@ function settingsScreen(){
  '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
   '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
   '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
+ '<section class="setting-panel"><h3>نسخة احتياطية للمفضلة والمتابعة</h3><p>انقل قوائمك ومواقع متابعة الأفلام والحلقات يدويًا بين متصفحاتك. الملف لا يحتوي كود اشتراك أو كلمات مرور أو روابط بث أو بوسترات أو سجل بحث، ولا يُرسل إلى خادم.</p>'+
+ '<button class="btn secondary" id="profile-export" type="button">↓ حفظ نسخة محلية</button> '+
+ '<button class="btn secondary" id="profile-import" type="button">↑ استيراد نسخة محلية</button>'+
+ '<input id="profile-import-file" type="file" accept=".json,application/json" hidden aria-label="اختيار نسخة بيانات BLOFY">'+
+ '<div id="profile-import-confirm" class="settings-inline-confirm" hidden><p id="profile-import-summary"></p>'+
+ '<button class="btn" type="button" id="profile-import-accept">تأكيد دمج البيانات</button> '+
+ '<button class="btn secondary" type="button" id="profile-import-cancel">إلغاء</button></div>'+
+ '<p class="small muted" id="profile-transfer-status" role="status" aria-live="polite">الاستيراد يضيف المفضلة ويحافظ على تقدم مشاهدة أحدث لديك. استخدم الملف فقط مع الاشتراك ومصدر المحتوى نفسه؛ هذا نقل يدوي وليس مزامنة سحابية.</p></section>'+
  '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
@@ -1199,6 +1207,115 @@ function settingsScreen(){
   };
   panel.querySelector('#watch-clear-cancel').onclick=function(){panel.remove();trigger.focus()};
   panel.querySelector('#watch-clear-cancel').focus()
+ };
+ // This export is user-initiated, browser-local and profile-partitioned.
+ // NEVER include encrypted session cookies, activation/device IDs, raw media
+ // links, poster URLs or full search history in the portable format.
+ var transfer=window.BlofyProfileTransfer||null,
+  transferStatus=document.getElementById('profile-transfer-status'),
+  importInput=document.getElementById('profile-import-file'),
+  importPanel=document.getElementById('profile-import-confirm'),
+  importedCandidate=null,importEpoch=-1,importProfile='';
+ function transferMessage(message,error){
+  if(transferStatus){
+   transferStatus.textContent=message;
+   transferStatus.className=error?'small info error':'small muted'
+  }
+ }
+ function clearImport(){
+  importedCandidate=null;importEpoch=-1;importProfile='';
+  if(importPanel)importPanel.hidden=true;
+  if(importInput)importInput.value=''
+ }
+ document.getElementById('profile-export').onclick=function(){
+  if(!S.userVerified||!S.profileKey||!transfer){
+   transferMessage('النسخة المحلية غير متاحة قبل تفعيل الاشتراك.',true);return
+  }
+  if(typeof Blob==='undefined'||!window.URL||!window.URL.createObjectURL){
+   transferMessage('هذا المتصفح لا يدعم حفظ الملفات. استخدم متصفح هاتف أو كمبيوتر لنقل البيانات.',true);
+   return
+  }
+  try{
+   var data=transfer.create(S.library,S.watch,S.favoriteItems,Date.now()),
+    blob=new Blob([data],{type:'application/json;charset=utf-8'});
+   if(blob.size>240000)throw Error('backup_too_large');
+   var link=document.createElement('a'),address=window.URL.createObjectURL(blob);
+   link.href=address;link.download='BLOFY-STREAM-Web-Profile-'+new Date().toISOString().slice(0,10)+'.json';
+   link.style.display='none';document.body.appendChild(link);link.click();link.remove();
+   setTimeout(function(){window.URL.revokeObjectURL(address)},15000);
+   transferMessage('تم تجهيز النسخة المحلية. احفظ الملف في مكان آمن، ثم استورده من الإعدادات على جهازك الآخر.')
+  }catch(e){transferMessage('تعذر تجهيز النسخة المحلية. تحقق من مساحة التخزين وإمكانات المتصفح.',true)}
+ };
+ document.getElementById('profile-import').onclick=function(){
+  if(!S.userVerified||!S.profileKey||!transfer||!importInput){
+   transferMessage('فعّل اشتراكك أولاً قبل الاستيراد.',true);return
+  }
+  clearImport();importInput.click()
+ };
+ importInput.onchange=function(){
+  var file=importInput.files&&importInput.files[0];
+  if(!file)return;
+  clearImport();
+  if(!S.userVerified||!S.profileKey){transferMessage('انتهت الجلسة؛ أعد التفعيل أولاً.',true);return}
+  if(file.size>240000||file.size<30){
+   transferMessage('حجم ملف النسخة غير صالح أو يتجاوز 240 كيلوبايت.',true);return
+  }
+  if(typeof FileReader==='undefined'){
+   transferMessage('هذه الشاشة لا تدعم قراءة ملف النسخة المحلية.',true);return
+  }
+  var epoch=S.accountEpoch,profile=S.profileKey,reader=new FileReader();
+  reader.onload=function(){
+   if(epoch!==S.accountEpoch||profile!==S.profileKey||!S.userVerified||S.route!=='settings')return;
+   try{
+    var candidate=transfer.parse(String(reader.result||''),Date.now());
+    importedCandidate=candidate;importEpoch=epoch;importProfile=profile;
+    importPanel.hidden=false;
+    document.getElementById('profile-import-summary').textContent=
+     'النسخة تحتوي '+candidate.favorites.length+' عنصرًا بالمفضلة و'+
+     candidate.watch.length+' موضع متابعة. سيتم دمجها مع بيانات الجهاز الحالية دون حذف المفضلة أو استبدال تقدم مشاهدة أحدث. تأكد أن ملف النسخة من الاشتراك ومصدر المحتوى نفسه.';
+    transferMessage('راجع عدد العناصر، ثم أكد الدمج أو ألغِ العملية.');
+    document.getElementById('profile-import-accept').focus()
+   }catch(e){clearImport();transferMessage('رفض الملف: ليس نسخة BLOFY STREAM Web صالحة أو يحتوي بيانات غير معتمدة.',true)}
+  };
+  reader.onerror=function(){clearImport();transferMessage('تعذر قراءة ملف النسخة المحلية.',true)};
+  reader.readAsText(file,'UTF-8')
+ };
+ document.getElementById('profile-import-cancel').onclick=function(){
+  clearImport();transferMessage('أُلغِي الاستيراد؛ لم تتغير أي بيانات.');document.getElementById('profile-import').focus()
+ };
+ document.getElementById('profile-import-accept').onclick=function(){
+  if(!importedCandidate||!S.userVerified||S.route!=='settings'||
+   importEpoch!==S.accountEpoch||importProfile!==S.profileKey){
+   clearImport();transferMessage('تغير الحساب أو انتهت صلاحية الاستيراد؛ اختر الملف مرة أخرى.',true);return
+  }
+  var merged=transfer.merge(S.library,S.watch,S.favoriteItems,importedCandidate);
+  var updates=[
+   ['favorites',merged.favorites],['favoriteItems',merged.favoriteItems],['watch',merged.watch]
+  ],old=[];
+  try{
+   // A quota failure must not leave a misleading success message or switch
+   // profile data mid-import. Recover previous storage values best-effort.
+   for(var t=0;t<updates.length;t++){
+    var key=profileStorageKey(updates[t][0]);
+    old.push({key:key,value:localStorage.getItem(key)});
+   }
+   for(var w=0;w<updates.length;w++)
+    localStorage.setItem(profileStorageKey(updates[w][0]),JSON.stringify(updates[w][1]))
+  }catch(e){
+   for(var j=0;j<old.length;j++)try{
+    if(old[j].value===null)localStorage.removeItem(old[j].key);
+    else localStorage.setItem(old[j].key,old[j].value)
+   }catch(ignore){}
+   clearImport();transferMessage('تعذر حفظ النسخة: المساحة المحلية غير كافية أو التخزين مغلق. لم تُعتمد بيانات جديدة.',true);
+   return
+  }
+  S.library=merged.favorites;S.watch=merged.watch;S.favoriteItems=merged.favoriteItems;
+  var stats=merged.stats;
+  clearImport();
+  transferMessage('✓ تم دمج '+stats.newFavorites+' مفضلة جديدة و'+
+   stats.newCheckpoints+' متابعة جديدة، وتحديث '+stats.updatedCheckpoints+
+   ' متابعة، مع الاحتفاظ بـ '+stats.preservedCheckpoints+' متابعة أحدث على الجهاز.');
+  document.getElementById('profile-import').focus()
  };
  var tvTest=document.getElementById('test-tv-capabilities');
  if(tvTest)tvTest.onclick=function(){
