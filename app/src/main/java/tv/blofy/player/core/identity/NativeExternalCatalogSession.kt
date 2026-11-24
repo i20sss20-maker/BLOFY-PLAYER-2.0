@@ -70,6 +70,7 @@ internal object NativeExternalCatalogSession {
                 val dao = BlofyDatabase.get(context.applicationContext).dao()
                 val row = dao.provider(profile.providerId)
                 if (row?.baseUrl == ExternalXtreamCatalogTransport.ORIGIN) {
+                    tv.blofy.player.ui.library.OfflineDownloadStore.removeNativeProvider(context,profile.providerId)
                     dao.deactivateProvider(profile.providerId)
                     dao.discardStagedCatalog(profile.providerId)
                     CatalogSyncState.clear(context,profile.providerId)
