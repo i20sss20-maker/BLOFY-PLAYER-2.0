@@ -103,4 +103,36 @@ class ConnectProfileDeviceTest {
         }
     }
 
+    @Test fun stagedNativeProfileSurvivesLegacyClearAndAuthenticatesCatalogIdentity() {
+        assertTrue(context.packageName.endsWith(".stream.qa"))
+        val before = StreamCodeSession.token(context)
+        val prefs = context.getSharedPreferences("blofy_connect_profile", Context.MODE_PRIVATE)
+        val id = "external-" + java.util.UUID.randomUUID()
+        val host = checkNotNull(ExternalStreamConnectClient.parseHost("https://provider.example.com"))
+        val credentials = ExternalStreamConnectClient.Credentials(host, "native-user", "native-secret")
+        try {
+            ExternalStreamConnectStore.clearStaged(context)
+            ExternalStreamConnectStore.save(context, credentials)
+            ExternalStreamConnectStore.saveStaged(context,
+                ExternalStreamConnectStore.StagedProfile(id, credentials))
+            val ciphertext = checkNotNull(prefs.getString("native_stage_v1", null))
+            assertFalse(ciphertext.contains("native-secret"))
+            val bytes = Base64.decode(ciphertext, Base64.NO_WRAP)
+            assertFalse(String(bytes, Charsets.UTF_8).contains(id))
+            assertFalse(String(bytes, Charsets.UTF_8).contains("native-secret"))
+            ExternalStreamConnectStore.clear(context)
+            val staged = checkNotNull(ExternalStreamConnectStore.loadStaged(context))
+            assertEquals(id, staged.providerId)
+            assertEquals(host, staged.credentials.host)
+            assertEquals("native-secret", staged.credentials.password)
+            bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
+            assertTrue(prefs.edit().putString("native_stage_v1", Base64.encodeToString(bytes, Base64.NO_WRAP)).commit())
+            assertNull(ExternalStreamConnectStore.loadStaged(context))
+        } finally {
+            ExternalStreamConnectStore.clearStaged(context)
+            ExternalStreamConnectStore.clear(context)
+        }
+        assertEquals(before, StreamCodeSession.token(context))
+    }
+
 }
