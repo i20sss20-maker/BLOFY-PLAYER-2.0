@@ -11,6 +11,13 @@ function seal(token){if(!KEY)throw new Error('SESSION_KEY_MISSING');const iv=ran
 function unseal(s){try{if(!KEY||!s)return null;const v=Buffer.from(s,'base64url');if(v.length<30||v.length>500)return null;const c=createDecipheriv('aes-256-gcm',KEY,v.subarray(0,12));c.setAuthTag(v.subarray(12,28));return Buffer.concat([c.update(v.subarray(28)),c.final()]).toString('utf8')}catch{return null}}
 function token(req){const m=String(req.headers.get('cookie')||'').match(/(?:^|;\s*)bv_session=([^;]+)/);return m?unseal(m[1]):null}
 function auth(req){const t=token(req);return t?{'Authorization':'Bearer '+t,'Accept':'application/json','Cache-Control':'no-store'}:null}
+function verifiedWorkerRetryHeaders(headers){
+ // Only numeric short delays are forwarded from the fixed private worker.
+ // Never forward arbitrary media headers, URLs, upstream hostnames or secrets.
+ const seconds=Number(headers&&headers.get&&headers.get('retry-after')||0);
+ return Number.isInteger(seconds)&&seconds>=1&&seconds<=30?
+  {'Retry-After':String(seconds)}:{}
+}
 function noCache(extra={}){return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...extra}}
 function normalizeSearch(text){
  return String(text||'').toLowerCase().normalize('NFKC')
@@ -244,7 +251,7 @@ if(p.startsWith('/api/vodfull/')&&(method==='GET'||method==='POST')){
  try{
   const response=await fetch(target,{method,headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'vod_worker_redirect_rejected'});
-  if(!response.ok){let error='vod_unavailable';try{error=(await response.json()).error||error}catch{};return json(response.status,{error})}
+  if(!response.ok){let error='vod_unavailable';try{error=(await response.json()).error||error}catch{};return json(response.status,{error},verifiedWorkerRetryHeaders(response.headers))}
   return new Response(response.body,{status:200,headers:noCache({'Content-Type':match[6].endsWith('m3u8')?'application/vnd.apple.mpegurl':match[6]==='stop'?'application/json':'video/mp2t','Accept-Ranges':'none'})})
  }catch{return json(502,{error:'vod_worker_unreachable'})}
 }
@@ -262,7 +269,7 @@ if(p.startsWith('/api/vod/')&&(method==='GET'||method==='POST')){
  try{
   const response=await fetch(target,{method,headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'vod_worker_redirect_rejected'});
-  if(!response.ok){let error='vod_unavailable';try{error=(await response.json()).error||error}catch{};return json(response.status,{error})}
+  if(!response.ok){let error='vod_unavailable';try{error=(await response.json()).error||error}catch{};return json(response.status,{error},verifiedWorkerRetryHeaders(response.headers))}
   return new Response(response.body,{status:200,headers:noCache({'Content-Type':match[6].endsWith('m3u8')?'application/vnd.apple.mpegurl':(match[6]==='stop'||match[6]==='meta')?'application/json':'video/mp2t','Accept-Ranges':'none'})})
  }catch{return json(502,{error:'vod_worker_unreachable'})}
 }
