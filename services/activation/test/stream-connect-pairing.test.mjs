@@ -82,3 +82,22 @@ test('bound redemption retries same installation without extending expiry or all
  await assert.rejects(f.service.redeem({code:issued.code,deviceKey}),/connect_code_expired_or_used/);
  await f.service.purgeExpired();assert.equal(f.rows.size,0);
 });
+
+test('unified unknown short codes count globally and valid claim is charged exactly once',async()=>{
+ const f=fixture(),issued=await f.service.issue({...input,shortCode:true}),deviceKey='b'.repeat(64);
+ const missing=issued.code==='00000000'?'00000001':'00000000';
+ for(let i=0;i<19;i++){
+  const attempt=await f.service.beginUnifiedAttempt(missing);
+  assert.equal(attempt.exists,false);
+  await assert.rejects(attempt.redeem(deviceKey),/connect_code_expired_or_used/);
+ }
+ const attempt=await f.service.beginUnifiedAttempt(issued.code);
+ assert.equal(attempt.exists,true);
+ assert.deepEqual((await attempt.redeem(deviceKey)).credentials,input);
+ await assert.rejects(attempt.redeem(deviceKey),/connect_code_expired_or_used/);
+ await assert.rejects(f.service.beginUnifiedAttempt(missing),/connect_rate_limited/);
+ await assert.rejects(f.service.redeem({code:issued.code,deviceKey}),/connect_rate_limited/);
+ f.advance(60000);
+ const retry=await f.service.beginUnifiedAttempt(issued.code);
+ assert.deepEqual((await retry.redeem(deviceKey)).credentials,input);
+});
