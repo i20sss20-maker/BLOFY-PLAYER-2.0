@@ -1,4 +1,5 @@
 import {readCatalogPage} from './catalog-array-reader.mjs';
+import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 import {preferAppleLiveStart} from './hls-ios-live-profile.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
@@ -46,6 +47,8 @@ function normalizeSearch(text){
   .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
 }
 const catalogPageCache=createCatalogPageCache();
+let activeVodDownloads=0;
+const MAX_VOD_DOWNLOADS=2;
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
@@ -362,6 +365,59 @@ if(p.indexOf('/api/compatible/')===0&&method==='GET'){
   return new Response(response.body,{status:200,headers:noCache({'Content-Type':contentType,'X-Blofy-Media-Mode':'compatible-'+mode,'Accept-Ranges':'none'})});
  }catch(e){return json(502,{error:'compat_proxy_unavailable'})}
 }
+
+// File downloads are isolated from live and normal VOD playback.
+// A browser writes the streamed bytes to its own download manager;
+// it cannot be treated as a completed offline library item here.
+if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
+ if(!h)return json(401,{error:'activation_required'});
+ if(Bun.env.BLOFY_WEB_VOD_DOWNLOAD_ENABLED!=='1')
+  return json(503,{error:'downloads_not_enabled'});
+ const match=/^\/api\/download\/(movie|series)\/([1-9][0-9]{0,14})\.(mp4|mkv|avi|mov|ts)$/.exec(p);
+ if(!match||vodDownloadPath(match[1],match[2],match[3])!==p)
+  return json(400,{error:'invalid_download_path'});
+ if(activeVodDownloads>=MAX_VOD_DOWNLOADS)
+  return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
+ const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
+ const ctrl=new AbortController();
+ const cancel=()=>ctrl.abort();
+ req.signal.addEventListener('abort',cancel,{once:true});
+ activeVodDownloads++;
+ let released=false;
+ const release=()=>{if(released)return;released=true;activeVodDownloads=Math.max(0,activeVodDownloads-1);req.signal.removeEventListener('abort',cancel)};
+ try{
+  const upstream=await fetch(target,{
+   method,headers:{Authorization:h.Authorization,Accept:'application/octet-stream,video/*;q=0.9','accept-encoding':'identity'},
+   redirect:'manual',signal:ctrl.signal
+  });
+  if(!downloadableResponse(upstream.status,upstream.headers.get('content-type'))||!upstream.body&&method==='GET'){
+   try{await upstream.body?.cancel()}catch{}
+   release();
+   return json(upstream.status===401||upstream.status===403?403:upstream.status===404?404:502,
+     {error:'download_source_unavailable'});
+  }
+  const out=noCache({'Content-Type':'application/octet-stream',
+    'Content-Disposition':'attachment; filename="'+attachmentFilename(match[1],match[2],match[3])+'"',
+    'X-Content-Type-Options':'nosniff','Accept-Ranges':'none'});
+  const length=upstream.headers.get('content-length');
+  if(length&&/^[1-9][0-9]{0,14}$/.test(length))out['Content-Length']=length;
+  if(method==='HEAD'){try{await upstream.body?.cancel()}catch{}release();return new Response(null,{status:200,headers:out})}
+  const reader=upstream.body.getReader();
+  // Pull one chunk at a time (no entire movie buffered in Railway RAM).
+  const stream=new ReadableStream({
+   async pull(controller){
+    try{
+     const chunk=await reader.read();
+     if(chunk.done){release();controller.close();return}
+     controller.enqueue(chunk.value);
+    }catch{release();controller.error(new Error('download_stream_interrupted'))}
+   },
+   async cancel(){cancel();try{await reader.cancel()}catch{}release()}
+  });
+  return new Response(stream,{status:200,headers:out});
+ }catch{release();return json(502,{error:'download_source_unreachable'})}
+}
+
 if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
  const m=p.match(/^\/api\/media\/(live|movie|series)\/([0-9]{1,15})\.(ts|m3u8|mp4|mkv|avi|mov)$/i);if(!m)return json(400,{error:'invalid_media_path'});
  const target=ORIGIN+'/api/v1/stream/media/'+m[1]+'/'+m[2]+'.'+m[3].toLowerCase();
