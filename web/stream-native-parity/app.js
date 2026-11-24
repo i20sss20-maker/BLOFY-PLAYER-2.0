@@ -1700,6 +1700,23 @@ function livePlaybackProgress(record,video,now){
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
  if(visualProgress){
+  // Report visual outages only after an earlier verified picture, not cold
+  // startup. This is a local sample-based estimate; no new fetch or telemetry.
+  // A switched HLS engine has a new record, so do not bridge engine lifetimes.
+  if(record.visualProgressSeen&&record.ready&&S.route==='player'&&S.playerView&&
+     S.playerView.kind==='live'&&S.playerView.video===video&&
+     !video.paused&&!video.seeking&&!document.hidden){
+   var visualGap=Math.max(0,now-(record.lastProgressAt||now));
+   if(visualGap>=6500){
+    var visualStats=S.playerView.stats;
+    if(visualStats){
+     visualStats.visualOutageCount=(visualStats.visualOutageCount||0)+1;
+     visualStats.visualOutageMs=(visualStats.visualOutageMs||0)+visualGap;
+     visualStats.longestVisualOutageMs=Math.max(visualStats.longestVisualOutageMs||0,visualGap)
+    }
+   }
+  }
+  record.visualProgressSeen=true;
   record.lastProgressAt=now;record.bufferSince=0;record.stallChecks=0;
   return {advanced:true,idleMs:0}
  }
@@ -2847,6 +2864,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
    stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,liveEvents:[],
+    visualOutageCount:0,visualOutageMs:0,longestVisualOutageMs:0,
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
  // The 20-minute acceptance uses existing decoded-frame and source health
  // observations. It never opens a new media, catalog or telemetry request.
@@ -3081,6 +3099,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     ' • الساقطة: '+(Number.isFinite(drops)?drops:'غير متوفرة'),
    'إعادة الاتصال: '+(st.recoveries||0)+' • أخطاء الفيديو: '+(st.errors||0),
    'انتظار التخزين: '+(st.bufferEvents||0)+' مرة',
+   'فترات غياب تقدم الصورة المرصودة: '+(st.visualOutageCount||0)+
+     ' • مجموعها التقريبي: '+Math.round((st.visualOutageMs||0)/1000)+' ثانية'+
+     ' • الأطول: '+Math.round((st.longestVisualOutageMs||0)/1000)+' ثانية',
    'آخر أحداث البث (وقت UTC):'+(st.liveEvents&&st.liveEvents.length?
     st.liveEvents.slice(-6).map(function(item){
      var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
@@ -3090,7 +3111,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
      return ' '+new Date(item.at).toISOString().slice(11,19)+' '+(labels[item.code]||'تشغيل')
     }).join(' ؛ '):' لا توجد أحداث مسجلة'),
    'النتيجة الأولية: '+assessment,
-   'ملاحظة: التقرير يستبعد بيانات الاشتراك والروابط؛ النتيجة تقديرية وليست تشخيصًا قطعيًا.'
+   'ملاحظة: مدة غياب تقدم الصورة تقديرية من العينات، ولا تشمل بدء التشغيل أو فترات توقف المستخدم؛ التقرير يستبعد بيانات الاشتراك والروابط.'
   ].join(String.fromCharCode(10))
  }
  var diagnosticToggle=document.getElementById('player-diagnostic-toggle');
