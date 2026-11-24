@@ -1237,7 +1237,7 @@ function settingsScreen(){
  '<p class="small muted" id="profile-transfer-status" role="status" aria-live="polite">الاستيراد يضيف المفضلة ويحافظ على تقدم مشاهدة أحدث لديك. استخدم الملف فقط مع الاشتراك ومصدر المحتوى نفسه؛ هذا نقل يدوي وليس مزامنة سحابية.</p></section>'+
  '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
- '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
+ '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('check-player-health').onclick=function(){
   var button=this,box=document.getElementById('player-health-status');
@@ -1245,8 +1245,13 @@ function settingsScreen(){
   api('GET','/api/health/media',null,function(st,result){
    button.disabled=false;if(!box||S.route!=='settings')return;
    if(st===200&&result&&result.ok){
+    var capacityInfo=result.encoderCapacity||{};
+    var denied=Math.max(0,Math.min(100000,Number(capacityInfo.deniedLastMinute)||0));
     box.textContent='✓ مشغّل الفيديو جاهز. اختبار التقديم والبث نجح. العمليات الحالية: '+
-     (result.converting||0)+' من '+(result.capacity||0)+'.';
+     (result.converting||0)+' من '+(result.capacity||0)+'.'+
+     (capacityInfo.busy?' المحرك ممتلئ حاليًا؛ يرجى الانتظار قبل فتح فيديو جديد.':'')+
+     (denied?' • محاولات تشغيل مؤجلة للسعة خلال الدقيقة الأخيرة: '+denied+'.':'')+
+     ' هذه أرقام عن سعة التحويل، وليست اختبارًا لجودة كل مصدر.';
    }else{
     box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
    }
@@ -1270,13 +1275,22 @@ function settingsScreen(){
     recovering=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.coolingSources)||0)),
     affected=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.recentSources)||0)),
     active=Math.max(0,Math.min(100,Number(data.activeJobs)||0)),
-    cap=Math.max(0,Math.min(100,Number(data.capacity)||0));
+    cap=Math.max(0,Math.min(100,Number(data.capacity)||0)),
+    encoder=data.encoderCapacity||{},
+    jobKinds=encoder.jobKinds||{},
+    denied=Math.max(0,Math.min(100000,Number(encoder.deniedLastMinute)||0)),
+    free=Math.max(0,Math.min(2,Number(encoder.freeSlots)||0)),
+    liveJobs=Math.max(0,Math.min(2,Number(jobKinds.live)||0)),
+    movieJobs=Math.max(0,Math.min(2,Number(jobKinds.fullVod)||0));
    target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة وفق إعدادات الخدمة':'معطلة لحماية الاستقرار')+
     ' • مجموعات البث: '+groups+' • المشاهدون المشاركون: '+viewers+
     ' • بانتظار اتصال المصدر: '+pending+
     ' • مصادر في تهدئة الاتصال: '+recovering+
     ' • مصادر تعثرت خلال دقيقتين: '+affected+
     ' • محركات الفيديو النشطة: '+active+' من '+cap+
+    ' • المشغولات بالبث المباشر: '+liveJobs+' • تحويل الأفلام الكاملة: '+movieJobs+
+    ' • فتحات تحويل متاحة: '+free+
+    (denied?' • عمليات رفض بسبب انشغال المحرك خلال الدقيقة الأخيرة: '+denied:'')+
     (cap&&active>=cap?' • المحركات ممتلئة حاليًا؛ قد يلزم الانتظار عند فتح قناة جديدة.':'')+
     ' • هذه أرقام حالة المحرك فقط، وليست قياسًا لجودة الصورة على جهازك.'
   })
