@@ -3506,6 +3506,15 @@ async function callLocalGateway(method,path,body){
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
 const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
+  linkCodeToXtream:async code=>{
+    const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/link/code-to-xtream',{code});
+    if(result.status===200&&result.data?.credentials){
+      const c=result.data.credentials;
+      c.serverUrl=XTREAM_CUSTOMER_HOST;
+      c.m3uUrl=c.serverUrl+'/get.php?'+new URLSearchParams({username:c.username,password:c.password,type:'m3u_plus',output:'ts'});
+    }
+    return {status:result.status,body:result.data};
+  },
   // Read-only, active/published catalog for the precisely pinned saleh source.
   listCatalog:async args=>(await listCatalog({
     type:args.type,serverId:args.sourceId,q:args.q,
@@ -3786,7 +3795,7 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='issue')return json(res,200,await streamDistributors.issue(token,payload),
       {'cache-control':'no-store'});
     if(command==='reveal')return json(res,200,
-      await streamDistributors.reveal(token,payload.issueId),{'cache-control':'no-store'});
+      await streamDistributors.reveal(token,payload.issueId,{includeXtream:payload.includeXtream===true}),{'cache-control':'no-store'});
     if(command==='library')return json(res,200,
       await streamDistributors.library(token,payload),{'cache-control':'no-store'});
     if(command==='library-categories')return json(res,200,
