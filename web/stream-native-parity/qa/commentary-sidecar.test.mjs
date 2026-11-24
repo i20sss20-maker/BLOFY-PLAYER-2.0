@@ -5,8 +5,8 @@ import {runInNewContext} from 'node:vm';
 
 const source=readFileSync(new URL('../stream-commentary.js',import.meta.url),'utf8');
 
-function mockSession(tracks){
- const instances=[];
+function mockSession(tracks, fakeTimers=false){
+ const instances=[],timers=[];
  class AudioMock {
   constructor(){this.src='';this.paused=true;instances.push(this)}
   play(){this.paused=false;return Promise.resolve()}
@@ -20,8 +20,10 @@ function mockSession(tracks){
  };
  const window={};
  const fetch=async()=>({ok:true,json:async()=>({tracks})});
- runInNewContext(source,{window,Audio:AudioMock,fetch,setTimeout,clearTimeout,encodeURIComponent,Promise});
- return {video,instances,callbacks,manager:window.BlofyCommentary.create(video,'31',()=>{})}
+ runInNewContext(source,{window,Audio:AudioMock,fetch,
+  setTimeout:fakeTimers?function(cb,delay){timers.push({cb,delay});return timers.length}:setTimeout,
+  clearTimeout:fakeTimers?function(){}:clearTimeout,encodeURIComponent,Promise});
+ return {video,instances,timers,callbacks,manager:window.BlofyCommentary.create(video,'31',()=>{})}
 }
 
 test('a companion audio source never mutes LIVE video before actual audio frames start',async()=>{
@@ -61,5 +63,19 @@ test('unsupported HLS audio never replaces a working channel or starts a second 
  assert.equal(manager.select('anis-hls-1'),false);
  assert.equal(video.muted,false);
  assert.equal(instances.length,0);
+ manager.destroy()
+});
+
+test('a stalled commentator restores original channel sound without restarting video',async()=>{
+ const {video,instances,manager,timers}=mockSession([{id:'anis-max-2',label:'بلوفي ماكس',format:'progressive',delaySeconds:0}],true);
+ await manager.load();
+ manager.select('anis-max-2');
+ instances[0].onplaying();
+ assert.equal(video.muted,true);
+ instances[0].onwaiting();
+ assert.equal(timers[0].delay,7000);
+ timers[0].cb();
+ assert.equal(video.muted,false);
+ assert.equal(manager.current(),'');
  manager.destroy()
 });
