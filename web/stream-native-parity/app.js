@@ -1159,7 +1159,7 @@ function settingsScreen(){
  '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
   '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
   '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
- '<section class="setting-panel"><h3>اتصالات البث ومشاركة المصدر</h3><p>فحص آمن لكفاءة الجلسات وإجمالي المحركات المستخدمة في النسخة التجريبية. لا يعرض حسابات العملاء أو أكواد الاشتراك.</p>'+
+ '<section class="setting-panel"><h3>اتصالات البث ومشاركة المصدر</h3><p>فحص آمن لكفاءة الجلسات وإجمالي محركات البث الحالية. لا يعرض حسابات العملاء أو أكواد الاشتراك.</p>'+
   '<button class="btn secondary" id="check-live-share-health" type="button">فحص اتصالات البث</button>'+
   '<p class="small muted" id="live-share-health-status" role="status" aria-live="polite">مشاركة المصدر معطلة افتراضيًا، ولن تُفعّل من هذا الزر.</p></section>'+
  '<section class="setting-panel"><h3>آخر اختبار مشاهدة فعلي</h3><p id="last-playback-diagnostic" role="status" aria-live="polite">'+esc(diagText)+'</p>'+
@@ -1190,7 +1190,7 @@ function settingsScreen(){
   api('GET','/api/health/media',null,function(st,result){
    button.disabled=false;if(!box||S.route!=='settings')return;
    if(st===200&&result&&result.ok){
-    box.textContent='✓ مشغّل الفيديو جاهز. الاختبار التجريبي للتقديم والبث نجح. العمليات الحالية: '+
+    box.textContent='✓ مشغّل الفيديو جاهز. اختبار التقديم والبث نجح. العمليات الحالية: '+
      (result.converting||0)+' من '+(result.capacity||0)+'.';
    }else{
     box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
@@ -1205,7 +1205,7 @@ function settingsScreen(){
    button.disabled=false;
    if(!target||!target.isConnected||S.route!=='settings')return;
    if(st!==200||!data||!data.ok){
-    target.textContent='تعذّر الوصول لمحرك البث التجريبي حاليًا. لن يتأثر اشتراكك بهذا الفحص.';
+    target.textContent='تعذّر الوصول لمحرك البث حاليًا. لن يتأثر اشتراكك بهذا الفحص.';
     return
    }
    var share=data.sharedLive||{},enabled=share.enabled===true,
@@ -1216,7 +1216,7 @@ function settingsScreen(){
     affected=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.recentSources)||0)),
     active=Math.max(0,Math.min(100,Number(data.activeJobs)||0)),
     cap=Math.max(0,Math.min(100,Number(data.capacity)||0));
-   target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة في التجربة':'معطلة لحماية الاستقرار')+
+   target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة وفق إعدادات الخدمة':'معطلة لحماية الاستقرار')+
     ' • مجموعات البث: '+groups+' • المشاهدون المشاركون: '+viewers+
     ' • بانتظار اتصال المصدر: '+pending+
     ' • مصادر في تهدئة الاتصال: '+recovering+
