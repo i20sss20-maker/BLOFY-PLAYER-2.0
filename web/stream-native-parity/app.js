@@ -541,36 +541,72 @@ function changeCatalogCategory(kind,category){
  })
 }
 
+var posterRecovery=null;
 function enrichPosters(kind,source){
  if(kind!=='movie'&&kind!=='series')return;
- // Recover source metadata artwork only for a bounded visible window.
- var queue=source.filter(function(x){return !art(x)&&!x.__cover_checked}).slice(0,16),at=0,inflight=0;
+ // Share a small recovery queue across category renders and page loads.
+ // Account changes invalidate every queued item and all remembered covers.
+ if(!posterRecovery||posterRecovery.epoch!==S.accountEpoch)
+  posterRecovery={epoch:S.accountEpoch,queue:[],pending:{},cache:{},order:[],active:0};
+ var state=posterRecovery;
+ function current(){return S.accountEpoch===state.epoch&&posterRecovery===state}
+ function apply(item,key,cover){
+  if(!cover||!current())return;
+  item.movie_image=cover;
+  var buttons=document.querySelectorAll('[data-details]');
+  for(var j=0;j<buttons.length;j++){
+   if(buttons[j].getAttribute('data-details')!==key)continue;
+   var holder=buttons[j].querySelector('.poster-art');
+   if(holder&&!holder.querySelector('img')){
+    var image=document.createElement('img');
+    image.loading='lazy';image.decoding='async';image.referrerPolicy='no-referrer';
+    image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
+   }
+  }
+ }
+ function remember(key,cover,ttl){
+  var old=state.order.indexOf(key);if(old>=0)state.order.splice(old,1);
+  state.cache[key]={cover:cover,until:Date.now()+ttl};state.order.push(key);
+  while(state.order.length>128)delete state.cache[state.order.shift()];
+ }
  function pump(){
-  while(at<queue.length&&inflight<2){
-   var item=queue[at++];item.__cover_checked=true;inflight++;
-   (function(x){
-    var id=itemId(x,kind),action=kind==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
-    api('GET','/api/catalog?action='+action+enc(id),null,function(st,res){
-     inflight--;
+  if(!current())return;
+  while(state.queue.length&&state.active<2){
+   var job=state.queue.shift();state.active++;
+   (function(task){
+    var action=task.kind==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
+    api('GET','/api/catalog?action='+action+enc(task.id),null,function(st,res){
+     if(!current())return;
+     state.active--;delete state.pending[task.key];
+     var cover='';
      if(st===200&&res){
       var data=res.info||res.movie_data||res;
-      var cover=urlPic(data.movie_image||data.cover_big||data.cover||data.poster||data.poster_path||data.backdrop_path||'');
-      if(cover){
-       x.movie_image=cover;
-       var buttons=document.querySelectorAll('[data-details="'+kind+':'+id+'"]');
-       for(var j=0;j<buttons.length;j++){
-        var holder=buttons[j].querySelector('.poster-art');
-        if(holder&&!holder.querySelector('img')){
-         var image=document.createElement('img');image.loading='lazy';image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
-        }
-       }
-      }
+      cover=urlPic(data.movie_image||data.cover_big||data.cover||data.poster||data.poster_path||data.backdrop_path||'');
      }
+     // Failed metadata reads are retryable instead of permanently hiding
+     // artwork. Successful covers are reused only inside this account.
+     remember(task.key,cover,cover?300000:30000);
+     if(cover)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover);
      pump();
     });
-   })(item)
+   })(job)
   }
- }pump()
+ }
+ var candidates=source.filter(function(x){return !art(x)}).slice(0,16);
+ for(var i=0;i<candidates.length;i++){
+  var item=candidates[i],id=itemId(item,kind);
+  if(!id||id.length>128)continue;
+  var key=kind+':'+id,hit=state.cache[key];
+  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover);continue}
+  if(state.pending[key]){
+   if(state.pending[key].items.length<16)state.pending[key].items.push(item);
+   continue
+  }
+  if(state.queue.length>=32)break;
+  var job={kind:kind,id:id,key:key,items:[item]};
+  state.pending[key]=job;state.queue.push(job)
+ }
+ pump()
 }
 function selectChannel(id,activate){
  var item=findItem('live',id);if(!item)return;S.selected=id;
