@@ -97,16 +97,37 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   const result=await pool.query('SELECT 1 FROM blofy_connect_pairings WHERE code_hash=$1 AND expires_at>NOW() LIMIT 1',[hash(code,key)]);
   return result.rows.length===1;
  }
- async function redeem({code,deviceKey=null}={}){
-  if(deviceKey!==null&&(typeof deviceKey!=='string'||!/^[a-f0-9]{64}$/.test(deviceKey)))throw error('connect_code_invalid');
-  const key=gate();
-  if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
-  await ensureSchema();
+ async function reserveShortAttempt(code){
   if(SHORT.test(code)){
    // Database-backed global budget across processes; no per-IP bypass.
    const budget=await pool.query("INSERT INTO blofy_connect_short_budget(id,minute,attempts) VALUES(1,date_trunc('minute',NOW()),1) ON CONFLICT(id) DO UPDATE SET minute=EXCLUDED.minute, attempts=CASE WHEN blofy_connect_short_budget.minute=EXCLUDED.minute THEN blofy_connect_short_budget.attempts+1 ELSE 1 END WHERE blofy_connect_short_budget.minute<>EXCLUDED.minute OR blofy_connect_short_budget.attempts<20 RETURNING attempts");
    if(budget.rows.length!==1)throw error('connect_rate_limited',429);
   }
+ }
+ async function redeem(input={}){
+  return redeemImpl(input,false);
+ }
+ // An internal one-use lookup/claim capability, never a JSON option.
+ // Charge every short-code lookup even when it is unknown or paid.
+ async function beginUnifiedAttempt(code){
+  gate();
+  if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
+  await ensureSchema();
+  await reserveShortAttempt(code);
+  const found=await exists(code);
+  let used=false;
+  return {exists:found,async redeem(deviceKey){
+   if(!found||used)throw error('connect_code_expired_or_used',404);
+   used=true;
+   return redeemImpl({code,deviceKey},true);
+  }};
+ }
+ async function redeemImpl({code,deviceKey=null}={},budgetReserved=false){
+  if(deviceKey!==null&&(typeof deviceKey!=='string'||!/^[a-f0-9]{64}$/.test(deviceKey)))throw error('connect_code_invalid');
+  const key=gate();
+  if(typeof code!=='string'||!(CODE.test(code)||NUMERIC.test(code)))throw error('connect_code_invalid');
+  await ensureSchema();
+  if(!budgetReserved)await reserveShortAttempt(code);
   const id=hash(code,key);
   // A unified claim is retryable only for the same installation, until the
   // original expiry (never extended). Old clients cannot consume a bound row.
@@ -122,7 +143,7 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   return {ok:true,type:'external_xtream',credentials,providerVerified:false};
  }
  async function purgeExpired(){await ensureSchema();const result=await pool.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');return {removed:Number(result.rowCount||0)};}
- return {issue,redeem,exists,ensureSchema,purgeExpired};
+ return {issue,redeem,exists,beginUnifiedAttempt,ensureSchema,purgeExpired};
 }
 
 
