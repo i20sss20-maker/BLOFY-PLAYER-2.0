@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRequire} from 'node:module';
+import {runInNewContext} from 'node:vm';
 import {readFileSync} from 'node:fs';
-const require=createRequire(import.meta.url);
-const transfer=require('../profile-transfer.js');
+// The application is an old-TV plain-script module, while this package uses
+// ESM. Exercise the actual global script in an isolated Node VM context.
+const sandbox={module:{exports:{}}};
+runInNewContext(readFileSync(new URL('../profile-transfer.js',import.meta.url),'utf8'),sandbox);
+const transfer=sandbox.module.exports;
 const fixed=1795500000000;
 const fav={
  'movie:11':true,'series:21':true,'live:31':true,
