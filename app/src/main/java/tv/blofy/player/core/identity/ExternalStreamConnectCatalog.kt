@@ -125,10 +125,23 @@ object ExternalStreamConnectCatalog {
             .addInterceptor { chain ->
                 val request = chain.request()
                 if(request.method != "GET") throw IOException("CONNECT media method denied")
-                val url = resolve(request.url)
+                var url = resolve(request.url)
                 val response = try {
-                    chain.proceed(request.newBuilder().url(url).removeHeader("Authorization")
-                        .removeHeader("Cookie").build())
+                    var current = chain.proceed(request.newBuilder().url(url).removeHeader("Authorization")
+                        .removeHeader("Cookie").removeHeader("Referer").build())
+                    var hops = 0
+                    while (current.code in setOf(301,302,303,307,308)) {
+                        val location = current.header("Location")
+                        current.close()
+                        if (++hops > 5 || location == null) throw IOException("External redirect limit")
+                        url = routes.redirect(url,location)
+                        // Follow the exact provider-supplied path; never copy credentials or
+                        // authentication headers from the previous origin.
+                        current = chain.proceed(request.newBuilder().url(url)
+                            .removeHeader("Authorization").removeHeader("Cookie")
+                            .removeHeader("Referer").build())
+                    }
+                    current
                 } catch (_: IOException) { throw IOException("CONNECT media connection failed") }
                 val sanitized = response.newBuilder().request(request)
                     .removeHeader("Location").removeHeader("Set-Cookie")
