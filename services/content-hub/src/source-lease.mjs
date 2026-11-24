@@ -1,4 +1,5 @@
 import pg from 'pg';
+import {privateDbPoolOptions} from './private-db-pool-options.mjs';
 import {reconcilePrivateVerifiedManifests} from './private-mirror-reconcile.mjs';
 
 // Session-bound PostgreSQL advisory lock, not a TTL: if the worker dies,
@@ -8,7 +9,7 @@ import {reconcilePrivateVerifiedManifests} from './private-mirror-reconcile.mjs'
 export function createSourceLease({connectionString,
   Pool=pg.Pool,applicationName='blofy-content-hub'}={}){
  if(!connectionString)throw Error('content_hub_db_required');
- const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
+ const pool=new Pool({...privateDbPoolOptions(connectionString),max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:applicationName});
  // Some historical pilot/confirmation tables are deliberately lazy-created.
  // Reading those tables before the first pilot is expected and must not
