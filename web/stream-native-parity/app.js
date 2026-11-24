@@ -1865,6 +1865,7 @@ function stopPlayback(sendStop){
 }
 function cleanupPlayer(){
  if(S.playerView){
+  if(S.playerView.commentary){S.playerView.commentary.destroy();S.playerView.commentary=null}
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directBufferNoticeTimer){clearTimeout(S.playerView.directBufferNoticeTimer);S.playerView.directBufferNoticeTimer=null}
@@ -3409,6 +3410,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button></div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
+ (isLive?playerControl('player-commentary','audio','المعلقين • صوتيات BLOFY'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','rewind','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -3426,6 +3428,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button><button class="btn secondary" id="player-direct-ts" type="button" title="تشغيل نفس مصدر القناة مباشرة على الأجهزة التي تدعم H.264/AAC؛ العودة تلقائيًا إلى HLS عند عدم الدعم">⚡ تشغيل MPEG-TS المباشر (بديل)</button>':'')+
  '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
  '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">🎙 المعلقين</button><p class="small muted" id="player-commentary-status" role="status" aria-live="polite">صوت القناة الأصلي</p>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button><button class="btn secondary" id="player-download-file" type="button">↓ تنزيل الملف</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4487,6 +4490,18 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
   else{state.ready=false;startVod(0)}
  };
+ // Independent companion voice player: never replace the LIVE video URL.
+ function commentaryMessage(message){
+  if(S.route!=='player'||S.playerView!==state)return;
+  var status=document.getElementById('player-commentary-status');
+  if(status)status.textContent=String(message||'');
+ }
+ function newCommentary(channelId){
+  return window.BlofyCommentary&&isLive?
+   window.BlofyCommentary.create(video,String(channelId),commentaryMessage):null
+ }
+ state.commentary=newCommentary(id);
+
  // Android's audio, subtitles and quality controls open a choice list
  // rather than silently cycling options or replacing their icon labels.
  var choicePanel=document.createElement('section');
@@ -4521,6 +4536,32 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var chosen=choicePanel.querySelector('.native-player-choice-item.selected')||choicePanel.querySelector('.native-player-choice-item');
   if(chosen)chosen.focus()
  }
+ function showCommentators(origin){
+  if(!isLive||!state.commentary)return;
+  var expected=String(state.id),manager=state.commentary;
+  var orig={name:'🔊 الصوت الأصلي للقناة',selected:!manager.current(),
+    select:function(){manager.select('original')}};
+  showPlayerChoices('المعلقين • BLOFY',[orig],origin);
+  commentaryMessage('جار قراءة المعلقين المصرح بهم لهذه القناة…');
+  manager.load().then(function(tracks){
+   if(S.route!=='player'||S.playerView!==state||state.commentary!==manager||
+      String(state.id)!==expected)return;
+   if(!tracks.length){commentaryMessage('لا توجد صوتيات متاحة حاليًا؛ صوت القناة الأصلي مستمر');return}
+   var options=[{name:orig.name,selected:!manager.current(),select:orig.select}];
+   tracks.forEach(function(track){
+    options.push({name:track.label+(track.format==='hls'?' • يحتاج توافق HLS':''),
+      selected:manager.current()===track.id,
+      select:function(){manager.select(track.id)}});
+   });
+   showPlayerChoices('المعلقين • BLOFY',options,origin);
+   commentaryMessage('اختر المعلق؛ أو ارجع لصوت القناة الأصلي في أي وقت')
+  })
+ }
+ var commentaryButton=document.getElementById('player-commentary');
+ if(commentaryButton)commentaryButton.onclick=function(){showCommentators(this)};
+ var commentaryMore=document.getElementById('player-commentary-more');
+ if(commentaryMore)commentaryMore.onclick=function(){showCommentators(this)};
+
  document.getElementById('player-audio').onclick=function(){
   var engine=S.play&&S.play.engine,tracks=video.audioTracks,options=[];
   if(tracks&&tracks.length>1){
@@ -4787,7 +4828,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(!next){playerStatus('هذه القناة ليست في القائمة المحمّلة؛ ارجع للقائمة لعرض المزيد.');return}
    var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
-   id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
+   if(state.commentary){state.commentary.destroy();state.commentary=null}
+   id=newId;state.id=id;state.commentary=newCommentary(id);state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
    if(state.stats){state.pictureObservationAllowed=false;state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();
     // Do not report the previous channel's frozen frames as this channel's QoE.
     state.stats.visualOutageCount=0;state.stats.visualOutageMs=0;state.stats.longestVisualOutageMs=0;
