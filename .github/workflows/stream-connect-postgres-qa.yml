@@ -1,0 +1,42 @@
+name: BLOFY CONNECT PostgreSQL QA
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/stream-connect-*.mjs'
+      - 'services/activation/test/stream-connect-*.mjs'
+      - '.github/workflows/stream-connect-postgres-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connect-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: blofy_connect_qa
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blofy_connect_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/blofy_connect_qa
+      BLOFY_STREAM_EPHEMERAL_DB_QA: 'true'
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node --test test/stream-connect-pairing.test.mjs test/stream-connect-http.test.mjs
+      - run: node test/stream-connect-postgres.smoke.mjs
