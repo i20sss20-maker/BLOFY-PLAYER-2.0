@@ -1440,6 +1440,24 @@ function loadHls(done){
  script.onerror=function(){finish(false)};
  document.head.appendChild(script)
 }
+function loadMpegts(done){
+ if(window.mpegts){done(true);return}
+ if(S.mpegtsState==='loading'){S.mpegtsCallbacks.push(done);return}
+ S.mpegtsState='loading';S.mpegtsCallbacks=[done];
+ var script=document.createElement('script'),settled=false;
+ script.src='/vendor/mpegts.js';script.async=true;
+ function finish(ok){
+  if(settled)return;
+  settled=true;clearTimeout(timer);S.mpegtsState=ok?'ready':'error';
+  var callbacks=S.mpegtsCallbacks||[];S.mpegtsCallbacks=[];
+  if(!ok){script.onload=null;script.onerror=null;if(script.parentNode)script.parentNode.removeChild(script)}
+  for(var i=0;i<callbacks.length;i++)callbacks[i](ok)
+ }
+ var timer=setTimeout(function(){finish(!!window.mpegts)},14000);
+ script.onload=function(){finish(!!window.mpegts)};
+ script.onerror=function(){finish(false)};
+ document.head.appendChild(script)
+}
 function stopPlayback(sendStop){
  if(!S.play)return;var old=S.play;S.play=null;
  if(old.preview)S.livePreview=null;
@@ -1598,6 +1616,19 @@ function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
   return true
  }catch(e){record.liveLagSince=0;return false}
 }
+function liveTransientRetryMs(attempt){
+ // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
+ // a home router/Wi-Fi connection to settle without hammering Railway.
+ var n=Math.max(1,Math.min(3,Math.floor(Number(attempt)||1)));
+ return [0,950,1800,3600][n]
+}
+function hlsRemuxWorkerSupported(){
+ // MPEG-TS remuxing can block scrolling and remote response on desktop.
+ // Keep legacy VIDAA/Android TV on the known main-thread compatibility path.
+ var ua=String(navigator.userAgent||'');
+ return !!window.Worker&&!!window.Blob&&!!window.MediaSource&&
+  !/VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android 9|iPad|iPhone/i.test(ua)
+}
 function liveOriginRetryMs(attempt){
  // A temporary origin failure should not trigger a tight re-open loop.
  var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
@@ -1640,6 +1671,130 @@ function liveUnexpectedPause(record,video,userPaused,hidden,now){
  if(!record.unexpectedPauseAt){record.unexpectedPauseAt=now;return false}
  return now-record.unexpectedPauseAt>=10000
 }
+/* Explicit direct MPEG-TS mode for H.264/AAC channels in MSE-enabled browsers.
+ * Uses the SAME authorized first-party source, not a new external host.
+ * Never opens direct TS while a previous HLS producer is still running:
+ * the old stream must acknowledge STOP first, preventing double sessions.
+ * On unsupported codec/network errors, returns to the normal HLS path.
+ */
+function playDirectMpegts(video,id,statusElement){
+ if(!S.userVerified||S.route!=='player'||!S.playerView||
+    S.playerView.video!==video||S.playerView.kind!=='live'||String(S.playerView.id)!==String(id))return;
+ var old=S.play,oldKey=old&&old.hlsKey;
+ if(oldKey){
+  stopPlayback(false);
+  if(statusElement){statusElement.textContent='جار إغلاق محرك HLS قبل فتح MPEG-TS المباشر…';statusElement.style.display='block'}
+  var epoch=S.accountEpoch,settled=false,timer=setTimeout(function(){finish(0)},6500);
+  function finish(st){
+   if(settled)return;settled=true;clearTimeout(timer);
+   if(epoch!==S.accountEpoch||S.route!=='player'||!S.playerView||
+      S.playerView.video!==video||String(S.playerView.id)!==String(id))return;
+   if(st!==200&&st!==404){
+    playerStatus('لم يتأكد إغلاق اتصال HLS السابق؛ لن أفتح اتصالًا آخر. اضغط إعادة المحاولة.',true);
+    return
+   }
+   playDirectMpegts(video,id,statusElement)
+  }
+  api('POST','/api/hls/'+oldKey+'/stop',{},function(st){finish(st)});
+  return
+ }
+ stopPlayback(true);
+ var state=S.playerView,record={video:video,kind:'live',id:id,preview:false,
+  mode:'mpegts',engine:null,ready:false,started:Date.now(),fallback:false};
+ S.play=record;state.mode='mpegts';state.ready=false;
+ var button=document.getElementById('player-direct-ts');
+ if(button)button.textContent='↩ العودة إلى HLS المتوافق';
+ var badge=document.getElementById('player-source-mode');
+ if(badge){badge.textContent='MPEG-TS مباشر • حسب ترميز المصدر';badge.hidden=false}
+ function alive(){return S.play===record&&S.route==='player'&&S.playerView===state&&
+  String(state.id)===String(id)&&video.isConnected}
+ function status(msg){
+  if(!alive())return;
+  if(statusElement){statusElement.textContent=msg;statusElement.style.display='block'}
+ }
+ function fallback(msg){
+  if(!alive()||record.fallback)return;
+  record.fallback=true;
+  if(state.stats){state.stats.recoveries=(state.stats.recoveries||0)+1;state.stats.lastRecoveryAt=Date.now()}
+  recordLiveIncident('reconnect');
+  status(msg||'الترميز المباشر غير مدعوم؛ جار الرجوع إلى HLS المتوافق…');
+  // stopPlayback destroys the direct fetch first; there is no old FFmpeg
+  // producer and no STOP call or duplicate HLS source on this path.
+  playHls(video,'live',id,'ts',0,statusElement,false,0)
+ }
+ if(!window.MediaSource||!window.MediaSource.isTypeSupported){
+  fallback('هذا التلفزيون لا يدعم محرك MPEG-TS المباشر؛ جار تشغيل HLS.');return
+ }
+ record.startupTimer=setTimeout(function(){
+  if(alive()&&!record.ready)fallback('تأخر بدء الصورة المباشرة؛ جار التحويل إلى مشغّل HLS.')
+ },28000);
+ loadMpegts(function(ok){
+  if(!alive())return;
+  if(!ok||!window.mpegts||!window.mpegts.isSupported||!window.mpegts.isSupported()){
+   fallback('لا يدعم المتصفح محرك MPEG-TS؛ جار العودة إلى HLS.');return
+  }
+  try{
+   var transport=window.mpegts.createPlayer({
+    type:'mpegts',isLive:true,url:'/api/media/live/'+enc(id)+'.ts'
+   },{
+    enableWorker:false,enableStashBuffer:true,stashInitialSize:131072,
+    lazyLoad:false,autoCleanupSourceBuffer:true,autoCleanupMaxBackwardDuration:30
+   });
+   record.engine=transport;
+   // A failed direct format must not leave the picture black indefinitely.
+   if(window.mpegts.Events&&window.mpegts.Events.ERROR)
+    transport.on(window.mpegts.Events.ERROR,function(){
+     if(alive())fallback('تعذر فك ترميز MPEG-TS من المصدر؛ جار تجربة مشغّل HLS.')
+    });
+   video.onplaying=function(){
+    if(!alive())return;
+    record.ready=true;
+    record.lastProgressAt=Date.now();
+    record.lastMediaTime=Number(video.currentTime)||0;
+    if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
+    status('● تشغيل MPEG-TS المباشر');
+    if(statusElement)statusElement.style.display='none';
+    state.ready=true;
+    if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
+    if(state.refreshVideoResolution)state.refreshVideoResolution();
+    if(state.revealControls)state.revealControls()
+   };
+   video.onerror=function(){fallback('رفض المتصفح ترميز البث المباشر؛ جار تجربة HLS.')};
+   video.onwaiting=video.onstalled=function(){
+    if(!alive()||video.paused||record.fallback)return;
+    var last=Number(video.currentTime)||0;
+    if(record.stallTimer)clearTimeout(record.stallTimer);
+    record.stallTimer=setTimeout(function(){
+     if(!alive()||video.paused)return;
+     if(Math.abs((Number(video.currentTime)||0)-last)<0.3)fallback('توقفت الصورة المباشرة؛ جار التحويل إلى HLS.')
+    },18000)
+   };
+   // On old decoders the audio time can advance while the picture stays
+   // black. Never claim direct TS is healthy based only on onplaying().
+   // This uses the same local visual-progress checks as the HLS watchdog.
+   record.progressWatchdog=setInterval(function(){
+    if(!alive()||document.hidden||video.paused||state.userPaused||video.seeking)return;
+    var now=Date.now();
+    if(record.ready&&(!video.videoWidth||!video.videoHeight)){
+     if(now-(record.lastProgressAt||record.started)>16000)
+      fallback('الصوت يعمل لكن صورة MPEG-TS غير ظاهرة؛ جار التحويل إلى HLS.');
+     return
+    }
+    if(!record.ready)return;
+    var progress=livePlaybackProgress(record,video,now);
+    if(!progress.advanced&&progress.idleMs>18000)
+     fallback('تجمّدت صورة MPEG-TS؛ جار العودة إلى HLS.')
+   },2000);
+   video.defaultPlaybackRate=1;video.playbackRate=1;video.muted=false;
+   video.playsInline=true;video.autoplay=true;
+   transport.attachMediaElement(video);
+   transport.load();
+   var promise=transport.play();
+   if(promise&&promise.catch)promise.catch(function(){if(alive())status('اضغط ▶ لبدء MPEG-TS')})
+   status('جار فتح النقل المباشر MPEG-TS…')
+  }catch(e){fallback('تعذر تهيئة المشغّل المباشر؛ جار الرجوع إلى HLS.')}
+ })
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
@@ -1676,6 +1831,11 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   return
  }
  stopPlayback(true);
+ if(!preview&&S.playerView&&S.playerView.video===video){
+  S.playerView.mode='hls';
+  var directBtn=document.getElementById('player-direct-ts');
+  if(directBtn)directBtn.textContent='⚡ تشغيل MPEG-TS المباشر (بديل)'
+ }
  var record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,
   retries:0,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),ready:false,started:Date.now(),lastProgressAt:0,lastMediaTime:null,lastVideoFrames:null,stallChecks:0,compat:compat,ultra:ultra};
  S.play=record;
@@ -1938,7 +2098,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
+   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
    // Network and decoder are separate signals. If HLS fragments arrive while
    // actual decoded frames remain frozen, the report can flag a TV decoder
@@ -1946,7 +2106,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    engine.on(window.Hls.Events.FRAG_LOADED,function(){
     if(alive()){
      record.lastFragmentAt=Date.now();
-     record.capacityRetries=0;record.originRetries=0;
+     record.capacityRetries=0;record.originRetries=0;record.transientRetries=0;
+     if(record.retryTimer){clearTimeout(record.retryTimer);record.retryTimer=null}
      if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
     }
    });
@@ -1993,8 +2154,17 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      },delay);
      return
     }
-    if(record.retries<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
-     record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
+    if((record.transientRetries||0)<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     record.transientRetries=(record.transientRetries||0)+1;
+     var pause=liveTransientRetryMs(record.transientRetries);
+     status('انقطاع شبكة مؤقت؛ إعادة الاتصال خلال '+Math.ceil(pause/1000)+' ثانية…');
+     if(record.retryTimer)clearTimeout(record.retryTimer);
+     record.retryTimer=setTimeout(function(){
+      record.retryTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){recoverConnection()}
+     },pause);
+     return
     }
     if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
      if(!preview)recordLiveIncident('decoder_error');
@@ -2215,7 +2385,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    fail('المتصفح لا يدعم تشغيل ملفات HLS القابلة للتقديم.');return
   }
   try{
-   var hls=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
+   var hls=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,startPosition:state.resume||0,maxBufferLength:36,
     maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:68000,manifestLoadingTimeOut:30000,
     fragLoadingMaxRetry:2,manifestLoadingMaxRetry:2});
    rec.engine=hls;
@@ -2258,7 +2428,14 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
      fail('خادم معالجة الفيديو مشغول حاليًا. تم حفظ مكان المشاهدة؛ حاول لاحقًا.');
      return
     }
-    if(recovery<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovery++;try{hls.startLoad()}catch(e){};return}
+    if(recovery<2&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     recovery++;
+     rec.retryTimer=setTimeout(function(){
+      rec.retryTimer=null;
+      if(!alive())return;
+      try{hls.startLoad()}catch(e){recoverFilm()}
+     },liveTransientRetryMs(recovery));return
+    }
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
     recoverFilm()
    });
@@ -2348,7 +2525,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    fail('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:0,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});
+   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,startPosition:0,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});
    rec.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){
     if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيلم')})}catch(e){}
@@ -2357,8 +2534,13 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
     diagnose(kind,'hls_error','video',0);
-    if(recovered<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
-     recovered++;try{engine.startLoad()}catch(e){};return
+    if(recovered<2&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     recovered++;
+     rec.retryTimer=setTimeout(function(){
+      rec.retryTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){interrupted('network_retry_failed')}
+     },liveTransientRetryMs(recovered));return
     }
     if(recovered<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
      recovered++;try{engine.recoverMediaError()}catch(e){};return
@@ -2473,7 +2655,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
- (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button><button class="btn secondary" id="player-direct-ts" type="button" title="تشغيل نفس مصدر القناة مباشرة على الأجهزة التي تدعم H.264/AAC؛ العودة تلقائيًا إلى HLS عند عدم الدعم">⚡ تشغيل MPEG-TS المباشر (بديل)</button>':'')+
  '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
  '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
@@ -3295,6 +3477,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.onerror=function(){
   if(state.mode==='direct'&&!isLive)state.recoverDirect();
   else playerStatus('تعذّر تشغيل هذا المصدر.',true)
+ };
+ var directTsButton=document.getElementById('player-direct-ts');
+ if(directTsButton)directTsButton.onclick=function(){
+  if(S.route!=='player'||S.playerView!==state)return;
+  if(state.mode==='mpegts'){
+   playerStatus('جار الرجوع إلى محرك HLS…');
+   playHls(video,'live',String(state.id),'ts',0,document.getElementById('player-status'),false,0)
+  }else playDirectMpegts(video,String(state.id),document.getElementById('player-status'))
  };
  document.getElementById('player-back').onclick=back;
  document.getElementById('player-toggle').onclick=state.toggle;

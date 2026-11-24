@@ -1,0 +1,36 @@
+name: BLOFY STREAM Web dual-engine recovery QA
+on:
+  push:
+    branches: [feat/stream-web-dual-engine-recovery-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-dual-engine.yml'
+  pull_request:
+    branches: [release/blofy-stream-web-1-0-0-20261124]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-blofy-stream-dual-engine.yml'
+permissions:
+  contents: read
+jobs:
+  controlled-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Check JavaScript syntax and deterministic engine behavior
+        run: |
+          node --check web/stream-native-parity/app.js
+          node --test web/stream-native-parity/qa/dual-engine-recovery.test.mjs
+      - name: Ensure official backend remains buildable
+        run: bun build web/stream-native-parity/server.ts --target=bun --outdir=/tmp/blofy-official-dual-engine
+      - name: Safety boundaries
+        if: always()
+        run: |
+          echo 'Direct MPEG-TS is explicitly user-selected. Previous authenticated HLS producer must ACK STOP before direct source fetch.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Desktop HLS remux workers are disabled on older TV user agents. Recovery budgets prevent tight repeated connection loops.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No upstream subscriber credentials, source URLs or account information are included in diagnostics.' >> "$GITHUB_STEP_SUMMARY"
