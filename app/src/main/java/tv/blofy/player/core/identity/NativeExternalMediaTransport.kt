@@ -32,13 +32,35 @@ internal object NativeExternalMediaTransport {
             .addPathSegment(kind).addPathSegment("$id.$ext").build().toString()
     }
 
+    private val catchupDate = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}:[0-9]{2}-[0-9]{2}")
+
+    fun catchupRoute(providerId: String, id: String, minutes: Int, start: String): String {
+        require(isExternal(providerId) && ExternalStreamConnectCatalog.safeId(id))
+        require(minutes in 1..1440 && catchupDate.matches(start))
+        return origin.newBuilder().addPathSegment("native").addPathSegment(providerId)
+            .addPathSegment("catchup").addPathSegment(minutes.toString())
+            .addPathSegment(start).addPathSegment("$id.ts").build().toString()
+    }
+
     internal fun resolveRoot(url: HttpUrl, providerId: String, credentials: ExternalStreamConnectClient.Credentials): HttpUrl {
         if (url.scheme != "https" || url.host != origin.host || url.port != origin.port ||
             url.username.isNotEmpty() || url.password.isNotEmpty() || url.query != null || url.fragment != null)
             throw IOException("External native route denied")
         val parts = url.pathSegments
-        if (parts.size != 4 || parts[0] != "native" || parts[1] != providerId || !isExternal(providerId))
+        if (parts.size < 4 || parts[0] != "native" || parts[1] != providerId || !isExternal(providerId))
             throw IOException("External native route denied")
+        if (parts[2] == "catchup") {
+            if (parts.size != 6 || !parts[3].matches(Regex("[0-9]{1,4}")) ||
+                parts[3].toInt() !in 1..1440 || !catchupDate.matches(parts[4]) ||
+                !parts[5].matches(Regex("[0-9]{1,15}\\.ts")))
+                throw IOException("External archive route denied")
+            if (credentials.username in setOf(".","..") || credentials.password in setOf(".",".."))
+                throw IOException("External archive route denied")
+            return credentials.host.newBuilder().addPathSegment("timeshift")
+                .addPathSegment(credentials.username).addPathSegment(credentials.password)
+                .addPathSegment(parts[3]).addPathSegment(parts[4]).addPathSegment(parts[5]).build()
+        }
+        if (parts.size != 4) throw IOException("External native route denied")
         val kind = kinds[parts[2]] ?: throw IOException("External native kind denied")
         val match = mediaPattern.matchEntire(parts[3]) ?: throw IOException("External native item denied")
         val id = match.groupValues[1]
