@@ -79,4 +79,28 @@ class ConnectProfileDeviceTest {
             }
         }
     }
+
+    @Test fun originalStreamLoginHasOneCodeFieldAndNoConnectSwitch() {
+        assertTrue(context.packageName.endsWith(".stream.qa"))
+        assertFalse("Fresh isolated QA installation required", StreamCodeSession.isClaimed(context))
+        ActivityScenario.launch<tv.blofy.player.ui.login.CodeOnlyLoginActivity>(
+            Intent(context, tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java)
+        ).use { scenario ->
+            scenario.onActivity { activity ->
+                val views = descendants(activity.window.decorView)
+                val field = views.filterIsInstance<EditText>().single()
+                assertFalse(field.isSaveEnabled)
+                assertEquals(android.text.InputType.TYPE_CLASS_NUMBER, field.inputType)
+                field.setText("01234567")
+                assertEquals("01234567", tv.blofy.player.core.identity.StreamCodeClient.normalizeCode(field.text.toString()))
+                field.setText("012345678901")
+                assertEquals("012345678901", tv.blofy.player.core.identity.StreamCodeClient.normalizeCode(field.text.toString()))
+                val buttons = views.filterIsInstance<Button>()
+                assertEquals("Activation and language only", 2, buttons.size)
+                assertFalse(buttons.any { it.text.toString().contains("CONNECT", ignoreCase = true) })
+                assertTrue(views.filterIsInstance<TextView>().any { it.text.toString() == "BLOFY STREAM" })
+            }
+        }
+    }
+
 }
