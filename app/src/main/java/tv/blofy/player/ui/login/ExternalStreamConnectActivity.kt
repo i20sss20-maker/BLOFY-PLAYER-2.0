@@ -233,7 +233,7 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
                     if(playbackState == Player.STATE_READY) status.text = "جاهز للمشاهدة"
                 }
             })
-            session.play(target.uri)
+            session.play(target.uri, fallbackUrl = target.fallbackUri)
         }catch(_: Exception){stopPlayer();status.text="صيغة التشغيل غير متوافقة مع النسخة التجريبية"}
     }
     private fun stopPlayer(){
