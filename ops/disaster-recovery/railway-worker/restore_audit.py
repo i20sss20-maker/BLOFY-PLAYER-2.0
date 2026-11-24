@@ -17,6 +17,7 @@ import time
 import boto3
 from botocore.client import Config
 from worker import decrypt_file, digest_file, safe_env
+from verify_latest import inspect_latest_receipt
 
 KEY_PATTERN = re.compile(r"^blofy-dr/postgres/[0-9]{4}/[0-9]{2}/[0-9]{2}/[0-9]{6}Z-[0-9a-f]{12}\.dump\.gcm$")
 
@@ -30,10 +31,12 @@ def die(reason):
 def cmd(args, timeout=120, capture=False):
     # Do not capture pipe handles inherited by the local PostgreSQL daemon:
     # pg_ctl would complete but communicate() can otherwise block forever.
+    # Reject inherited libpq connection/service options for every scratch command.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PG") and k != "DATABASE_URL"}
     return subprocess.run(args, check=True,
                           stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL, timeout=timeout,
-                          env={**os.environ, "PGPASSWORD": ""})
+                          env=env)
 
 
 def main():
@@ -43,7 +46,7 @@ def main():
         die("production_db_connection_forbidden")
     try:
         object_key = safe_env("BLOFY_RESTORE_OBJECT_KEY")
-        if not KEY_PATTERN.match(object_key):
+        if object_key != "latest-verified" and not KEY_PATTERN.fullmatch(object_key):
             raise ValueError("object_key_invalid")
         key = bytes.fromhex(safe_env("BLOFY_BACKUP_AES256_KEY_HEX"))
         if len(key) != 32:
@@ -69,6 +72,10 @@ def main():
     if not all((bdir / cmdname).exists() for cmdname in ("initdb", "pg_ctl", "postgres")):
         die("postgresql18_scratch_binaries_missing")
     try:
+        receipt = None
+        if object_key == "latest-verified":
+            receipt = inspect_latest_receipt(s3, bucket, include_archive=True)
+            object_key = receipt["archive_key"]
         with tempfile.TemporaryDirectory(prefix="blofy-restore-") as d:
             root = pathlib.Path(d)
             remote, archive = root / "archive.gcm", root / "archive.dump"
@@ -76,6 +83,9 @@ def main():
             expected_sha = (meta.get("Metadata") or {}).get("sha256", "")
             if not re.fullmatch(r"[a-f0-9]{64}", expected_sha):
                 raise ValueError("missing_ciphertext_hash")
+            if receipt and (expected_sha != receipt["encrypted_sha256"] or
+                            meta.get("ContentLength") != receipt["object_bytes"]):
+                raise ValueError("archive_changed_since_verified_receipt")
             s3.download_file(bucket, object_key, str(remote))
             if remote.stat().st_size != meta.get("ContentLength") or digest_file(remote) != expected_sha:
                 raise ValueError("download_hash_invalid")
