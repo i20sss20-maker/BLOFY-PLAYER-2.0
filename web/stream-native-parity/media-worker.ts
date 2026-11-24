@@ -640,7 +640,7 @@ async function hlsRequest(req,url){
  if(kind==='live'&&expiredLiveSegment(owner,filename))
   return hlsError(410,'hls_segment_evicted');
  const ready=await awaitHlsFile(owner,filename,manifestDeadline?
-  Math.min(25000,Math.max(0,manifestDeadline-Date.now())):
+  Math.max(0,manifestDeadline-Date.now()):
   filename==='index.m3u8'?25000:8000);
  if(ready&&manifestDeadline){
   const playable=await awaitPlayableLiveManifest(owner,req.signal,manifestDeadline);
@@ -665,6 +665,13 @@ async function hlsRequest(req,url){
   console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
  }
  if(!ready){
+  if(manifestDeadline&&!owner.stopped&&!owner.hadPlayableLiveManifest){
+   // Covers an upstream HTTP stream that never produced even index.m3u8.
+   // Once the first playable-video deadline passes, free its slot and
+   // apply the same source-specific backoff as a bare/empty manifest.
+   stopHls(owner,'live_no_initial_segment');
+   return hlsError(503,'hls_live_segment_not_ready',2)
+  }
   if(kind==='live'&&expiredLiveSegment(owner,filename))
    return hlsError(410,'hls_segment_evicted');
   return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout')
