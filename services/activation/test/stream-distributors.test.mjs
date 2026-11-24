@@ -384,33 +384,25 @@ test('annual code deducts exactly twelve month credits and is locked to saleh',a
  assert.equal(f.calls.length,1,'never issue on a second source');
  assert.equal(f.distributors[0].credits,3,'no charge when saleh is unavailable');
 });
-test('one-day trials are free, phone-fingerprinted, limited, and repeat denied',async()=>{
+test('one-day trials permit repeated contact numbers but remain free, scoped and capped at 50',async()=>{
  const f=fixture();const created=await f.manager.createAdmin({
   name:'trial store',username:'trial-store',credits:0});
  const login=await f.manager.login({username:'trial-store',password:created.password});
  await assert.rejects(f.manager.issue(login.token,{kind:'xtream',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID()}),/distributor_trial_phone_required/);
+  requestId:crypto.randomUUID()}),/distributor_trial_phone_required/);
+ const requestId=crypto.randomUUID();
  const first=await f.manager.issue(login.token,{kind:'xtream',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'});
+  requestId,trialPhone:'0555555555'});
  assert.equal(first.issue.chargedCredits,0);
- assert.equal(f.distributors[0].credits,0);
- assert.match(f.issues[0].trial_customer_hash,/^[a-f0-9]{64}$/);
- assert.equal(JSON.stringify(f.issues).includes('0555555555'),false);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'}),
-  /distributor_trial_already_used/);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'+966555555555'}),
-  /distributor_trial_already_used/);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'00966555555555'}),
-  /distributor_trial_already_used/);
- for(let n=0;n<4;n++)
+ assert.equal(f.issues[0].trial_customer_hash,null);
+ await f.manager.issue(login.token,{kind:'xtream',durationDays:1,requestId,trialPhone:'0555555555'});
+ assert.equal(f.issues.length,1,'same request remains idempotent');
+ for(let n=0;n<49;n++)
   await f.manager.issue(login.token,{kind:'app',durationDays:1,
-   maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'055555555'+n});
+   requestId:crypto.randomUUID(),trialPhone:['0555555555','+966555555555','12345678'][n%3]});
+ assert.equal(f.issues.length,50);
  await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555560'}),
-  /distributor_trial_daily_limit/);
+  requestId:crypto.randomUUID(),trialPhone:'0555555555'}),/distributor_trial_daily_limit/);
  assert.equal(f.distributors[0].credits,0);
 });
 test('organization is private to distributor; only actual saleh titles are editable',async()=>{
