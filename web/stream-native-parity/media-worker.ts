@@ -200,24 +200,29 @@ function stopHls(session,reason){
  if(ownsKey)hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
  try{session.sourceController?.abort()}catch{}
- // A still-running full-VOD encoder owns a real CPU slot until FFmpeg
- // actually exits. Releasing it immediately after SIGTERM would permit a
- // second encoder to overlap during rapid seek/STOP/reopen cycles.
- const fullVodProcess=session.fullVod&&!session.finished&&!session.released?session.proc:null;
+ // All real FFmpeg jobs (live, VOD and compatibility HLS) own their
+ // CPU slot until the process actually exits. Releasing just after SIGTERM
+ // lets rapid stop/reopen churn exceed MAX_JOBS while old encoders linger.
+ const running=session.proc&&!session.finished&&!session.released?session.proc:null;
  try{session.proc?.kill()}catch{}
- if(fullVodProcess&&fullVodProcess.exited&&typeof fullVodProcess.exited.then==='function'){
-  // A stuck process continues to reserve its slot; SIGKILL is bounded.
-  // Never claim freed capacity while its process could still be alive.
+ const cleanup=()=>{
+  releaseHls(session);
+  // Do not remove a chunk directory while its encoder might still be
+  // writing into it. Access is already denied because the SID is removed.
+  try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ };
+ if(running&&running.exited&&typeof running.exited.then==='function'){
+  // If FFmpeg ignores SIGTERM, escalate, but never declare capacity free
+  // while its process could still be alive.
   const killTimer=setTimeout(()=>{
-   try{fullVodProcess.kill(9)}catch{}
+   try{running.kill(9)}catch{}
   },2500);killTimer.unref?.();
-  Promise.resolve(fullVodProcess.exited).then(()=>{
-   clearTimeout(killTimer);releaseHls(session)
+  Promise.resolve(running.exited).then(()=>{
+   clearTimeout(killTimer);cleanup()
   },()=>{
-   clearTimeout(killTimer);releaseHls(session)
+   clearTimeout(killTimer);cleanup()
   });
- }else releaseHls(session);
- try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ }else cleanup();
  if(reason!=='idle_timeout'&&reason!=='session_expired')console.info('VIDAA_HLS_SESSION_END',{kind:session.kind,reason})
 }
 function releaseHls(session){if(!session.released){session.released=true;active=Math.max(0,active-1)}}
