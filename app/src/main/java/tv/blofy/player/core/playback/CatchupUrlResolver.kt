@@ -18,6 +18,12 @@ object CatchupUrlResolver {
             timeZone = TimeZone.getDefault()
         }
         val start = formatter.format(Date(startMs))
+        if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN &&
+            tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(provider.id)) {
+            require(startMs > 0 && endMs > startMs && endMs - startMs <= 86_400_000L)
+            return tv.blofy.player.core.identity.NativeExternalMediaTransport.catchupRoute(
+                provider.id,stream.remoteId,durationMinutes,start)
+        }
         val base = provider.baseUrl.trim().trimEnd('/')
         return "$base/timeshift/${pathSegment(provider.username)}/${pathSegment(provider.password)}/$durationMinutes/$start/${stream.remoteId}.ts"
     }
