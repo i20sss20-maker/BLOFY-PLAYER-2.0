@@ -2,8 +2,8 @@
  * Network-first ensures freshly deployed app assets appear immediately.
  * Offline copies allow the interface to open; protected content still needs auth.
  */
-const CACHE_NAME='blofy-stream-shell-v2';
-const SHELL=['/','/app.js','/profile-transfer.js','/styles.css','/stream-icon.svg','/manifest.webmanifest'];
+const CACHE_NAME='blofy-stream-shell-v3';
+const SHELL=['/','/app.js','/profile-transfer.js','/playback-acceptance.js','/styles.css','/stream-icon.svg','/manifest.webmanifest'];
 self.addEventListener('install',function(event){
  event.waitUntil((async function(){
   const cache=await caches.open(CACHE_NAME);
