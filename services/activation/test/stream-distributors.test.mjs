@@ -80,6 +80,7 @@ function fixture({redemption=false}={}){
       issue_id:x.issue_id,details:x.result||{},created_at:now}));
    return {rows:credits.concat(relogins).reverse()};
   }
+  if(sql.includes('SET permissions=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.permissions=JSON.parse(args[1]);return {rows:[row]};}
   if(sql.includes('SET bonus_policy=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.bonus_policy=JSON.parse(args[1]);return {rows:[row]};}
   if(sql.includes('SET daily_issue_limit=$2')){
    const row=distributors.find(x=>x.id===args[0]);
@@ -776,4 +777,18 @@ test('bonus policy changes future purchases only and customer history is scoped'
  assert.equal((await f.manager.activity(ta,{issueId:first.issue.id})).items.length,1);
  assert.equal((await f.manager.activity(tb,{issueId:second.issue.id})).items.length,0);
  await assert.rejects(f.manager.setAdmin(a.item.id,{bonusRates:{30:0,90:0,180:0,365:41}}),/distributor_bonus_policy_invalid/);
+});
+
+test('operator permissions default to allowed and block disabled features server-side',async()=>{
+ const f=fixture({redemption:true}),a=await f.manager.createAdmin({name:'Access A',username:'access-a',credits:12}),b=await f.manager.createAdmin({name:'Access B',username:'access-b',credits:12});
+ const ta=(await f.manager.login({username:'access-a',password:a.password})).token,tb=(await f.manager.login({username:'access-b',password:b.password})).token;
+ const original=(await f.manager.me(ta)).item.permissions;
+ assert.ok(Object.values(original).every(Boolean));
+ const issued=await f.manager.issue(ta,{kind:'app',durationDays:30,requestId:crypto.randomUUID()});
+ await f.manager.setAdmin(a.item.id,{permissionSettings:Object.fromEntries(Object.keys(original).map(k=>[k,false]))});
+ for(const call of [()=>f.manager.issue(ta,{kind:'app',durationDays:30,requestId:crypto.randomUUID()}),()=>f.manager.issue(ta,{kind:'app',durationDays:1,requestId:crypto.randomUUID(),trialPhone:'12345678'}),()=>f.manager.renew(ta,{issueId:issued.issue.id,days:30,requestId:crypto.randomUUID()}),()=>f.manager.exportIssues(ta),()=>f.manager.redeemRewards(ta,{credits:1,requestId:crypto.randomUUID()}),()=>f.manager.customer(ta,{issueId:issued.issue.id,name:'Denied'}),()=>f.manager.relogin(ta,{issueId:issued.issue.id,requestId:crypto.randomUUID()}),()=>f.manager.rotateOwnedXtream(ta,{issueId:issued.issue.id,requestId:crypto.randomUUID()}),()=>f.manager.reveal(ta,issued.issue.id,{includeXtream:true})])await assert.rejects(call,/distributor_permission_denied/);
+ assert.equal((await f.manager.me(tb)).item.permissions.paidIssue,true);
+ assert.equal((await f.manager.issued(ta)).items.length,1);
+ assert.equal((await f.manager.me(ta)).item.credits,11);
+ await assert.rejects(f.manager.setAdmin(a.item.id,{permissionSettings:{paidIssue:true}}),/distributor_permissions_invalid/);
 });
