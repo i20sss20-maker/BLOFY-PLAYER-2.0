@@ -12,6 +12,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import okhttp3.OkHttpClient
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.NativeExternalMediaTransport
 import tv.blofy.player.core.device.StreamDeviceCompatibility
 import org.chromium.net.CronetEngine
 import tv.blofy.player.core.provider.ProviderProfile
@@ -26,6 +27,11 @@ object TransportFactory {
 
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val appContext = context.applicationContext
+        // Never send external media through BLOFY bearer transport or its disk cache.
+        if (BuildConfig.CODE_ONLY_LOGIN && NativeExternalMediaTransport.isExternal(profile.providerKey)) {
+            return OkHttpDataSource.Factory(NativeExternalMediaTransport.client(appContext, profile.providerKey))
+                .setUserAgent("BLOFY STREAM/${BuildConfig.VERSION_NAME}")
+        }
         val upstreamHttp: HttpDataSource.Factory =
             if (BuildConfig.CODE_ONLY_LOGIN) secureStreamHttp(appContext)
             else when (profile.transport) {
