@@ -66,13 +66,13 @@ class ConnectProfileDeviceTest {
             scenario.onActivity { activity ->
                 val views = descendants(activity.window.decorView)
                 assertTrue(views.filterIsInstance<TextView>().any { it.text.toString().contains("BLOFY STREAM CONNECT") })
-                val field = views.filterIsInstance<EditText>().first { it.hint?.toString()=="أدخل 12 رقمًا" }
+                val field = views.filterIsInstance<EditText>().first { it.hint?.toString()=="أدخل 8 أرقام" }
                 assertFalse("Pairing code must not be saved in view state",field.isSaveEnabled)
                 assertTrue(field.text.isNullOrEmpty())
                 assertEquals(android.text.InputType.TYPE_CLASS_NUMBER,field.inputType)
-                field.setText("012345678901")
-                assertEquals("012345678901",field.text.toString())
-                assertEquals("012345678901",ExternalStreamConnectClient.normalizeCode(field.text.toString()))
+                field.setText("01234567")
+                assertEquals("01234567",field.text.toString())
+                assertEquals("01234567",ExternalStreamConnectClient.normalizeCode(field.text.toString()))
                 assertNotNull(ExternalStreamConnectClient.parseHost("http://provider.example.com:8080"))
                 assertTrue(views.filterIsInstance<Button>().any { it.text.toString()=="ربط الاشتراك الخارجي" && it.isFocusable })
                 assertTrue(activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0)
