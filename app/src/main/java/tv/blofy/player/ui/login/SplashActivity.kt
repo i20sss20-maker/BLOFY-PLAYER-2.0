@@ -67,7 +67,13 @@ class SplashActivity : AppCompatActivity() {
                 // revalidates the bearer; invalid/expired sessions still redirect.
                 if (StreamCodeSession.isClaimed(this@SplashActivity) &&
                     CatalogSyncState.isReady(this@SplashActivity, StreamCodeSession.providerId))
-                    HomeActivity::class.java else CodeOnlyLoginActivity::class.java
+                    HomeActivity::class.java
+                else if (!StreamCodeSession.isClaimed(this@SplashActivity) &&
+                    tv.blofy.player.core.identity.NativeExternalCatalogSession.hasStaged(this@SplashActivity) &&
+                    kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                        tv.blofy.player.core.identity.NativeExternalCatalogSession.activeId(applicationContext)
+                    } != null) HomeActivity::class.java
+                else CodeOnlyLoginActivity::class.java
             } else if (StartupEntryState.shouldOpenHome(this@SplashActivity)) {
                 HomeActivity::class.java
             } else {
