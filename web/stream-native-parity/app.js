@@ -1696,12 +1696,11 @@ function livePlaybackProgress(record,video,now){
  // callback is stronger evidence even on older TVs that omit dimensions.
  var visualProgress=record.framePresentationObserved?advancedPresented:
   pictureDimensions&&(frameCounterUsable?advancedFrames:(advancedTime||advancedFrames));
- // After browser suspension a 2-second observer might resume minutes later.
- // Do not charge idle tab time as a video freeze or force an instant recovery.
- if(record.visualProgressSeen&&record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000){
-  record.lastProgressAt=now;record.visualProgressSeen=false;
-  record.visualOutageReported=false
- }
+ // An unsampled interval (for example, a sleeping browser) cannot be
+ // counted as observed playback downtime. Do not change the recovery
+ // watchdog's lastProgressAt: a genuinely frozen decoder must still recover.
+ if(record.visualProgressSeen&&record.lastVisualSampleAt&&now-record.lastVisualSampleAt>6000)
+  record.visualOutageReported=true;
  record.lastVisualSampleAt=now;
  if(record.framePresentationObserved)record.lastSampledPresentationAt=record.lastPresentedFrameAt;
  if(Number.isFinite(time))record.lastMediaTime=time;
