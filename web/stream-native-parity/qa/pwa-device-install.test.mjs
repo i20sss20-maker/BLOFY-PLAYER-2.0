@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+import {inflateSync} from 'node:zlib';
 
 const root=new URL('../',import.meta.url);
 const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
@@ -41,7 +42,11 @@ test('PWA includes standalone metadata, a real PNG icon, secure server route',()
  assert.equal(manifest.display,'standalone');
  assert.equal(manifest.scope,'/');
  assert.ok(manifest.icons.some(x=>x.src==='/stream-icon.svg'));
+ assert.ok(manifest.icons.some(x=>x.src==='/icon-192.png'&&x.sizes==='192x192'&&x.type==='image/png'));
+ assert.ok(manifest.icons.some(x=>x.src==='/icon-512.png'&&x.sizes==='512x512'&&x.type==='image/png'));
  assert.match(server,/p==='\/apple-touch-icon\.png'/);
+ assert.match(server,/p==='\/icon-192\.png'/);
+ assert.match(server,/p==='\/icon-512\.png'/);
  assert.match(server,/p==='\/apple-touch-icon\.png'\?'image\/png'/);
  assert.match(sw,/blofy-stream-shell-v4/);
  assert.match(sw,/\/apple-touch-icon\.png/);
@@ -55,4 +60,25 @@ test('home-screen install entry is optional and exposes accessible status',()=>{
  assert.match(app,/appinstalled/);
  assert.match(style,/safe-area-inset-bottom/);
  assert.match(style,/touch-action:manipulation/);
+});
+
+test('all three PNG icons have correct dimensions and fully decompress',()=>{
+ for(const size of [180,192,512]){
+  const name=size===180?'apple-touch-icon.png':'icon-'+size+'.png';
+  const bytes=readFileSync(new URL('../'+name,import.meta.url));
+  assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a',name);
+  assert.equal(bytes.readUInt32BE(16),size,name+' width');
+  assert.equal(bytes.readUInt32BE(20),size,name+' height');
+  let offset=8,compressed=[];
+  while(offset+12<=bytes.length){
+   const len=bytes.readUInt32BE(offset),tag=bytes.toString('ascii',offset+4,offset+8);
+   assert.ok(offset+len+12<=bytes.length,name+' chunk bounds');
+   if(tag==='IDAT')compressed.push(bytes.subarray(offset+8,offset+8+len));
+   offset+=len+12;
+   if(tag==='IEND')break;
+  }
+  assert.ok(compressed.length>0,name+' has compressed image data');
+  const data=inflateSync(Buffer.concat(compressed));
+  assert.ok(data.length>size*size/3,name+' decompresses into pixel rows');
+ }
 });
