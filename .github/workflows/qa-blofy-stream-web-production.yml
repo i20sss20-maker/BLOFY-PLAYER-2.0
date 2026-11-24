@@ -39,6 +39,8 @@ jobs:
         run: cd web/stream-native-parity && node --test qa/hls-ios-live-profile.test.mjs
       - name: Verify native iPhone recovery and PWA controls without extra upstream sessions
         run: cd web/stream-native-parity && node --test qa/ios-native-playback-stability.test.mjs
+      - name: Verify iPhone cross-browser HLS engine and explicit audio gesture playback
+        run: cd web/stream-native-parity && node --test qa/ios-native-browser-gesture-play.test.mjs
       - name: Verify live buffer UI recovery and Android-inspired READY parity
         run: cd web/stream-native-parity && node --test qa/live-buffer-ready-parity.test.mjs
       - name: Verify standalone device web-app installation and safe icon route

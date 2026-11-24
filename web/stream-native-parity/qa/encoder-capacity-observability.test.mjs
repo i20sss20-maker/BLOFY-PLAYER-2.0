@@ -54,8 +54,11 @@ test('first-party authenticated API strips upstream account values and caps nume
   jobKinds:{live:100,fullVod:1,legacyVod:-1,compatible:'2',token:'token-secret'}
  };
  const sanitized=JSON.parse(JSON.stringify(clean(candidate)));
- assert.deepEqual(sanitized,{busy:true,freeSlots:2,deniedLastMinute:100000,
-  jobKinds:{live:2,legacyVod:0,fullVod:1,compatible:2}});
+ // The Web API now reports up to four slots on the separately deployed
+ // capacity-controlled production worker. This sanitizer test is independent
+ // of the local two-slot synthetic media-worker source fixture above.
+ assert.deepEqual(sanitized,{busy:true,freeSlots:4,deniedLastMinute:100000,
+  jobKinds:{live:4,legacyVod:0,fullVod:1,compatible:2}});
  assert.doesNotMatch(JSON.stringify(sanitized),/secret|token|Bearer/);
  assert.equal((web.match(/encoderCapacity:safeEncoderCapacity\(/g)||[]).length,2,
   'media-health and compatible-health require identical sanitization');

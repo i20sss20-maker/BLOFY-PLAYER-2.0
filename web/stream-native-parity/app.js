@@ -532,7 +532,12 @@ function buildCatalog(kind,listing){
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
   var selected=findItem('live',S.selected)||source[0];
-  if(selected)selectChannel(itemId(selected,'live'),true);
+  if(selected)selectChannel(itemId(selected,'live'),
+   !appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints));
+  if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)){
+   var previewEmpty=document.getElementById('preview-empty');
+   if(previewEmpty){previewEmpty.style.display='flex';previewEmpty.textContent='اختر قناة لبدء المشاهدة • المعاينة اختيارية'}
+  }
   // Arrow navigation on a TV changes the highlighted channel as it settles.
   // A short delay avoids opening one transcoder for every rapid D-pad press.
   var channelList=document.getElementById('channel-list');
@@ -734,13 +739,19 @@ function selectChannel(id,activate){
  var item=findItem('live',id);if(!item)return;S.selected=id;
  var rows=document.querySelectorAll('[data-channel]');for(var i=0;i<rows.length;i++)rows[i].className='channel-item'+(rows[i].getAttribute('data-channel')===id?' selected':'');
  var name=document.getElementById('live-title'),desc=document.getElementById('live-desc');
- if(name)name.textContent=title(item);if(desc)desc.textContent='معاينة '+title(item)+' • التشغيل تلقائي عند التحديد';
+ if(name)name.textContent=title(item);
+ if(desc)desc.textContent=appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)?
+  'اضغط على القناة للمشاهدة مباشرة • المعاينة متاحة بالزر':
+  'معاينة '+title(item)+' • التشغيل تلقائي عند التحديد';
  var favorite=document.getElementById('live-favorite');if(favorite){
   favorite.setAttribute('data-favorite','live:'+id);
   favorite.textContent=S.library['live:'+id]?'♥ إزالة من المفضلة':'♡ المفضلة'
  }
  loadShortEpg(id);
- if(activate)beginPreview(item)
+ // Selecting channels on an iPhone never opens an unrequested FFmpeg
+ // preview. A single channel tap opens the actual player; preview stays
+ // available on demand via the dedicated button, with the same features.
+ if(activate&&!appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints))beginPreview(item)
 }
 function decodeEpgField(raw){
  var source=String(raw==null?'':raw).trim().slice(0,500);
@@ -1655,8 +1666,11 @@ function diagnose(kind,phase,mode,code){
 }
 
 function shouldUseNativeHls(video){
- if(S.preferMseHls&&window.MediaSource&&window.MediaSource.isTypeSupported)return false;
  if(!video||!video.canPlayType||!video.canPlayType('application/vnd.apple.mpegurl'))return false;
+ // All iOS browsers (Safari/Chrome/Edge/Firefox) use the Apple WebKit
+ // native HLS decoder; a previous MSE override must not redirect them.
+ if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints))return true;
+ if(S.preferMseHls&&window.MediaSource&&window.MediaSource.isTypeSupported)return false;
  // Chrome and Edge sometimes report "maybe" here yet fail to decode MPEG-TS
  // with MEDIA_ERR_SRC_NOT_SUPPORTED (4). Use Hls.js/MSE on these browsers.
  var ua=(navigator.userAgent||'');
@@ -1666,6 +1680,15 @@ function shouldUseNativeHls(video){
  return apple||tv||!mse
 }
 
+/* On iOS, autoplay with audio can require a real tap. Do not restart
+ * a session or open a second source: offer a direct action on this video. */
+function offerIosPlayGesture(error,video,preview){
+ if(preview||!error||error.name!=='NotAllowedError'||
+    !appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)||
+    S.route!=='player'||!S.playerView||S.playerView.video!==video||
+    !S.playerView.promptIosPlay)return false;
+ return S.playerView.promptIosPlay(error)
+}
 function loadHls(done){
  if(window.Hls){done(true);return}
  if(S.hlsState==='loading'){S.hlsCallbacks.push(done);return}
@@ -2589,20 +2612,26 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    }
   },2200);
  if(shouldUseNativeHls(video)){
-  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})}catch(e){}return
+  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(error){
+    if(alive()&&!offerIosPlayGesture(error,video,preview))status('اضغط ▶ في المشغّل')
+   })}catch(e){if(alive()&&!offerIosPlayGesture(e,video,preview))status('اضغط ▶ في المشغّل')}return
  }
  loadHls(function(ok){
   if(!alive())return;
   if(!ok||!window.Hls||!window.Hls.isSupported()){
    // Only try native HLS if the browser genuinely advertises it.
    if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
-    video.src=manifest;try{video.play()}catch(e){};return
+    video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(error){
+     if(alive()&&!offerIosPlayGesture(error,video,preview))status('اضغط تشغيل ▶')
+    })}catch(e){if(alive()&&!offerIosPlayGesture(e,video,preview))status('اضغط تشغيل ▶')};return
    }
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
    var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
-   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
+   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(error){
+    if(alive()&&!offerIosPlayGesture(error,video,preview))status('اضغط تشغيل ▶')
+   })}catch(e){if(alive()&&!offerIosPlayGesture(e,video,preview))status('اضغط تشغيل ▶')}});
    // Network and decoder are separate signals. If HLS fragments arrive while
    // actual decoded frames remain frozen, the report can flag a TV decoder
    // problem instead of blaming Railway or the subscriber's source.
@@ -3150,7 +3179,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  S.route='player';
  showWebShellUpdateHint();
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
- '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+
+ '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+ 
+ '<button id="player-ios-tap-to-play" class="player-ios-tap-to-play" type="button" hidden aria-label="بدء تشغيل البث على الآيفون">'+
+ '<span aria-hidden="true">▶</span><strong>اضغط لتشغيل</strong><small>يتطلب الآيفون لمسة لتفعيل الصوت والفيديو</small></button>'+
  '<div class="mobile-seek-feedback" id="mobile-seek-feedback" hidden role="status" aria-live="polite"></div>'+
  '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
  '<div class="player-hud native-stream-hud">'+
@@ -3212,6 +3243,39 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     visualOutageCount:0,visualOutageMs:0,longestVisualOutageMs:0,
     visualOutageByEngine:{hls:{count:0,ms:0},mpegts:{count:0,ms:0}},
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
+ // This button restarts no source and carries no extra network request.
+ function hideIosPlayGesture(){
+  var button=document.getElementById('player-ios-tap-to-play');
+  if(button)button.hidden=true
+ }
+ function promptIosPlay(error){
+  if(!error||error.name!=='NotAllowedError'||
+     !appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)||
+     S.route!=='player'||S.playerView!==state||state.userPaused||
+     !video.paused||!video.isConnected)return false;
+  var button=document.getElementById('player-ios-tap-to-play');
+  if(!button)return false;
+  button.hidden=false;
+  var root=document.getElementById('player-root');
+  if(root)root.classList.remove('controls-hidden');
+  playerStatus('اضغط تشغيل لتفعيل الصوت والصورة على الآيفون.');
+  return true
+ }
+ state.promptIosPlay=promptIosPlay;
+ var iosPlayButton=document.getElementById('player-ios-tap-to-play');
+ if(iosPlayButton)iosPlayButton.onclick=function(){
+  if(S.route!=='player'||S.playerView!==state||state.userPaused)return;
+  hideIosPlayGesture();
+  try{
+   var promise=video.play();
+   if(promise&&promise.catch)promise.catch(function(error){
+    if(S.route!=='player'||S.playerView!==state)return;
+    if(!promptIosPlay(error))playerStatus('تعذر تشغيل الوسائط؛ استخدم إعادة المحاولة.',true)
+   })
+  }catch(error){if(!promptIosPlay(error))playerStatus('تعذر تشغيل الوسائط؛ استخدم إعادة المحاولة.',true)}
+ };
+ video.addEventListener('playing',hideIosPlayGesture);
+ video.addEventListener('play',hideIosPlayGesture);
  // The 20-minute acceptance uses existing decoded-frame and source health
  // observations. It never opens a new media, catalog or telemetry request.
  // Monotonic time avoids TV system-clock/date problems.
@@ -4037,7 +4101,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  state.toggle=function(){
   if(video.paused){
    state.userPaused=false;
-   var p=video.play();if(p&&p.catch)p.catch(function(){})
+   try{
+    var p=video.play();if(p&&p.catch)p.catch(function(error){
+     if(S.route==='player'&&S.playerView===state&&
+        !offerIosPlayGesture(error,video,false))playerStatus('تعذر استئناف التشغيل؛ حاول إعادة الاتصال.',true)
+    })
+   }catch(error){if(!offerIosPlayGesture(error,video,false))playerStatus('تعذر استئناف التشغيل؛ حاول إعادة الاتصال.',true)}
   }else{
    state.userPaused=true;video.pause()
   }
@@ -4077,7 +4146,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    state.recoverDirect()
   },18000);
   video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
-  try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
+  try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(error){
+   if(!offerIosPlayGesture(error,video,false))playerStatus('اضغط ▶ لتشغيل الفيديو')
+  })}catch(e){if(!offerIosPlayGesture(e,video,false))playerStatus('اضغط ▶ لتشغيل الفيديو')}
  }
  video.onloadedmetadata=function(){
   if(state.mode!=='direct')return;
@@ -4632,6 +4703,11 @@ function clickHandler(event){
   if(kind==='live'){var channel=findItem('live',id);openPlayer('live',id,'ts',title(channel),0);return}
   navigate('detail',{kind:kind,id:id});return}
  if(ch){
+  if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)&&S.route==='live'){
+   var appleChannel=findItem('live',ch);
+   if(appleChannel){S.selected=ch;openPlayer('live',ch,'ts',title(appleChannel),0)}
+   return
+  }
   selectChannel(ch,true);
   // On phones the video preview is deliberately above the channel list.
   // Bring that existing player into view after an explicit channel tap;
