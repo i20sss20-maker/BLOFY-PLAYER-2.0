@@ -57,7 +57,7 @@ function fixture({redemption=false}={}){
     const i=issues.find(x=>x.id===e.issue_id&&x.distributor_id===e.distributor_id);
     const code=codes.find(x=>x.id===i?.subject_id);
     if(e.distributor_id!==args[0]||!i||i.kind!=='app'||i.status!=='done'||e.delta>=0||e.type!=='issue'||!code||code.redeemed_at||code.revoked_at||e.created_at<start||creditEvents.some(r=>r.distributor_id===e.distributor_id&&r.issue_id===e.issue_id&&r.type==='refund'))continue;
-    quarters+=({30:1,90:2,180:4,365:8})[e.details.days]||0;
+    quarters+=e.details.bonusQuarters??(({30:1,90:2,180:4,365:8})[e.details.days]||0);
    }
    return {rows:[{pending_quarters:quarters}]};
   }
@@ -69,17 +69,18 @@ function fixture({redemption=false}={}){
     if(e.distributor_id!==args[0]||!i||i.status!=='done'||e.delta>=0||!['issue','renew'].includes(e.type))continue;
     const at=e.type==='issue'&&i.kind==='app'?codes.find(x=>x.id===i.subject_id)?.redeemed_at:e.created_at;
     if(!at||at<start||creditEvents.some(r=>r.distributor_id===e.distributor_id&&r.issue_id===e.issue_id&&r.type==='refund'))continue;
-    quarters+=({30:1,90:2,180:4,365:8})[e.details.days]||0;
+    quarters+=e.details.bonusQuarters??(({30:1,90:2,180:4,365:8})[e.details.days]||0);
    }
    return {rows:[{reward_quarters:quarters}]};
   }
   if(sql.includes('FROM blofy_stream_distributor_credit_events')&&sql.includes('ORDER BY')){
-   const credits=creditEvents.filter(x=>x.distributor_id===args[0]);
-   const relogins=actions.filter(x=>x.distributor_id===args[0]&&x.action==='relogin')
+   const credits=creditEvents.filter(x=>x.distributor_id===args[0]&&(!args[2]||x.issue_id===args[2]));
+   const relogins=actions.filter(x=>x.distributor_id===args[0]&&x.action==='relogin'&&(!args[2]||x.issue_id===args[2]))
     .map(x=>({...x,type:'relogin',delta:0,balance_after:null,
       issue_id:x.issue_id,details:x.result||{},created_at:now}));
    return {rows:credits.concat(relogins).reverse()};
   }
+  if(sql.includes('SET bonus_policy=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.bonus_policy=JSON.parse(args[1]);return {rows:[row]};}
   if(sql.includes('SET daily_issue_limit=$2')){
    const row=distributors.find(x=>x.id===args[0]);
    if(!row)return {rows:[]};row.daily_issue_limit=args[1];return {rows:[row]};
@@ -762,4 +763,17 @@ test('admin bonus is auditable, scoped and idempotent',async()=>{
  assert.equal((await f.manager.analytics(tb)).stats.rewardPointsAvailable,0);
  await assert.rejects(f.manager.setAdmin(b.item.id,data),/distributor_request_conflict/);
  assert.equal((await f.manager.me(ta)).item.credits,0);
+});
+
+test('bonus policy changes future purchases only and customer history is scoped',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Policy A',username:'policy-a',credits:24}),b=await f.manager.createAdmin({name:'Policy B',username:'policy-b',credits:24});
+ const ta=(await f.manager.login({username:'policy-a',password:a.password})).token,tb=(await f.manager.login({username:'policy-b',password:b.password})).token;
+ const first=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ await f.manager.setAdmin(a.item.id,{bonusRates:{30:0,90:0,180:0,365:16}});
+ const second=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,6);
+ assert.equal((await f.manager.me(tb)).item.bonusPolicy[365],8);
+ assert.equal((await f.manager.activity(ta,{issueId:first.issue.id})).items.length,1);
+ assert.equal((await f.manager.activity(tb,{issueId:second.issue.id})).items.length,0);
+ await assert.rejects(f.manager.setAdmin(a.item.id,{bonusRates:{30:0,90:0,180:0,365:41}}),/distributor_bonus_policy_invalid/);
 });
