@@ -285,7 +285,13 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
 
     private fun activate() {
         if (busy) return
-        val code = StreamCodeClient.normalizeCode(codeInput.text.toString())
+        val raw = codeInput.text.toString()
+        if (raw.isBlank() && !StreamCodeSession.isClaimed(this) &&
+            NativeExternalCatalogSession.hasStaged(this)) {
+            restoreNativeExternal()
+            return
+        }
+        val code = StreamCodeClient.normalizeCode(raw)
         if (code.isEmpty()) {
             statusText.text = getString(R.string.stream_ui_code_length)
             codeInput.requestFocus()
@@ -362,9 +368,20 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     else -> getString(R.string.stream_ui_activation_failed)
                 }
                 setBusy(false)
-                codeInput.requestFocus()
+                if (codeInput.text.isNullOrBlank() && NativeExternalCatalogSession.hasStaged(this@CodeOnlyLoginActivity)) {
+                    showResumeAction()
+                } else codeInput.requestFocus()
             }
         }
+    }
+
+    private fun showResumeAction() {
+        val arabic = ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar"
+        statusText.text = if (arabic)
+            "تم حفظ الاشتراك. اضغط استكمال لإعادة المحاولة دون كود جديد."
+            else "Subscription saved. Press Continue to retry without a new code."
+        submitButton.text = if (arabic) "استكمال التفعيل" else "Continue activation"
+        submitButton.requestFocus()
     }
 
     private fun openNativeHome() {
@@ -396,7 +413,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 statusText.text = getString(R.string.stream_ui_restore_failed)
             }
             setBusy(false)
-            codeInput.requestFocus()
+            if (NativeExternalCatalogSession.hasStaged(this@CodeOnlyLoginActivity)) showResumeAction()
+            else codeInput.requestFocus()
         }
     }
 
