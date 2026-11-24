@@ -2750,6 +2750,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,
             enabled:['1','true'].includes(String(process.env.BLOFY_STREAM_CONNECT_ENABLED))});
           const pairing=unifiedConnectPairing;
+          let connectAttempt=null;
           const redeem=createUnifiedCodeRedeemer({
             paidExists:async code=>{
               const proof=streamCodeProof(code,KEY_HEX);
@@ -2757,9 +2758,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
               const result=await pool.query('SELECT 1 FROM blofy_xtream_gateway_duration_codes WHERE code_hash=$1 LIMIT 1',[proof]);
               return result.rows.length===1;
             },
-            connectExists:code=>pairing.exists(code),
+            connectExists:async code=>{connectAttempt=await pairing.beginUnifiedAttempt(code);return connectAttempt.exists;},
             redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true}),
-            redeemConnect:(code,deviceKey)=>pairing.redeem({code,deviceKey})
+            redeemConnect:(_code,deviceKey)=>connectAttempt.redeem(deviceKey)
           });
           const input=await readJson(req);
           return json(res,201,await redeem({code:input.code,deviceKey:input.deviceKey,origin:xtreamOrigin(req)}),headers);
