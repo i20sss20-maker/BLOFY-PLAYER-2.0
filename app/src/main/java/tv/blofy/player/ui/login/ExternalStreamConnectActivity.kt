@@ -76,13 +76,20 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
         }
         panel.addView(status)
         code = EditText(this).apply {
-            hint = "BC-..."
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            hint = "أدخل 12 رقمًا"
+            inputType = InputType.TYPE_CLASS_NUMBER
             isSingleLine = true
             isSaveEnabled = false
-            filters = arrayOf(android.text.InputFilter.LengthFilter(27))
+            filters = arrayOf(android.text.InputFilter.LengthFilter(12))
         }
         panel.addView(code)
+        panel.addView(button("تبديل إلى إدخال الكود القديم / الرقمي") {
+            val numeric = code.inputType == InputType.TYPE_CLASS_NUMBER
+            code.text?.clear()
+            code.inputType = if (numeric) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS else InputType.TYPE_CLASS_NUMBER
+            code.filters = arrayOf(android.text.InputFilter.LengthFilter(if (numeric) 27 else 12))
+            code.hint = if (numeric) "BC-..." else "أدخل 12 رقمًا"
+        })
         pairButton = button("ربط الاشتراك الخارجي") { pair() }
         panel.addView(pairButton)
         panel.addView(button("حذف الاشتراك الخارجي من الجهاز") {

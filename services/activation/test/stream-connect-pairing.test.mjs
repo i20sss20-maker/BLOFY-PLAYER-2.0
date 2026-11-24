@@ -8,7 +8,7 @@ function fixture(){
   if(/^(CREATE|BEGIN|COMMIT|ROLLBACK|SELECT pg_advisory)/.test(sql))return {rows:[]};
   if(sql==='DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()'){for(const [id,r] of rows)if(r.expiresAt<=now)rows.delete(id);return {rows:[]}}
   if(sql.startsWith('SELECT COUNT'))return {rows:[{count:rows.size}]};
-  if(sql.startsWith('INSERT INTO blofy_connect_pairings')){rows.set(args[0],{sealed:args[1],expiresAt:args[2].getTime()});return {rows:[]}}
+  if(sql.startsWith('INSERT INTO blofy_connect_pairings')){if(rows.has(args[0]))return {rows:[]};rows.set(args[0],{sealed:args[1],expiresAt:args[2].getTime()});return {rows:[{code_hash:args[0]}]}}
   if(sql.startsWith('DELETE FROM blofy_connect_pairings WHERE code_hash=')){const r=rows.get(args[0]);if(!r||r.expiresAt<=now)return {rows:[]};rows.delete(args[0]);return {rows:[r]}}
   throw Error('unexpected test query');
  }
@@ -20,8 +20,8 @@ test('pairing is fail-closed without explicit enable and independent key',async(
  await assert.rejects(createStreamConnectPairing().issue(input),/connect_disabled/);
  await assert.rejects(createStreamConnectPairing({enabled:true,pool:fixture().pool}).issue(input),/connect_key_unconfigured/);
 });
-test('validate origin only, never accept insecure URL or local addresses',()=>{
- for(const host of ['http://provider.example.com','https://127.0.0.1','https://[::1]','https://localhost','https://router.local','https://name.internal','https://user:pass@provider.example.com','https://provider.example.com/path','https://provider.example.com?x=1','https://provider.example.com#x'])assert.throws(()=>normalizeConnectInput({...input,host}),/connect_host_invalid/);
+test('validate origin only, reject non-HTTP schemes and local addresses',()=>{
+ for(const host of ['ftp://provider.example.com','https://127.0.0.1','https://[::1]','https://localhost','https://router.local','https://name.internal','https://user:pass@provider.example.com','https://provider.example.com/path','https://provider.example.com?x=1','https://provider.example.com#x'])assert.throws(()=>normalizeConnectInput({...input,host}),/connect_host_invalid/);
  assert.deepEqual(normalizeConnectInput(input),input);
  assert.throws(()=>normalizeConnectInput({...input,password:'x\nx'}),/connect_input_invalid/);
 });
@@ -59,3 +59,5 @@ test('expiry maintenance skips disabled and overlapping ticks and never reports 
  assert.deepEqual(await failing.tick(),{failed:true});
  assert.deepEqual(events,['connect_expiry_cleanup_failed','connect_expiry_cleanup_failed']);
 });
+
+test('numeric codes and explicit HTTP consent',async()=>{const f=fixture(),http={...input,host:'http://provider.example.com:8080'};await assert.rejects(f.service.issue(http),/connect_host_invalid/);const a=await f.service.issue({...http,allowHttp:true,numericCode:true});assert.match(a.code,/^[0-9]{12}$/);const b=await f.service.issue({...input,numericCode:true});assert.notEqual(a.code,b.code);assert.deepEqual((await f.service.redeem({code:a.code})).credentials,http);await assert.rejects(f.service.redeem({code:a.code}),/connect_code_expired_or_used/);assert.deepEqual((await f.service.redeem({code:b.code})).credentials,input);});
