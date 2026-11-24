@@ -309,6 +309,7 @@ function fixture({redemption=false}={}){
  }
  const pool={query,async connect(){return {query,release(){}}}};
  const manager=createStreamDistributors({pool,clock:()=>now.getTime(),
+   playbackSnapshot:sourceId=>{calls.push({type:'quality',sourceId});return {started:10,failed:2,interrupted:1,recovered:3,p95StartMs:2200,liveTsRecoveryGapSamples:3,p95LiveTsRecoveryGapMs:1100,liveTsSourceDrops:3,byKind:{live:{started:10,failed:2,interrupted:1,recovered:3}},recentIssues:[{itemId:123,sourceId,secret:'private'}],unexpected:'secret'}},
    trialKeyHex:'9'.repeat(64),rewardsStart:'2026-11-12T00:00:00Z',rewardsRedemptionEnabled:redemption,
    linkCodeToXtream:async code=>{
      if(code!==issuedToken||!codes[0].redeemed_at)return {status:409,body:{ok:false}};
@@ -803,4 +804,16 @@ test('admin distributor report reads scoped wallet and issued sales data',async(
  assert.equal(report.stats.paidTotal,1);assert.equal(other.stats.paidTotal,0);
  assert.equal(report.item.id,a.item.id);assert.equal(other.item.id,b.item.id);
  await assert.rejects(f.manager.adminReport(crypto.randomUUID()),/distributor_missing/);
+});
+
+test('distributor relay quality uses only published source and returns no item or private data',async()=>{
+ const f=fixture();await assert.rejects(f.manager.quality('invalid'),/distributor_unauthorized/);
+ const a=await f.manager.createAdmin({name:'Quality A',username:'quality-a',credits:1});
+ const token=(await f.manager.login({username:'quality-a',password:a.password})).token;
+ const report=await f.manager.quality(token);
+ assert.equal(report.scope,'shared_source_single_instance');assert.equal(report.decodedOnClient,false);
+ assert.equal(report.byKind.live.started,10);assert.equal(report.p95RecoveryGapMs,1100);
+ assert.equal(f.calls.find(x=>x.type==='quality').sourceId,f.salehId);
+ assert.equal(JSON.stringify(report).includes('private'),false);assert.equal('recentIssues' in report,false);
+ f.setSource(false);await assert.rejects(f.manager.quality(token),/distributor_saleh_source_unavailable/);
 });
