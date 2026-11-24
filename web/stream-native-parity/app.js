@@ -4387,6 +4387,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function toggleFull(){
   if(isFull()){exitFull();return}
+  // Prefer genuine iOS video fullscreen/gesture controls to a viewport mock.
+  if(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)&&video.webkitEnterFullscreen){
+   try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}
+  }
   var request=root.requestFullscreen||root.webkitRequestFullscreen||root.mozRequestFullScreen||root.msRequestFullscreen;
   if(request){
    try{
