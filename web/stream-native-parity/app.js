@@ -1792,6 +1792,13 @@ function cleanupPlayer(){
   }
   if(S.playerView.seekDebounce){clearTimeout(S.playerView.seekDebounce);S.playerView.seekDebounce=null}
   if(S.playerView.healthTimer){clearInterval(S.playerView.healthTimer);S.playerView.healthTimer=null}
+  if(S.playerView.noticeObserverTimer){clearInterval(S.playerView.noticeObserverTimer);S.playerView.noticeObserverTimer=null}
+  if(S.playerView.noticeFrameRepeatTimer){clearTimeout(S.playerView.noticeFrameRepeatTimer);S.playerView.noticeFrameRepeatTimer=null}
+  if(S.playerView.noticeFrameId!==null&&S.playerView.noticeFrameId!==undefined&&
+     S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
+   try{S.playerView.video.cancelVideoFrameCallback(S.playerView.noticeFrameId)}catch(err){}
+   S.playerView.noticeFrameId=null
+  }
   if(S.playerView.firstPictureWatchTimer){clearInterval(S.playerView.firstPictureWatchTimer);S.playerView.firstPictureWatchTimer=null}
   if(S.playerView.firstPictureFrameId!==null&&S.playerView.firstPictureFrameId!==undefined&&
      S.playerView.video&&typeof S.playerView.video.cancelVideoFrameCallback==='function'){
@@ -1805,9 +1812,78 @@ function cleanupPlayer(){
  }
  stopPlayback(true)
 }
+/* Real decoded/presented frames, not HTMLMediaElement "playing", prove
+ * that the image has resumed. Audio clocks alone may move over black video.
+ * Old TVs without video-frame APIs use a bounded time+dimensions fallback. */
+function playbackNoticeProgress(previous,current){
+ if(!previous||!current||previous.record!==current.record||
+    current.paused||current.userPaused||current.hidden||current.ended||
+    current.seeking||current.pendingSeek||current.readyState<2||
+    current.width<1||current.height<1)return false;
+ if(current.frames!==null&&previous.frames!==null)
+  return current.frames>previous.frames;
+ if(current.frames!==null||previous.frames!==null)return false;
+ return previous.width>0&&previous.height>0&&
+  current.time-previous.time>=0.22&&current.time-previous.time<=3.5
+}
+function playbackNoticeSample(state,record,video){
+ var frames=null,quality=null;
+ try{quality=video.getVideoPlaybackQuality&&video.getVideoPlaybackQuality()}catch(err){}
+ var presented=Number(state.noticePresentedFrames)||0;
+ if(presented>0)frames=presented;
+ else if(quality&&Number(quality.totalVideoFrames)>0)
+  frames=Number(quality.totalVideoFrames);
+ else if(Number(video.webkitDecodedFrameCount)>0)
+  frames=Number(video.webkitDecodedFrameCount);
+ return {record:record||null,frames:frames,
+  time:Number(video.currentTime)||0,width:Number(video.videoWidth)||0,
+  height:Number(video.videoHeight)||0,readyState:Number(video.readyState)||0,
+  paused:!!video.paused,userPaused:!!state.userPaused,hidden:document.hidden===true,
+  ended:!!video.ended,seeking:!!video.seeking,
+  pendingSeek:!!state.pendingSeek||!!state.seekIncomplete}
+}
+function dismissRecoveredPlaybackNotice(state,now){
+ if(!state||S.route!=='player'||S.playerView!==state||
+    !state.video||!state.video.isConnected)return false;
+ var record=S.play,video=state.video;
+ if(!record||record.video!==video)return false;
+ var observed=playbackNoticeSample(state,record,video),
+  advanced=playbackNoticeProgress(state.noticePreviousSample,observed);
+ state.noticePreviousSample=observed;
+ if(!advanced)return false;
+ state.noticeLastProgressAt=now;state.noticeLastProgressRecord=record;
+ var label=document.getElementById('player-status');
+ if(!label||label.style.display==='none'||!label.textContent)return true;
+ if(label.className==='player-error'){
+  state.noticeRecoveryFrames=(state.noticeRecoveryFrames||0)+1;
+  if(state.noticeRecoveryFrames<2)return true
+ }
+ if(now-(state.noticeShownAt||0)<400)return true;
+ playerStatus('');
+ if(state.revealControls)state.revealControls();
+ return true
+}
 function playerStatus(message,error){
+ var state=S.route==='player'?S.playerView:null,video=state&&state.video,
+     now=Date.now(),copy=String(message||'');
+ // Silent recovery and informational notices must not cover advancing video.
+ // Real errors, paused media, seeks, hidden tabs and new sources are exempt.
+ if(!error&&copy&&state&&video&&S.play&&
+    state.noticeLastProgressRecord===S.play&&
+    now-(state.noticeLastProgressAt||0)<2000&&
+    !state.userPaused&&!state.pendingSeek&&!state.seekIncomplete&&
+    !video.paused&&!video.seeking&&!document.hidden&&
+    /^(?:جار |تعليق |تأخر |وصل الصوت|الفيلم يستغرق)/.test(copy))
+  copy='';
  var el=document.getElementById('player-status');
- if(el){el.style.display=message?'block':'none';el.textContent=message||'';el.className=error?'player-error':'player-loading'}
+ if(el){
+  if(state&&copy&&(el.textContent!==copy||el.style.display==='none'||
+      el.className!==(error?'player-error':'player-loading'))){
+   state.noticeShownAt=now;state.noticeRecoveryFrames=0
+  }
+  el.style.display=copy?'block':'none';el.textContent=copy;
+  el.className=error?'player-error':'player-loading'
+ }
  var retry=document.getElementById('player-retry');
  if(retry)retry.style.display=error?'inline-flex':'none';
  if(error){
@@ -2163,7 +2239,7 @@ function playDirectMpegts(video,id,statusElement){
   String(state.id)===String(id)&&video.isConnected}
  function status(msg){
   if(!alive())return;
-  if(statusElement){statusElement.textContent=msg;statusElement.style.display='block'}
+  if(statusElement)playerStatus(msg)
  }
  function fallback(msg){
   if(!alive()||record.fallback)return;
@@ -2462,8 +2538,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }).catch(function(){})
  }
  function status(text){if(!alive())return;
-  if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
-  else playerStatus(text)
+  if(preview){if(statusElement)statusElement.textContent=text}
+  else playerStatus(text.slice(0,1)==='●'?'':text)
  }
  video.onerror=function(){if(alive()){
   var unsupported=video.error&&(video.error.code===4||video.error.code===3);
@@ -3884,7 +3960,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function markReady(){
   if(S.route!=='player')return;
-  var firstReady=!state.ready;state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
+  var firstReady=!state.ready;state.ready=true;playerStatus('');
   if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
   if(firstReady)revealControls();
   if(state.mode==='direct'){
