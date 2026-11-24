@@ -39,6 +39,7 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var code: EditText
     private lateinit var pairButton: Button
+    private lateinit var clearButton: Button
     private lateinit var library: LinearLayout
     private lateinit var list: ListView
     private lateinit var search: EditText
@@ -85,18 +86,19 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
         panel.addView(code)
         pairButton = button("ربط الاشتراك الخارجي") { pair() }
         panel.addView(pairButton)
-        panel.addView(button("حذف الاشتراك الخارجي من الجهاز") {
+        clearButton = button("حذف الاشتراك الخارجي من الجهاز") {
             stopPlayer(); job?.cancel(); credentials = null; items = emptyList()
             library.visibility = View.GONE; code.visibility = View.VISIBLE
-            pairButton.visibility = View.VISIBLE; pairButton.isEnabled = false
+            pairButton.visibility = View.VISIBLE; pairButton.isEnabled = false; clearButton.isEnabled = false
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) {
                     runCatching { ExternalStreamConnectStore.clear(applicationContext) }.isSuccess
                 }
                 status.text = if(ok) "تم حذف ملف CONNECT المحلي" else "تعذر حذف الملف المحلي"
-                pairButton.isEnabled = true
+                pairButton.isEnabled = true; clearButton.isEnabled = true
             }
-        })
+        }
+        panel.addView(clearButton)
         library = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         panel.addView(library,LinearLayout.LayoutParams(-1,0,1f))
         val tabs = LinearLayout(this)
@@ -130,7 +132,9 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
     }
 
     private fun restore() {
+        pairButton.isEnabled = false; clearButton.isEnabled = false
         job = lifecycleScope.launch {
+            try {
             val saved = withContext(Dispatchers.IO) { ExternalStreamConnectStore.load(applicationContext) }
                 ?: return@launch
             pairButton.isEnabled = false
@@ -139,12 +143,13 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
             pairButton.isEnabled = true
             if(state.status==ExternalStreamConnectVerifier.Status.ACTIVE) openLibrary(saved)
             else status.text = "تعذر التحقق من الاشتراك المحفوظ. حاول ربطه مجددًا"
+            } finally { pairButton.isEnabled = true; clearButton.isEnabled = true }
         }
     }
     private fun pair() {
         val value = ExternalStreamConnectClient.normalizeCode(code.text.toString())
         if(value==null){status.text="أدخل كود CONNECT صحيحًا";return}
-        job?.cancel(); stopPlayer(); pairButton.isEnabled=false; code.text?.clear()
+        job?.cancel(); stopPlayer(); pairButton.isEnabled=false; clearButton.isEnabled=false; code.text?.clear()
         status.text="جارٍ الربط والتحقق لدى المزود..."
         job=lifecycleScope.launch {
             try {
@@ -158,7 +163,7 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
                 openLibrary(saved)
             } catch(cancelled: CancellationException){throw cancelled}
             catch(_: Exception){status.text="تعذر الربط. تحقق من الكود واتصال الإنترنت"}
-            finally{pairButton.isEnabled=true}
+            finally{pairButton.isEnabled=true; clearButton.isEnabled=true}
         }
     }
     private fun openLibrary(saved: ExternalStreamConnectClient.Credentials) {
@@ -206,5 +211,5 @@ class ExternalStreamConnectActivity : AppCompatActivity() {
     }
     private fun stopPlayer(){playerView.player=null;player?.release();player=null;playerView.visibility=View.GONE}
     override fun onStop(){if(::playerView.isInitialized)stopPlayer();super.onStop()}
-    override fun onDestroy(){job?.cancel();credentials=null;super.onDestroy()}
+    override fun onDestroy(){job?.cancel();if(::playerView.isInitialized)stopPlayer();credentials=null;super.onDestroy()}
 }
