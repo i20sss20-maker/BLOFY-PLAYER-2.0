@@ -212,7 +212,7 @@ function login(message){
  app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
  '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
  '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
- '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'تفعيل بالكود فقط • نسخة ويب تحت التطوير')+'</div>'+
+ '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'أدخل كود الاشتراك الخاص بك للمتابعة')+'</div>'+
  '</div></div>';
  var button=document.getElementById('redeem');
  button.onclick=redeem;
@@ -281,9 +281,25 @@ function restoreView(route,preferred){
   }else if(root)root.scrollTop=0
  },0)
 }
+/* Consistent vector navigation for TV remotes, mobile bottom tabs and desktop.
+ * Icons are fixed first-party markup: no network fonts or layout jitter. */
+function navIcon(kind){
+ var icons={
+  home:'<path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+  live:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m8 2 4 3 4-3M8 16v-6l5 3-5 3z"/>',
+  movie:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 5l3 5M15 5l3 5M10 14l5 3-5 3z"/>',
+  series:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5M2 6v12M22 6v12"/>',
+  collections:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  favorites:'<path d="M20.8 8.5c0 4.5-8.8 10.6-8.8 10.6S3.2 13 3.2 8.5a4.6 4.6 0 0 1 8.8-1.7 4.6 4.6 0 0 1 8.8 1.7z"/>',
+  search:'<circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 5 5"/>',
+  ai:'<path d="m12 2 2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/><path d="m19 2 .7 2.3L22 5l-2.3.7L19 8l-.7-2.3L16 5l2.3-.7z"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.8 3.1-1.7-.6a8 8 0 0 1-2.4 1.4l-.3 1.8h-3.6l-.3-1.8a8 8 0 0 1-2.4-1.4l-1.7.6-1.8-3.1 1.4-1.1a8.1 8.1 0 0 1 0-2.8l-1.4-1.1 1.8-3.1 1.7.6a8 8 0 0 1 2.4-1.4l.3-1.8h3.6l.3 1.8a8 8 0 0 1 2.4 1.4l1.7-.6 1.8 3.1-1.4 1.1a8.1 8.1 0 0 1 0 2.8z"/>'
+ };
+ return '<svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" focusable="false">'+(icons[kind]||icons.home)+'</svg>'
+}
 function navHtml(){
  return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
- NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"'+(S.route===v[0]?' aria-current="page"':'')+'><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
+ NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'" type="button" aria-label="'+v[2]+'" title="'+v[2]+'"'+(S.route===v[0]?' aria-current="page"':'')+'><span class="symbol" aria-hidden="true">'+navIcon(v[0])+'</span><span>'+v[2]+'</span></button>'}).join('')+
  '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
 }
 function shell(pageTitle,markup){
@@ -302,6 +318,16 @@ function shell(pageTitle,markup){
  '<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
  '<div id="screen">'+markup+'</div></main></div>';
  showWebShellUpdateHint();
+ // Keep the selected section visible in the narrow swipeable phone nav.
+ // This is only visual navigation: no player, account or network changes.
+ if(window.innerWidth<=730&&document.documentElement.getAttribute('data-blofy-device')==='touch'){
+  var selectedNav=app.querySelector('.rail .rail-link.active');
+  if(selectedNav)setTimeout(function(){
+   if(!selectedNav.isConnected)return;
+   try{selectedNav.scrollIntoView({block:'nearest',inline:'nearest',behavior:'auto'})}
+   catch(err){try{selectedNav.scrollIntoView(false)}catch(ignore){}}
+  },0)
+ }
  // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
 function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
@@ -525,7 +551,7 @@ function buildCatalog(kind,listing){
   (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
   '<span class="channel-name"><strong>'+esc(title(x))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'}).join('')+
   '</div><div class="pane-bottom"><button class="btn secondary" data-more="live" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section>'+
-  '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
+  '<section class="preview'+(appleTouchBrowser(navigator.userAgent,navigator.maxTouchPoints)?' preview-idle':'')+'"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
   '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
   '<p class="live-preview-quality" id="live-preview-quality" aria-live="polite">الدقة المعروضة: جار قراءة معلومات الفيديو…</p>'+
   '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
@@ -824,6 +850,8 @@ function beginPreview(item){
  if(!video||!item||S.route!=='live')return;
  var id=itemId(item,'live'),key='live/'+id+'/ts/0';
  if(String(S.selected)!==String(id))return;
+ var livePreviewPanel=video.closest&&video.closest('.preview');
+ if(livePreviewPanel)livePreviewPanel.classList.remove('preview-idle');
  if(S.livePreview===id&&S.play&&S.play.preview&&S.play.video===video){
   if(video.paused&&S.play.ready){try{var p=video.play();if(p&&p.catch)p.catch(function(){})}catch(e){}}
   return
