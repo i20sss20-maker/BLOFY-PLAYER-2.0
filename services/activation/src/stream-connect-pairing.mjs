@@ -1,3 +1,4 @@
+import {SHARED_CODE_LOCK_SQL,unifiedNamespaceEnabled,conflictsWithPaid} from './stream-code-namespace.mjs';
 // External-provider pairing is independent of all BLOFY subscription/account tables.
 // No server-side request is ever made to a submitted host. The compatible app
 // must validate the provider and subscription directly on the user's device.
@@ -71,12 +72,14 @@ export function createStreamConnectPairing({pool,keyHex,enabled=false,clock=Date
   try{
    await db.query('BEGIN');
    // Serialize only Connect creation to enforce a global bounded active queue.
+   if(unifiedNamespaceEnabled())await db.query(SHARED_CODE_LOCK_SQL);
    await db.query("SELECT pg_advisory_xact_lock(173921,24)");
    await db.query('DELETE FROM blofy_connect_pairings WHERE expires_at<=NOW()');
    const n=Number((await db.query('SELECT COUNT(*)::int AS count FROM blofy_connect_pairings')).rows[0]?.count||0);
    if(n>=(short?100:2000))throw error('connect_capacity',429);
    for(let attempt=0;attempt<8;attempt++){
     const candidate=short?String(crypto.randomInt(0,100_000_000)).padStart(8,'0'):input.numericCode===true?String(crypto.randomInt(0,1_000_000_000_000)).padStart(12,'0'):'BC-'+crypto.randomBytes(18).toString('base64url');
+    if(await conflictsWithPaid(db,candidate))continue;
     const id=hash(candidate,key);
     const inserted=await db.query('INSERT INTO blofy_connect_pairings(code_hash,sealed,expires_at) VALUES($1,$2,$3) ON CONFLICT (code_hash) DO NOTHING RETURNING code_hash',[id,encrypt(credentials,key,id),new Date(expiresAt)]);
     if(inserted.rows.length===1){code=candidate;break;}
