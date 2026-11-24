@@ -17,5 +17,9 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
-  ]
+  ],
+  "categories": [
+    "entertainment"
+  ],
+  "orientation": "any"
 }
