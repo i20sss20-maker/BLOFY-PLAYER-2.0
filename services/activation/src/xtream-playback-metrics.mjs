@@ -14,6 +14,7 @@ const REASONS=new Set([
   'upstream_http_other','headers_timeout','media_read_timeout','upstream_empty_media',
   'upstream_non_media_response','upstream_unreachable','upstream_denial_cooldown',
   'gateway_auth_denied','catalog_item_unavailable','licensed_fanout_unavailable',
+  'fanout_source_channel_limit','fanout_source_handoff_pending','fanout_source_cooling_down',
   'upstream_stream_ended','client_or_proxy_closed','xtream_transport_connection_reset',
   'xtream_transport_timeout','xtream_transport_unreachable',
   'xtream_transport_dns_failed','xtream_transport_connection_refused',
