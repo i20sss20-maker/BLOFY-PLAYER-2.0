@@ -34,7 +34,7 @@ test('parity UI keeps subtitles, audio, quality, descriptions and explicit downl
  for(const part of ["player-audio","player-subtitles","player-quality","player-info-panel","detail-plot","data-download","function downloadsScreen","function webDownloadPath"])
   assert.ok(app.includes(part),part);
  assert.match(app,/downloadRequests/);
- assert.match(app,/showPlayerChoices\('الجودة',options,this\)/);
+ assert.match(app,/showPlayerChoices\('جودة الفيديو',options,this\)/);
  assert.match(app,/تلقائي \(Auto\)/);
  assert.match(app,/طلبات التنزيل فقط/);
  assert.match(app,/المتصفح/);
