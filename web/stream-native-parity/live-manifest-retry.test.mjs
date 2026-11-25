@@ -32,3 +32,12 @@ test('source restart backoff is bounded and respects a valid Retry-After',()=>{
  assert.equal(liveSessionRetryDelay(4,30),30000);
  assert.equal(liveSessionRetryDelay(4,999),25000);
 });
+
+test('full-screen adds a modest bounded buffer reserve while preview remains unchanged',()=>{
+ const start=app.indexOf('function liveBufferProfile('),end=app.indexOf('function resumeLiveHlsNetwork(',start);
+ const profile=new Function(app.slice(start,end)+';return liveBufferProfile')();
+ assert.deepEqual(profile(true),{sync:4,maxLatency:10,buffer:35});
+ assert.deepEqual(profile(false),{sync:5,maxLatency:12,buffer:45});
+ assert.match(app,/record\.ready\|\|record\.reconnecting\|\|video\.paused/);
+ assert.match(app,/!record\.ready\|\|record\.reconnecting\|\|!video\.isConnected/);
+});
