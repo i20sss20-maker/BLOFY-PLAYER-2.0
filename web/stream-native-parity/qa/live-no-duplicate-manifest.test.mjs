@@ -12,6 +12,9 @@ test('licensed LIVE play does not create a second manifest request just to read 
  const early=probe.indexOf("if(kind==='live')return;");
  const extra=probe.indexOf('fetch(manifest,');
  assert.ok(early>0&&extra>early,'live must skip duplicate probe before any fetch');
+ assert.match(app,/window\.Hls\.Events\.MANIFEST_LOADED/);
+ assert.match(app,/data&&data\.networkDetails/);
+ assert.match(app,/applySourceVideoMode\(/);
  assert.match(app,/video\.videoWidth/);
  assert.match(app,/video\.videoHeight/);
 });
