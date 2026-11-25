@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Distinguish installed, browser and preview runtime in existing playback diagnostics and show build label in settings. Preview 667a9db9-8aac-4f27-a02c-b316f5d24a06 SUCCESS. No changes to player engine, native apps or Xtream. Installed playback remains unresolved. Rollback 7aed4947-31fa-4d44-aad2-3578c1bd087a.
