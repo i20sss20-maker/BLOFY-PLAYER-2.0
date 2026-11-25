@@ -1,0 +1,6 @@
+APPROVED WEB RELEASE — 2026-11-25
+Change: PR #907 merged as 774f7f3fb33f782a1e87a9f362b7c04549a46d99.
+Scope: initial HLS manifest same-session retry; missing LIVE fragment edge recovery; existing bounded backoff, auth, native iOS, VOD and origin policy unchanged.
+Gates: nine web/media CI workflows SUCCESS, including official browser UI run 45534937407 (37 successful steps, synthetic authorized HLS fixtures); dedicated recovery tests SUCCESS. Generic Android CI failure at Xiaomi/TV UX verify, unrelated to web-only files; do not release Android.
+Deploy only official web service on this release branch. Do not change pinned media worker or activation origin. Previous deployment rollback: 23334bbf-eb36-47fa-a5c2-9aa6f731c373, revision 150e3635d5666f1d25ae82baf06135aae2be1708.
+Physical device and production authorized live playback still unverified. Upstream source admission 503s remain a separate issue; no quota changes or claim of full resolution.
