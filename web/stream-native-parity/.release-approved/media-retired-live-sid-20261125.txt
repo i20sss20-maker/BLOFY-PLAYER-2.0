@@ -1,0 +1,4 @@
+MEDIA RELEASE — 2026-11-25
+Prevent delayed manifest requests from reopening a retired live SID and restarting its segment numbering. Explicit stop and advertised ended sessions retire only their authenticated HMAC SID. Bounded registry (4096 entries, 180s TTL); legacy no-SID clients and VOD unaffected. Existing clients recover on 503/404. No source quota change.
+Initial TTL/cap checks passed; Docker build requires five regression tests and compilation. No continuous viewing proof. Replacing media worker may briefly interrupt web playback.
+Rollback: b4da634e-8afc-4a01-9cc1-035b27e8417a revision 510cc5369d12aa4827b56d3ab256a8de6b7ba44d.
