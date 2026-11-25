@@ -37,4 +37,15 @@ change("  const activeSession=hlsSessions.get(key);\n  if(activeSession)stopHls(
 change(" let sess=hlsSessions.get(key);\n if(!sess&&filename!=='index.m3u8')"," let sess=hlsSessions.get(key);\n if(!sess&&kind==='live'&&viewerSid&&liveSidRetired(key))return hlsError(filename==='index.m3u8'?503:404,'hls_session_retired',2);\n if(!sess&&filename!=='index.m3u8')");
 change(" const owner=sess.sharedProducer||sess;\n touchHls(sess);"," if(kind==='live'&&viewerSid){\n  if(liveSidRetired(key)){if(!sess.stopped)stopHls(sess,'viewer_stopped');return hlsError(503,'hls_session_retired',2)}\n  sess.viewerSid=viewerSid\n }\n const owner=sess.sharedProducer||sess;\n touchHls(sess);");
 
+
+change("function hlsError(status,error,retryAfterSeconds=0){",`function liveUpstreamFailure(kind,status,headers){
+ const retry=Number(headers?.get('retry-after')||0);
+ if(kind==='live'&&(status===429||status===503))
+  return {error:'live_source_unavailable',status,retryAfterSeconds:Number.isInteger(retry)&&retry>=1&&retry<=30?retry:5};
+ return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}
+}
+function hlsError(status,error,retryAfterSeconds=0){`);
+change("if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}","if(!upstream.ok||!upstream.body){const status=upstream.status;const failure=liveUpstreamFailure(kind,status,upstream.headers);try{await upstream.body?.cancel()}catch{};stopHls(session,'upstream_'+status);return failure}");
+change("if(start.error)return hlsError(start.status,start.error,start.status===429?5:0);","if(start.error)return hlsError(start.status,start.error,start.retryAfterSeconds||(start.status===429?5:0));");
+
 writeFileSync('media-worker.ts',source);
