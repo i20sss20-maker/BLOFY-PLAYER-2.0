@@ -2643,12 +2643,31 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   recoverConnection()
  },50000);
 
+ function applySourceVideoMode(info){
+  if(!info||!alive())return;
+  record.videoMode=info.mode;
+  record.sourceDimensions=/^[1-9][0-9]{1,3}x[1-9][0-9]{1,3}$/.test(info.source)?info.source:'';
+  if(preview){
+   if(record.qualityListener)record.qualityListener();
+   return
+  }
+  if(S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
+  if(S.playerView.refreshVideoResolution)S.playerView.refreshVideoResolution();
+  var tag=document.getElementById('player-source-mode');
+  if(!tag)return;
+  if(info.mode==='source_copy'){
+   tag.textContent='الفيديو الأصلي • بدون ضغط إضافي';tag.hidden=false
+  }else if(info.mode==='ultra_transcode'){
+   tag.textContent='4K تجريبي • إعادة ترميز حتى دقة المصدر';tag.hidden=false
+  }else if(info.mode==='compatibility_transcode'){
+   tag.textContent='وضع توافق • تحويل الصورة';tag.hidden=false
+  }else tag.hidden=true
+ }
  function probeSourceVideoMode(){
-  // LIVE source has a single-feed licensed upstream. A second GET for the
-  // same HLS manifest purely to display its resolution can acquire or race
-  // a provider handoff and create a burst of 503s. The actual decoded
-  // dimensions remain available via videoWidth / videoHeight instead.
-  // Keep the previous metadata probe for VOD only (VOD is not modified).
+  // A licensed LIVE channel must never GET its manifest a second time just
+  // to inspect resolution headers. Hls.js can read metadata from the SAME
+  // completed manifest request through MANIFEST_LOADED, with no new network.
+  // Native HLS browsers display actual decoded dimensions instead.
   if(kind==='live')return;
   if(record.videoModeProbed||!alive()||typeof fetch!=='function')return;
   record.videoModeProbed=true;
@@ -2658,26 +2677,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     mode:response.headers.get('x-blofy-video-mode')||'',
     source:response.headers.get('x-blofy-source-resolution')||''
    }
-  }).then(function(info){
-   if(!info||!alive())return;
-   record.videoMode=info.mode;
-   record.sourceDimensions=/^[1-9][0-9]{1,3}x[1-9][0-9]{1,3}$/.test(info.source)?info.source:'';
-   if(preview){
-    if(record.qualityListener)record.qualityListener();
-    return
-   }
-   if(S.route!=='player'||!S.playerView||S.playerView.video!==video)return;
-   if(S.playerView.refreshVideoResolution)S.playerView.refreshVideoResolution();
-   var tag=document.getElementById('player-source-mode');
-   if(!tag)return;
-   if(info.mode==='source_copy'){
-    tag.textContent='الفيديو الأصلي • بدون ضغط إضافي';tag.hidden=false
-   }else if(info.mode==='ultra_transcode'){
-    tag.textContent='4K تجريبي • إعادة ترميز حتى دقة المصدر';tag.hidden=false
-   }else if(info.mode==='compatibility_transcode'){
-    tag.textContent='وضع توافق • تحويل الصورة';tag.hidden=false
-   }else tag.hidden=true
-  }).catch(function(){})
+  }).then(applySourceVideoMode).catch(function(){})
  }
  function status(text){if(!alive())return;
   if(preview){if(statusElement)statusElement.textContent=text}
@@ -2853,6 +2853,22 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    // Network and decoder are separate signals. If HLS fragments arrive while
    // actual decoded frames remain frozen, the report can flag a TV decoder
    // problem instead of blaming Railway or the subscriber's source.
+   // Metadata from the already downloaded HLS manifest: never trigger a
+   // separate provider admission or additional HLS manifest GET.
+   if(kind==='live'&&window.Hls.Events.MANIFEST_LOADED)
+    engine.on(window.Hls.Events.MANIFEST_LOADED,function(event,data){
+     if(!alive())return;
+     var net=data&&data.networkDetails,headers=net&&net.headers;
+     var read=net&&typeof net.getResponseHeader==='function'?
+       function(name){return net.getResponseHeader(name)}:
+       headers&&typeof headers.get==='function'?
+       function(name){return headers.get(name)}:null;
+     if(!read)return;
+     applySourceVideoMode({
+      mode:String(read('x-blofy-video-mode')||''),
+      source:String(read('x-blofy-source-resolution')||'')
+     })
+    });
    engine.on(window.Hls.Events.FRAG_LOADED,function(){
     if(alive()){
      record.lastFragmentAt=Date.now();
