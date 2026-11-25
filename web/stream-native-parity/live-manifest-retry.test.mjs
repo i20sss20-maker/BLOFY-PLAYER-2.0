@@ -162,3 +162,26 @@ test('Apple touch Safari with supported MSE or ManagedMediaSource uses direct TS
  assert.equal(prefer('desktop','Chrome',{MediaSource:good}),true);
  assert.match(app,/video\.disableRemotePlayback=true/);
 });
+
+test('installed Apple WebKit without Safari token can use direct engine when supported',()=>{
+ const a=app.indexOf('function preferDesktopDirectLive('),b=app.indexOf('function resumeSelectedLiveTransport(',a);
+ const prefer=new Function(app.slice(a,b)+';return preferDirectLiveForDevice')();
+ const ua='Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148';
+ const win={ManagedMediaSource:{isTypeSupported:()=>true}};
+ assert.equal(prefer('touch',ua,win,true),true);
+ assert.equal(prefer('touch',ua,win,false),false);
+ assert.equal(prefer('tv',ua,win,true),false);
+});
+test('installed live restoration only resumes the same retired viewer and respects offline and pause',()=>{
+ const a=app.indexOf('function installedLiveResumeDecision('),b=app.indexOf('function resumeInstalledLiveAfterExit(',a);
+ const decide=new Function(app.slice(a,b)+';return installedLiveResumeDecision')();
+ const state={kind:'live',id:'17',video:{isConnected:true}},pending={state,id:'17'};
+ const context={installed:true,verified:true,route:'player',hidden:false,offline:false};
+ assert.equal(decide(pending,state,null,context),'resume');
+ assert.equal(decide(pending,state,{},context),'discard');
+ assert.equal(decide(pending,state,null,{...context,offline:true}),'defer');
+ assert.equal(decide(pending,state,null,{...context,hidden:true}),'defer');
+ assert.equal(decide(pending,state,null,{...context,installed:false}),'discard');
+ state.userPaused=true;assert.equal(decide(pending,state,null,context),'defer');
+ state.userPaused=false;state.id='18';assert.equal(decide(pending,state,null,context),'discard');
+});
