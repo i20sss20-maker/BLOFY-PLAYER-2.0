@@ -137,6 +137,7 @@ async function commentaryForChannel(channel){
  return {status:200,tracks:channelTracks(body,channel)};
 }
 if(p==='/api/audio/catalog'&&method==='GET'){
+ if(!h)return json(401,{error:'activation_required'});
  if(Bun.env.BLOFY_WEB_COMMENTARY_ENABLED!=='1')return json(503,{error:'commentary_not_enabled'});
  const channel=u.searchParams.get('channel')||'';
  if(!validCommentaryChannel(channel))return json(400,{error:'invalid_channel'});
@@ -147,6 +148,7 @@ if(p==='/api/audio/catalog'&&method==='GET'){
  }catch{return json(503,{error:'commentary_unavailable'})}
 }
 if(p.startsWith('/api/audio/track/')&&method==='GET'){
+ if(!h)return json(401,{error:'activation_required'});
  if(Bun.env.BLOFY_WEB_COMMENTARY_ENABLED!=='1')return json(503,{error:'commentary_not_enabled'});
  const match=/^\/api\/audio\/track\/([A-Za-z0-9_-]{1,64})$/.exec(p);
  const channel=u.searchParams.get('channel')||'';
