@@ -155,4 +155,8 @@ change("var pause=liveTransientRetryMs(record.transientRetries);","var pause=Mat
  // Apply only to the established live HLS engine, never VOD.
 change("maxBufferLength:bufferProfile.buffer,maxBufferHole:1.5,","maxBufferLength:bufferProfile.buffer,maxMaxBufferLength:preview?45:60,backBufferLength:preview?12:30,maxBufferHole:1.5,");
 
+
+// Aborted XHR must release the STOP accounting exactly once too.
+change(" xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;finishMediaStop();"," xhr.onerror=xhr.ontimeout=xhr.onabort=function(){if(!done){done=true;finishMediaStop();");
+
 new Function(app);writeFileSync('app.js',app);
