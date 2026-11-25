@@ -207,7 +207,7 @@ test('runtime diagnostic identifies installed, browser and preview modes without
  assert.equal(mode(false,false),'browser');
  assert.equal(mode(true,true),'preview');
  assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
- assert.match(app,/2026\.11\.25\.8/);
+ assert.match(app,/2026\.11\.25\.9/);
 });
 
 test('installed Apple HLS policy is restricted to supported standalone WebKit',()=>{
@@ -245,3 +245,5 @@ test('refreshing installed shell is explicit, online-only and preserves account 
  assert.ok(app.includes('/vendor/mpegts.js?v=1.8.2'));
  assert.ok(app.includes('/vendor/hls.min.js?v=1.5.20'));
 });
+
+test('installed admission gates native playback and bounds retries',()=>{assert.match(app,/admissionAttempt>=5/);assert.match(app,/liveSessionRetryDelay\(admissionAttempt\+\+,hint\)/);assert.match(app,/old.admissionAbort.abort\(\)/);assert.match(app,/installedWebApp\(\)&&pendingMediaStops>0/);});
