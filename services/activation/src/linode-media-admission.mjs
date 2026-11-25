@@ -22,6 +22,7 @@ export function decideLinodeAdmission({context,requestId,capacity,attempt}={},en
     // or that its resources are released, can permit legacy routing again.
     if(attempt.authoritative!==true||attempt.noNewFeed!==true)
       return blocked('release_not_confirmed');
+    if(attempt.legacyAllowed!==true)return blocked('legacy_capacity_not_confirmed');
     return legacy('reservation_closed');
   }
   if(attempt.state==='not_started'&&!pre.eligible)return legacy(pre.reason);
