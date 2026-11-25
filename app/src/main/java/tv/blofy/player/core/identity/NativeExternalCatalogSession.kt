@@ -81,6 +81,7 @@ internal object NativeExternalCatalogSession {
                     dao.discardStagedCatalog(profile.providerId)
                     CatalogSyncState.clear(context,profile.providerId)
                     FirstImportCheckpoint.clear(context,profile.providerId)
+                    tv.blofy.player.data.NativeExternalCatalogRefreshWorker.clearArtworkState(context,profile.providerId)
                 }
             }
         }
@@ -163,6 +164,7 @@ internal object NativeExternalCatalogSession {
                     dao.promoteStagedRefresh(staged.id,current.copy(updatedAt = System.currentTimeMillis()),
                         activateTarget = false,expectedSource = current)
                     CatalogSyncState.markSourceReplaced(app,id)
+                    tv.blofy.player.data.NativeExternalCatalogRefreshWorker.markArtworkReady(app,id)
                 }
                 result.freshItemCount
             } finally {
@@ -224,6 +226,7 @@ internal object NativeExternalCatalogSession {
             dao.hasCatalog(id)) { "تعذر تحميل مكتبة الاشتراك بالكامل" }
         check(ExternalStreamConnectStore.loadStaged(app)?.providerId == id)
         CatalogSyncState.markCatalogCommitted(app, id)
+        tv.blofy.player.data.NativeExternalCatalogRefreshWorker.markArtworkReady(app,id)
         FirstImportCheckpoint.clear(app,id)
         return Prepared(id, dao.streamCountForProvider(id))
     }
