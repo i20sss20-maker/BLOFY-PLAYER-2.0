@@ -1,0 +1,6 @@
+APPROVED WEB RELEASE — 2026-11-25
+Change: PR #908 merged as b251c36593bba326e96b2ab7b8d9b75ca3b28da6.
+Nine web/media workflows passed, including official browser run 45535677511. Android CI independently failed; no Android release.
+Scope: bounded Retry-After and coalesced recovery; avoid codec switches during source failures. Preserve authentication, provider limits, native iOS and VOD.
+Rollback: web deployment feab8025-67f4-421b-847c-dceca5f50585, revision ef34cd7ef99ef456934e2b95d29e02a7dac9ad21.
+Authorized continuous production playback remains unverified.
