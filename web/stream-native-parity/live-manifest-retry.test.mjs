@@ -54,3 +54,15 @@ test('live sequence guard detects a reset without treating duplicate playlists a
  assert.equal(check(state,{startSN:0,endSN:null,live:true}),false);
  assert.equal(state.highestLiveEndSN,18);
 });
+
+test('provider retry hint accepts only bounded integer seconds from XHR or Fetch',()=>{
+ const start=app.indexOf('function liveRetryHint('),end=app.indexOf('function liveSessionRetryDelay(',start);
+ const hint=new Function(app.slice(start,end)+';return liveRetryHint')();
+ assert.equal(hint({networkDetails:{getResponseHeader:()=> '12'}}),12000);
+ assert.equal(hint({networkDetails:{headers:{get:()=> '30'}}}),30000);
+ for(const value of [null,'0','31','999','1.5','invalid'])assert.equal(hint({networkDetails:{getResponseHeader:()=>value}}),0);
+ assert.equal(hint({}),0);
+ assert.equal(hint({networkDetails:{getResponseHeader(){throw Error('unavailable')}}}),0);
+ assert.match(app,/Math\.max\(liveCapacityRetryMs\(record\.capacityRetries\),liveRetryHint\(detail\)\)/);
+ assert.match(app,/Math\.max\(liveOriginRetryMs\(record\.originRetries\),liveRetryHint\(detail\)\)/);
+});
