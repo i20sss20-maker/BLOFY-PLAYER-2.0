@@ -1,0 +1,1 @@
+Web-only guarded follow-up: reuse LIVE Hls.js manifest metadata without an additional GET; repair isolated commentary menu generation; PWA shell v7. Preserve VOD, provider connection limits, auth and licensed live upstream. Release only with green web QA and Railway pilot health. This marker is for Railway web watch-pattern deploy, not a guarantee of source continuity.
