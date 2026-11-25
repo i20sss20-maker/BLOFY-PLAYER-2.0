@@ -96,3 +96,16 @@ test('desktop direct live transport is limited to compatible MSE browsers; TV an
  assert.equal(prefer('desktop',{isTypeSupported:()=>{throw Error('unsupported')}}),false);
  assert.match(app,/statusCode===429\|\|statusCode===503/);
 });
+
+test('channel switch and retry keep selected transport and do not race pending HLS shutdown',()=>{
+ const a=app.indexOf('function resumeSelectedLiveTransport('),b=app.indexOf('function playDirectMpegts(',a);
+ const calls=[];
+ const resume=new Function('playDirectMpegts','playHls',app.slice(a,b)+';return resumeSelectedLiveTransport')(
+  (...args)=>calls.push(['direct',...args]),(...args)=>calls.push(['hls',...args]));
+ resume({id:8,mode:'mpegts'},'video','status');
+ resume({id:9,mode:'hls'},'video','status');
+ resume({id:10,mode:'mpegts',directStopPending:true},'video','status');
+ assert.deepEqual(calls,[['direct','video','8','status'],['hls','video','live','9','ts',0,'status',false,0]]);
+ assert.match(app,/requestedState\.directStopPending=true/);
+ assert.match(app,/playDirectMpegts\(video,String\(requestedState\.id\),statusElement\)/);
+});
