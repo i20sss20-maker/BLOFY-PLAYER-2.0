@@ -516,4 +516,24 @@ change(" video.onerror=function(){if(alive()){\n  var unsupported=video.error&&(
   var unsupported=mediaError===4||mediaError===3;`);
 change("2026.11.25.6 • '+(installedWebApp()", "2026.11.25.7 • '+(installedWebApp()");
 
+
+change("script.src='/vendor/hls.min.js';", "script.src='/vendor/hls.min.js?v=1.5.20';");
+change("script.src='/vendor/mpegts.js';script.async=true;", "script.src='/vendor/mpegts.js?v=1.8.2';script.async=true;");
+change("2026.11.25.7 • '+(installedWebApp()", "2026.11.25.8 • '+(installedWebApp()");
+change('id="install-blofy-web">طريقة إضافة BLOFY</button>', 'id="install-blofy-web">طريقة إضافة BLOFY</button> <button class="btn secondary" type="button" id="refresh-web-shell">تحديث نسخة الويب</button>');
+change(" document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};", ` document.getElementById('refresh-web-shell').onclick=function(){
+  if(S.route!=='settings'||navigator.onLine===false){
+   setStatus('اتصل بالإنترنت ثم أعد محاولة تحديث نسخة الويب.',true);return
+  }
+  this.disabled=true;
+  setStatus('جار تحديث واجهة BLOFY دون حذف الاشتراك أو المفضلة…');
+  // Bypass a restored WebKit document with a fresh navigation. Never clear
+  // localStorage, cookies, account data, or caches belonging to other apps.
+  var target=new URL('/',window.location.origin);
+  target.searchParams.set('shell','2026.11.25.8');
+  target.searchParams.set('refresh',String(Date.now()));
+  try{window.location.replace(target.href)}catch(e){window.location.reload()}
+ };
+ document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};`);
+
 new Function(app);writeFileSync('app.js',app);
