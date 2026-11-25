@@ -443,4 +443,24 @@ change("   if(isLive&&(!S.play||S.play.video===video&&S.play.reconnecting)){",` 
    }
    if(isLive&&(!S.play||S.play.video===video&&S.play.reconnecting)){`);
 
+
+change(" record.startupTimer=setTimeout(directStartupCheck,28000);"," record.startupCheck=directStartupCheck;\n record.startupTimer=setTimeout(directStartupCheck,28000);");
+change(" record.startupTimer=setTimeout(startupCheck,50000);"," record.startupCheck=startupCheck;\n record.startupTimer=setTimeout(startupCheck,50000);");
+change("    S.play.autoplayBlocked=false;\n    resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));return",`    // Use the existing media element inside this exact user gesture.
+    // Recreating an asynchronous engine here loses WebKit activation.
+    var blockedRecord=S.play;
+    blockedRecord.autoplayBlocked=false;
+    var result=video.play();
+    if(blockedRecord.startupCheck&&!blockedRecord.startupTimer)
+     blockedRecord.startupTimer=setTimeout(blockedRecord.startupCheck,28000);
+    if(result&&result.catch)result.catch(function(error){
+     if(S.play!==blockedRecord)return;
+     if(error&&error.name==='NotAllowedError'){
+      blockedRecord.autoplayBlocked=true;
+      if(blockedRecord.startupTimer){clearTimeout(blockedRecord.startupTimer);blockedRecord.startupTimer=null}
+      playerStatus('اضغط تشغيل ▶ مرة أخرى.',true)
+     }
+    });
+    return`);
+
 new Function(app);writeFileSync('app.js',app);
