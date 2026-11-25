@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Live HLS MSE buffer limits: preview forward 45s maximum/back 12s, fullscreen forward 60s maximum/back 30s. Preserve preview, existing quality, VOD and native HLS. Preview a3d0072e-0b7e-42ba-869c-f6991dd5c08d SUCCESS; 27 regression tests passed, 0 failed; healthcheck passed. Real long-duration viewing not verified; memory caps are configuration, not proof of measured memory consumption. Rollback ea3ff72c-2816-4438-810d-01410f72adcd.
