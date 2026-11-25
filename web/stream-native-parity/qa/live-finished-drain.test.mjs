@@ -43,3 +43,31 @@ test('explicit STOP cancels drain and served manifests are tracked only after re
  assert.match(source,/if\(session\.finishedDrainTimer\)\{clearTimeout\(session\.finishedDrainTimer\)/);
  assert.match(source,/if\(!data\.length\)return hlsError\(503,'hls_file_empty'\);\s*if\(kind==='live'\)owner\.servedLiveManifest=true/);
 });
+
+test('retired live SID registry is bounded and expires without exposing credentials',()=>{
+ const a=source.indexOf('const retiredLiveSids='),b=source.indexOf(' // Guarded pilot fan-out',a);
+ const {retireLiveSid,liveSidRetired,retiredLiveSids}=new Function(source.slice(a,b)+';return {retireLiveSid,liveSidRetired,retiredLiveSids}')();
+ retireLiveSid('old-hmac',100);
+ assert.equal(liveSidRetired('old-hmac',179999),true);
+ assert.equal(liveSidRetired('old-hmac',180100),false);
+ for(let i=0;i<4100;i++)retireLiveSid('hmac-'+i,100);
+ assert.equal(retiredLiveSids.size,4096);
+ assert.equal(liveSidRetired('hmac-0',101),false);
+ assert.equal(liveSidRetired('hmac-4099',101),true);
+});
+test('late manifest GET cannot reopen an explicitly stopped live SID',async()=>{
+ const retired=new Set(),sessions=new Map(),opens=[];
+ const ctx={SECRET:'f'.repeat(64),secureEquals:()=>true,hlsSessions:sessions,hlsKey:()=> 'viewer',
+  retireLiveSid:key=>retired.add(key),liveSidRetired:key=>retired.has(key),
+  cancelPendingSharedLiveViewer:()=>false,liveShareAllowed:()=>false,
+  liveSourceIdentity:()=> 'source',liveSourceRetryMs:()=>0,
+  startHls:async()=>{opens.push(1);return {error:'unexpected_start',status:500}},
+  json:(status,value)=>({status,value}),hlsError:(status,error,retry)=>({status,error,retry})};
+ const run=vm.runInNewContext(source.slice(begin,end)+';hlsRequest',ctx);
+ const headers={get:n=>n==='authorization'?'Bearer v1.00000000-0000-0000-0000-000000000000.'+'A'.repeat(43):'f'.repeat(64)};
+ const call=(method,file)=>run({method,headers},new URL('http://worker/hls/live/31/ts/0/sid-'+ 'a'.repeat(32)+'/'+file));
+ assert.equal((await call('POST','stop')).status,200);
+ assert.equal((await call('GET','index.m3u8')).status,503);
+ assert.equal((await call('GET','seg-000001.ts')).status,404);
+ assert.equal(opens.length,0);
+});
