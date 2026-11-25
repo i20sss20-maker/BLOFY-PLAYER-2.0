@@ -71,3 +71,14 @@ test('late manifest GET cannot reopen an explicitly stopped live SID',async()=>{
  assert.equal((await call('GET','seg-000001.ts')).status,404);
  assert.equal(opens.length,0);
 });
+
+test('live admission failure preserves 429/503 and bounded Retry-After while VOD remains unchanged',()=>{
+ const start=source.indexOf('function liveUpstreamFailure('),end=source.indexOf('function hlsError(',start);
+ const classify=new Function(source.slice(start,end)+';return liveUpstreamFailure')();
+ const headers=value=>({get:()=>value});
+ assert.deepEqual(classify('live',503,headers('12')),{error:'live_source_unavailable',status:503,retryAfterSeconds:12});
+ assert.equal(classify('live',429,headers('999')).retryAfterSeconds,5);
+ assert.equal(classify('live',401,headers('12')).status,401);
+ assert.equal(classify('movie',503,headers('12')).status,502);
+ assert.match(source,/start\.retryAfterSeconds\|\|\(start\.status===429\?5:0\)/);
+});
