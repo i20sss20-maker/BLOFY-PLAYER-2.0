@@ -2644,6 +2644,12 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  },50000);
 
  function probeSourceVideoMode(){
+  // LIVE source has a single-feed licensed upstream. A second GET for the
+  // same HLS manifest purely to display its resolution can acquire or race
+  // a provider handoff and create a burst of 503s. The actual decoded
+  // dimensions remain available via videoWidth / videoHeight instead.
+  // Keep the previous metadata probe for VOD only (VOD is not modified).
+  if(kind==='live')return;
   if(record.videoModeProbed||!alive()||typeof fetch!=='function')return;
   record.videoModeProbed=true;
   fetch(manifest,{method:'GET',credentials:'same-origin',cache:'no-store'}).then(function(response){
