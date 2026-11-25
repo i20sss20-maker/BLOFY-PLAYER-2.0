@@ -536,4 +536,61 @@ change(" document.getElementById('refresh-content').onclick=function(){refreshCa
  };
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};`);
 
+
+change(" if(activate&&!S.previewToFullPending){",` // Installed WebKit must not occupy the provider's limited channel slot
+ // merely by focusing a row. Explicit preview and full playback still work.
+ if(installedWebApp()){
+  if(desc)desc.textContent='اضغط المعاينة أو تشغيل القناة • لتوفير اتصال البث';
+  if(S.play&&S.play.preview&&String(S.play.id)!==String(id))stopPlayback(true);
+  return
+ }
+ if(activate&&!S.previewToFullPending){`);
+change(" if(old.originTimer)clearTimeout(old.originTimer);", " if(old.originTimer)clearTimeout(old.originTimer);\n  if(old.admissionAbort)old.admissionAbort.abort();");
+change(" if(shouldUseNativeHls(video)){\n  record.nativeHls=true;\n  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}return",` if(shouldUseNativeHls(video)){
+  record.nativeHls=true;
+  if(installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&typeof fetch==='function'){
+   // Native HLS hides response status and can hammer failed playlists.
+   // Check the SAME authorized SID before attaching it to the decoder.
+   var admissionAttempt=0;
+   function openInstalledManifest(){
+    record.originTimer=null;
+    if(!alive()||!video.isConnected)return;
+    if(document.hidden||navigator.onLine===false||(!preview&&S.playerView&&S.playerView.userPaused)){
+     record.originTimer=setTimeout(openInstalledManifest,3000);return
+    }
+    var controller=typeof AbortController==='function'?new AbortController():null;
+    record.admissionAbort=controller;
+    var timeout=setTimeout(function(){if(controller)controller.abort()},30000);
+    fetch(manifest,{credentials:'same-origin',cache:'no-store',signal:controller?controller.signal:undefined}).then(function(response){
+     if(!alive())return;
+     if(response.ok){
+      if(response.body&&response.body.cancel)response.body.cancel().catch(function(){});
+      record.admissionAbort=null;
+      if(record.startupTimer)clearTimeout(record.startupTimer);
+      record.startupTimer=setTimeout(startupCheck,50000);
+      video.src=manifest;
+      try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}
+      return
+     }
+     var hint=Number(response.headers.get('Retry-After'))||0;
+     if(response.body&&response.body.cancel)response.body.cancel().catch(function(){});
+     if(response.status===401||response.status===403){
+      if(record.startupTimer)clearTimeout(record.startupTimer);
+      status('تعذر التحقق من صلاحية تشغيل القناة. أعد فتحها.');return
+     }
+     deferAdmission(hint)
+    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});
+    function deferAdmission(hint){
+     record.admissionAbort=null;
+     if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
+     status('مصدر البث مشغول أو غير متاح مؤقتًا؛ جار انتظار اتصال متاح…');
+     record.originTimer=setTimeout(openInstalledManifest,liveSessionRetryDelay(admissionAttempt++,hint))
+    }
+   }
+   if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
+   openInstalledManifest();return
+  }
+  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}return`);
+change("2026.11.25.8 • '+(installedWebApp()", "2026.11.25.9 • '+(installedWebApp()");
+
 new Function(app);writeFileSync('app.js',app);
