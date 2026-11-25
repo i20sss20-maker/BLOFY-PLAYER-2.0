@@ -1,0 +1,3 @@
+WEB RELEASE — 2026-11-25
+Scope: honor bounded numeric Retry-After on capacity, origin and transient HLS failures. Existing SID/sequence guards, preview, VOD and quality unchanged. Preview 7236efee-1bbf-4998-868b-060feb9c9a18 SUCCESS, 26 tests passed, healthcheck passed. No continuous decoded playback proof. Rollback b72a5251-edf7-457a-bcd3-0d48d8e3566b.
+Reference: https://github.com/video-dev/hls.js/blob/master/docs/API.md ; https://www.rfc-editor.org/rfc/rfc8216.html
