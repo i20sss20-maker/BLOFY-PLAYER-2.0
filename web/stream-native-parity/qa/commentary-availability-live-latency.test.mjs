@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 
 const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const sidecar=readFileSync(new URL('../stream-commentary.js',import.meta.url),'utf8');
+const server=readFileSync(new URL('../server.ts',import.meta.url),'utf8');
 
 test('LIVE MSE startup is one segment closer to the source but retains compatibility guard',()=>{
  const at=app.indexOf('function playHls(');
@@ -44,4 +45,10 @@ test('disabled external commentary returns explicit status while primary TV audi
  assert.equal(manager.failure(),'not_enabled');
  assert.equal(video.muted,false);
  manager.destroy();
+});
+
+test('protected commentary API checks authentication before feature availability',()=>{
+ assert.match(server,/if\(p==='\/api\/audio\/catalog'&&method==='GET'\)\{\s*if\(!h\)return json\(401/);
+ assert.match(server,/if\(p\.startsWith\('\/api\/audio\/track\/'\)&&method==='GET'\)\{\s*if\(!h\)return json\(401/);
+ assert.match(server,/BLOFY_WEB_COMMENTARY_ENABLED!=='1'/);
 });
