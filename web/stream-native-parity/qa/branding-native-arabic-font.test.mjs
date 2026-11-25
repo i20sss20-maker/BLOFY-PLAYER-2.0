@@ -50,7 +50,7 @@ test('logo uses BLOFY original ocean ring/play shape and high contrast, not a ne
  assert.doesNotMatch(logo,/<script|<foreignObject/i);
 });
 test('updates are cached only as public app shell and never media/session credentials',()=>{
- assert.match(sw,/blofy-stream-shell-v6/);
+ assert.match(sw,/blofy-stream-shell-v7/);
  assert.match(sw,/\/fonts\/IBMPlexSansArabic-Regular\.ttf/);
  assert.match(sw,/\/fonts\/IBMPlexSansArabic-SemiBold\.ttf/);
  assert.match(sw,/if\(SHELL\.indexOf\(url\.pathname\)<0\)return/);
