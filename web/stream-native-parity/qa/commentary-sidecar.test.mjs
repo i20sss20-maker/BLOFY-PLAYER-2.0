@@ -79,3 +79,17 @@ test('a stalled commentator restores original channel sound without restarting v
  assert.equal(manager.current(),'');
  manager.destroy()
 });
+
+test('reopening commentator catalogue must not invalidate active audio or error fallback',async()=>{
+ const {video,instances,manager}=mockSession([{id:'anis-max-1',label:'معلق',format:'progressive',delaySeconds:0}]);
+ await manager.load();
+ assert.equal(manager.select('anis-max-1'),true);
+ instances[0].onplaying();
+ assert.equal(video.muted,true);
+ await manager.load(); // user opens the commentator menu while the voice plays
+ assert.equal(manager.current(),'anis-max-1');
+ instances[0].onerror();
+ assert.equal(video.muted,false); // source failure still restores TV audio
+ assert.equal(manager.current(),'');
+ manager.destroy();
+});
