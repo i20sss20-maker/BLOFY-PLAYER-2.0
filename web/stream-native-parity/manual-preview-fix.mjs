@@ -190,4 +190,31 @@ change("if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّ�
 change("record.manifestParsed=true;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}","record.manifestParsed=true;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}");
 change("  record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;","  record.autoplayBlocked=false;record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;");
 
+
+change("window.addEventListener('pagehide',persistPlaybackCheckpoint);",`// Full navigation/close must release this browser's unique live HLS SID.
+// A hidden tab or bfcache page is not an abandoned viewer.
+function releaseLiveOnPageExit(event){
+ if(event&&event.persisted)return false;
+ var record=S.play;
+ if(!record||record.kind!=='live'||!record.hlsKey||
+    !/^live\\/[^/]+\\/[^/]+\\/[^/]+\\/sid-[a-zA-Z0-9_-]+(?:\\/(?:compat|ultra))?$/.test(record.hlsKey))return false;
+ var url='/api/hls/'+record.hlsKey+'/stop';
+ stopPlayback(false);
+ try{
+  if(typeof navigator.sendBeacon==='function'&&navigator.sendBeacon(url,'{}'))return true
+ }catch(e){}
+ try{
+  if(typeof fetch==='function'){
+   fetch(url,{method:'POST',credentials:'same-origin',keepalive:true,body:'{}',headers:{'Content-Type':'application/json'}}).catch(function(){});
+   return true
+  }
+ }catch(e){}
+ api('POST',url,{},function(){});
+ return true
+}
+window.addEventListener('pagehide',function(event){
+ persistPlaybackCheckpoint();
+ releaseLiveOnPageExit(event)
+});`);
+
 new Function(app);writeFileSync('app.js',app);
