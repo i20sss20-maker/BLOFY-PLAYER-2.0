@@ -1,0 +1,1 @@
+WEB RELEASE 2026-11-26. Installed PWA only: release hidden live sessions, preserve PiP and VOD, confirm old SID stop before restoration, explicitly handle retired SID. Preview 94a8d773-ea63-4727-8afe-e544e83b55d9 SUCCESS; 84 tests passed, zero failed. Does not increase provider channel quota. Actual installed playback unverified. Rollback c3a3e5c6-d027-4df2-9e17-98e1ad15d0bf.
