@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Direct MPEG-TS transient network errors and stalls retry the same transport with bounded backoff before HLS fallback; 429/503 capacity errors retry with 5–30 second delay; stop previous transport before retry and cancel on route change. Hidden/offline/user-paused playback defers reconnect. Preview b4ff25df-c62e-475a-9b57-86e6b0c28528 SUCCESS; 69 tests passed, zero failed; healthcheck passed. Real channel long-duration playback remains unverified. No changes to native apps, activation or provider quotas. Rollback f2a304ae-ba1e-4b5a-aa18-e8d0d7acfcd4.
