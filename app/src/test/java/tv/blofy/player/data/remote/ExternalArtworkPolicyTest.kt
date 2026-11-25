@@ -27,6 +27,15 @@ class ExternalArtworkPolicyTest {
         }
     }
 
+    @Test fun onlyOversizedCanonicalTmdbArtworkIsResized() {
+        assertEquals("https://image.tmdb.org/t/p/w500/abc.jpg",
+            ExternalArtworkPolicy.preferredDownloadUrl("https://image.tmdb.org/t/p/original/abc.jpg",420))
+        assertEquals("https://image.tmdb.org/t/p/w780/abc.jpg",
+            ExternalArtworkPolicy.preferredDownloadUrl("https://image.tmdb.org/t/p/original/abc.jpg",640))
+        for (url in listOf("https://image.tmdb.org/t/p/w342/abc.jpg","https://cdn.example.net/images/abc.jpg"))
+            assertEquals(url,ExternalArtworkPolicy.preferredDownloadUrl(url,420))
+    }
+
     @Test fun rejectsCredentialsPrivateHostsRedirectQueriesAndNonImagePaths() {
         for (url in listOf(
             "http://image.tmdb.org/t/p/w500/abc.jpg",
