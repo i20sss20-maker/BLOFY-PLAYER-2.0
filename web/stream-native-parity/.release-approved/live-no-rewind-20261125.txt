@@ -1,0 +1,4 @@
+WEB RELEASE — 2026-11-25
+Scope: detect HLS media sequence regression on a live session, stop stale loads and perform bounded fresh-SID recovery. Avoid backwards seek when resynchronizing expired segments. Preview, original quality and VOD unchanged.
+Preview 243d6125-5578-4061-a9c1-144b949ccb98 SUCCESS; 25 tests passed, 0 failed; healthcheck passed. Latest production sample still has 17 manifest 503; source availability and actual no-rewind viewing not verified.
+Rollback: 9749d322-aaba-484a-9e83-61e2afab3727 revision 27cb491e89017b7521fcb5543bb43969b3024599.
