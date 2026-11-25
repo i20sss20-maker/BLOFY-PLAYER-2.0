@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Prefer native HLS for installed Apple WebKit only when the video element advertises HLS support; preserve ordinary browser and non-Apple engine selection. Defer native network recovery while hidden/offline/paused; reopen through existing serialized STOP flow. Preview c345962d-ba3d-4e83-b855-7357a90b82f8 SUCCESS; 79 tests passed, zero failed; healthcheck passed. Build 2026.11.25.7. Actual installed-device playback remains unverified. No native app, Xtream or provider limit changes. Rollback 343cbabe-d116-4992-b7ac-6b4479f1304f.
