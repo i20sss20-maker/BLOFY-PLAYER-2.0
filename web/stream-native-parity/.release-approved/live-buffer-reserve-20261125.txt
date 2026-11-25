@@ -1,0 +1,4 @@
+WEB RELEASE — 2026-11-25
+Scope: HLS fullscreen sync 5 segments (was 4), max latency 12 (was 10), target buffer 45s (was 35s), preserve preview and native HLS/VOD. Guard recovery against watchdog interference.
+Preview bd7b338d-8276-467e-a32d-b1750b4dedd7 SUCCESS; 24 tests passed, 0 failed; healthcheck passed. Latest production sample has 2 manifest 503 despite successful segment delivery; continuous decoded playback not established. No changes to upstream quota, activation, media worker or subscriptions.
+Rollback: 7820c9fa-ab4f-42ff-ae0d-bae76aaad06b revision a4e7e58771627ff49661793d9497816d01632915.
