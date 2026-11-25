@@ -472,4 +472,48 @@ function diagnose(kind,phase,mode,code){`);
 change("  mode:actualMode,phase:phase,errorCode:", "  runtime:webRuntimeMode(installedWebApp(),kind==='live'&&S.route!=='player'),\n  mode:actualMode,phase:phase,errorCode:");
 change("BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>", "BLOFY STREAM Web • 2026.11.25.6 • '+(installedWebApp()?'تطبيق الشاشة الرئيسية':'المتصفح')+'</div>");
 
+
+change("function shouldUseNativeHls(video){",`// Installed Apple WebKit can omit the Safari token. Prefer its own HLS
+// decoder if supported; leave the ordinary browser route unchanged.
+function installedNativeHlsPreferred(installed,ua,video){
+ var agent=String(ua||'');
+ return !!(installed&&/AppleWebKit/i.test(agent)&&
+  /iPhone|iPad|iPod|Macintosh/i.test(agent)&&
+  !/Chrome|Chromium|CriOS|Edg|FxiOS|OPR/i.test(agent)&&
+  video&&video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl'))
+}
+function shouldUseNativeHls(video){`);
+change(" var apple=/Safari/i.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);",
+ " var apple=/Safari/i.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua)||installedNativeHlsPreferred(installedWebApp(),ua,video);");
+change("  if(preferDirectLiveForDevice(family,navigator.userAgent,window,installedWebApp()))",
+ "  if(!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice(family,navigator.userAgent,window,installedWebApp()))");
+change(" if(shouldUseNativeHls(video)){\n  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}return", " if(shouldUseNativeHls(video)){\n  record.nativeHls=true;\n  video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}return");
+change(" video.onerror=function(){if(alive()){\n  var unsupported=video.error&&(video.error.code===4||video.error.code===3);",` video.onerror=function(){if(alive()){
+  var mediaError=video.error&&video.error.code;
+  // Native network errors are not codec errors. Wait before reopening the
+  // same channel and avoid consuming a second provider connection.
+  if(record.nativeHls&&installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&
+      mediaError===2){
+   if(record.reconnecting)return;
+   record.reconnecting=true;
+   if(record.startupTimer)clearTimeout(record.startupTimer);
+   if(record.stallTimer)clearTimeout(record.stallTimer);
+   if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+   if(record.stableTimer)clearTimeout(record.stableTimer);
+   var attempt=record.recoveryAttempt||0;
+   status('جار استعادة اتصال البث في تطبيق الشاشة الرئيسية…');
+   function recoverInstalledNative(){
+    record.retryTimer=null;
+    if(!alive()||!video.isConnected)return;
+    if(document.hidden||navigator.onLine===false||!preview&&S.playerView&&S.playerView.userPaused){
+     record.retryTimer=setTimeout(recoverInstalledNative,3000);return
+    }
+    playHls(video,kind,id,extension,track,statusElement,preview,Math.min(attempt+1,4))
+   }
+   record.retryTimer=setTimeout(recoverInstalledNative,liveSessionRetryDelay(attempt,0));
+   return
+  }
+  var unsupported=mediaError===4||mediaError===3;`);
+change("2026.11.25.6 • '+(installedWebApp()", "2026.11.25.7 • '+(installedWebApp()");
+
 new Function(app);writeFileSync('app.js',app);
