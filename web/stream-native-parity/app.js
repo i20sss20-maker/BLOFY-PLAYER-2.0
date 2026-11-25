@@ -4598,18 +4598,56 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var chosen=choicePanel.querySelector('.native-player-choice-item.selected')||choicePanel.querySelector('.native-player-choice-item');
   if(chosen)chosen.focus()
  }
+ function embeddedCommentaryChoices(manager){
+  // Some licensed channels already carry alternative commentator languages
+  // inside the same LIVE media session. Reuse those tracks: do not create a
+  // second upstream feed, new relay, or a protected commentary request.
+  var options=[],tracks=video.audioTracks,engine=S.play&&S.play.engine;
+  if(tracks&&tracks.length>1){
+   for(var n=0;n<Math.min(tracks.length,16);n++)(function(track,index){
+    options.push({name:'🔊 '+String(track.label||track.language||('صوت القناة '+(index+1))).slice(0,70),
+     selected:!!track.enabled&&!manager.current(),
+     select:function(){
+      manager.select('original');
+      for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===index;
+      commentaryMessage('تم اختيار الصوت المدمج '+(index+1))
+     }})
+   })(tracks[n],n)
+  }else if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
+   var audioList=engine.audioTracks;
+   for(var k=0;k<Math.min(audioList.length,16);k++)(function(track,index){
+    options.push({name:'🔊 '+String(track.name||track.lang||('صوت القناة '+(index+1))).slice(0,70),
+     selected:engine.audioTrack===index&&!manager.current(),
+     select:function(){
+      manager.select('original');
+      engine.audioTrack=index;
+      commentaryMessage('تم اختيار الصوت المدمج '+(index+1))
+     }})
+   })(audioList[k],k)
+  }
+  return options
+ }
  function showCommentators(origin){
   if(!isLive||!state.commentary)return;
   var expected=String(state.id),manager=state.commentary;
   var orig={name:'🔊 الصوت الأصلي للقناة',selected:!manager.current(),
     select:function(){manager.select('original')}};
-  showPlayerChoices('المعلقين • BLOFY',[orig],origin);
+  var embedded=embeddedCommentaryChoices(manager);
+  showPlayerChoices('المعلقين • BLOFY',[orig].concat(embedded),origin);
   commentaryMessage('جار قراءة المعلقين المصرح بهم لهذه القناة…');
   manager.load().then(function(tracks){
    if(S.route!=='player'||S.playerView!==state||state.commentary!==manager||
-      String(state.id)!==expected)return;
-   if(!tracks.length){commentaryMessage('لا توجد صوتيات متاحة حاليًا؛ صوت القناة الأصلي مستمر');return}
-   var options=[{name:orig.name,selected:!manager.current(),select:orig.select}];
+      String(state.id)!==expected||choicePanel.hidden||choiceOrigin!==origin)return;
+   if(!tracks.length){
+    var reason=typeof manager.failure==='function'?manager.failure():'';
+    commentaryMessage(reason==='not_enabled'?'المعلقون الخارجيون غير مفعّلين على السيرفر حاليًا؛ المسارات المدمجة متاحة أعلاه.':
+      reason==='unauthorized'?'جلسة الاشتراك لا تسمح بجلب المعلقين.':
+      reason==='not_configured'?'قائمة المعلقين الخارجية غير مجهزة في مصدر الخدمة.':
+      embedded.length?'تقدر تختار الصوت المدمج للقناة من القائمة.':
+      'لا تتوفر أصوات إضافية لهذه القناة حاليًا؛ الصوت الأصلي مستمر.');
+    return
+   }
+   var options=[{name:orig.name,selected:!manager.current(),select:orig.select}].concat(embedded);
    var favorites=commentatorFavorites(),recent=S.profileKey?readJson(profileStorageKey('commentatorRecent'),{}):{};
    var lastId=recent&&typeof recent==='object'?recent[expected]:'';
    tracks=tracks.slice().sort(function(a,b){
