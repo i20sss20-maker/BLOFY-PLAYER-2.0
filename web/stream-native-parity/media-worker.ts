@@ -124,7 +124,7 @@ function liveSourceRetryMs(identity,now=Date.now()){
 function recordLiveSourceFailure(session,reason,now=Date.now()){
  if(session.kind!=='live'||!session.sourceIdentity)return;
  if(!['live_source_finished','stale_manifest','ffmpeg_no_playlist','process_crashed',
-  'fetch_or_spawn_error','hls_source_failed','live_no_initial_segment'].includes(reason)&&!/^upstream_5[0-9]{2}$/.test(reason))return;
+  'fetch_or_spawn_error','hls_source_failed','live_no_initial_segment','source_missing_video','invalid_source_data','upstream_429'].includes(reason)&&!/^upstream_5[0-9]{2}$/.test(reason))return;
  const key=session.sourceIdentity,old=liveSourceFailureWindows.get(key);
  const repeated=old&&now-old.lastAt<120000&&now-session.startedAt<90000;
  const failures=repeated?Math.min(6,old.failures+1):1;
@@ -238,6 +238,19 @@ async function awaitHlsFile(session,filename,limitMs){
   await nap(220);
  }
  return false;
+}
+// Keep first-party source admission failures distinct from decoder failures.
+// A numeric upstream wait is advisory, capped to 30 seconds.
+function liveUpstreamFailure(kind,status,headers){
+ const retry=Number(headers?.get('retry-after')||0);
+ if(kind==='live'&&(status===429||status===503))
+  return {error:'live_source_unavailable',status,retryAfterSeconds:Number.isInteger(retry)&&retry>=1&&retry<=30?retry:5};
+ return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}
+}
+function hlsProbeBudget(kind,copyVideo){
+ // Unknown/compat LIVE input may advertise audio before its video PMT.
+ // Allow more media bytes/time, still within the existing startup deadline.
+ return kind==='live'&&!copyVideo?'4000000':'1200000'
 }
 function hlsError(status,error,retryAfterSeconds=0){
  const seconds=Math.max(0,Math.min(30,Number(retryAfterSeconds)||0));
@@ -402,7 +415,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    try{await upstream.body?.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
-  if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
+  if(!upstream.ok||!upstream.body){const status=upstream.status;const failure=liveUpstreamFailure(kind,status,upstream.headers);try{await upstream.body?.cancel()}catch{};stopHls(session,'upstream_'+status);return failure}
   // Experimental continuity for ONE preapproved channel + bearer access ID.
   // All subsequent requests use the exact same first-party authorized URL.
   // Disabled in normal previews; strict guard prevents a single env flag
@@ -448,7 +461,8 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
   const losslessVideo=!forceCompat&&sourceInput.copyVideo;
   session.videoMode=losslessVideo?'source_copy':ultra?'ultra_transcode':'compatibility_transcode';
   const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind,1,ultra?'2160':undefined);
-  const args=['-hide_banner','-loglevel','info','-nostats','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
+  const probeBudget=hlsProbeBudget(kind,losslessVideo);
+  const args=['-hide_banner','-loglevel','info','-nostats','-nostdin','-analyzeduration',probeBudget,'-probesize',probeBudget,'-fflags','+genpts','-i','pipe:0',
    '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,
    // Correct audio PTS discontinuities by inserting/dropping samples rather
    // than changing playback rate and making speech sound oddly pitched.
@@ -631,7 +645,7 @@ async function hlsRequest(req,url){
    if(wait>0)return hlsError(503,'hls_origin_backoff',Math.ceil(wait/1000))
   }
   const start=liveShareAllowed(kind,viewerSid)?await startSharedLiveViewer(args):await startHls(args);
-  if(start.error)return hlsError(start.status,start.error,start.status===429?5:0);
+  if(start.error)return hlsError(start.status,start.error,start.retryAfterSeconds||(start.status===429?5:0));
   sess=start.session
  }
  // Aliases have their own auth/SID and idle timer; only the producer owns
