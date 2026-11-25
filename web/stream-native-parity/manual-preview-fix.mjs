@@ -415,4 +415,32 @@ document.addEventListener('visibilitychange',function(){
  if(!document.hidden)resumeInstalledLiveAfterExit()
 });`);
 
+
+change(" record.startupTimer=setTimeout(function(){\n  if(alive()&&!record.ready)fallback('تأخر بدء الصورة المباشرة؛ جار التحويل إلى مشغّل HLS.')\n },28000);",` function directStartupCheck(){
+  record.startupTimer=null;
+  var decision=liveStartupDecision(record,{
+   active:alive(),userPaused:state.userPaused,hidden:document.hidden,offline:navigator.onLine===false
+  });
+  if(decision==='defer'){record.startupTimer=setTimeout(directStartupCheck,5000);return}
+  if(decision==='recover')retryDirect(false)
+ }
+ record.startupTimer=setTimeout(directStartupCheck,28000);`);
+change("    record.ready=true;\n    if(record.stableTimer)clearTimeout(record.stableTimer);", "    record.ready=true;record.autoplayBlocked=false;\n    if(record.stableTimer)clearTimeout(record.stableTimer);");
+change("    if(!alive()||video.paused||record.fallback)return;", "    if(!alive()||video.paused||record.fallback||document.hidden||navigator.onLine===false||state.userPaused||record.autoplayBlocked)return;");
+change("     if(!alive()||video.paused)return;\n     if(Math.abs((Number(video.currentTime)||0)-last)<0.3)retryDirect(false)", "     if(!alive()||video.paused||document.hidden||navigator.onLine===false||state.userPaused||record.autoplayBlocked)return;\n     if(Math.abs((Number(video.currentTime)||0)-last)<0.3)retryDirect(false)");
+change("   if(promise&&promise.catch)promise.catch(function(){if(alive())status('اضغط ▶ لبدء MPEG-TS')})",`   if(promise&&promise.catch)promise.catch(function(error){
+    if(!alive()||record.reconnecting)return;
+    if(error&&error.name==='NotAllowedError'){
+     record.autoplayBlocked=true;
+     if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
+     status('اضغط ▶ لبدء MPEG-TS')
+    }else if(error&&error.name==='NotSupportedError')fallback('ترميز غير مدعوم؛ جار تجربة HLS.')
+    // AbortError may be a normal pause or background suspension, not a codec failure.
+   })`);
+change("   if(isLive&&(!S.play||S.play.video===video&&S.play.reconnecting)){",`   if(isLive&&S.play&&S.play.video===video&&S.play.autoplayBlocked){
+    S.play.autoplayBlocked=false;
+    resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));return
+   }
+   if(isLive&&(!S.play||S.play.video===video&&S.play.reconnecting)){`);
+
 new Function(app);writeFileSync('app.js',app);
