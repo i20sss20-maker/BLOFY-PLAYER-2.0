@@ -1,0 +1,6 @@
+WEB RELEASE — 2026-11-25
+Operator explicitly requested automatic preview restored.
+Scope: automatic preview after 800ms stable selection; cancel pending selection on fullscreen and explicit play; preserve stop-before-switch behavior even for a different channel.
+Syntax and mocked latest-selection and route-guard checks passed. Preview build initiated, not yet confirmed. Production build retains existing regression tests and healthcheck.
+No change to media worker, provider quota, authentication or subscription settings. Real playback remains unverified.
+Rollback: 001be4f8-0ece-40aa-bd42-14cc6e861a5a revision ec3ba9bdd807a3643c2156c3da9a2d5482f3fe1b.
