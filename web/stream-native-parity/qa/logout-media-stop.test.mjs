@@ -74,3 +74,22 @@ test('aborted media STOP releases accounting exactly once, even if a late event 
  assert.equal(context.pendingMediaStops,0);
  assert.equal(calls,1);
 });
+
+test('page exit releases only its own live SID, never hidden/bfcache, VOD or legacy shared sessions',()=>{
+ const start=app.indexOf('function releaseLiveOnPageExit('),end=app.indexOf("window.addEventListener('pagehide',function(event)",start);
+ const helper=app.slice(start,end);
+ const S={play:{kind:'live',hlsKey:'live/31/ts/0/sid-abcd123'}};
+ let stopped=0;const requests=[];
+ const release=new Function('S','navigator','stopPlayback','fetch','api',helper+';return releaseLiveOnPageExit')(S,
+  {sendBeacon:url=>{requests.push(url);return true}},
+  sendStop=>{assert.equal(sendStop,false);stopped++;S.play=null},undefined,()=>{throw Error('unexpected fallback')});
+ assert.equal(release({persisted:true}),false);
+ assert.equal(stopped,0);
+ assert.equal(release({persisted:false}),true);
+ assert.deepEqual(requests,['/api/hls/live/31/ts/0/sid-abcd123/stop']);
+ assert.equal(release({persisted:false}),false);
+ for(const record of [{kind:'movie',hlsKey:'movie/31/mp4/0/sid-abc'},{kind:'live',hlsKey:'live/31/ts/0'}]){
+  S.play=record;assert.equal(release({persisted:false}),false);
+ }
+ assert.equal(stopped,1);
+});
