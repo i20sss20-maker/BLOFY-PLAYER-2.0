@@ -1,6 +1,5 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 
 const app = readFileSync(new URL('../app.js',import.meta.url),'utf8');
@@ -18,8 +17,10 @@ function setup() {
   send(){}
   resolve(status){this.status=status;this.readyState=4;this.onreadystatechange()}
  }
- const context={XMLHttpRequest:FakeXHR,S:{accountEpoch:1},JSON,Math,RegExp};
- vm.runInNewContext(helper,context);
+ // Read the actual closure rather than a VM global snapshot (Bun and Node
+ // differ in how global var updates are reflected on the sandbox object).
+ const state={accountEpoch:1};
+ const context=new Function('XMLHttpRequest','S',helper+';return {api,S,get pendingMediaStops(){return pendingMediaStops}}')(FakeXHR,state);
  return {context,requests};
 }
 
