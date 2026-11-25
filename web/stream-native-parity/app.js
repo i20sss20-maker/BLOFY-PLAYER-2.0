@@ -2504,6 +2504,21 @@ function playDirectMpegts(video,id,statusElement){
   }catch(e){fallback('تعذر تهيئة المشغّل المباشر؛ جار الرجوع إلى HLS.')}
  })
 }
+/* A fatal initial manifest failure is different from a failed level or fragment.
+ * Reload the SAME signed session URL; startLoad alone cannot fetch an initial
+ * manifest that never parsed. Do not open another upstream session. */
+function retryLiveHlsRequest(engine,manifest,detail){
+ if(!engine)return false;
+ try{
+  var reason=String(detail&&detail.details||'');
+  if(reason==='manifestLoadError'||reason==='manifestLoadTimeOut'){
+   engine.loadSource(manifest);
+  }else{
+   engine.startLoad();
+  }
+  return true
+ }catch(e){return false}
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
@@ -2921,7 +2936,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail)return;
     var code=Number(detail.response&&detail.response.code)||0;
-    if(code===410&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+    if((code===410||(code===404&&detail.details==='fragLoadError'))&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
      if(!preview)recordLiveIncident('live_edge_resync');
      var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());
      if(edgeAction==='restart')recoverConnection();
@@ -2943,7 +2958,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.capacityTimer=setTimeout(function(){
       record.capacityTimer=null;
       if(!alive())return;
-      try{engine.startLoad()}catch(e){recoverConnection()}
+      if(!retryLiveHlsRequest(engine,manifest,detail))recoverConnection()
      },delay);
      return
     }
@@ -2957,7 +2972,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.originTimer=setTimeout(function(){
       record.originTimer=null;
       if(!alive())return;
-      try{engine.startLoad()}catch(e){recoverConnection()}
+      if(!retryLiveHlsRequest(engine,manifest,detail))recoverConnection()
      },delay);
      return
     }
@@ -2969,7 +2984,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.retryTimer=setTimeout(function(){
       record.retryTimer=null;
       if(!alive())return;
-      try{engine.startLoad()}catch(e){recoverConnection()}
+      if(!retryLiveHlsRequest(engine,manifest,detail))recoverConnection()
      },pause);
      return
     }
