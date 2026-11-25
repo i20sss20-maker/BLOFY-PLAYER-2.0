@@ -7,13 +7,13 @@
  'use strict';
  function create(video,channelId,notify){
   var audio=null,activeId='',tracks=[],generation=0,disposed=false,
-    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null;
+    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null,catalogEpoch=0;
   function say(msg){if(typeof notify==='function')notify(msg)}
   function clearDelay(){if(delayTimer){clearTimeout(delayTimer);delayTimer=null}}
   function clearStall(){if(stallTimer){clearTimeout(stallTimer);stallTimer=null}}
   function restore(){video.muted=savedMuted;video.volume=savedVolume}
   function stop(){
-   generation++;clearDelay();clearStall();
+   generation++;catalogEpoch++;clearDelay();clearStall();
    if(audio){var a=audio;audio=null;a.onplaying=null;a.onerror=null;a.onended=null;a.onwaiting=null;a.onstalled=null;a.ontimeupdate=null;
     try{a.pause();a.removeAttribute('src');a.load()}catch(e){}}
    activeId='';restore()
@@ -48,17 +48,20 @@
   }
   function load(){
    if(disposed)return Promise.resolve([]);
-   var epoch=++generation;
+   // Catalogue fetches must not alter the playing companion's generation.
+   // Otherwise reopening the options silently disables onplaying/onerror
+   // handlers and can leave the original channel audio muted on failure.
+   var epoch=++catalogEpoch;
    return fetch('/api/audio/catalog?channel='+encodeURIComponent(channelId),{
      credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
     }).then(function(res){if(!res.ok)throw Error('catalog_unavailable');return res.json()})
      .then(function(data){
-      if(disposed||epoch!==generation)return [];
+      if(disposed||epoch!==catalogEpoch)return [];
       tracks=Array.isArray(data.tracks)?data.tracks.filter(function(t){
        return t&&/^[A-Za-z0-9_-]{1,64}$/.test(t.id)&&typeof t.label==='string'&&t.label.length<=80
       }).slice(0,60):[];
       return tracks.slice()
-     }).catch(function(){if(epoch===generation&&!disposed)say('الصوتيات غير متاحة حاليًا؛ صوت القناة الأصلي مستمر');return []})
+     }).catch(function(){if(epoch===catalogEpoch&&!disposed)say('الصوتيات غير متاحة حاليًا؛ صوت القناة الأصلي مستمر');return []})
   }
   function onVideoPause(){if(audio&&!video.ended){try{audio.pause()}catch(e){}}}
   function onVideoPlay(){if(audio&&activeId){var play=audio.play();if(play&&play.catch)play.catch(function(){})}}
