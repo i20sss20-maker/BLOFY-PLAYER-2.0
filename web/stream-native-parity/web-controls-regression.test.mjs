@@ -73,3 +73,19 @@ test('engine replacement stops the separate live audio and menu shows its status
  assert.ok(source.includes("S.playerView.commentary.stop()"));
  assert.ok(source.includes("id=\\\"player-commentary-dialog-status\\\"")||source.includes('id="player-commentary-dialog-status"'));
 });
+
+test('subtitle recovery follows matching language and label, not old numeric index',()=>{
+ const video={textTracks:[]},state={id:'42'},engine={subtitleTracks:[{lang:'en',name:'English'},{lang:'ar',name:'Arabic'}],subtitleTrack:-1,subtitleDisplay:false},S={play:{video,engine},playerView:state};
+ const x=new Function('S','video','state',source.slice(source.indexOf(' function subtitleIdentity('),source.indexOf(' var subtitleButton='))+';return {saveSubtitlePreference,restoreSubtitlePreference};')(S,video,state);
+ x.saveSubtitlePreference(engine.subtitleTracks[1]);engine.subtitleTracks.reverse();x.restoreSubtitlePreference();
+ assert.equal(engine.subtitleTrack,0);assert.equal(engine.subtitleDisplay,true);
+ state.id='43';engine.subtitleTrack=1;x.restoreSubtitlePreference();assert.equal(engine.subtitleTrack,1);
+ state.id='42';x.saveSubtitlePreference(null);x.restoreSubtitlePreference();assert.equal(engine.subtitleTrack,-1);assert.equal(engine.subtitleDisplay,false);
+});
+test('native subtitle recovery avoids ambiguous same-language selection',()=>{
+ const video={textTracks:[{kind:'subtitles',language:'ar',label:'Arabic A',mode:'disabled'},{kind:'subtitles',language:'ar',label:'Arabic B',mode:'disabled'}]},state={id:'42'},S={play:{video,engine:null},playerView:state};
+ const x=new Function('S','video','state',source.slice(source.indexOf(' function subtitleIdentity('),source.indexOf(' var subtitleButton='))+';return {saveSubtitlePreference,restoreSubtitlePreference};')(S,video,state);
+ x.saveSubtitlePreference({language:'ar',label:'Other'});x.restoreSubtitlePreference();assert.ok(video.textTracks.every(t=>t.mode==='disabled'));
+ x.saveSubtitlePreference(video.textTracks[1]);x.restoreSubtitlePreference();assert.equal(video.textTracks[1].mode,'showing');
+ x.saveSubtitlePreference(null);x.restoreSubtitlePreference();assert.ok(video.textTracks.every(t=>t.mode==='disabled'));
+});
