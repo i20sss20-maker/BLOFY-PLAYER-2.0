@@ -37,8 +37,9 @@ test('only matching committed reservation allows new route',()=>{
 });
 test('fallback only after explicit authoritative closure',()=>{
  for(const state of ['released','denied']){
- const f=fixture();f.attempt={requestId:q,state,authoritative:true,noNewFeed:true};
+ const f=fixture();f.attempt={requestId:q,state,authoritative:true,noNewFeed:true,legacyAllowed:true};
  assert.equal(check(f,env,now).action,'legacy');
- f.attempt.noNewFeed=false;assert.equal(check(f,env,now).action,'hold');
+ f.attempt.legacyAllowed=false;assert.equal(check(f,env,now).action,'hold');
+ f.attempt.legacyAllowed=true;f.attempt.noNewFeed=false;assert.equal(check(f,env,now).action,'hold');
  }
 });
