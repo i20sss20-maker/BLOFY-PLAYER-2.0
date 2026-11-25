@@ -1,0 +1,100 @@
+name: STREAM 56.0.12 signed APK upgrade verification
+on:
+  push:
+    branches: [release/stream-unified-56-0-9-20261125]
+    paths: [.github/workflows/stream-56-0-12-signed-upgrade-verification.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  signed-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 34]
+    env:
+      ANDROID_I_WANT_MY_TCG: 'yes'
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Retrieve only verified official signed APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/$GITHUB_REPOSITORY/actions/runs/45511380865 | jq -e '.head_sha=="299644093ee1a949b3e3061d356babe6efa69425" and .conclusion=="success"'
+          gh api repos/$GITHUB_REPOSITORY/actions/runs/45653054529 | jq -e '.head_sha=="a7358df92c3314bc8fe2c3c557014b47adf33f8d" and .conclusion=="success"'
+          gh run download 45511380865 --repo "$GITHUB_REPOSITORY" --name BLOFY-STREAM-56.0.10-UNIFIED-OWNER-SIGNED --dir old
+          gh run download 45653054529 --repo "$GITHUB_REPOSITORY" --name BLOFY-STREAM-56.0.12-UNIFIED-OWNER-SIGNED --dir new
+          (cd old && sha256sum -c SHA256SUMS)
+          (cd new && sha256sum -c SHA256SUMS)
+          grep -Fxq 'source_commit=a298e264cc7e0d86c9009dea10370fab62fd323c' new/BUILD-IDENTITY.txt
+          grep -Fxq 'production_release=false' new/BUILD-IDENTITY.txt
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          test -x "$tools/apksigner"
+          for spec in 'old:56.0.10:2000125' 'new:56.0.12:2000127'; do
+            IFS=: read -r dir version code <<< "$spec"
+            apk="$dir/BLOFY-STREAM-$version-UNIFIED-OWNER-SIGNED.apk"
+            "$tools/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/$dir-cert"
+            actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/$dir-cert" | head -1 | tr '[:lower:]' '[:upper:]')"
+            test "$actual" = "$EXPECTED_CERT"
+            "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/$dir-badging"
+            grep -Fq "name='tv.blofy.player.v2.stream' versionCode='$code'" "$RUNNER_TEMP/$dir-badging"
+            ! grep -Fq application-debuggable "$RUNNER_TEMP/$dir-badging"
+          done
+      - name: Write upgrade verification script
+        shell: bash
+        run: |
+          cat > verify-upgrade.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          pkg=tv.blofy.player.v2.stream
+          component="$pkg/tv.blofy.player.ui.login.SplashActivity"
+          launch() {
+            adb shell am start -W -n "$component" | tee "$RUNNER_TEMP/launch.txt"
+            grep -Fq 'Status: ok' "$RUNNER_TEMP/launch.txt"
+            sleep 12
+            adb shell pidof "$pkg" | grep -Eq '[0-9]'
+            adb shell dumpsys activity activities | grep -F "$pkg" > "$RUNNER_TEMP/activity.txt"
+          }
+          install_record() {
+            adb shell dumpsys package "$pkg" > "$RUNNER_TEMP/package.txt"
+            grep -m1 'firstInstallTime=' "$RUNNER_TEMP/package.txt" | tr -d '\r'
+          }
+          adb install old/BLOFY-STREAM-56.0.10-UNIFIED-OWNER-SIGNED.apk
+          launch
+          before="$(install_record)"
+          grep -Fq 'versionCode=2000125' "$RUNNER_TEMP/package.txt"
+          adb shell am force-stop "$pkg"
+          adb logcat -c
+          adb install -r new/BLOFY-STREAM-56.0.12-UNIFIED-OWNER-SIGNED.apk
+          after="$(install_record)"
+          test -n "$before"
+          test "$before" = "$after"
+          grep -Fq 'versionCode=2000127' "$RUNNER_TEMP/package.txt"
+          launch
+          adb shell am force-stop "$pkg"
+          launch
+          adb logcat -b crash -d > "$RUNNER_TEMP/crash.txt"
+          if grep -Fq "Process: $pkg," "$RUNNER_TEMP/crash.txt"; then
+            echo 'Official signed application crashed during upgrade/launch'
+            exit 1
+          fi
+          echo "Verified signed in-place upgrade, preserved first install date and successful cold restart." >> "$GITHUB_STEP_SUMMARY"
+          SH
+          chmod +x verify-upgrade.sh
+      - name: Install and update without uninstalling, verify cold start
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 2048M
+          disk-size: 4096M
+          emulator-boot-timeout: 720
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash verify-upgrade.sh
