@@ -56,3 +56,20 @@ test('local Arabic matches appear immediately, deduplicate and are replaced by s
  assert.match(output.innerHTML,/أكشن آخر/);assert.doesNotMatch(output.innerHTML,/الجديد/);assert.doesNotMatch(status.textContent,/أولية/);
  search('اكشن',1);reply(503,null);assert.match(status.textContent,/النتائج غير مكتملة/);assert.match(output.innerHTML,/الجديد/);
 });
+
+test('commentary resume denial restores the primary channel and clears timers',async()=>{
+ const listeners={},video={muted:false,volume:.7,paused:false,addEventListener(n,f){listeners[n]=f},removeEventListener(n){delete listeners[n]}};
+ let timers=new Map(),seq=0,audio;const win={};
+ class Audio{constructor(){audio=this;this.calls=0}play(){this.calls++;return this.calls===1?Promise.resolve():Promise.reject(Error('blocked'))}pause(){this.paused=true}removeAttribute(){}load(){}}
+ vm.runInNewContext(sidecar,{window:win,Audio,Promise,encodeURIComponent,fetch:async()=>({ok:true,json:async()=>({tracks:[{id:'anis-test',label:'Test',format:'progressive'}]})}),setTimeout:f=>{timers.set(++seq,f);return seq},clearTimeout:id=>timers.delete(id)});
+ const manager=win.BlofyCommentary.create(video,'42',()=>{});
+ await manager.load();manager.select('anis-test');audio.onplaying();assert.equal(video.muted,true);
+ video.paused=true;listeners.pause();assert.equal(timers.size,0);assert.equal(audio.paused,true);
+ video.paused=false;listeners.play();await Promise.resolve();await Promise.resolve();
+ assert.equal(video.muted,false);assert.equal(manager.current(),'');assert.equal(timers.size,0);
+ manager.destroy()
+});
+test('engine replacement stops the separate live audio and menu shows its status',()=>{
+ assert.ok(source.includes("S.playerView.commentary.stop()"));
+ assert.ok(source.includes("id=\\\"player-commentary-dialog-status\\\"")||source.includes('id="player-commentary-dialog-status"'));
+});
