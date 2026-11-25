@@ -2534,6 +2534,15 @@ function liveRetryDelayMs(base,detail){
 function liveRetryPending(record){
  return !!(record&&(record.capacityTimer||record.originTimer||record.retryTimer))
 }
+// Native HLS reports HTTP 503/502 and invalid codecs as the same media error.
+// Before the first decoded picture, retry the existing SID with a bounded
+// delay rather than immediately destroying the source or starting a transcoder.
+function nativeInitialLiveRetryMs(record,errorCode){
+ if(!record||record.kind!=='live'||record.engine||record.ready||record.framePresentationObserved||
+    ![2,3,4].includes(Number(errorCode)))return 0;
+ var attempts=Number(record.nativeInitialRetries)||0;
+ return attempts<3?[3000,6500,12000][attempts]:0
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
@@ -2745,6 +2754,22 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   else playerStatus(text.slice(0,1)==='●'?'':text)
  }
  video.onerror=function(){if(alive()){
+  if(liveRetryPending(record)||record.reconnecting)return;
+  var code=video.error&&video.error.code;
+  var delay=nativeInitialLiveRetryMs(record,code);
+  if(delay){
+   record.nativeInitialRetries=(record.nativeInitialRetries||0)+1;
+   status('تعذر بدء بث القناة؛ إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');
+   record.originTimer=setTimeout(function(){
+    record.originTimer=null;
+    if(!alive()||!video.isConnected||(!preview&&S.playerView&&S.playerView.userPaused))return;
+    // Same authenticated manifest/SID; no diagnostic GET or STOP on each retry.
+    try{video.src=manifest;video.load();var p=video.play();if(p&&p.catch)p.catch(function(error){
+     if(alive())offerIosPlayGesture(error,video,preview)
+    })}catch(e){if(alive())offerIosPlayGesture(e,video,preview)}
+   },delay);
+   return
+  }
   var unsupported=video.error&&(video.error.code===4||video.error.code===3);
   // Some VIDAA browsers advertise native HLS but cannot actually decode it.
   // Prefer the verified MSE engine on the codec fallback where available.
