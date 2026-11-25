@@ -11,6 +11,22 @@ class ExternalArtworkPolicyTest {
         }
     }
 
+    @Test fun externalProviderArtworkAcceptsPublicCdnAndRelativeImagesWithoutSecrets() {
+        val host = checkNotNull(tv.blofy.player.core.identity.ExternalStreamConnectClient.parseHost("http://provider.example.com:8080"))
+        val credentials = tv.blofy.player.core.identity.ExternalStreamConnectClient.Credentials(host,"fixture-user","fixture-secret")
+        for (url in listOf("https://cdn.example.net/posters/cover.jpg","http://provider.example.com:8080/logos/channel.png","https://cdn.example.net/images/abcd?w=500")) {
+            assertEquals(url,ExternalArtworkPolicy.providerUrl(url,credentials))
+        }
+        assertEquals("http://provider.example.com:8080/images/poster.jpg",
+            ExternalArtworkPolicy.providerUrl("/images/poster.jpg",credentials))
+        for (url in listOf("http://127.0.0.1/poster.jpg","https://router.local/image.jpg",
+            "https://cdn.example.net/images/fixture-secret.jpg","https://cdn.example.net/images/a.jpg?password=fixture-secret",
+            "https://cdn.example.net/movie/fixture-user/fixture-secret/1.mp4",
+            "https://cdn.example.net/posters/a.jpg?token=hidden")) {
+            assertNull(url,ExternalArtworkPolicy.providerUrl(url,credentials))
+        }
+    }
+
     @Test fun rejectsCredentialsPrivateHostsRedirectQueriesAndNonImagePaths() {
         for (url in listOf(
             "http://image.tmdb.org/t/p/w500/abc.jpg",
