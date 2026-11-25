@@ -36,8 +36,12 @@ data class PlaylistSyncResult(
 class PlaylistManager(
     private val api: XtreamApi,
     private val dao: BlofyDao,
-    private val externalCatalog: Boolean = false
+    private val externalCatalog: Boolean = false,
+    private val artworkCredentials: ExternalStreamConnectClient.Credentials? = null
 ) {
+    private fun externalArtwork(vararg urls: String?): String? =
+        urls.firstNotNullOfOrNull { tv.blofy.player.data.remote.ExternalArtworkPolicy.providerUrl(it, artworkCredentials) }
+
     suspend fun syncAll(
         provider: ProviderEntity,
         completedSections: Set<String> = emptySet(),
@@ -177,7 +181,7 @@ class PlaylistManager(
                         categoryId = row.id("category_id"),
                         kind = "live",
                         name = row.string("name") ?: "Channel $id",
-                        icon = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("stream_icon")) else row.string("stream_icon"),
+                        icon = if (externalCatalog) externalArtwork(row.string("stream_icon"), row.string("cover"), row.string("cover_big"), row.string("movie_image"), row.string("poster_path")) else row.string("stream_icon"),
                         directSource = if (externalCatalog) null else row.string("direct_source"),
                         epgChannelId = row.string("epg_channel_id"),
                         streamType = row.string("stream_type"),
@@ -243,7 +247,7 @@ class PlaylistManager(
             categoryId = row.id("category_id"),
             kind = "movie",
             name = row.string("name") ?: "Movie $id",
-            icon = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("stream_icon")) else row.string("stream_icon"),
+            icon = if (externalCatalog) externalArtwork(row.string("stream_icon"), row.string("cover"), row.string("cover_big"), row.string("movie_image"), row.string("poster_path")) else row.string("stream_icon"),
             extension = row.string("container_extension") ?: "mp4",
             directSource = if (externalCatalog) null else row.string("direct_source"),
             addedAt = row.string("added")?.toLongOrNull(),
@@ -253,7 +257,7 @@ class PlaylistManager(
             year = row.string("year"),
             rating = row.string("rating") ?: row.string("rating_5based"),
             duration = row.string("duration"),
-            backdrop = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(backdrop) else backdrop?.takeIf { it.isNotBlank() && it != "null" },
+            backdrop = if (externalCatalog) externalArtwork(backdrop, row.string("backdrop"), row.string("backdrop_url")) else backdrop?.takeIf { it.isNotBlank() && it != "null" },
             favorite = false,
             locked = false
         )
@@ -296,7 +300,7 @@ class PlaylistManager(
                         categoryId = row.id("category_id"),
                         kind = "series",
                         name = row.string("name") ?: "Series $id",
-                        icon = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("cover")) ?: tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(row.string("stream_icon")) else row.string("cover") ?: row.string("stream_icon"),
+                        icon = if (externalCatalog) externalArtwork(row.string("cover"), row.string("cover_big"), row.string("stream_icon"), row.string("poster_path"), row.string("movie_image")) else row.string("cover") ?: row.string("stream_icon"),
                         addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
                         plot = row.string("plot") ?: row.string("description"),
                         genre = row.string("genre"),
@@ -304,7 +308,7 @@ class PlaylistManager(
                         year = row.string("year"),
                         rating = row.string("rating") ?: row.string("rating_5based"),
                         duration = row.string("episode_run_time") ?: row.string("duration"),
-                        backdrop = if (externalCatalog) tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(backdrop) else backdrop?.takeIf { it.isNotBlank() && it != "null" },
+                        backdrop = if (externalCatalog) externalArtwork(backdrop, row.string("backdrop"), row.string("backdrop_url")) else backdrop?.takeIf { it.isNotBlank() && it != "null" },
                         favorite = false,
                         locked = false
                     )
@@ -597,11 +601,11 @@ class PlaylistManager(
             val client = ExternalXtreamCatalogTransport.client(staged.credentials)
             val api = tv.blofy.player.data.remote.XtreamClient.createApi(
                 if (episodeRequest) tv.blofy.player.data.remote.XtreamClient.episodeClient(client) else client)
-            return PlaylistManager(api, dao, externalCatalog = true)
+            return PlaylistManager(api, dao, externalCatalog = true, artworkCredentials = staged.credentials)
         }
 
         internal fun forExternal(credentials: ExternalStreamConnectClient.Credentials, dao: BlofyDao): PlaylistManager =
-            PlaylistManager(ExternalXtreamCatalogTransport.api(credentials), dao, externalCatalog = true)
+            PlaylistManager(ExternalXtreamCatalogTransport.api(credentials), dao, externalCatalog = true, artworkCredentials = credentials)
 
         const val DIRECT_STREAM_BATCH = 700
         const val DIRECT_CATEGORY_BATCH = 500
