@@ -1,0 +1,5 @@
+WEB RELEASE CANDIDATE — 2026-11-25
+Scope: companion-audio resume failure fallback, pause cleanup, decoder replacement cleanup and visible catalogue status.
+Preview deployment 55aa08e7-7aee-4835-9b73-a0cffaf6845a SUCCESS; 33 build tests passed, healthcheck passed.
+No changes to media worker or subscription gates. External commentary source availability and continuous production playback remain unverified.
+Rollback: 173dd3f2-6333-4af0-824b-849f57c0b5c7, revision dfdd7c928df58acdd020d35ecd69ae93fee37d68.
