@@ -81,4 +81,5 @@ change("    if(!detail.fatal)return;\n    diagnose('live','hls_error','video',0)
      return
     }`);
 
+change("   engine.on(window.Hls.Events.FRAG_LOADED,function(){\n    if(alive()){","   engine.on(window.Hls.Events.FRAG_LOADED,function(){\n    if(alive()&&!record.reconnecting){");
 new Function(app);writeFileSync('app.js',app);
