@@ -149,3 +149,16 @@ test('HLS delayed recovery defers while paused/offline and manual play restarts 
  active=false;queued.fn();assert.equal(opened,1);
  assert.match(app,/S\.play\.video===video&&S\.play\.reconnecting/);
 });
+
+test('Apple touch Safari with supported MSE or ManagedMediaSource uses direct TS, not TV or Android',()=>{
+ const a=app.indexOf('function preferDesktopDirectLive('),b=app.indexOf('function resumeSelectedLiveTransport(',a);
+ const prefer=new Function(app.slice(a,b)+';return preferDirectLiveForDevice')();
+ const good={isTypeSupported:()=>true},bad={isTypeSupported:()=>false};
+ assert.equal(prefer('touch','iPad Safari',{ManagedMediaSource:good}),true);
+ assert.equal(prefer('touch','Macintosh Safari',{MediaSource:good}),true);
+ assert.equal(prefer('touch','iPhone Safari',{ManagedMediaSource:bad}),false);
+ assert.equal(prefer('tv','Safari',{ManagedMediaSource:good}),false);
+ assert.equal(prefer('touch','Android Chrome',{MediaSource:good}),false);
+ assert.equal(prefer('desktop','Chrome',{MediaSource:good}),true);
+ assert.match(app,/video\.disableRemotePlayback=true/);
+});
