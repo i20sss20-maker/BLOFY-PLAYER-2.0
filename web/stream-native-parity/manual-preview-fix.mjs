@@ -613,4 +613,46 @@ change("     if(record.startupTimer){clearTimeout(record.startupTimer);record.st
      }
      status('مصدر البث مشغول أو غير متاح مؤقتًا؛ جار انتظار اتصال متاح…');`);
 
+
+change("var installedLiveResume=null;",`var installedLiveResume=null;
+function installedLiveShouldRelease(installed,hidden,record,video,pip){
+ return !!(installed&&hidden&&record&&record.kind==='live'&&video&&!pip)
+}
+// Release at the visibility event, not a timer that WebKit may suspend.
+// A foreground restoration waits for the acknowledged STOP of its own SID.
+function retireHiddenInstalledLive(){
+ var record=S.play,state=S.playerView,video=record&&record.video;
+ var pip=video&&(document.pictureInPictureElement===video||video.webkitPresentationMode==='picture-in-picture');
+ if(!installedLiveShouldRelease(installedWebApp(),document.hidden,record,video,pip))return;
+ var isFull=!record.preview&&S.route==='player'&&state&&state.video===video;
+ var key=record.hlsKey;
+ var pending=isFull?{state:state,id:String(state.id),stopKey:key||null,stopping:false}:null;
+ if(pending)installedLiveResume=pending;
+ stopPlayback(false);
+ if(key){
+  if(pending)confirmInstalledStop(pending);
+  else api('POST','/api/hls/'+key+'/stop',{},function(){})
+ }
+}
+function confirmInstalledStop(pending){
+ if(!pending||!pending.stopKey||pending.stopping)return;
+ pending.stopping=true;
+ api('POST','/api/hls/'+pending.stopKey+'/stop',{},function(st){
+  pending.stopping=false;
+  if(st===200||st===404){
+   pending.stopKey=null;
+   if(installedLiveResume===pending&&!document.hidden)resumeInstalledLiveAfterExit()
+  }else if(installedLiveResume===pending&&!document.hidden){
+   playerStatus('تعذر تأكيد إغلاق جلسة البث السابقة؛ أعد فتح القناة بعد لحظات.',true)
+  }
+ })
+}`);
+change(" if(decision==='defer')return;\n installedLiveResume=null;", " if(decision==='defer')return;\n if(pending.stopKey){confirmInstalledStop(pending);return}\n installedLiveResume=null;");
+change(" if(!document.hidden)resumeInstalledLiveAfterExit()\n});", " if(document.hidden)retireHiddenInstalledLive();else resumeInstalledLiveAfterExit()\n});");
+change("     if(response.body&&response.body.cancel)response.body.cancel().catch(function(){});\n     if(response.status===401||response.status===403||response.status===400){", "     return response.json().catch(function(){return {}}).then(function(failure){\n     if(!alive())return;\n     if(response.status===401||response.status===403||response.status===400){");
+change("     if(response.status===404){\n      // A retired session", "     if(response.status===404||failure&&failure.error==='hls_session_retired'){\n      if((record.recoveryAttempt||0)>=4){status('انتهت جلسة البث. اضغط إعادة المحاولة.');return}\n      // A retired session");
+change("       if(!alive())return;\n       playHls(video,kind,id,extension,track,statusElement,preview,Math.min((record.recoveryAttempt||0)+1,4))", "       if(!alive())return;\n       if(document.hidden||navigator.onLine===false||!preview&&S.playerView&&S.playerView.userPaused){deferAdmission(hint);return}\n       playHls(video,kind,id,extension,track,statusElement,preview,Math.min((record.recoveryAttempt||0)+1,4))");
+change("     deferAdmission(hint)\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});", "     deferAdmission(hint)\n     })\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});");
+change("2026.11.25.9 • '+(installedWebApp()", "2026.11.26.1 • '+(installedWebApp()");
+
 new Function(app);writeFileSync('app.js',app);
