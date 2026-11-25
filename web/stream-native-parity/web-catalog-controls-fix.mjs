@@ -139,5 +139,25 @@ app=change(app,"engine.subtitleDisplay=true;engine.subtitleTrack=index;playerSta
 app=change(app," state.noticeObserverTimer=setInterval(function(){\n  dismissRecoveredPlaybackNotice(state,Date.now())"," state.noticeObserverTimer=setInterval(function(){\n  try{restoreSubtitlePreference()}catch(e){}\n  dismissRecoveredPlaybackNotice(state,Date.now())");
 app=change(app,"   id=newId;state.id=id;state.commentary=newCommentary(id);","   id=newId;state.id=id;state.subtitlePreference=null;state.commentary=newCommentary(id);");
 
+
+ // Native Safari's MEDIA_ERR_NETWORK is a source/transport error, not a
+ // codec error. Keep original quality and the same SID during short outages.
+app=change(app,"function nativeInitialLiveRetryMs(record,errorCode){",`function nativeLiveNetworkRetryMs(record,errorCode){
+ if(!record||record.kind!=='live'||record.engine||!record.ready||Number(errorCode)!==2)return 0;
+ var attempts=Number(record.nativeNetworkRetries)||0;
+ return attempts<3?[3000,6500,12000][attempts]:0
+}
+function nativeInitialLiveRetryMs(record,errorCode){`);
+app=change(app,"  var delay=nativeInitialLiveRetryMs(record,code);\n  if(delay){\n   record.nativeInitialRetries=(record.nativeInitialRetries||0)+1;",`  var networkDelay=nativeLiveNetworkRetryMs(record,code);
+  var delay=networkDelay||nativeInitialLiveRetryMs(record,code);
+  if(!record.engine&&record.kind==='live'&&Number(code)===2)record.sourceFailure=true;
+  if(delay){
+   if(networkDelay)record.nativeNetworkRetries=(record.nativeNetworkRetries||0)+1;
+   else record.nativeInitialRetries=(record.nativeInitialRetries||0)+1;`);
+app=change(app,"status('تعذر بدء بث القناة؛ إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');","status((record.ready?'انقطع اتصال القناة؛ ':'تعذر بدء بث القناة؛ ')+'إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');");
+ // Reset the native network backoff only after sustained good playback;
+ // transient playing events are not proof that the origin recovered.
+app=change(app,"if(alive()&&record.ready&&video.readyState>=2)record.recoveryAttempt=0","if(alive()&&record.ready&&video.readyState>=2){record.recoveryAttempt=0;record.nativeNetworkRetries=0;record.sourceFailure=false}");
+
 new Function(app);
 writeFileSync('app.js',app);writeFileSync('server.ts',server);
