@@ -37,4 +37,48 @@ change("      try{engine.startLoad()}catch(e){recoverConnection()}\n     },delay
 change("      try{engine.startLoad()}catch(e){recoverConnection()}\n     },delay);\n     return\n    }\n    if((record.transientRetries","      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     },delay);\n     return\n    }\n    if((record.transientRetries");
 change("      try{engine.startLoad()}catch(e){recoverConnection()}\n     },pause);","      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     },pause);");
 
+
+ // A vanished segment/session cannot be recovered by retrying its old URL.
+ // A fresh SID is created only after the old session's STOP is confirmed.
+change("function resumeLiveHlsNetwork(",`function liveSessionLost(record,detail,code){
+ if(!record.manifestParsed||!detail||!detail.fatal)return false;
+ if(code===404)return !!detail.frag||/fragLoad/i.test(String(detail.details||''));
+ return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))
+}
+function liveSessionRetryDelay(attempt,retryAfter){
+ var seconds=Number(retryAfter);
+ return Math.max(attempt>=4?25000:Math.min(15000,5000+attempt*2500),
+  Number.isFinite(seconds)&&seconds>=1&&seconds<=30?seconds*1000:0)
+}
+function resumeLiveHlsNetwork(`);
+change("    if(!detail.fatal)return;\n    diagnose('live','hls_error','video',0);",`    if(!detail.fatal||record.reconnecting)return;
+    diagnose('live','hls_error','video',0);
+    if(detail.type===window.Hls.ErrorTypes.NETWORK_ERROR&&liveSessionLost(record,detail,code)){
+     record.reconnecting=true;
+     var attempt=record.recoveryAttempt||0,retryAfter=0;
+     try{
+      var network=detail.networkDetails;
+      if(network&&typeof network.getResponseHeader==='function')retryAfter=network.getResponseHeader('Retry-After');
+      else if(network&&network.headers&&network.headers.get)retryAfter=network.headers.get('Retry-After')
+     }catch(e){}
+     var delay=liveSessionRetryDelay(attempt,retryAfter);
+     if(record.startupTimer)clearTimeout(record.startupTimer);
+     if(record.stallTimer)clearTimeout(record.stallTimer);
+     if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+     if(record.stableTimer)clearTimeout(record.stableTimer);
+     if(record.retryTimer)clearTimeout(record.retryTimer);
+     if(record.capacityTimer)clearTimeout(record.capacityTimer);
+     if(record.originTimer)clearTimeout(record.originTimer);
+     try{engine.stopLoad()}catch(e){}
+     status('انتهت جلسة المصدر؛ جار استعادة البث خلال '+Math.ceil(delay/1000)+' ثوانٍ…');
+     record.originTimer=setTimeout(function(){
+      record.originTimer=null;
+      if(!alive()||!video.isConnected)return;
+      if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
+      if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)||S.playerView.userPaused))return;
+      playHls(video,kind,id,extension,track,statusElement,preview,attempt>=4?0:attempt+1)
+     },delay);
+     return
+    }`);
+
 new Function(app);writeFileSync('app.js',app);
