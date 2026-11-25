@@ -107,3 +107,18 @@ test('UI and CI integration: real-player stats only, account-partitioned report,
  assert.match(docker,/COPY .*playback-acceptance\.js/);
  assert.match(worker,/\/playback-acceptance\.js/);
 });
+
+test('live timeline regression fails even when decoded video continues advancing',()=>{
+ const m=begin();
+ assert.equal(monitor.tick(m,beat(1)),null);
+ const result=monitor.tick(m,beat(2,{time:2}));
+ assert.equal(result.status,'failed');
+ assert.equal(result.reason,'media_rewind');
+});
+test('missing counters becoming available do not count as displayed-frame progress',()=>{
+ const m=monitor.init('live',0,{...start,frames:null,presented:null});
+ assert.equal(monitor.tick(m,beat(1)),null);
+ assert.equal(m.hasFrameProof,false);
+ assert.equal(monitor.tick(m,beat(2)),null);
+ assert.equal(m.hasFrameProof,true);
+});
