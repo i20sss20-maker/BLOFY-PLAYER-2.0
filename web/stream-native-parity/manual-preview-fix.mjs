@@ -134,4 +134,19 @@ change("   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())re
    });
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;record.manifestParsed=true;`);
 
+
+change("function liveSessionRetryDelay(attempt,retryAfter){",`function liveRetryHint(detail){
+ try{
+  var n=detail&&detail.networkDetails;
+  var raw=n&&typeof n.getResponseHeader==='function'?n.getResponseHeader('Retry-After'):
+   n&&n.headers&&typeof n.headers.get==='function'?n.headers.get('Retry-After'):null;
+  var seconds=Number(raw);
+  return Number.isInteger(seconds)&&seconds>=1&&seconds<=30?seconds*1000:0
+ }catch(e){return 0}
+}
+function liveSessionRetryDelay(attempt,retryAfter){`);
+change("var delay=liveCapacityRetryMs(record.capacityRetries);","var delay=Math.max(liveCapacityRetryMs(record.capacityRetries),liveRetryHint(detail));");
+change("var delay=liveOriginRetryMs(record.originRetries);","var delay=Math.max(liveOriginRetryMs(record.originRetries),liveRetryHint(detail));");
+change("var pause=liveTransientRetryMs(record.transientRetries);","var pause=Math.max(liveTransientRetryMs(record.transientRetries),liveRetryHint(detail));");
+
 new Function(app);writeFileSync('app.js',app);
