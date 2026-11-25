@@ -14,5 +14,41 @@ const edits=[
 ];
 for(const [a,b] of edits)app=change(app,a,b);
 server=change(server,"(!query||normalizeSearch(item.name||item.title||'').includes(query))","(!query||query.split(/\\s+/).every(word=>normalizeSearch(item.name||item.title||'').includes(word)))");
+
+// Guard first-picture startup against the browser's initial paused state,
+// but do not fight a real user pause or autoplay-policy rejection.
+const begin=app.indexOf('function playHls('),end=app.indexOf('function playFullVod(',begin);
+if(begin<0||end<=begin)throw Error('HLS section unavailable');
+let hls=app.slice(begin,end);
+hls=change(hls,"if(!alive()||record.reconnecting||liveRetryPending(record))return;","if(!alive()||record.reconnecting||liveRetryPending(record))return;\n  if(!preview&&S.playerView&&S.playerView.video===video&&S.playerView.userPaused)return;");
+hls=change(hls," record.startupTimer=setTimeout(function(){\n  record.startupTimer=null;\n  if(!alive()||record.ready||video.paused||liveRetryPending(record))return;\n  recoverConnection()\n },50000);",` function checkStartup(){
+  record.startupTimer=null;
+  if(!alive()||record.ready||!video.isConnected)return;
+  var userPaused=!preview&&S.playerView&&S.playerView.video===video&&S.playerView.userPaused;
+  if(userPaused||document.hidden||navigator.onLine===false||record.awaitingPlayGesture||liveRetryPending(record)){
+   record.startupTimer=setTimeout(checkStartup,5000);return
+  }
+  if(Date.now()<(record.startupDeadline||0)){
+   record.startupTimer=setTimeout(checkStartup,5000);return
+  }
+  recoverConnection()
+ }
+ record.startupDeadline=Date.now()+50000;
+ record.startupTimer=setTimeout(checkStartup,50000);
+ function noteGestureError(error){
+  if(alive()&&error&&error.name==='NotAllowedError'&&!preview)record.awaitingPlayGesture=true;
+  return offerIosPlayGesture(error,video,preview)
+ }`);
+const marker="return offerIosPlayGesture(error,video,preview)";
+hls=hls.replaceAll("offerIosPlayGesture(error,video,preview)","noteGestureError(error)").replaceAll("offerIosPlayGesture(e,video,preview)","noteGestureError(e)");
+hls=change(hls,"return noteGestureError(error)","return offerIosPlayGesture(error,video,preview)");
+hls=change(hls,"record.ready=true;record.retries=0;","record.ready=true;record.awaitingPlayGesture=false;record.retries=0;");
+app=app.slice(0,begin)+hls+app.slice(end);
+const resume="if(S.play&&S.play.video===video&&S.play.hlsKey&&!S.play.ready){S.play.awaitingPlayGesture=false;S.play.startupDeadline=Date.now()+50000}";
+app=change(app,"  hideIosPlayGesture();\n  try{\n   var promise=video.play();","  hideIosPlayGesture();\n  "+resume+"\n  try{\n   var promise=video.play();");
+app=change(app,"   state.userPaused=false;\n   try{\n    var p=video.play();","   state.userPaused=false;\n   "+resume+"\n   try{\n    var p=video.play();");
+// A new policy denial during an explicit retry must still defer the watchdog.
+app=change(app,"    if(!promptIosPlay(error))playerStatus('تعذر تشغيل الوسائط؛ استخدم إعادة المحاولة.',true)","    if(error&&error.name==='NotAllowedError'&&S.play&&S.play.video===video)S.play.awaitingPlayGesture=true;\n    if(!promptIosPlay(error))playerStatus('تعذر تشغيل الوسائط؛ استخدم إعادة المحاولة.',true)");
+
 new Function(app);
 writeFileSync('app.js',app);writeFileSync('server.ts',server);
