@@ -1,0 +1,3 @@
+MEDIA RELEASE — 2026-11-25
+Production observations: repeated live_source_finished and missing HLS segment 404 after manifest 503. This change preserves previously advertised segments for a bounded five seconds after source EOF, without advertising an ended source as live, opening an additional connection, or changing subscription limits. Explicit STOP cancels the drain.
+Isolated mocked tests passed; Docker build requires the dedicated three-test regression suite and compilation. Actual continuous playback not yet proven. Media worker replacement may interrupt active web sessions. Rollback deployment 66a38369-56f4-4d78-872f-841a61b13359 revision 8119a790ec301f2f485d0a621fa13e26017ecd96.
