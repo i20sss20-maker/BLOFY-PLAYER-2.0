@@ -463,4 +463,13 @@ change("    S.play.autoplayBlocked=false;\n    resumeSelectedLiveTransport(state
     });
     return`);
 
+
+change("function diagnose(kind,phase,mode,code){",`// Low-cardinality runtime evidence: never log an account or raw user agent.
+function webRuntimeMode(standalone,preview){
+ return preview?'preview':standalone?'installed':'browser'
+}
+function diagnose(kind,phase,mode,code){`);
+change("  mode:actualMode,phase:phase,errorCode:", "  runtime:webRuntimeMode(installedWebApp(),kind==='live'&&S.route!=='player'),\n  mode:actualMode,phase:phase,errorCode:");
+change("BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>", "BLOFY STREAM Web • 2026.11.25.6 • '+(installedWebApp()?'تطبيق الشاشة الرئيسية':'المتصفح')+'</div>");
+
 new Function(app);writeFileSync('app.js',app);
