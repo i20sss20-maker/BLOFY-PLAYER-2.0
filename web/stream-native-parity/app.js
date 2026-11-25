@@ -1205,6 +1205,7 @@ function commentatorsScreen(){
  S.route='commentators';
  shell('المعلقين • صوتيات BLOFY','<section class="commentator-library">'+
  '<h2>🎙 المعلقين</h2><p class="small muted">اختر القناة ثم اختر المعلق من قائمة صوتيات BLOFY. يظهر فقط الصوت المتاح والمصرح به لهذه القناة؛ ويمكن الرجوع إلى الصوت الأصلي في أي وقت.</p>'+
+ '<div id="commentator-voice-preview" class="commentator-preview small muted" role="status">اختر قناة لعرض الصوتيات المتاحة لها.</div>'+
  '<div id="commentator-channels">'+loading('جار تحميل القنوات')+'</div></section>');
  var epoch=S.accountEpoch;
  getListing('live','all',function(st,data){
@@ -1220,7 +1221,37 @@ function commentatorsScreen(){
     (art(item)?safeImg(art(item),'commentator-channel-art'):'<span class="commentator-channel-empty">◉</span>')+
     '<span><strong>'+esc(title(item))+'</strong><small>فتح المعلقين ◂</small></span></button>'
   }).join('')+'</div><p class="small muted">القنوات المعروضة هنا من أول صفحة؛ تصفح البث المباشر لرؤية بقية القنوات.</p>';
-  restoreView('commentators')
+  restoreView('commentators');
+  // One authenticated, channel-scoped catalogue lookup for the page:
+  // show real labels only (never guessed commentator names, tokens or URLs).
+  var firstId=rows.length?itemId(rows[0],'live'):'';
+  if(!/^[1-9][0-9]{0,14}$/.test(firstId))return;
+  fetch('/api/audio/catalog?channel='+encodeURIComponent(firstId),{
+   credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
+  }).then(function(response){
+   return response.json().catch(function(){return {}}).then(function(body){return {status:response.status,body:body}})
+  }).then(function(reply){
+   if(S.route!=='commentators'||S.accountEpoch!==epoch)return;
+   var target=document.getElementById('commentator-voice-preview');
+   if(!target)return;
+   var data=reply.body||{},tracks=Array.isArray(data.tracks)?data.tracks.slice(0,60):[];
+   if(reply.status===200&&tracks.length){
+    target.innerHTML='<strong>المعلقون المتاحون للقناة الأولى:</strong> '+
+     tracks.filter(function(t){return t&&typeof t.label==='string'}).map(function(t){
+      return '<span class="commentator-name-chip">'+esc(String(t.label).slice(0,80))+'</span>'
+     }).join('')+'<p>اختر القناة أدناه لتشغيل صوت المعلق أو تبديله.</p>'
+   }else if(reply.status===503&&data.error==='commentary_not_enabled'){
+    target.textContent='المعلقون الخارجيون غير مفعّلين من السيرفر حاليًا؛ تقدر تجرب الصوتيات المدمجة في مشغل القناة إذا كانت متاحة.'
+   }else if(reply.status===200){
+    target.textContent='لا توجد أصوات إضافية مسجلة لهذه القناة؛ يمكنك استخدام الصوت الأصلي أو تجربة قناة أخرى.'
+   }else{
+    target.textContent='تعذر جلب المعلقين من مصدر الصوت حاليًا؛ يمكن متابعة البث بصوت القناة الأصلي.'
+   }
+  }).catch(function(){
+   if(S.route!=='commentators'||S.accountEpoch!==epoch)return;
+   var target=document.getElementById('commentator-voice-preview');
+   if(target)target.textContent='تعذر الاتصال بخدمة المعلقين حاليًا؛ البث المباشر ما زال متاحًا.'
+  })
  })
 }
 
