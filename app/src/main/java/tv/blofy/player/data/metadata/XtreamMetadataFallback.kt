@@ -50,20 +50,24 @@ object XtreamMetadataFallback {
                 .build().toString()
         }.getOrNull() ?: return null
 
+        var artworkCredentials: tv.blofy.player.core.identity.ExternalStreamConnectClient.Credentials? = null
         val api = if (external) {
             val context = checkNotNull(BlofyApp.contextOrNull())
             check(tv.blofy.player.core.identity.NativeExternalCatalogSession.activeId(context) == provider.id)
             val profile = checkNotNull(tv.blofy.player.core.identity.ExternalStreamConnectStore.loadStaged(context))
             check(profile.providerId == provider.id && stream.providerId == provider.id)
+            artworkCredentials = profile.credentials
             XtreamClient.createApi(XtreamClient.episodeClient(
                 tv.blofy.player.data.remote.ExternalXtreamCatalogTransport.client(profile.credentials)))
         } else XtreamClient.api
         val root = withTimeout(if (external) 15_000L else 8_000L) { api.objectResponse(url) }
         check(root.isNotEmpty()) { "Provider returned no details" }
-        return parseResponse(provider, stream, root, kind)
+        return parseResponse(provider, stream, root, kind, artworkCredentials)
     }
 
-    internal fun parseResponse(provider: ProviderEntity, stream: StreamEntity, root: Map<String, Any?>, kind: String): ProviderMetadata.Metadata? {
+    internal fun parseResponse(provider: ProviderEntity, stream: StreamEntity, root: Map<String, Any?>, kind: String,
+        artworkCredentials: tv.blofy.player.core.identity.ExternalStreamConnectClient.Credentials? = null): ProviderMetadata.Metadata? {
+        fun artwork(raw: String?, row: ProviderEntity) = imageUrl(raw, row, artworkCredentials)
         val payload = map(root["data"]).ifEmpty { root }
         val source = linkedMapOf<String, Any?>()
         // Some panels put fields on the root, others use info/movie_data. Blank fields
@@ -80,7 +84,7 @@ object XtreamMetadataFallback {
         val plot = cleanText(text(source, "plot", "description", "overview", "synopsis")).ifBlank { stream.plot.orEmpty() }.ifBlank { null }
         val genreText = text(source, "genre", "genres").ifBlank { stream.genre.orEmpty() }
         val genres = splitValues(genreText)
-        val cast = castValues(source).map { it.copy(profileUrl = imageUrl(it.profileUrl, provider)) }
+        val cast = castValues(source).map { it.copy(profileUrl = artwork(it.profileUrl, provider)) }
         val crew = buildList {
             val credits = map(source["credits"])
             listOf(source["crew"], credits["crew"]).forEach { raw ->
@@ -89,7 +93,7 @@ object XtreamMetadataFallback {
                     val name = cleanText(text(row, "name"))
                     if (name.isNotBlank()) add(ProviderMetadata.Credit(name,
                         cleanText(text(row, "job", "department")),
-                        imageUrl(text(row, "profile_url", "profile_path", "image", "photo"), provider)))
+                        artwork(text(row, "profile_url", "profile_path", "image", "photo"), provider)))
                 }
             }
             splitValues(text(source, "director")).take(3).forEach { add(ProviderMetadata.Credit(it, "المخرج")) }
@@ -104,12 +108,12 @@ object XtreamMetadataFallback {
             .ifBlank { stream.releaseDate.orEmpty() }.ifBlank { null }
         val durationMinutes = durationMinutes(source, stream)
         val images = map(source["images"])
-        val poster = imageUrl(text(source, "movie_image", "cover", "cover_big", "stream_icon", "poster_path"), provider)
-            ?: imageUrl(firstBackdrop(images["posters"]), provider) ?: stream.icon?.takeIf(String::isNotBlank)
-        val backdrop = imageUrl(firstBackdrop(source["backdrop_path"] ?: source["backdrop"] ?: images["backdrops"]), provider)
+        val poster = artwork(text(source, "movie_image", "cover", "cover_big", "stream_icon", "poster_path"), provider)
+            ?: artwork(firstBackdrop(images["posters"]), provider) ?: stream.icon?.takeIf(String::isNotBlank)
+        val backdrop = artwork(firstBackdrop(source["backdrop_path"] ?: source["backdrop"] ?: images["backdrops"]), provider)
             ?: stream.backdrop?.takeIf(String::isNotBlank)
-        val logo = imageUrl(text(source, "logo", "logo_url", "logo_path"), provider)
-            ?: imageUrl(firstBackdrop(images["logos"]), provider)
+        val logo = artwork(text(source, "logo", "logo_url", "logo_path"), provider)
+            ?: artwork(firstBackdrop(images["logos"]), provider)
         val country = countryValues(source)
         val language = text(source, "language", "original_language").ifBlank { null }
         val status = text(source, "status").ifBlank { null }
@@ -255,11 +259,12 @@ object XtreamMetadataFallback {
         }
     }
 
-    private fun imageUrl(raw: String?, provider: ProviderEntity): String? {
+    private fun imageUrl(raw: String?, provider: ProviderEntity,
+        credentials: tv.blofy.player.core.identity.ExternalStreamConnectClient.Credentials? = null): String? {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) } ?: return null
         if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN &&
             tv.blofy.player.core.identity.NativeExternalMediaTransport.isExternal(provider.id))
-            return tv.blofy.player.data.remote.ExternalArtworkPolicy.safeUrl(value)
+            return tv.blofy.player.data.remote.ExternalArtworkPolicy.providerUrl(value, credentials)
         val parsed = value.toHttpUrlOrNull() ?: provider.baseUrl.toHttpUrlOrNull()?.resolve(value)
         return parsed?.takeIf { it.username.isEmpty() && it.password.isEmpty() }?.toString()
     }
