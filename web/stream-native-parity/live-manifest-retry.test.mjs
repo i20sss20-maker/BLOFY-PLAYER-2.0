@@ -207,7 +207,7 @@ test('runtime diagnostic identifies installed, browser and preview modes without
  assert.equal(mode(false,false),'browser');
  assert.equal(mode(true,true),'preview');
  assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
- assert.match(app,/2026\.11\.25\.7/);
+ assert.match(app,/2026\.11\.25\.8/);
 });
 
 test('installed Apple HLS policy is restricted to supported standalone WebKit',()=>{
@@ -233,4 +233,15 @@ test('installed native recovery respects background, pause, offline and session 
  state.userPaused=false;nav.onLine=false;queued.fn();assert.equal(opens,0);
  nav.onLine=true;queued.fn();assert.equal(opens,1);
  active=false;queued.fn();assert.equal(opens,1);
+});
+
+test('refreshing installed shell is explicit, online-only and preserves account storage',()=>{
+ const a=app.indexOf("document.getElementById('refresh-web-shell').onclick"),b=app.indexOf("document.getElementById('refresh-content').onclick",a);
+ const source=app.slice(a,b);
+ assert.match(source,/S\.route!=='settings'/);
+ assert.match(source,/navigator\.onLine===false/);
+ assert.match(source,/window\.location\.replace\(target\.href\)/);
+ assert.doesNotMatch(source,/localStorage\.(clear|removeItem)|caches\.delete\(|\/api\/logout/);
+ assert.ok(app.includes('/vendor/mpegts.js?v=1.8.2'));
+ assert.ok(app.includes('/vendor/hls.min.js?v=1.5.20'));
 });
