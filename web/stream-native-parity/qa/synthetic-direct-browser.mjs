@@ -13,6 +13,7 @@ try{
  const app=readFileSync('app.js','utf8');
  const configuration=app.match(/var transport=window\.mpegts\.createPlayer\(\{[\s\S]*?url:'\/api\/media\/live\/'\+enc\(id\)\+'\.ts'\s*\},(\{[\s\S]*?\})\);/)?.[1];
  assert.ok(configuration,'extract actual direct MPEG-TS config');
+ assert.equal(JSON.parse(readFileSync('node_modules/mpegts.js/package.json','utf8')).version,'1.8.2');
  const js=readFileSync('node_modules/mpegts.js/dist/mpegts.js');
  let requests=0,delivered=0,gapAt=0,cancelled=false,closed=false;
  server=Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){
