@@ -84,3 +84,15 @@ test('startup recovers when decoder stays paused but no user gesture is required
  assert.equal(decide({},{active:false}),'stop');
  assert.match(app,/error\.name==='NotAllowedError'/);
 });
+
+test('desktop direct live transport is limited to compatible MSE browsers; TV and touch retain HLS',()=>{
+ const a=app.indexOf('function preferDesktopDirectLive('),b=app.indexOf('function playDirectMpegts(',a);
+ const prefer=new Function(app.slice(a,b)+';return preferDesktopDirectLive')();
+ assert.equal(prefer('desktop',{isTypeSupported:()=>true}),true);
+ assert.equal(prefer('desktop',{isTypeSupported:()=>false}),false);
+ assert.equal(prefer('desktop',null),false);
+ assert.equal(prefer('tv',{isTypeSupported:()=>true}),false);
+ assert.equal(prefer('touch',{isTypeSupported:()=>true}),false);
+ assert.equal(prefer('desktop',{isTypeSupported:()=>{throw Error('unsupported')}}),false);
+ assert.match(app,/statusCode===429\|\|statusCode===503/);
+});
