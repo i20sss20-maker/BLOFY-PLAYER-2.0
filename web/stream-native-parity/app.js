@@ -1205,6 +1205,7 @@ function commentatorsScreen(){
  S.route='commentators';
  shell('المعلقين • صوتيات BLOFY','<section class="commentator-library">'+
  '<h2>🎙 المعلقين</h2><p class="small muted">اختر القناة ثم اختر المعلق من قائمة صوتيات BLOFY. يظهر فقط الصوت المتاح والمصرح به لهذه القناة؛ ويمكن الرجوع إلى الصوت الأصلي في أي وقت.</p>'+
+ '<div id="commentator-voice-preview" class="commentator-preview small muted" role="status">اختر قناة لعرض الصوتيات المتاحة لها.</div>'+
  '<div id="commentator-channels">'+loading('جار تحميل القنوات')+'</div></section>');
  var epoch=S.accountEpoch;
  getListing('live','all',function(st,data){
@@ -1220,7 +1221,37 @@ function commentatorsScreen(){
     (art(item)?safeImg(art(item),'commentator-channel-art'):'<span class="commentator-channel-empty">◉</span>')+
     '<span><strong>'+esc(title(item))+'</strong><small>فتح المعلقين ◂</small></span></button>'
   }).join('')+'</div><p class="small muted">القنوات المعروضة هنا من أول صفحة؛ تصفح البث المباشر لرؤية بقية القنوات.</p>';
-  restoreView('commentators')
+  restoreView('commentators');
+  // One authenticated, channel-scoped catalogue lookup for the page:
+  // show real labels only (never guessed commentator names, tokens or URLs).
+  var firstId=rows.length?itemId(rows[0],'live'):'';
+  if(!/^[1-9][0-9]{0,14}$/.test(firstId))return;
+  fetch('/api/audio/catalog?channel='+encodeURIComponent(firstId),{
+   credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
+  }).then(function(response){
+   return response.json().catch(function(){return {}}).then(function(body){return {status:response.status,body:body}})
+  }).then(function(reply){
+   if(S.route!=='commentators'||S.accountEpoch!==epoch)return;
+   var target=document.getElementById('commentator-voice-preview');
+   if(!target)return;
+   var data=reply.body||{},tracks=Array.isArray(data.tracks)?data.tracks.slice(0,60):[];
+   if(reply.status===200&&tracks.length){
+    target.innerHTML='<strong>المعلقون المتاحون للقناة الأولى:</strong> '+
+     tracks.filter(function(t){return t&&typeof t.label==='string'}).map(function(t){
+      return '<span class="commentator-name-chip">'+esc(String(t.label).slice(0,80))+'</span>'
+     }).join('')+'<p>اختر القناة أدناه لتشغيل صوت المعلق أو تبديله.</p>'
+   }else if(reply.status===503&&data.error==='commentary_not_enabled'){
+    target.textContent='المعلقون الخارجيون غير مفعّلين من السيرفر حاليًا؛ تقدر تجرب الصوتيات المدمجة في مشغل القناة إذا كانت متاحة.'
+   }else if(reply.status===200){
+    target.textContent='لا توجد أصوات إضافية مسجلة لهذه القناة؛ يمكنك استخدام الصوت الأصلي أو تجربة قناة أخرى.'
+   }else{
+    target.textContent='تعذر جلب المعلقين من مصدر الصوت حاليًا؛ يمكن متابعة البث بصوت القناة الأصلي.'
+   }
+  }).catch(function(){
+   if(S.route!=='commentators'||S.accountEpoch!==epoch)return;
+   var target=document.getElementById('commentator-voice-preview');
+   if(target)target.textContent='تعذر الاتصال بخدمة المعلقين حاليًا؛ البث المباشر ما زال متاحًا.'
+  })
  })
 }
 
@@ -2846,7 +2877,17 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
+   // One-second LIVE segments can start closer to the live edge with a
+   // three-segment safety margin. Keep the stable non-low-latency decoder
+   // path for older TVs; throttle automatic manifest errors to avoid a
+   // burst of repeated 503 admissions against a one-feed provider.
+   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,
+    liveSyncDurationCount:3,liveMaxLatencyDurationCount:10,maxBufferLength:35,
+    maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,
+    manifestLoadingTimeOut:30000,manifestLoadingMaxRetry:2,
+    manifestLoadingRetryDelay:1600,manifestLoadingMaxRetryTimeout:7000,
+    levelLoadingMaxRetry:2,levelLoadingRetryDelay:1600,levelLoadingMaxRetryTimeout:7000,
+    fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(error){
     if(alive()&&!offerIosPlayGesture(error,video,preview))status('اضغط تشغيل ▶')
    })}catch(e){if(alive()&&!offerIosPlayGesture(e,video,preview))status('اضغط تشغيل ▶')}});
@@ -4598,18 +4639,57 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var chosen=choicePanel.querySelector('.native-player-choice-item.selected')||choicePanel.querySelector('.native-player-choice-item');
   if(chosen)chosen.focus()
  }
+ function embeddedCommentaryChoices(manager){
+  // Some licensed channels already carry alternative commentator languages
+  // inside the same LIVE media session. Reuse those tracks: do not create a
+  // second upstream feed, new relay, or a protected commentary request.
+  var options=[],tracks=video.audioTracks,engine=S.play&&S.play.engine;
+  if(tracks&&tracks.length>1){
+   for(var n=0;n<Math.min(tracks.length,16);n++)(function(track,index){
+    options.push({name:'🔊 '+String(track.label||track.language||('صوت القناة '+(index+1))).slice(0,70),
+     selected:!!track.enabled&&!manager.current(),
+     select:function(){
+      manager.select('original');
+      for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===index;
+      commentaryMessage('تم اختيار الصوت المدمج '+(index+1))
+     }})
+   })(tracks[n],n)
+  }else if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
+   var audioList=engine.audioTracks;
+   for(var k=0;k<Math.min(audioList.length,16);k++)(function(track,index){
+    options.push({name:'🔊 '+String(track.name||track.lang||('صوت القناة '+(index+1))).slice(0,70),
+     selected:engine.audioTrack===index&&!manager.current(),
+     select:function(){
+      manager.select('original');
+      engine.audioTrack=index;
+      commentaryMessage('تم اختيار الصوت المدمج '+(index+1))
+     }})
+   })(audioList[k],k)
+  }
+  return options
+ }
  function showCommentators(origin){
   if(!isLive||!state.commentary)return;
   var expected=String(state.id),manager=state.commentary;
   var orig={name:'🔊 الصوت الأصلي للقناة',selected:!manager.current(),
     select:function(){manager.select('original')}};
-  showPlayerChoices('المعلقين • BLOFY',[orig],origin);
+  var embedded=embeddedCommentaryChoices(manager);
+  showPlayerChoices('المعلقين • BLOFY',[orig].concat(embedded),origin);
   commentaryMessage('جار قراءة المعلقين المصرح بهم لهذه القناة…');
   manager.load().then(function(tracks){
    if(S.route!=='player'||S.playerView!==state||state.commentary!==manager||
-      String(state.id)!==expected)return;
-   if(!tracks.length){commentaryMessage('لا توجد صوتيات متاحة حاليًا؛ صوت القناة الأصلي مستمر');return}
-   var options=[{name:orig.name,selected:!manager.current(),select:orig.select}];
+      String(state.id)!==expected||choicePanel.hidden||choiceOrigin!==origin)return;
+   if(!tracks.length){
+    var reason=typeof manager.failure==='function'?manager.failure():'';
+    commentaryMessage(reason==='not_enabled'?'المعلقون الخارجيون غير مفعّلين على السيرفر حاليًا؛ المسارات المدمجة متاحة أعلاه.':
+      reason==='unauthorized'?'جلسة الاشتراك لا تسمح بجلب المعلقين.':
+      reason==='source_unavailable'?'مصدر المعلقين الخارجيين غير متاح من السيرفر حاليًا؛ تقدر تختار الصوت المدمج إن وجد.':
+      reason==='not_configured'?'قائمة المعلقين الخارجية غير مجهزة في مصدر الخدمة.':
+      embedded.length?'تقدر تختار الصوت المدمج للقناة من القائمة.':
+      'لا تتوفر أصوات إضافية لهذه القناة حاليًا؛ الصوت الأصلي مستمر.');
+    return
+   }
+   var options=[{name:orig.name,selected:!manager.current(),select:orig.select}].concat(embedded);
    var favorites=commentatorFavorites(),recent=S.profileKey?readJson(profileStorageKey('commentatorRecent'),{}):{};
    var lastId=recent&&typeof recent==='object'?recent[expected]:'';
    tracks=tracks.slice().sort(function(a,b){
