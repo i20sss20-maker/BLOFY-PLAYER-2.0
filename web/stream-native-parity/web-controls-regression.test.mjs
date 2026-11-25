@@ -45,3 +45,14 @@ test('commentary timeout retains original video sound and stops pending audio',a
  [...pending.values()][0]();assert.equal(video.muted,false);assert.equal(lastAudio.paused,true);assert.equal(manager.current(),'');
  video.muted=true;manager.select('original');assert.equal(video.muted,true);manager.destroy()
 });
+
+test('local Arabic matches appear immediately, deduplicate and are replaced by server results',()=>{
+ const item={stream_id:42,name:'الأكشن الجديد'};
+ const S={route:'search',searchToken:1,searchKind:'movie',searchRequests:[],loaded:{'movie:all':{items:[item]},'movie:7':{items:[item]}}};
+ const output={innerHTML:''},status={textContent:''};let reply;
+ const search=new Function('S','keyOf','posterCard','document','pageRequest',source.slice(source.indexOf('function searchNow(q,token)'),source.indexOf('function aiScreen()'))+';return searchNow;')(S,(k,c)=>k+':'+c,item=>'<b>'+item.name+'</b>',{getElementById:id=>id==='search-result'?output:status},(k,c,o,l,cb)=>{reply=cb;return {abort(){}}});
+ search('اكشن',1);assert.equal(S.loaded['movie:search'].items.length,1);assert.match(status.textContent,/أولية/);
+ reply(200,{items:[{stream_id:43,name:'أكشن آخر'}]});
+ assert.match(output.innerHTML,/أكشن آخر/);assert.doesNotMatch(output.innerHTML,/الجديد/);assert.doesNotMatch(status.textContent,/أولية/);
+ search('اكشن',1);reply(503,null);assert.match(status.textContent,/النتائج غير مكتملة/);assert.match(output.innerHTML,/الجديد/);
+});
