@@ -22,17 +22,18 @@ CREATE INDEX IF NOT EXISTS blofy_linode_reservations_active_source
 // Run migrations explicitly; no DDL on playback requests.
 export async function installReservationSchema(pool){await pool.query(reservationSchema)}
 async function transaction(pool,work){
- const c=await pool.connect();
+ let c;
  try{
+   c=await pool.connect();
    await c.query('BEGIN');
    await c.query("SET LOCAL lock_timeout='2s'");
    await c.query("SET LOCAL statement_timeout='5s'");
    const result=await work(c);
    await c.query('COMMIT'); return result;
  }catch{
-   try{await c.query('ROLLBACK')}catch{}
+   try{if(c)await c.query('ROLLBACK')}catch{}
    return {state:'unknown',reason:'transaction_outcome_unknown'};
- }finally{c.release()}
+ }finally{if(c)c.release()}
 }
 const lock=async(c,source)=>c.query("SELECT pg_advisory_xact_lock(hashtextextended('blofy-linode-reservation:' || $1::text,0))",[source]);
 const read=async(c,request)=>(await c.query('SELECT * FROM blofy_linode_reservations WHERE request_id=$1',[request])).rows[0];
@@ -88,5 +89,23 @@ export async function releaseLinodeFeed(pool,confirmation){
    const updated=(await c.query(`UPDATE blofy_linode_reservations SET state='released',released_at=now()
      WHERE request_id=$1 AND reservation_id=$2 RETURNING *`,[requestId,reservationId])).rows[0];
    return view(updated);
+ });
+}
+
+// Reconcile an ambiguous commit on the primary database, under the same source
+// lock used by admission. Absence is NOT evidence of physical feed closure.
+// The caller must not fall back or reopen a feed on an unknown result.
+export async function reconcileLinodeReservation(pool,request){
+ const requestId=id(request?.requestId),sourceId=id(request?.sourceId),
+ accountId=id(request?.accountId),channelId=channel(request?.channelId);
+ if(!requestId||!sourceId||!accountId||!channelId)
+   return {state:'unknown',reason:'invalid_reconciliation'};
+ return transaction(pool,async c=>{
+   await lock(c,sourceId);
+   const row=await read(c,requestId);
+   if(!row)return {state:'unknown',reason:'reservation_not_found'};
+   if(row.source_id!==sourceId||row.account_id!==accountId||row.channel_id!==channelId)
+     return {state:'unknown',reason:'reservation_mismatch'};
+   return view(row);
  });
 }
