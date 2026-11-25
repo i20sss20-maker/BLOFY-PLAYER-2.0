@@ -1,0 +1,3 @@
+WEB RELEASE — 2026-11-25
+Scope: release gate for visual progress, first picture, freeze accounting, engine-specific QoE and media STOP; handle aborted XHR without leaking pending stop count. Correct cross-runtime test fixture to read actual closure. Preview f2af1d9e-8931-4f13-837b-364421c75878 SUCCESS; 27 base + 25 visual/lifecycle tests passed, 0 failed. Healthcheck passed. No change to player engine, preview, source quota or VOD routing. Actual long-duration customer playback not verified; latest available live traffic predates this release.
+Rollback: 3690909b-b60b-4bb2-bafa-3c5816595f0b revision d26e39202a5b88ac012e3ad8fcc5bc27d8d862e6.
