@@ -149,4 +149,10 @@ change("var delay=liveCapacityRetryMs(record.capacityRetries);","var delay=Math.
 change("var delay=liveOriginRetryMs(record.originRetries);","var delay=Math.max(liveOriginRetryMs(record.originRetries),liveRetryHint(detail));");
 change("var pause=liveTransientRetryMs(record.transientRetries);","var pause=Math.max(liveTransientRetryMs(record.transientRetries),liveRetryHint(detail));");
 
+
+ // HLS.js maxBufferLength is a target, not a ceiling. Cap forward
+ // buffering and evict old decoded data during long TV sessions.
+ // Apply only to the established live HLS engine, never VOD.
+change("maxBufferLength:bufferProfile.buffer,maxBufferHole:1.5,","maxBufferLength:bufferProfile.buffer,maxMaxBufferLength:preview?45:60,backBufferLength:preview?12:30,maxBufferHole:1.5,");
+
 new Function(app);writeFileSync('app.js',app);
