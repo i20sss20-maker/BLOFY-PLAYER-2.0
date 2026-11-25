@@ -323,4 +323,21 @@ change("if(Math.abs((Number(video.currentTime)||0)-last)<0.3)fallback('توقف�
 change("     fallback('تجمّدت صورة MPEG-TS؛ جار العودة إلى HLS.')","     retryDirect(false)");
 change("type===window.mpegts.ErrorTypes?.NETWORK_ERROR","(window.mpegts.ErrorTypes&&type===window.mpegts.ErrorTypes.NETWORK_ERROR)");
 
+
+change("   record.retryTimer=setTimeout(function(){\n    record.retryTimer=null;\n    if(!alive()||S.route!=='player'||!video.isConnected||state.userPaused)return;\n    // A decoder may set video.paused=true on a fatal error without user input.\n    playHls(video,kind,id,extension,track,statusElement,false,0)\n   },25000);",`   function resumeHlsRecovery(){
+    record.retryTimer=null;
+    if(!alive()||S.route!=='player'||!video.isConnected)return;
+    if(state.userPaused||document.hidden||navigator.onLine===false){
+     record.retryTimer=setTimeout(resumeHlsRecovery,3000);return
+    }
+    playHls(video,kind,id,extension,track,statusElement,false,0)
+   }
+   record.retryTimer=setTimeout(resumeHlsRecovery,25000);`);
+change("  if(video.paused){\n   state.userPaused=false;\n   var p=video.play();if(p&&p.catch)p.catch(function(){})",`  if(video.paused){
+   state.userPaused=false;
+   if(isLive&&S.play&&S.play.video===video&&S.play.reconnecting){
+    resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));return
+   }
+   var p=video.play();if(p&&p.catch)p.catch(function(){})`);
+
 new Function(app);writeFileSync('app.js',app);
