@@ -1,0 +1,5 @@
+WEB RELEASE — 2026-11-25
+Scope: established HLS sessions with fatal missing segments or unavailable playlists recover via bounded fresh SID after STOP. Preserve automatic preview and source quality. Respect Retry-After and avoid late fragment cancelling recovery.
+Preview 6e07c5f8-ebe5-4934-ab30-1e66eb44bcb1 SUCCESS, 23 tests passed, healthcheck passed. Production still observed source EOF and provider quota; cannot claim continuous playback.
+No media-worker restart, provider quota or subscription change.
+Rollback: 4e977227-e5ae-4eec-bb4e-040053430e89 revision aa09726c003c71b47919e678dc3bdc7ae7343665.
