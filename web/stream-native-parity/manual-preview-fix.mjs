@@ -655,4 +655,20 @@ change("       if(!alive())return;\n       playHls(video,kind,id,extension,track
 change("     deferAdmission(hint)\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});", "     deferAdmission(hint)\n     })\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});");
 change("2026.11.25.9 • '+(installedWebApp()", "2026.11.26.1 • '+(installedWebApp()");
 
+
+change(" if(!state||state.directStopPending)return;\n if(state.mode==='mpegts')",` if(!state||state.directStopPending)return;
+ if(installedLiveResume&&installedLiveResume.state===state&&installedLiveResume.stopKey){
+  installedLiveResume.id=String(state.id);
+  confirmInstalledStop(installedLiveResume);return
+ }
+ if(state.mode==='mpegts')`);
+change(" pending.stopping=true;\n api('POST','/api/hls/'+pending.stopKey+'/stop',{},function(st){", " pending.stopping=true;\n var stopUrl='/api/hls/'+pending.stopKey+'/stop';\n function finished(st){");
+change("   playerStatus('تعذر تأكيد إغلاق جلسة البث السابقة؛ أعد فتح القناة بعد لحظات.',true)\n  }\n })\n}",`   playerStatus('تعذر تأكيد إغلاق جلسة البث السابقة؛ اضغط إعادة المحاولة بعد لحظات.',true)
+  }
+ }
+ if(typeof fetch==='function'){
+  fetch(stopUrl,{method:'POST',credentials:'same-origin',keepalive:true,cache:'no-store',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(response){finished(response.status)},function(){finished(0)})
+ }else api('POST',stopUrl,{},finished)
+}`);
+
 new Function(app);writeFileSync('app.js',app);
