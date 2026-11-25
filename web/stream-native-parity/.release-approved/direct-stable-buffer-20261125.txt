@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Direct MPEG-TS stash 384 KiB; latency chasing and liveSync explicitly disabled; bounded back buffer cleanup. Preview ea5341ec-99be-46e8-8faa-4057fc1b699b SUCCESS. Chromium synthetic test: 252 frames, 50 after five-second source gap, one request, no engine errors. Synthetic results not proof of uninterrupted real source playback. Chromium/FFmpeg test packages omitted from production. HLS/TV/mobile/preview and provider quotas unchanged. Rollback ba64c8a8-89e6-408e-b7a4-a25869dcb04b.
