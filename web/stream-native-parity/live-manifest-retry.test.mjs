@@ -185,3 +185,17 @@ test('installed live restoration only resumes the same retired viewer and respec
  state.userPaused=true;assert.equal(decide(pending,state,null,context),'defer');
  state.userPaused=false;state.id='18';assert.equal(decide(pending,state,null,context),'discard');
 });
+
+test('direct startup defers in background and offline and never switches engine on autoplay denial',()=>{
+ const a=app.indexOf(' function directStartupCheck(){'),b=app.indexOf(' record.startupCheck=directStartupCheck;',a);
+ const c=app.indexOf('function liveStartupDecision('),d=app.indexOf('function liveRetryHint(',c);
+ const decide=new Function(app.slice(c,d)+';return liveStartupDecision')();
+ let queued,retries=0;
+ const record={},state={},doc={hidden:true},nav={onLine:true};
+ const check=new Function('record','state','document','navigator','alive','liveStartupDecision','setTimeout','retryDirect',app.slice(a,b)+';return directStartupCheck')(record,state,doc,nav,()=>true,decide,(fn,ms)=>{queued={fn,ms};return 1},()=>retries++);
+ check();assert.equal(queued.ms,5000);assert.equal(retries,0);
+ doc.hidden=false;nav.onLine=false;queued.fn();assert.equal(retries,0);
+ nav.onLine=true;record.autoplayBlocked=true;queued.fn();assert.equal(retries,0);assert.equal(record.startupTimer,null);
+ record.autoplayBlocked=false;check();assert.equal(retries,1);
+ assert.match(app,/var blockedRecord=S\.play;[\s\S]*?var result=video\.play\(\);/);
+});
