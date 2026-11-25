@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Scope: startup watchdog recovers decoder paused before first picture, defers offline/hidden/retry, respects user pause and autoplay gesture. Long-playback acceptance detects timeline rewind and requires actual frame and time proof. Preview e2eb2a0a-fa3b-465a-84b3-3f910eb88ff9 SUCCESS, 64 tests passed, zero failed, healthcheck passed. Production recent worker repeatedly upstream_503. This release cannot repair unavailable upstream. No source quota changes. Rollback aacd10f5-45d1-4ef1-84c3-ea22cc8700c8.
