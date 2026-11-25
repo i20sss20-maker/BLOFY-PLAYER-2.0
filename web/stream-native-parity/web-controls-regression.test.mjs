@@ -89,3 +89,13 @@ test('native subtitle recovery avoids ambiguous same-language selection',()=>{
  x.saveSubtitlePreference(video.textTracks[1]);x.restoreSubtitlePreference();assert.equal(video.textTracks[1].mode,'showing');
  x.saveSubtitlePreference(null);x.restoreSubtitlePreference();assert.ok(video.textTracks.every(t=>t.mode==='disabled'));
 });
+
+test('native live network failure retries same source with bounded backoff',()=>{
+ const fn=new Function(source.slice(source.indexOf('function nativeLiveNetworkRetryMs('),source.indexOf('function nativeInitialLiveRetryMs('))+';return nativeLiveNetworkRetryMs;')();
+ assert.deepEqual([0,1,2,3].map(n=>fn({kind:'live',ready:true,nativeNetworkRetries:n},2)),[3000,6500,12000,0]);
+ assert.equal(fn({kind:'live',ready:true},3),0);
+ assert.equal(fn({kind:'movie',ready:true},2),0);
+ assert.equal(fn({kind:'live',ready:false},2),0);
+ assert.equal(fn({kind:'live',ready:true,engine:{}},2),0);
+ assert.ok(source.includes("if(!record.engine&&record.kind==='live'&&Number(code)===2)record.sourceFailure=true"));
+});
