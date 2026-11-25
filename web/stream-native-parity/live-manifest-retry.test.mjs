@@ -41,3 +41,16 @@ test('full-screen adds a modest bounded buffer reserve while preview remains unc
  assert.match(app,/record\.ready\|\|record\.reconnecting\|\|video\.paused/);
  assert.match(app,/!record\.ready\|\|record\.reconnecting\|\|!video\.isConnected/);
 });
+
+test('live sequence guard detects a reset without treating duplicate playlists as failures',()=>{
+ const start=app.indexOf('function liveSequenceRegressed('),end=app.indexOf('function liveBufferProfile(',start);
+ const check=new Function(app.slice(start,end)+';return liveSequenceRegressed')();
+ const state={};
+ assert.equal(check(state,{startSN:10,endSN:17,live:true}),false);
+ assert.equal(check(state,{startSN:11,endSN:18,live:true}),false);
+ assert.equal(check(state,{startSN:11,endSN:18,live:true}),false);
+ assert.equal(check(state,{startSN:0,endSN:7,live:false}),false);
+ assert.equal(check(state,{startSN:0,endSN:7,live:true}),true);
+ assert.equal(check(state,{startSN:0,endSN:null,live:true}),false);
+ assert.equal(state.highestLiveEndSN,18);
+});
