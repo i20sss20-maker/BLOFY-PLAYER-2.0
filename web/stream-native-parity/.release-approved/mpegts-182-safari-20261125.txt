@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Upgrade mpegts.js 1.7.3 to 1.8.2. Preview e93c6237-4e1c-440d-b152-4189c368b93f SUCCESS; installed version asserted in Chromium test, 254 presented frames, 50 following simulated five-second gap, one HTTP request, zero engine errors. Production image retains lean Dockerfile. Actual Apple hardware and customer source playback remain unverified. HLS fallback retained. No native app, Xtream, or provider quota changes. Rollback 9f301705-34e3-4794-a845-d9d0558404c1.
