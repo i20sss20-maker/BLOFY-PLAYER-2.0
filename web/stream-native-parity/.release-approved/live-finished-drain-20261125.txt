@@ -1,0 +1,6 @@
+APPROVED WEB MEDIA RELEASE — 2026-11-25
+Change: PR #911 merged as 8598f1fa5337c9f6f1bd3a848409fab55f2c6b01.
+Dedicated worker workflow 45630014835 passed lifecycle, source probe, EOF drain, Bun and Docker build tests. Android CI failed independently; no Android release.
+Scope: bounded five-second drain of previously advertised segments after finished LIVE source; no new origin request, no provider quota changes, no VOD change.
+Rollback: deployment 902f4b2e-8774-4138-b700-67d2fdddd929 revision 00ba8d33dc1fea77ed1f7631793fd5c9175b3d9c.
+Authorized continuous production playback remains unverified.
