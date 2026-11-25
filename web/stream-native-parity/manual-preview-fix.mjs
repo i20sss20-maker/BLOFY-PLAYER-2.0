@@ -340,4 +340,34 @@ change("  if(video.paused){\n   state.userPaused=false;\n   var p=video.play();i
    }
    var p=video.play();if(p&&p.catch)p.catch(function(){})`);
 
+
+change("function resumeSelectedLiveTransport(state,video,statusElement){",`// Safari iPad desktop UA can still be classified as touch. Check the
+// actual media API rather than excluding it from the direct TS path.
+function directLiveMediaSource(win){
+ var candidates=[win.ManagedMediaSource,win.MediaSource];
+ for(var i=0;i<candidates.length;i++){
+  var m=candidates[i];
+  if(preferDesktopDirectLive('desktop',m))return m
+ }
+ return null
+}
+function preferDirectLiveForDevice(family,ua,win){
+ var media=directLiveMediaSource(win);
+ if(!media||family==='tv')return false;
+ if(family==='desktop')return true;
+ return family==='touch'&&/Safari/i.test(String(ua||''))&&
+  /iPhone|iPad|iPod|Macintosh/i.test(String(ua||''))&&
+  !/CriOS|FxiOS|EdgiOS/i.test(String(ua||''))
+}
+function resumeSelectedLiveTransport(state,video,statusElement){`);
+change(" if(!window.MediaSource||!window.MediaSource.isTypeSupported){\n  fallback('هذا التلفزيون لا يدعم محرك MPEG-TS المباشر؛ جار تشغيل HLS.');return", " if(!directLiveMediaSource(window)){\n  fallback('هذا الجهاز لا يدعم محرك MPEG-TS المباشر؛ جار تشغيل HLS.');return");
+change("  if(preferDesktopDirectLive(family,window.MediaSource))", "  if(preferDirectLiveForDevice(family,navigator.userAgent,window))");
+change("   transport.attachMediaElement(video);\n   transport.load();",`   // ManagedMediaSource on Safari requires remote playback disabled
+   // unless an alternative AirPlay source is supplied.
+   if(window.ManagedMediaSource&&directLiveMediaSource(window)===window.ManagedMediaSource)
+    video.disableRemotePlayback=true;
+   transport.attachMediaElement(video);
+   transport.load();`);
+change(" S.play=record;state.mode='mpegts';state.ready=false;", " S.play=record;state.mode='mpegts';state.ready=false;\n diagnose('live','live_start','mpegts',0);");
+
 new Function(app);writeFileSync('app.js',app);
