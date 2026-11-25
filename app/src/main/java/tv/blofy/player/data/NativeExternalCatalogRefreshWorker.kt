@@ -36,10 +36,7 @@ class NativeExternalCatalogRefreshWorker(context: Context, params: WorkerParamet
                     if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
                 }
             }
-            if (completed == null) Result.retry() else {
-                markArtworkReady(app,id)
-                Result.success()
-            }
+            if (completed == null) Result.retry() else Result.success()
         } catch (_: PlaybackInProgressException) { Result.retry() }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { Result.retry() }
@@ -80,7 +77,9 @@ class NativeExternalCatalogRefreshWorker(context: Context, params: WorkerParamet
                     .enqueueUniqueWork(REPAIR,ExistingWorkPolicy.KEEP,repair)
             }
             val request = PeriodicWorkRequestBuilder<NativeExternalCatalogRefreshWorker>(1,TimeUnit.HOURS)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setInitialDelay(1,TimeUnit.HOURS)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresStorageNotLow(true).build())
                 .build()
             WorkManager.getInstance(context.applicationContext)
                 .enqueueUniquePeriodicWork(NAME,ExistingPeriodicWorkPolicy.KEEP,request)
