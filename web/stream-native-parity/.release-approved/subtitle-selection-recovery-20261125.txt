@@ -1,0 +1,5 @@
+WEB RELEASE CANDIDATE — 2026-11-25
+Scope: retain explicitly selected subtitle identity (language/label) or off state across playback recovery; prevent preference leaking into another channel.
+Preview deployment 72b0df94-2ef4-4a98-9a6d-a95ffd81cb6c SUCCESS; 35 tests passed, 0 failed; healthcheck passed.
+No media worker changes. Embedded subtitle extraction and external commentary playback not verified.
+Rollback deployment b37e3158-8ece-44a1-b3c1-107e36044bb6, revision c312de563f75baea212847f581b60db6cc6a8.
