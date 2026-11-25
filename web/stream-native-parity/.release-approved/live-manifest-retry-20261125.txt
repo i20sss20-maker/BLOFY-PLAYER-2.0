@@ -1,0 +1,5 @@
+WEB RELEASE — 2026-11-25
+Scope: retry initial HLS manifest with loadSource on same SID, resume established HLS levels with startLoad, do not confuse capacity failure with codec incompatibility.
+Preview 3f01ba50-f798-4eaa-bf0c-394406da3c01 SUCCESS; 21 tests passed, 0 failed; healthcheck passed.
+Provider concurrent channel limit 503 remains observed; authenticated actual playback unverified. No provider quota, subscriptions, or media-worker changes.
+Rollback: 6746f1fa-157f-42b9-bba3-04cd51f34caf revision b06c13b448eae1f6bdaeb9f0e5349427db760e2c.
