@@ -7,7 +7,7 @@ const snippet=source.slice(source.indexOf('function searchNow(q,token)'),source.
 function fixture(){
  const S={route:'search',searchToken:1,searchKind:'all',searchRequests:[],loaded:{'movie:all':{items:[{id:88}]}}};
  const calls=[],output={innerHTML:''},status={textContent:''};
- const context=vm.createContext({S,keyOf:(k,c)=>k+':'+c,posterCard:item=>'<b>'+item.id+'</b>',
+ const context=vm.createContext({S,keyOf:(k,c)=>k+':'+c,itemId:(x,k)=>String(x?(k==='series'?(x.series_id||x.id):(x.stream_id||x.id))||'':''),clearTimeout,posterCard:item=>'<b>'+item.id+'</b>',
  document:{getElementById:id=>id==='search-result'?output:status},
  pageRequest:(kind,cat,offset,limit,cb,q)=>{const request={kind,cb,q,aborted:false,abort(){this.aborted=true}};calls.push(request);return request}});
  vm.runInContext(snippet,context);
@@ -36,4 +36,20 @@ test('successful empty search completes with no results rather than loading fore
  for(const c of f.calls)c.cb(200,{items:[]});
  assert.match(f.output.innerHTML,/لم يتم العثور/);
  assert.equal(f.status.textContent,'لا توجد نتائج');
+});
+
+test('cached Arabic search is deduplicated, marked partial and replaced by authoritative matches',()=>{
+ const f=fixture();f.S.loaded['movie:all'].items=[{id:88,name:'الفيلم الأزرق'},{id:88,name:'الفيلم الأزرق'}];
+ f.search('ازرق الفيلم');
+ assert.equal(f.S.loaded['movie:search'].items.length,1);
+ assert.match(f.status.textContent,/أولية/);
+ f.calls[1].cb(200,{items:[{id:99}]});
+ assert.equal(f.S.loaded['movie:search'].items[0].id,99);
+ assert.doesNotMatch(f.status.textContent,/أولية/);
+});
+test('failed authoritative search retains cached matches without claiming completeness',()=>{
+ const f=fixture();f.S.loaded['movie:all'].items=[{id:88,name:'الفيلم الأزرق'}];f.search('ازرق');
+ f.calls[0].cb(200,{items:[]});f.calls[1].cb(503,null);f.calls[2].cb(200,{items:[]});
+ assert.equal(f.S.loaded['movie:search'].items[0].id,88);
+ assert.match(f.status.textContent,/غير مكتملة/);
 });
