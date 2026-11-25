@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Do not switch direct playback engines on autoplay denial or background/offline startup delay. Preserve user activation by playing existing video element from the manual gesture. Preview a8f04b7c-487d-43a9-a633-e611d6f706ab SUCCESS; 74 tests passed, zero failed; healthcheck passed. Actual iOS installed-app viewing remains unverified. Native apps, Xtream, provider limits unchanged. Rollback a3ffa2de-8a49-41da-87f8-3eff93306b6e.
