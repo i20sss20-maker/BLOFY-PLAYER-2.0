@@ -7,7 +7,7 @@
  'use strict';
  function create(video,channelId,notify){
   var audio=null,activeId='',tracks=[],generation=0,disposed=false,
-    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null,catalogEpoch=0;
+    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null,catalogEpoch=0,lastFailure='';
   function say(msg){if(typeof notify==='function')notify(msg)}
   function clearDelay(){if(delayTimer){clearTimeout(delayTimer);delayTimer=null}}
   function clearStall(){if(stallTimer){clearTimeout(stallTimer);stallTimer=null}}
@@ -52,21 +52,35 @@
    // Otherwise reopening the options silently disables onplaying/onerror
    // handlers and can leave the original channel audio muted on failure.
    var epoch=++catalogEpoch;
+   lastFailure='';
    return fetch('/api/audio/catalog?channel='+encodeURIComponent(channelId),{
      credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
-    }).then(function(res){if(!res.ok)throw Error('catalog_unavailable');return res.json()})
+    }).then(function(res){
+      if(!res.ok){
+       if(res.status===401||res.status===403)throw Error('unauthorized');
+       if(res.status===429)throw Error('busy');
+       if(res.status===503)throw Error('not_enabled');
+       throw Error('unavailable')
+      }
+      return res.json()
+     })
      .then(function(data){
       if(disposed||epoch!==catalogEpoch)return [];
       tracks=Array.isArray(data.tracks)?data.tracks.filter(function(t){
        return t&&/^[A-Za-z0-9_-]{1,64}$/.test(t.id)&&typeof t.label==='string'&&t.label.length<=80
       }).slice(0,60):[];
       return tracks.slice()
-     }).catch(function(){if(epoch===catalogEpoch&&!disposed)say('الصوتيات غير متاحة حاليًا؛ صوت القناة الأصلي مستمر');return []})
+     }).catch(function(err){if(epoch===catalogEpoch&&!disposed){
+       lastFailure=err&&['unauthorized','busy','not_enabled'].indexOf(err.message)>=0?err.message:'unavailable';
+       say(lastFailure==='not_enabled'?'المعلقون الخارجيون غير مفعّلين من السيرفر؛ صوت القناة الأصلي يعمل.':
+        lastFailure==='unauthorized'?'تحقق من تفعيل اشتراكك للوصول للمعلقين.':
+        'تعذر قراءة المعلقين؛ صوت القناة الأصلي مستمر.')
+      }return []})
   }
   function onVideoPause(){if(audio&&!video.ended){try{audio.pause()}catch(e){}}}
   function onVideoPlay(){if(audio&&activeId){var play=audio.play();if(play&&play.catch)play.catch(function(){})}}
   video.addEventListener('pause',onVideoPause);video.addEventListener('play',onVideoPlay);
-  return {load:load,select:select,stop:stop,current:function(){return activeId},
+  return {load:load,select:select,stop:stop,failure:function(){return lastFailure},current:function(){return activeId},
    currentLabel:function(){var item=validTrack(activeId);return item?item.label:''},
    destroy:function(){disposed=true;stop();video.removeEventListener('pause',onVideoPause);
     video.removeEventListener('play',onVideoPlay)}}
