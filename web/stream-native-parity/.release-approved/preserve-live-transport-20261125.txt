@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Keep current live engine on channel switch and retry; serialize pending direct handoff after HLS STOP. Preview 5340c81b-1fac-454e-bc49-f643c00454e0 SUCCESS; 67 tests passed, 0 failed; healthcheck passed. Latest available official live logs still show HLS 503s; no post-release direct decode evidence. TV/mobile default HLS, preview and VOD unchanged. Rollback 71dc8c7e-26c7-4dc4-8c5a-fa7307264a2e.
