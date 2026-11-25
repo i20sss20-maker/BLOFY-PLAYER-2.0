@@ -7,16 +7,18 @@
  'use strict';
  function create(video,channelId,notify){
   var audio=null,activeId='',tracks=[],generation=0,disposed=false,
-    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null,catalogEpoch=0,lastFailure='';
+    savedMuted=!!video.muted,savedVolume=video.volume,delayTimer=null,stallTimer=null,startTimer=null,catalogEpoch=0,lastFailure='';
   function say(msg){if(typeof notify==='function')notify(msg)}
   function clearDelay(){if(delayTimer){clearTimeout(delayTimer);delayTimer=null}}
   function clearStall(){if(stallTimer){clearTimeout(stallTimer);stallTimer=null}}
+  function clearStart(){if(startTimer){clearTimeout(startTimer);startTimer=null}}
   function restore(){video.muted=savedMuted;video.volume=savedVolume}
   function stop(){
-   generation++;catalogEpoch++;clearDelay();clearStall();
+   generation++;catalogEpoch++;clearDelay();clearStall();clearStart();
+   var hadAudio=!!audio;
    if(audio){var a=audio;audio=null;a.onplaying=null;a.onerror=null;a.onended=null;a.onwaiting=null;a.onstalled=null;a.ontimeupdate=null;
     try{a.pause();a.removeAttribute('src');a.load()}catch(e){}}
-   activeId='';restore()
+   activeId='';if(hadAudio)restore()
   }
   function validTrack(id){return tracks.find(function(x){return x.id===id})||null}
   function select(id){
@@ -28,7 +30,7 @@
    savedMuted=video.muted;savedVolume=video.volume;
    var next=new Audio();next.preload='none';next.autoplay=false;next.controls=false;
    next.onplaying=function(){if(disposed||epoch!==generation)return;
-    clearStall();
+    clearStall();clearStart();
     video.muted=true;activeId=id;say('المعلق: '+track.label)};
    next.onerror=next.onended=function(){if(epoch===generation){stop();say('تعذر تشغيل المعلق؛ رجع صوت القناة الأصلي')}};
    next.ontimeupdate=function(){if(epoch===generation)clearStall()};
@@ -41,7 +43,8 @@
    audio=next;
    var delay=Math.max(0,Math.min(15000,(Number(track.delaySeconds)||0)*1000));
    function start(){if(disposed||epoch!==generation||audio!==next)return;
-    var play=next.play();if(play&&play.catch)play.catch(function(){if(epoch===generation){stop();say('اضغط خيار المعلق مرة أخرى لتفعيل الصوت')}})}
+    clearStart();startTimer=setTimeout(function(){startTimer=null;if(epoch===generation&&audio===next&&!activeId){stop();say('لم يبدأ صوت المعلق؛ صوت القناة الأصلي مستمر')}},15000);
+    try{var play=next.play();if(play&&play.catch)play.catch(function(){if(epoch===generation){stop();say('اضغط خيار المعلق مرة أخرى لتفعيل الصوت')}})}catch(e){if(epoch===generation){stop();say('تعذر تشغيل صوت المعلق؛ صوت القناة الأصلي مستمر')}}}
    if(delay){say('جار مزامنة صوت المعلق…');delayTimer=setTimeout(function(){delayTimer=null;start()},delay)}
    else start();
    return true
