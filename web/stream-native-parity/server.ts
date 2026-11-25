@@ -154,7 +154,7 @@ if(p==='/api/player-diagnostic'&&method==='POST'){
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
  if(!['live','movie','series'].includes(kind)||
   !['direct','audio','video','fullvod','vodhls','hls','mpegts'].includes(mode)||
-  !['media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout'].includes(phase)||
+  !['live_start','media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout'].includes(phase)||
   errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
  const rawId=String(data?.itemId||'');
  const itemRef=/^[1-9][0-9]{0,14}$/.test(rawId)&&KEY?
