@@ -4683,6 +4683,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     var reason=typeof manager.failure==='function'?manager.failure():'';
     commentaryMessage(reason==='not_enabled'?'المعلقون الخارجيون غير مفعّلين على السيرفر حاليًا؛ المسارات المدمجة متاحة أعلاه.':
       reason==='unauthorized'?'جلسة الاشتراك لا تسمح بجلب المعلقين.':
+      reason==='source_unavailable'?'مصدر المعلقين الخارجيين غير متاح من السيرفر حاليًا؛ تقدر تختار الصوت المدمج إن وجد.':
       reason==='not_configured'?'قائمة المعلقين الخارجية غير مجهزة في مصدر الخدمة.':
       embedded.length?'تقدر تختار الصوت المدمج للقناة من القائمة.':
       'لا تتوفر أصوات إضافية لهذه القناة حاليًا؛ الصوت الأصلي مستمر.');
