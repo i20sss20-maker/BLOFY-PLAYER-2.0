@@ -42,6 +42,7 @@ import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
 import {queryXtreamCatalogPageNoParallel} from './xtream-catalog-low-memory-query.mjs';
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
+import {inspectLinodeGatewayMapping} from './linode-gateway-mapping-qa.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
@@ -2580,6 +2581,14 @@ async function handlePlayerApi(req, res, url) {
   // BLOFY-specific extension: device may check revision before explicitly
   // refreshing standard Xtream lists. Authentication and source scope are
   // identical to every other player_api action; no per-user state changes.
+  // Isolated mapping QA for already authenticated STREAM bearer or Xtream.
+  // Default OFF; no provider requests, no new media session or routing.
+  if(action==='get_blofy_engine_mapping_qa'){
+    const result=await inspectLinodeGatewayMapping(pool,account,{
+      kind:url.searchParams.get('kind'),gatewayId:url.searchParams.get('id')
+    },{isHidden:(kind,id)=>distributorCatalog.isHidden(distributorScope,kind,id)});
+    return json(res,result.status,result.body,{'cache-control':'private, no-store'});
+  }
   if(action==='get_blofy_catalog_version'){
     res.setHeader('cache-control','private, no-store');
     const status=await xtreamCatalogVersionForAccount(
