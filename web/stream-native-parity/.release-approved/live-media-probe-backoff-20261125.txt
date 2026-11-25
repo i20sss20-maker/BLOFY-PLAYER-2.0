@@ -1,0 +1,6 @@
+APPROVED WEB MEDIA RELEASE — 2026-11-25
+Change: PR #909 merged as 955c45c8e37193054110d3130f629f9dcc1ff6b9.
+Dedicated worker workflow 45535874471 passed source-probe and lifecycle tests, Bun compilation and Docker build. Android CI independently failed; no Android release.
+Scope: LIVE unknown-video probe budget, preserve source 429/503 and bounded retry hints, cancel rejected response, cooldown on missing video. VOD and source rights/limits unchanged.
+Rollback: deployment 58c7446e-fdaa-4551-aed5-ebb6f09d587d, revision af036da6fecfd06ff47b05255986d3ea195256c6.
+Continuous authorized production playback remains unverified; if upstream has no video, probe changes cannot create it.
