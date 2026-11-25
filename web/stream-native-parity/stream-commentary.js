@@ -59,7 +59,9 @@
       if(!res.ok){
        if(res.status===401||res.status===403)throw Error('unauthorized');
        if(res.status===429)throw Error('busy');
-       if(res.status===503)throw Error('not_enabled');
+       if(res.status===503)return res.json().catch(function(){return {}}).then(function(body){
+        throw Error(body.error==='commentary_not_enabled'?'not_enabled':'source_unavailable')
+       });
        throw Error('unavailable')
       }
       return res.json()
@@ -71,9 +73,10 @@
       }).slice(0,60):[];
       return tracks.slice()
      }).catch(function(err){if(epoch===catalogEpoch&&!disposed){
-       lastFailure=err&&['unauthorized','busy','not_enabled'].indexOf(err.message)>=0?err.message:'unavailable';
+       lastFailure=err&&['unauthorized','busy','not_enabled','source_unavailable'].indexOf(err.message)>=0?err.message:'unavailable';
        say(lastFailure==='not_enabled'?'المعلقون الخارجيون غير مفعّلين من السيرفر؛ صوت القناة الأصلي يعمل.':
         lastFailure==='unauthorized'?'تحقق من تفعيل اشتراكك للوصول للمعلقين.':
+        lastFailure==='source_unavailable'?'مصدر المعلقين الخارجيين غير متاح حاليًا؛ صوت القناة الأصلي يعمل.':
         'تعذر قراءة المعلقين؛ صوت القناة الأصلي مستمر.')
       }return []})
   }
