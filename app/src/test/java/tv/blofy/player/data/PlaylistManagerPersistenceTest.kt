@@ -256,6 +256,32 @@ class PlaylistManagerPersistenceTest {
             !it.contains("username=") && !it.contains("password=") })
     }
 
+    @Test fun externalCatalogKeepsPublicProviderArtworkAfterRefresh(): Unit = runBlocking(Dispatchers.IO) {
+        val external = ProviderEntity("external-artwork-fixture","External fixture",
+            tv.blofy.player.data.remote.ExternalXtreamCatalogTransport.ORIGIN,"","",enabled = false)
+        val host = checkNotNull(tv.blofy.player.core.identity.ExternalStreamConnectClient.parseHost("https://provider.example.com"))
+        val credentials = tv.blofy.player.core.identity.ExternalStreamConnectClient.Credentials(host,"fixture-user","fixture-secret")
+        val api = object : XtreamApi {
+            override suspend fun list(url: String) = listOf(mapOf("category_id" to "1","category_name" to "Category"))
+            override fun streamingCall(url: String): retrofit2.Call<ResponseBody> = FixtureCall(when {
+                url.contains("get_live_streams") -> """[{"stream_id":1,"category_id":1,"name":"Live","stream_icon":"/logos/1.png"}]"""
+                url.contains("get_vod_streams") -> """[{"stream_id":2,"category_id":1,"name":"Movie","cover_big":"https://cdn.example.net/posters/2.jpg","direct_source":"https://provider.example.com/movie/fixture-user/fixture-secret/2.mp4"}]"""
+                else -> """[{"series_id":3,"category_id":1,"name":"Series","cover":"https://cdn.example.net/images/3.webp","backdrop_path":["https://cdn.example.net/backdrops/3.jpg"]}]"""
+            })
+            override suspend fun objectResponse(url: String): Map<String, Any?> = error("Unexpected EPG")
+            override suspend fun jsonResponse(url: String): JsonElement = error("Unexpected details")
+        }
+        val manager = PlaylistManager(api,db.dao(),externalCatalog = true,artworkCredentials = credentials)
+        repeat(2) {
+            assertEquals(0,manager.syncAll(external).failedSectionCount)
+            assertEquals("https://provider.example.com/logos/1.png",db.dao().stream("${external.id}:live:1")?.icon)
+            assertEquals("https://cdn.example.net/posters/2.jpg",db.dao().stream("${external.id}:movie:2")?.icon)
+            assertNull(db.dao().stream("${external.id}:movie:2")?.directSource)
+            assertEquals("https://cdn.example.net/images/3.webp",db.dao().stream("${external.id}:series:3")?.icon)
+            assertEquals("https://cdn.example.net/backdrops/3.jpg",db.dao().stream("${external.id}:series:3")?.backdrop)
+        }
+    }
+
     @Test fun interruptedExternalImportKeepsCompletedSectionsAndRebuildsOnlyMissingRows(): Unit = runBlocking(Dispatchers.IO) {
         val context = RuntimeEnvironment.getApplication()
         val external = ProviderEntity("external-" + java.util.UUID.randomUUID(), "External",
