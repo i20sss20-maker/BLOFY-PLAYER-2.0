@@ -207,5 +207,30 @@ test('runtime diagnostic identifies installed, browser and preview modes without
  assert.equal(mode(false,false),'browser');
  assert.equal(mode(true,true),'preview');
  assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
- assert.match(app,/2026\.11\.25\.6/);
+ assert.match(app,/2026\.11\.25\.7/);
+});
+
+test('installed Apple HLS policy is restricted to supported standalone WebKit',()=>{
+ const a=app.indexOf('function installedNativeHlsPreferred('),b=app.indexOf('function shouldUseNativeHls(',a);
+ const prefer=new Function(app.slice(a,b)+';return installedNativeHlsPreferred')();
+ const apple='Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148';
+ const mac='Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/27.2 Safari/605.1.15';
+ const video={canPlayType:()=> 'maybe'};
+ assert.equal(prefer(true,apple,video),true);
+ assert.equal(prefer(true,mac,video),true);
+ assert.equal(prefer(false,apple,video),false);
+ assert.equal(prefer(true,mac,{canPlayType:()=>''}),false);
+ assert.equal(prefer(true,'Mozilla/5.0 (Macintosh) AppleWebKit Chrome/157 Safari',video),false);
+ assert.match(app,/record\.nativeHls=true/);
+});
+test('installed native recovery respects background, pause, offline and session ownership',()=>{
+ const a=app.indexOf('   function recoverInstalledNative(){'),b=app.indexOf('   record.retryTimer=setTimeout(recoverInstalledNative,liveSessionRetryDelay',a);
+ let queued,opens=0,active=true;
+ const record={},state={userPaused:false},doc={hidden:true},nav={onLine:true},video={isConnected:true};
+ const recover=new Function('record','document','navigator','S','video','alive','preview','setTimeout','playHls','kind','id','extension','track','statusElement','attempt',app.slice(a,b)+';return recoverInstalledNative')(record,doc,nav,{playerView:state},video,()=>active,false,(fn,ms)=>{queued={fn,ms};return 1},()=>opens++,'live','1','ts',0,null,0);
+ recover();assert.equal(queued.ms,3000);assert.equal(opens,0);
+ doc.hidden=false;state.userPaused=true;queued.fn();assert.equal(opens,0);
+ state.userPaused=false;nav.onLine=false;queued.fn();assert.equal(opens,0);
+ nav.onLine=true;queued.fn();assert.equal(opens,1);
+ active=false;queued.fn();assert.equal(opens,1);
 });
