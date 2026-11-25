@@ -370,4 +370,49 @@ change("   transport.attachMediaElement(video);\n   transport.load();",`   // Ma
    transport.load();`);
 change(" S.play=record;state.mode='mpegts';state.ready=false;", " S.play=record;state.mode='mpegts';state.ready=false;\n diagnose('live','live_start','mpegts',0);");
 
+
+change("function preferDirectLiveForDevice(family,ua,win){", "function preferDirectLiveForDevice(family,ua,win,standalone){");
+change(" return family==='touch'&&/Safari/i.test(String(ua||''))&&", " return family==='touch'&&(/Safari/i.test(String(ua||''))||standalone===true&&/AppleWebKit/i.test(String(ua||'')))&&");
+change("preferDirectLiveForDevice(family,navigator.userAgent,window)", "preferDirectLiveForDevice(family,navigator.userAgent,window,installedWebApp())");
+change("   if(isLive&&S.play&&S.play.video===video&&S.play.reconnecting){", "   if(isLive&&(!S.play||S.play.video===video&&S.play.reconnecting)){");
+change("window.addEventListener('pagehide',function(event){\n persistPlaybackCheckpoint();\n releaseLiveOnPageExit(event)\n});",`// Installed WebKit apps may survive pagehide and later restore the same
+// JavaScript document. Restore only a live player we explicitly retired.
+var installedLiveResume=null;
+function installedLiveResumeDecision(pending,state,record,context){
+ if(!pending||!context.installed||!context.verified||context.route!=='player'||
+    pending.state!==state||!state||state.kind!=='live'||String(state.id)!==pending.id||
+    !state.video||!state.video.isConnected||record)return 'discard';
+ if(context.hidden||context.offline||state.userPaused||state.directStopPending)return 'defer';
+ return 'resume'
+}
+function resumeInstalledLiveAfterExit(){
+ var pending=installedLiveResume,state=S.playerView;
+ var decision=installedLiveResumeDecision(pending,state,S.play,{
+  installed:installedWebApp(),verified:S.userVerified,route:S.route,
+  hidden:document.hidden,offline:navigator.onLine===false
+ });
+ if(decision==='discard'){installedLiveResume=null;return}
+ if(decision==='defer')return;
+ installedLiveResume=null;
+ state.ready=false;
+ playerStatus('جار استعادة البث بعد العودة للتطبيق…');
+ resumeSelectedLiveTransport(state,state.video,document.getElementById('player-status'))
+}
+window.addEventListener('pagehide',function(event){
+ persistPlaybackCheckpoint();
+ var state=S.playerView,record=S.play;
+ var installed=installedWebApp()&&S.route==='player'&&state&&state.kind==='live'&&
+    record&&record.video===state.video&&!(event&&event.persisted);
+ var released=releaseLiveOnPageExit(event);
+ if(installed&&record.mode==='mpegts'&&S.play===record){
+  stopPlayback(false);released=true
+ }
+ if(installed&&released)installedLiveResume={state:state,id:String(state.id)}
+});
+window.addEventListener('pageshow',resumeInstalledLiveAfterExit);
+window.addEventListener('online',resumeInstalledLiveAfterExit);
+document.addEventListener('visibilitychange',function(){
+ if(!document.hidden)resumeInstalledLiveAfterExit()
+});`);
+
 new Function(app);writeFileSync('app.js',app);
