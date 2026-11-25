@@ -171,7 +171,14 @@ test('live previews restart automatically but stop after two tries and never res
   setTimeout(fn,ms){ctx.task={fn,ms};return 1},
   playHls(...args){ctx.played=args}
  };
- const recover=vm.runInNewContext(playerSource.slice(start,end)+';\nrecoverConnection',ctx);
+ const guardStart=playerSource.indexOf('function liveRetryPending(');
+ const guardEnd=playerSource.indexOf('\nfunction playHls(',guardStart);
+ assert.ok(guardStart>=0&&guardEnd>guardStart);
+ const recover=vm.runInNewContext(playerSource.slice(guardStart,guardEnd)+'\n'+playerSource.slice(start,end)+';\nrecoverConnection',ctx);
+ ctx.record.originTimer=1;
+ recover();
+ assert.equal(ctx.task,undefined,'pending source retry must not launch another recovery');
+ delete ctx.record.originTimer;
  recover();
  assert.equal(ctx.record.reconnecting,true);
  assert.equal(ctx.task.ms,1200);

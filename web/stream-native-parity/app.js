@@ -2519,6 +2519,21 @@ function retryLiveHlsRequest(engine,manifest,detail){
   return true
  }catch(e){return false}
 }
+/* Only trust bounded numeric delay hints on first-party media responses.
+ * XHR and Fetch expose headers differently; never read URLs or body text. */
+function liveRetryDelayMs(base,detail){
+ var net=detail&&detail.networkDetails,raw='';
+ try{
+  if(net&&typeof net.getResponseHeader==='function')raw=net.getResponseHeader('Retry-After');
+  else if(net&&net.headers&&typeof net.headers.get==='function')raw=net.headers.get('Retry-After')
+ }catch(e){}
+ var text=String(raw||'').trim();
+ var seconds=/^[0-9]{1,2}$/.test(text)?Number(text):0;
+ return Math.max(base,seconds>=1&&seconds<=30?seconds*1000:0)
+}
+function liveRetryPending(record){
+ return !!(record&&(record.capacityTimer||record.originTimer||record.retryTimer))
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
@@ -2626,7 +2641,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
  }
  function recoverConnection(){
-  if(!alive()||record.reconnecting)return;
+  if(!alive()||record.reconnecting||liveRetryPending(record))return;
   if(preview){
    if(S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
    if(record.recoveryAttempt>=2){
@@ -2660,11 +2675,11 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
   // Recovery order: original-native -> original MSE -> bounded compatibility.
   // Do not sacrifice upstream 4K on the first TV decoder stall.
-  if(record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
-  if(!record.engine&&record.recoveryAttempt>=1&&window.MediaSource&&window.MediaSource.isTypeSupported){
+  if(!record.sourceFailure&&record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
+  if(!record.sourceFailure&&!record.engine&&record.recoveryAttempt>=1&&window.MediaSource&&window.MediaSource.isTypeSupported){
    S.preferMseHls=true;
   }
-  if(!record.compat&&record.recoveryAttempt>=2&&setCompatibility(true,true))return;
+  if(!record.sourceFailure&&!record.compat&&record.recoveryAttempt>=2&&setCompatibility(true,true))return;
   if(record.startupTimer)clearTimeout(record.startupTimer);
   if(record.stallTimer)clearTimeout(record.stallTimer);
   if(record.progressWatchdog)clearInterval(record.progressWatchdog);
@@ -2685,7 +2700,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  }
  record.startupTimer=setTimeout(function(){
   record.startupTimer=null;
-  if(!alive()||record.ready||video.paused)return;
+  if(!alive()||record.ready||video.paused||liveRetryPending(record))return;
   recoverConnection()
  },50000);
 
@@ -2815,6 +2830,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
    if(!preview&&S.route!=='player')return;
    var now=Date.now();
+   if(liveRetryPending(record))return;
    var intentionalPause=!preview&&S.playerView&&S.playerView.video===video&&S.playerView.userPaused;
    if(liveUnexpectedPause(record,video,!!intentionalPause,document.hidden,now)){
     status('توقف مشغّل الفيديو دون طلب؛ جار إعادة اتصال القناة…');
@@ -2928,7 +2944,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    engine.on(window.Hls.Events.FRAG_LOADED,function(){
     if(alive()){
      record.lastFragmentAt=Date.now();
-     record.capacityRetries=0;record.originRetries=0;record.transientRetries=0;
+     record.capacityRetries=0;record.originRetries=0;record.transientRetries=0;record.sourceFailure=false;
+     if(record.capacityTimer){clearTimeout(record.capacityTimer);record.capacityTimer=null}
      if(record.retryTimer){clearTimeout(record.retryTimer);record.retryTimer=null}
      if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
     }
@@ -2943,16 +2960,16 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      else if(edgeAction==='resync')status('تأخرت بعض مقاطع البث؛ جار الانتقال إلى البث المباشر…');
      return
     }
-    if(!detail.fatal)return;
+    if(!detail.fatal||liveRetryPending(record))return;
     diagnose('live','hls_error','video',0);
-    if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
+    if(record.ultra&&code===429&&setCompatibility(true,true))return;
     if(code===429){
      if(!preview)recordLiveIncident('encoder_capacity');
      // Only two worker slots exist on the pilot. Back off instead of
      // burning connection attempts, which could cut off healthy viewers.
      record.capacityRetries=(record.capacityRetries||0)+1;
      if(record.capacityRetries>5){recoverConnection();return}
-     var delay=liveCapacityRetryMs(record.capacityRetries);
+     var delay=liveRetryDelayMs(liveCapacityRetryMs(record.capacityRetries),detail);
      status('المحرك مشغول مؤقتًا؛ إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');
      if(record.capacityTimer)clearTimeout(record.capacityTimer);
      record.capacityTimer=setTimeout(function(){
@@ -2964,9 +2981,10 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     }
     if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
      if(!preview)recordLiveIncident('source_error');
+     record.sourceFailure=true;
      record.originRetries=(record.originRetries||0)+1;
      if(record.originRetries>5){recoverConnection();return}
-     var delay=liveOriginRetryMs(record.originRetries);
+     var delay=liveRetryDelayMs(liveOriginRetryMs(record.originRetries),detail);
      status('تعثر اتصال مصدر القناة؛ محاولة تدريجية بعد '+Math.ceil(delay/1000)+' ثوانٍ…');
      if(record.originTimer)clearTimeout(record.originTimer);
      record.originTimer=setTimeout(function(){
