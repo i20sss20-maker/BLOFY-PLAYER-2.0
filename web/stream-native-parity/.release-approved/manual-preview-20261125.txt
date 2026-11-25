@@ -1,0 +1,5 @@
+WEB RELEASE — 2026-11-25
+Scope: explicit live preview instead of background/focus-triggered source consumption; stop existing preview before opening fullscreen, including different channels.
+Preview 63fb4fe5-10af-449a-8838-90b18fc75897 SUCCESS; 19 existing build tests and healthcheck passed. Syntax and source guard checks passed. Authenticated playback still unverified.
+No changes to provider quota, media worker, authorization, or subscriptions.
+Rollback: a5aea67c-2d32-4b42-a2a3-987def35513e (7419cd3ecafeac4fdcb79a76e24328d2887cddc6).
