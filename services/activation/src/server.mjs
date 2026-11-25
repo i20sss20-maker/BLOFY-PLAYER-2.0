@@ -1,6 +1,7 @@
 import { databaseOptions, observeIdleDatabaseErrors } from './database-options.mjs';
 import { withDatabaseStartRetry } from './startup-db-retry.mjs';
 import http from 'node:http';
+import {configureLinodeHeartbeat,receiveLinodeHeartbeat} from './linode-heartbeat.mjs';
 import { servePrivacyPage } from './privacy-pages.mjs';
 import { PUBLIC_ANALYTICS_CSP, withPublicAnalytics } from './public-analytics.mjs';
 import { createSiteAnalyticsHandlers } from './site-analytics.mjs';
@@ -64,6 +65,7 @@ const pool = new Pool({
   ...databaseOptions(DATABASE_URL)
 });
 observeIdleDatabaseErrors(pool);
+configureLinodeHeartbeat(pool);
 
 const authIpLimiter = createFixedWindowLimiter({ limit: AUTH_IP_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
 const authDeviceLimiter = createFixedWindowLimiter({ limit: AUTH_DEVICE_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
@@ -953,6 +955,7 @@ const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerC
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if(await receiveLinodeHeartbeat(req,res,requestUrl,json))return;
     const requestHost = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
     // Geidea/Apple Pay verifies exact domain bytes. Serve on every BLOFY host
     // before the api-to-site redirect, with no authentication or HTML wrapper.
