@@ -1,0 +1,6 @@
+APPROVED WEB RELEASE — 2026-11-25
+Change: PR #910 merged as 0bee55c7a4b405a84dc576b750f16deb3ba81199.
+All nine web/media workflows passed including official browser run 45627134561. Generic Android CI failed independently; no Android publication.
+Scope: same-SID native startup backoff, no provider limits or authorization changes. Preserve VOD and existing MSE engine.
+Rollback: deployment 53973e13-f9c1-413c-80c6-7c4006b9e744, revision ab855cf5c76b961047cd68760a0e6089054622c5.
+Continuous authorized production playback not yet verified.
