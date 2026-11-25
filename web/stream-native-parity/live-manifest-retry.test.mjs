@@ -109,3 +109,9 @@ test('channel switch and retry keep selected transport and do not race pending H
  assert.match(app,/requestedState\.directStopPending=true/);
  assert.match(app,/playDirectMpegts\(video,String\(requestedState\.id\),statusElement\)/);
 });
+
+test('direct MPEG-TS retains documented stash buffer and disables latency chasing',()=>{
+ assert.match(app,/enableStashBuffer:true,stashInitialSize:393216/);
+ assert.match(app,/liveBufferLatencyChasing:false,liveSync:false/);
+ assert.match(app,/autoCleanupMaxBackwardDuration:45,\s*autoCleanupMinBackwardDuration:15/);
+});
