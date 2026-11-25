@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@playwright/test": "1.56.1"
+    "@playwright/test": "1.56.1",
+    "shaka-player": "5.3.4"
   },
   "dependencies": {
     "hls.js": "1.5.20",
