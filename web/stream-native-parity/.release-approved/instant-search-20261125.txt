@@ -1,0 +1,6 @@
+WEB RELEASE CANDIDATE — 2026-11-25
+Scope: instant search previews from currently loaded account catalog, explicit partial-result labels, deduplication and replacement by authoritative server results.
+Preview deployment e8fe93e1-940b-441d-875f-74a03c6e6a5d: SUCCESS; 31 build tests passed, 0 failed, healthcheck succeeded.
+No changes to playback engines, media worker, authorization or external commentary gates.
+Rollback: deployment 204eb72a-c9c2-4536-b0fd-e8cac6b18ae1, revision 93541553ff9ce2d5c8aca3abd93aecc59b221cfa.
+Authenticated full-catalog latency and real-device playback are still unverified.
