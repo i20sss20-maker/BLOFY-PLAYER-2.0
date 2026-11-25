@@ -15,3 +15,20 @@ test('established HLS session resumes loading without reloading the source',()=>
  resume(engine,'/same-manifest',{manifestParsed:true});
  assert.deepEqual(calls,['start']);
 });
+
+const lostStart=app.indexOf('function liveSessionLost(');
+const lostEnd=app.indexOf('function resumeLiveHlsNetwork(',lostStart);
+const {liveSessionLost,liveSessionRetryDelay}=new Function(app.slice(lostStart,lostEnd)+';return {liveSessionLost,liveSessionRetryDelay}')();
+test('only established fatal missing fragments or unavailable playlists require a new session',()=>{
+ assert.equal(liveSessionLost({manifestParsed:true},{fatal:true,frag:{}},404),true);
+ assert.equal(liveSessionLost({manifestParsed:true},{fatal:true,details:'levelLoadError'},503),true);
+ assert.equal(liveSessionLost({},{fatal:true,frag:{}},404),false);
+ assert.equal(liveSessionLost({manifestParsed:true},{fatal:false,frag:{}},404),false);
+ assert.equal(liveSessionLost({manifestParsed:true},{fatal:true,details:'fragLoadError'},429),false);
+});
+test('source restart backoff is bounded and respects a valid Retry-After',()=>{
+ assert.equal(liveSessionRetryDelay(0,0),5000);
+ assert.equal(liveSessionRetryDelay(2,12),12000);
+ assert.equal(liveSessionRetryDelay(4,30),30000);
+ assert.equal(liveSessionRetryDelay(4,999),25000);
+});
