@@ -245,4 +245,26 @@ change("    transport.on(window.mpegts.Events.ERROR,function(){\n     if(alive()
      fallback('تعذر فك ترميز MPEG-TS من المصدر؛ جار تجربة مشغّل HLS.')
     });`);
 
+
+change("function playDirectMpegts(video,id,statusElement){",`function resumeSelectedLiveTransport(state,video,statusElement){
+ if(!state||state.directStopPending)return;
+ if(state.mode==='mpegts')playDirectMpegts(video,String(state.id),statusElement);
+ else playHls(video,'live',String(state.id),'ts',0,statusElement,false,0)
+}
+function playDirectMpegts(video,id,statusElement){`);
+change(" var old=S.play,oldKey=old&&old.hlsKey;\n if(oldKey){\n  stopPlayback(false);",` var requestedState=S.playerView;
+ if(requestedState.directStopPending)return;
+ var old=S.play,oldKey=old&&old.hlsKey;
+ if(oldKey){
+  requestedState.directStopPending=true;
+  stopPlayback(false);`);
+change("   if(settled)return;settled=true;clearTimeout(timer);\n   if(epoch!==S.accountEpoch||S.route!=='player'||!S.playerView||\n      S.playerView.video!==video||String(S.playerView.id)!==String(id))return;",`   if(settled)return;settled=true;clearTimeout(timer);
+   requestedState.directStopPending=false;
+   if(epoch!==S.accountEpoch||S.route!=='player'||S.playerView!==requestedState||
+      requestedState.video!==video||!video.isConnected)return;`);
+change("   playDirectMpegts(video,id,statusElement)\n  }\n  api('POST','/api/hls/'+oldKey+'/stop'", "   playDirectMpegts(video,String(requestedState.id),statusElement)\n  }\n  api('POST','/api/hls/'+oldKey+'/stop'");
+change(" if(directTsButton)directTsButton.onclick=function(){\n  if(S.route!=='player'||S.playerView!==state)return;", " if(directTsButton)directTsButton.onclick=function(){\n  if(S.route!=='player'||S.playerView!==state||state.directStopPending)return;");
+change("  if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);","  if(isLive)resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));");
+change("    playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);\n    if(state.refreshLiveGuide)state.refreshLiveGuide()", "    resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));\n    if(state.refreshLiveGuide)state.refreshLiveGuide()");
+
 new Function(app);writeFileSync('app.js',app);
