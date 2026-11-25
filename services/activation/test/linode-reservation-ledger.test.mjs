@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {reserveLinodeFeed,releaseLinodeFeed,installReservationSchema} from '../src/linode-reservation-ledger.mjs';
+import {reserveLinodeFeed,releaseLinodeFeed,installReservationSchema,reconcileLinodeReservation} from '../src/linode-reservation-ledger.mjs';
 
 test('unverified allocation and uncertain release never touch DB',async()=>{
  const pool={connect(){throw Error('must not connect')}};
@@ -23,6 +23,13 @@ test('dedicated pool serializes concurrent reservations and keeps expired slots 
    assert.equal(results.filter(r=>r.reason==='capacity_exhausted').length,7);
    const winner=results.find(r=>r.state==='reserved');
    const original=requests.find(r=>r.requestId===winner.requestId);
+   assert.equal((await reconcileLinodeReservation(pool,original)).reservationId,winner.reservationId);
+   assert.equal((await reconcileLinodeReservation(pool,{...original,channelId:'999'})).state,'unknown');
+   assert.equal((await reconcileLinodeReservation(pool,request())).state,'unknown');
+   const broken={connect:async()=>{throw Error('unavailable')}};
+   assert.equal((await reserveLinodeFeed(broken,original,grant,now)).state,'unknown');
+   assert.equal((await reconcileLinodeReservation(broken,original)).state,'unknown');
+   assert.equal((await releaseLinodeFeed(broken,{...winner,noFeedRemaining:true})).state,'unknown');
    const replay=await reserveLinodeFeed(pool,original,grant,now);
    assert.equal(replay.reservationId,winner.reservationId);
    const conflict=await reserveLinodeFeed(pool,{...original,channelId:'999'},grant,now);
