@@ -48,7 +48,7 @@ test('PWA includes standalone metadata, a real PNG icon, secure server route',()
  assert.match(server,/p==='\/icon-192\.png'/);
  assert.match(server,/p==='\/icon-512\.png'/);
  assert.match(server,/\(p==='\/apple-touch-icon\.png'\|\|p==='\/icon-192\.png'\|\|p==='\/icon-512\.png'\)\?'image\/png'/);
- assert.match(sw,/blofy-stream-shell-v6/);
+ assert.match(sw,/blofy-stream-shell-v7/);
  assert.match(sw,/\/apple-touch-icon\.png/);
  assert.match(sw,/if\(SHELL\.indexOf\(url\.pathname\)<0\)return/,'service worker fetch interception is limited to shell files');
 });
