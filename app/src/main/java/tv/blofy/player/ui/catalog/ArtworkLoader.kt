@@ -403,7 +403,12 @@ object ArtworkLoader {
         val bitmap = cache.get(key)?.takeUnless { it.isRecycled }
             ?: readPinned(context, url, target)
             ?: readDisk(context.cacheDir, url, target)
-            ?: runCatching { execute(download) }.getOrNull()?.let {
+            ?: runCatching {
+                val preferred = tv.blofy.player.data.remote.ExternalArtworkPolicy.preferredDownloadUrl(url,target.width)
+                val first = runCatching { execute(download,preferred) }.getOrNull()
+                if (first != null || preferred == url || download.future.isCancelled) first
+                else execute(download,url)
+            }.getOrNull()?.let {
                 encoded = it.encoded
                 it.bitmap
             }
@@ -416,8 +421,9 @@ object ArtworkLoader {
         return bitmap
     }
 
-    private fun execute(download: Download): Downloaded? {
-        val request = Request.Builder().url(download.url)
+    private fun execute(download: Download, requestUrl: String): Downloaded? {
+        download.bodyComplete = false
+        val request = Request.Builder().url(requestUrl)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android TV) BLOFY-PLAYER/2.0")
             .header("Accept", "image/webp,image/jpeg,image/png,image/gif;q=0.8")
             .build()
@@ -426,9 +432,9 @@ object ArtworkLoader {
         val artworkClient = if (external) {
             val profile = tv.blofy.player.core.identity.ExternalStreamConnectStore.loadStaged(download.context)
                 ?: return null
-            if (tv.blofy.player.data.remote.ExternalArtworkPolicy.providerUrl(download.url, profile.credentials) == null)
+            if (tv.blofy.player.data.remote.ExternalArtworkPolicy.providerUrl(requestUrl, profile.credentials) == null)
                 return null
-            tv.blofy.player.data.remote.ExternalArtworkPolicy.client
+            tv.blofy.player.data.remote.ExternalArtworkPolicy.clientFor(profile.credentials)
         } else client
         val call = artworkClient.newCall(request)
         download.call = call
@@ -437,7 +443,7 @@ object ArtworkLoader {
         // unsupported images, or ten-second timeouts before trying a valid fallback.
         call.execute().use { response ->
             if (!response.isSuccessful) {
-                if (response.code in setOf(400, 401, 403, 404, 410)) {
+                if (requestUrl == download.url && response.code in setOf(400, 401, 403, 404, 410)) {
                     failedUntil.put(download.key, System.currentTimeMillis() + NEGATIVE_CACHE_MS)
                 }
                 // Offline/timeout/5xx failures must not hide a recovered image for five minutes.
@@ -540,7 +546,14 @@ object ArtworkLoader {
     private fun skeleton() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF21182D.toInt(), 0xFF30203F.toInt(), 0xFF17111F.toInt())).apply { cornerRadius = 18f }
     private fun diskFile(cacheDir: File, url: String, target: Target) = File(File(cacheDir, "blofy_posters"), hash(cacheKey(url, target)) + ".jpg")
     private fun hash(value: String) = StableHash.sha256(value)
-    private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
+    private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int {
+        var s = 1
+        while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2
+        // Limit decompressed pixels, including very wide/tall image responses.
+        // Encoded byte limits alone cannot prevent excessive bitmap allocations.
+        while ((w / s).toLong() * (h / s).toLong() > 4_000_000L && s < (1 shl 29)) s *= 2
+        return s
+    }
 
     private fun normalizeUrl(raw: String?): String? {
         val value = raw?.trim()?.takeIf {
