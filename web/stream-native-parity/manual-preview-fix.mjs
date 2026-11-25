@@ -94,4 +94,44 @@ change("   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),low
 change(" if(!alive()||record.ready||video.paused)return;\n  recoverConnection()"," if(!alive()||record.ready||record.reconnecting||video.paused)return;\n  recoverConnection()");
 change("   if(!alive()||!record.ready||!video.isConnected)return;\n   if(preview&&","   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;\n   if(preview&&");
 
+
+ // Resync must never seek backwards: an expired playlist can advertise a
+ // live edge behind the actual current decoder position.
+change("(!Number.isFinite(current)||edge-current>2)","Number.isFinite(current)&&edge-current>2");
+change("   if(!alive()||!detail)return;\n    var code=Number(detail.response","   if(!alive()||!detail)return;\n    var code=Number(detail.response");
+ // Track monotonic playlist sequence within one HLS SID. A reset signals
+ // that a source/worker session was recreated under the same URL.
+change("function liveBufferProfile(preview){",`function liveSequenceRegressed(record,details){
+ if(!details||details.live===false||details.startSN===null||details.startSN===undefined||details.endSN===null||details.endSN===undefined)return false;
+ var first=Number(details.startSN),last=Number(details.endSN);
+ if(!Number.isSafeInteger(first)||!Number.isSafeInteger(last)||first<0||last<first)return false;
+ if(Number.isSafeInteger(record.highestLiveEndSN)&&last<record.highestLiveEndSN)return true;
+ record.highestLiveEndSN=last;
+ return false
+}
+function liveBufferProfile(preview){`);
+change("   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;record.manifestParsed=true;",`   engine.on(window.Hls.Events.LEVEL_LOADED,function(event,data){
+    if(!alive()||record.reconnecting||!liveSequenceRegressed(record,data&&data.details))return;
+    // Stop stale segment loading before asking for a new authenticated SID.
+    record.reconnecting=true;
+    if(record.startupTimer)clearTimeout(record.startupTimer);
+    if(record.stallTimer)clearTimeout(record.stallTimer);
+    if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+    if(record.stableTimer)clearTimeout(record.stableTimer);
+    if(record.retryTimer)clearTimeout(record.retryTimer);
+    if(record.capacityTimer)clearTimeout(record.capacityTimer);
+    if(record.originTimer)clearTimeout(record.originTimer);
+    try{engine.stopLoad()}catch(e){}
+    status('تغيّر تسلسل البث؛ جار العودة إلى البث المباشر…');
+    var attempt=record.recoveryAttempt||0;
+    record.originTimer=setTimeout(function(){
+     record.originTimer=null;
+     if(!alive()||!video.isConnected)return;
+     if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
+     if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)||S.playerView.userPaused))return;
+     playHls(video,kind,id,extension,track,statusElement,preview,attempt>=4?0:attempt+1)
+    },liveSessionRetryDelay(attempt,0))
+   });
+   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;record.manifestParsed=true;`);
+
 new Function(app);writeFileSync('app.js',app);
