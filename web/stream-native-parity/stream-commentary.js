@@ -30,12 +30,13 @@
    savedMuted=video.muted;savedVolume=video.volume;
    var next=new Audio();next.preload='none';next.autoplay=false;next.controls=false;
    next.onplaying=function(){if(disposed||epoch!==generation)return;
+    if(video.paused){stop();say('شغّل القناة أولًا ثم اختر المعلق');return}
     clearStall();clearStart();
     video.muted=true;activeId=id;say('المعلق: '+track.label)};
    next.onerror=next.onended=function(){if(epoch===generation){stop();say('تعذر تشغيل المعلق؛ رجع صوت القناة الأصلي')}};
    next.ontimeupdate=function(){if(epoch===generation)clearStall()};
    next.onwaiting=next.onstalled=function(){
-    if(epoch!==generation||!activeId||stallTimer)return;
+    if(epoch!==generation||!activeId||stallTimer||video.paused)return;
     stallTimer=setTimeout(function(){stallTimer=null;
      if(epoch===generation&&audio===next){stop();say('انقطع صوت المعلق؛ عاد صوت القناة الأصلي')}} ,7000)
    };
@@ -83,8 +84,20 @@
         'تعذر قراءة المعلقين؛ صوت القناة الأصلي مستمر.')
       }return []})
   }
-  function onVideoPause(){if(audio&&!video.ended){try{audio.pause()}catch(e){}}}
-  function onVideoPlay(){if(audio&&activeId){var play=audio.play();if(play&&play.catch)play.catch(function(){})}}
+  // Never retain a muted primary video when companion audio cannot resume.
+  function onVideoPause(){
+   if(!audio)return;
+   if(!activeId){stop();say('أُوقف صوت المعلق مع إيقاف الفيديو');return}
+   clearStall();clearStart();clearDelay();
+   try{audio.pause()}catch(e){stop()}
+  }
+  function onVideoPlay(){
+   if(!audio||!activeId)return;
+   var epoch=generation,next=audio;
+   function failed(){if(epoch===generation&&audio===next){stop();say('تعذر استئناف صوت المعلق؛ عاد صوت القناة الأصلي')}}
+   clearStart();startTimer=setTimeout(function(){startTimer=null;failed()},15000);
+   try{var play=next.play();if(play&&play.catch)play.catch(failed)}catch(e){failed()}
+  }
   video.addEventListener('pause',onVideoPause);video.addEventListener('play',onVideoPlay);
   return {load:load,select:select,stop:stop,failure:function(){return lastFailure},current:function(){return activeId},
    currentLabel:function(){var item=validTrack(activeId);return item?item.label:''},
