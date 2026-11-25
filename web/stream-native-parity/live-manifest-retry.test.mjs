@@ -136,3 +136,16 @@ test('direct reconnect backs off on network and capacity failures without racing
  state.userPaused=false;queued.fn();assert.deepEqual(calls,['destroy','reopen']);
  active=false;queued.fn();assert.deepEqual(calls,['destroy','reopen']);
 });
+
+test('HLS delayed recovery defers while paused/offline and manual play restarts a reconnecting engine',()=>{
+ const a=app.indexOf('   function resumeHlsRecovery(){'),b=app.indexOf('   record.retryTimer=setTimeout(resumeHlsRecovery,25000);',a);
+ let queued,opened=0,active=true;
+ const record={},state={userPaused:true},doc={hidden:false},nav={onLine:true},video={isConnected:true};
+ const f=new Function('record','state','document','navigator','video','alive','S','playHls','setTimeout','kind','id','extension','track','statusElement',app.slice(a,b)+';return resumeHlsRecovery')(record,state,doc,nav,video,()=>active,{route:'player'},()=>opened++,(fn,ms)=>{queued={fn,ms};return 1},'live','9','ts',0,null);
+ f();assert.equal(queued.ms,3000);assert.equal(opened,0);
+ state.userPaused=false;nav.onLine=false;queued.fn();assert.equal(opened,0);
+ nav.onLine=true;doc.hidden=true;queued.fn();assert.equal(opened,0);
+ doc.hidden=false;queued.fn();assert.equal(opened,1);
+ active=false;queued.fn();assert.equal(opened,1);
+ assert.match(app,/S\.play\.video===video&&S\.play\.reconnecting/);
+});
