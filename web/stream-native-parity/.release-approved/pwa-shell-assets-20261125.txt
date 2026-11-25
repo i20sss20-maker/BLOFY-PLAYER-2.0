@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Package missing apple-touch-icon.png, icon-192.png and icon-512.png in runtime image, validate exact PNG dimensions and all PWA shell assets, rotate shell cache to v6. Preview 6918ba0e-aa76-4c21-ac4e-1cc0e69656e5 SUCCESS; 76 tests passed, zero failed; healthcheck passed. No changes to playback engine, native apps, Xtream or provider limits. Actual installed Apple device playback remains unverified. Rollback 91f6e873-7fdb-411a-a0b5-579fa4acbe52.
