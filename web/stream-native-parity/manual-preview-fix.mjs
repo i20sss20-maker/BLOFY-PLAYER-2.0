@@ -267,4 +267,10 @@ change(" if(directTsButton)directTsButton.onclick=function(){\n  if(S.route!=='p
 change("  if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);","  if(isLive)resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));");
 change("    playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);\n    if(state.refreshLiveGuide)state.refreshLiveGuide()", "    resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));\n    if(state.refreshLiveGuide)state.refreshLiveGuide()");
 
+
+change("    enableWorker:false,enableStashBuffer:true,stashInitialSize:131072,\n    lazyLoad:false,autoCleanupSourceBuffer:true,autoCleanupMaxBackwardDuration:30",`    enableWorker:false,enableStashBuffer:true,stashInitialSize:393216,
+    liveBufferLatencyChasing:false,liveSync:false,
+    lazyLoad:false,autoCleanupSourceBuffer:true,autoCleanupMaxBackwardDuration:45,
+    autoCleanupMinBackwardDuration:15`);
+
 new Function(app);writeFileSync('app.js',app);
