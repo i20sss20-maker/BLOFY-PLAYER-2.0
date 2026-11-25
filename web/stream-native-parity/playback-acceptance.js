@@ -10,6 +10,8 @@
   paused:'توقف الفيديو أثناء الفحص',
   hidden:'أصبحت الصفحة في الخلفية ولم يعد الفحص متواصلًا',
   playback_error:'ظهر خطأ في تشغيل الفيديو',
+  media_rewind:'عاد توقيت البث إلى الخلف أثناء الفحص',
+  clock_regressed:'تراجع توقيت مؤقت الفحص',
   playback_restarted:'أعيد تشغيل المشغل خلال الفحص',
   video_stalled:'توقفت حركة صورة الفيديو',
   long_gap:'توقف مؤقت الفحص أو دخل الجهاز وضع السكون',
@@ -19,6 +21,7 @@
   success:'استمر عرض إطارات الفيديو لمدة 20 دقيقة دون انقطاع مكتشف'
  };
  function number(n,def){
+  if(n===null||n===undefined||n==='')return def;
   n=Number(n);
   return isFinite(n)&&n>=0?n:def
  }
@@ -67,6 +70,10 @@
   if(state.bufferMs>30000)return summary(state,'failed','buffering',at);
   var frames=number(snapshot.frames,null),presented=number(snapshot.presented,null),
    currentTime=number(snapshot.time,null);
+  // Live media time must not regress by more than ordinary sample jitter.
+  // This detects decoder timeline resets, not upstream replay with new PTS.
+  if(state.kind==='live'&&currentTime!==null&&state.lastTime!==null&&currentTime<state.lastTime-1)
+   return summary(state,'failed','media_rewind',at);
   var pixelProof=false,timeProof=false;
   if(frames!==null&&state.lastFrames!==null&&frames>state.lastFrames)pixelProof=true;
   if(presented!==null&&state.lastPresented!==null&&presented>state.lastPresented)pixelProof=true;
@@ -84,8 +91,8 @@
   // are available, a rising audio clock must not conceal a frozen picture.
   if(at-state.lastMotionAt>=STALL_MS)return summary(state,'failed','video_stalled',at);
   if(at-state.startedAt>=TARGET_MS)
-   return summary(state,state.hasFrameProof?'passed':'inconclusive',
-    state.hasFrameProof?'success':'inconclusive',at);
+   return summary(state,state.hasFrameProof&&state.hasTimeProof?'passed':'inconclusive',
+    state.hasFrameProof&&state.hasTimeProof?'success':'inconclusive',at);
   return null
  }
  function stop(state,at){
