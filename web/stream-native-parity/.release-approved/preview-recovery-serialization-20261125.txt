@@ -1,0 +1,5 @@
+WEB RELEASE — 2026-11-25
+Scope: serialize preview recovery STOP with channel selection; retain only the latest pending selection and avoid starting fullscreen before the stop is confirmed. Automatic preview remains enabled.
+Preview b050186c-ce45-48fd-bff0-455623cfa21d SUCCESS; 19 existing tests passed, 0 failed; healthcheck passed; syntax checks passed. No authenticated playback proof.
+No media worker, source quota, activation or subscription changes.
+Rollback: 8472ed5c-581f-4f24-a96e-de42b7aa9cb6 revision d71a165885e50a92ef2d873204a9bcefcf225786.
