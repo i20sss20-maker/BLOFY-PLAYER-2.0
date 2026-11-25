@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Select direct MPEG-TS for capable Apple touch Safari via MediaSource or ManagedMediaSource, with remote playback disabled when required and HLS fallback retained. Add bounded live_start diagnostic. Preview d8342cd5-5c02-466f-8fed-b5b50cf24876 SUCCESS; 71 tests passed, zero failed; healthcheck passed. Unit tests simulate browser APIs; actual Apple hardware decoding not yet verified. TV, Android touch, preview, native apps and Xtream unchanged. Rollback 096787ae-2e16-40c8-b024-25ad1ea35b57.
