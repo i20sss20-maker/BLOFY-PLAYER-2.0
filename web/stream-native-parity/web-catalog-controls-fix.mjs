@@ -50,5 +50,36 @@ app=change(app,"   state.userPaused=false;\n   try{\n    var p=video.play();"," 
 // A new policy denial during an explicit retry must still defer the watchdog.
 app=change(app,"    if(!promptIosPlay(error))playerStatus('تعذر تشغيل الوسائط؛ استخدم إعادة المحاولة.',true)","    if(error&&error.name==='NotAllowedError'&&S.play&&S.play.video===video)S.play.awaitingPlayGesture=true;\n    if(!promptIosPlay(error))playerStatus('تعذر تشغيل الوسائط؛ استخدم إعادة المحاولة.',true)");
 
+
+ // Display matching items already loaded in this account while the authoritative
+ // search scans the server. Never treat these partial results as a full search.
+app=change(app," function draw(){\n  if(token!==S.searchToken||S.route!=='search')return;",` var previewKinds={};
+ function normalizeLocal(value){
+  return String(value||'').toLowerCase().normalize('NFKC')
+   .replace(/[\\u064b-\\u065f\\u0670\\u0640]/g,'')
+   .replace(/[\\u0622\\u0623\\u0625\\u0671]/g,'ا')
+   .replace(/\\u0649/g,'ي').replace(/\\u0624/g,'و').replace(/\\u0626/g,'ي')
+ }
+ var words=normalizeLocal(q).trim().split(/\\s+/).filter(Boolean);
+ kinds.forEach(function(k){
+  var seen={},keys=Object.keys(S.loaded);
+  for(var x=0;x<keys.length&&responses[k].length<20;x++){
+   if(keys[x].indexOf(k+':')!==0)continue;
+   var items=S.loaded[keys[x]].items||[];
+   for(var y=0;y<items.length&&responses[k].length<20;y++){
+    var item=items[y],name=normalizeLocal(item.name||item.title),id=String((k==='series'?item.series_id:item.stream_id)||item.id||'');
+    if(!id||seen[id]||!name||!words.length||!words.every(function(w){return name.indexOf(w)>=0}))continue;
+    seen[id]=true;responses[k].push(item)
+   }
+  }
+  if(responses[k].length){previewKinds[k]=true;S.loaded[keyOf(k,'search')]={items:responses[k]}}
+ });
+ function draw(){
+  if(token!==S.searchToken||S.route!=='search')return;`);
+app=change(app,"  status.textContent=(count?'تم العثور على '+count+' نتيجة':pending?'جار البحث':failed?'تعذر البحث':'لا توجد نتائج')+(pending?' • استكمال باقي المكتبة…':failed&&count?' • تعذر البحث في بعض الأقسام':'')",`  var partial=Object.keys(previewKinds).length>0;
+  status.textContent=(count?(partial?'نتائج أولية من المكتبة: ':'تم العثور على ')+count+' نتيجة':pending?'جار البحث':failed?'تعذر البحث':'لا توجد نتائج')+(pending?' • استكمال باقي المكتبة…':failed&&count?' • تعذر البحث في بعض الأقسام؛ النتائج غير مكتملة':'')`);
+app=change(app," for(var i=0;i<kinds.length;i++)(function(k){\n  var xhr=pageRequest(k,'all',0,20", " draw();\n for(var i=0;i<kinds.length;i++)(function(k){\n  var xhr=pageRequest(k,'all',0,20");
+app=change(app,"    responses[k]=p.items.slice(0,20);","    delete previewKinds[k];\n    responses[k]=p.items.slice(0,20);");
+
 new Function(app);
 writeFileSync('app.js',app);writeFileSync('server.ts',server);
