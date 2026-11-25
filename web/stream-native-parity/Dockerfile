@@ -12,8 +12,8 @@ RUN bun test ./qa/live-audio-picture-progress.test.mjs ./qa/local-engine-qoe.tes
 COPY Dockerfile /app/Dockerfile
 COPY qa/playback-acceptance.test.mjs /app/qa/
 RUN bun test ./qa/playback-acceptance.test.mjs
-COPY qa/pwa-shell-assets.test.mjs /app/qa/
-RUN bun test ./qa/pwa-shell-assets.test.mjs
+COPY qa/pwa-shell-assets.test.mjs qa/installed-release.test.mjs /app/qa/
+RUN bun test ./qa/pwa-shell-assets.test.mjs ./qa/installed-release.test.mjs
 ENV PORT=8080
 EXPOSE 8080
 USER bun
