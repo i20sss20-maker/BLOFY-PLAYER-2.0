@@ -1,0 +1,1 @@
+WEB RELEASE 2026-11-25. Versioned static assets and explicit safe reload. Preview 798b71be-cf44-479a-b920-fd194547d266 SUCCESS, 81 tests passed, zero failed, healthcheck passed. Not a proven fix for installed playback. Rollback bc6c01ee-bbe0-4513-9b3f-a192d5821dfa.
