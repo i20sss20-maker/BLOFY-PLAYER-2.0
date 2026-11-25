@@ -16,6 +16,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: cd web/stream-native-parity && node --test qa/live-media-source-probe.test.mjs qa/media-lifecycle.test.mjs
+      - run: cd web/stream-native-parity && node --test qa/live-media-source-probe.test.mjs qa/media-lifecycle.test.mjs qa/live-finished-drain.test.mjs
       - run: cd web/stream-native-parity && bun build media-worker.ts --target=bun --outfile=/tmp/media-worker-check.js
       - run: docker build -f web/stream-native-parity/Dockerfile.media web/stream-native-parity

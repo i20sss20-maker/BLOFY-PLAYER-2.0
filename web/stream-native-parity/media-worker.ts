@@ -157,6 +157,7 @@ function touchHls(session){
 }
 function stopHls(session,reason){
  if(!session||session.stopped)return;
+ if(session.finishedDrainTimer){clearTimeout(session.finishedDrainTimer);session.finishedDrainTimer=null}
  if(!session.sharedAlias)recordLiveSourceFailure(session,reason);
  if(session.sharedAlias){
   // A viewer-specific stop drops one ref, NEVER another viewer's decoder.
@@ -694,8 +695,18 @@ async function hlsRequest(req,url){
   return hlsError(owner.error?502:504,owner.error||'hls_segment_timeout')
  }
  if(filename==='index.m3u8'&&kind==='live'&&owner.finished){
+  // The process and provider connection have already ended. Let clients
+  // drain files from the last advertised playlist for at most five seconds.
+  // Never advertise a dead LIVE playlist or open another upstream feed here.
+  if(owner.servedLiveManifest&&!owner.stopped){
+   if(!owner.finishedDrainTimer){
+    owner.finishedDrainTimer=setTimeout(()=>stopHls(owner,'live_source_finished'),5000);
+    owner.finishedDrainTimer.unref?.();
+   }
+   return hlsError(503,'hls_source_finished',5)
+  }
   stopHls(owner,'live_source_finished');
-  return hlsError(503,'hls_source_finished')
+  return hlsError(503,'hls_source_finished',2)
  }
  if(filename==='index.m3u8'&&staleLiveManifest(owner,join(owner.dir,filename),Date.now())){
   console.warn('VIDAA_LIVE_MANIFEST_STALLED',{kind:owner.kind,mode:owner.videoMode||'unknown'});
@@ -708,11 +719,12 @@ async function hlsRequest(req,url){
    'X-Blofy-Source-Resolution':owner.sourceDimensions||'unknown'};
   if(!playlist){
    const streamed=await streamMediaFile(path,'video/mp2t','no-store, private',statusHeaders);
-   if(streamed&&kind==='live')noteLiveSourceHealthy(owner);
+   if(streamed&&kind==='live'&&!owner.finished)noteLiveSourceHealthy(owner);
    return streamed||hlsError(503,'hls_segment_unavailable')
   }
   const data=readFileSync(path);
   if(!data.length)return hlsError(503,'hls_file_empty');
+  if(kind==='live')owner.servedLiveManifest=true;
   return new Response(data,{status:200,headers:{
    'Content-Type':'application/vnd.apple.mpegurl','Cache-Control':'no-store, private',
    'X-Content-Type-Options':'nosniff',...statusHeaders
