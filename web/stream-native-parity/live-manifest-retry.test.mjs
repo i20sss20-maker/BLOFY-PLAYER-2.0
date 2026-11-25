@@ -38,7 +38,7 @@ test('full-screen adds a modest bounded buffer reserve while preview remains unc
  const profile=new Function(app.slice(start,end)+';return liveBufferProfile')();
  assert.deepEqual(profile(true),{sync:4,maxLatency:10,buffer:35});
  assert.deepEqual(profile(false),{sync:5,maxLatency:12,buffer:45});
- assert.match(app,/record\.ready\|\|record\.reconnecting\|\|video\.paused/);
+ assert.match(app,/record\.ready\|\|record\.reconnecting\|\|context\.userPaused\|\|record\.autoplayBlocked/);
  assert.match(app,/!record\.ready\|\|record\.reconnecting\|\|!video\.isConnected/);
 });
 
