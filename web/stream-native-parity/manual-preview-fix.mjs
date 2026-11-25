@@ -273,4 +273,54 @@ change("    enableWorker:false,enableStashBuffer:true,stashInitialSize:131072,\n
     lazyLoad:false,autoCleanupSourceBuffer:true,autoCleanupMaxBackwardDuration:45,
     autoCleanupMinBackwardDuration:15`);
 
+
+change("function playDirectMpegts(video,id,statusElement){",`function directLiveRetryDelay(attempt,capacity){
+ var n=Math.max(0,Math.min(4,Number(attempt)||0));
+ return capacity?Math.min(30000,5000*Math.pow(2,n)):Math.min(20000,2000*Math.pow(2,n))
+}
+function playDirectMpegts(video,id,statusElement,recoveryAttempt){`);
+change("  mode:'mpegts',engine:null,ready:false,started:Date.now(),fallback:false};",
+ "  mode:'mpegts',engine:null,ready:false,started:Date.now(),fallback:false,recoveryAttempt:Math.max(0,Number(recoveryAttempt)||0),reconnecting:false};");
+change(" function fallback(msg){\n  if(!alive()||record.fallback)return;",` function retryDirect(capacity){
+  if(!alive()||record.reconnecting||record.fallback)return;
+  if(!capacity&&record.recoveryAttempt>=2){fallback('تعذر استعادة النقل المباشر؛ جار تجربة HLS.');return}
+  record.reconnecting=true;
+  countVisualOutage(record,video,Date.now());
+  if(record.startupTimer)clearTimeout(record.startupTimer);
+  if(record.stallTimer)clearTimeout(record.stallTimer);
+  if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+  if(record.stableTimer)clearTimeout(record.stableTimer);
+  // Stop the direct fetch before waiting. Keep the record as a cancellation
+  // token so route changes and manual retry invalidate the scheduled attempt.
+  var previousEngine=record.engine;record.engine=null;
+  try{if(previousEngine)previousEngine.destroy()}catch(e){}
+  try{video.pause();video.removeAttribute('src');video.load()}catch(e){}
+  var delay=directLiveRetryDelay(record.recoveryAttempt,capacity);
+  playerStatus(capacity?'مصدر القناة مشغول مؤقتًا؛ إعادة اتصال تلقائية…':'انقطع النقل المباشر؛ جار استعادة الاتصال…',true);
+  function resume(){
+   record.retryTimer=null;
+   if(!alive())return;
+   if(document.hidden||navigator.onLine===false||state.userPaused){
+    record.retryTimer=setTimeout(resume,3000);return
+   }
+   if(state.stats){state.stats.recoveries=(state.stats.recoveries||0)+1;state.stats.lastRecoveryAt=Date.now()}
+   recordLiveIncident('reconnect');
+   playDirectMpegts(video,id,statusElement,Math.min(4,record.recoveryAttempt+1))
+  }
+  record.retryTimer=setTimeout(resume,delay)
+ }
+ function fallback(msg){
+  if(!alive()||record.fallback||record.reconnecting)return;`);
+change("     if(!alive())return;\n     var statusCode=Number(info&&(info.code||info.status)||0);", "     if(!alive()||record.reconnecting)return;\n     var statusCode=Number(info&&(info.code||info.status)||0);");
+change("     if(statusCode===429||statusCode===503){\n      stopPlayback(false);\n      playerStatus('مصدر القناة مشغول مؤقتًا. اضغط إعادة المحاولة بعد لحظات.',true);\n      return\n     }",`     if(statusCode===429||statusCode===503){retryDirect(true);return}
+     if(type===window.mpegts.ErrorTypes?.NETWORK_ERROR||/network/i.test(String(type))||statusCode===502||statusCode===504){retryDirect(false);return}`);
+change("    if(!alive())return;\n    record.ready=true;\n    record.lastProgressAt=Date.now();",`    if(!alive()||record.reconnecting)return;
+    record.ready=true;
+    if(record.stableTimer)clearTimeout(record.stableTimer);
+    record.stableTimer=setTimeout(function(){if(alive()&&!record.reconnecting&&record.visualProgressSeen)record.recoveryAttempt=0},120000);
+    record.lastProgressAt=Date.now();`);
+change("if(Math.abs((Number(video.currentTime)||0)-last)<0.3)fallback('توقفت الصورة المباشرة؛ جار التحويل إلى HLS.')","if(Math.abs((Number(video.currentTime)||0)-last)<0.3)retryDirect(false)");
+change("     fallback('تجمّدت صورة MPEG-TS؛ جار العودة إلى HLS.')","     retryDirect(false)");
+change("type===window.mpegts.ErrorTypes?.NETWORK_ERROR","(window.mpegts.ErrorTypes&&type===window.mpegts.ErrorTypes.NETWORK_ERROR)");
+
 new Function(app);writeFileSync('app.js',app);
