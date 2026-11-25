@@ -34,7 +34,7 @@ test('desktop browsers remux in a worker; old TV engines retain main-thread comp
 });
 test('HLS+VOD use the same safe remux-worker policy, live starts closer without rate changing pitch',()=>{
  assert.equal((app.match(/enableWorker:hlsRemuxWorkerSupported\(\)/g)||[]).length,3);
- assert.match(app,/liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35/);
+ assert.match(app,/liveSyncDurationCount:3,\s*liveMaxLatencyDurationCount:10,maxBufferLength:35/);
  assert.match(app,/maxLiveSyncPlaybackRate:1/);
  const vod=app.slice(app.indexOf('function playFullVod('),app.indexOf('function playVodSegments('));
  assert.match(vod,/rec\.retryTimer=setTimeout/);
