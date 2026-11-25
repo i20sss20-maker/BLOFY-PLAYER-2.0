@@ -1,5 +1,6 @@
 // Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
 import { readFile } from 'node:fs/promises';
+import {probeLinodeHeartbeat} from './linode-heartbeat.mjs';
 import {probeLinodeBridge} from './linode-readonly-bridge.mjs';
 import {siteOperatorReadiness} from './site-operator-readiness.mjs';
 
@@ -88,7 +89,7 @@ export async function controlCenterSnapshot() {
   pending=(async()=>{
     const [checks,operatorReadiness,linode]=await Promise.all([
       Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target))),
-      siteOperatorReadiness(),probeLinodeBridge()
+      siteOperatorReadiness(),(process.env.BLOFY_LINODE_HEARTBEAT_ENABLED==='true'?probeLinodeHeartbeat():probeLinodeBridge())
     ]);
     if(linode)checks.push(linode);
     const result={

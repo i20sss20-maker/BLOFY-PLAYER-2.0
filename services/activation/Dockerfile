@@ -56,5 +56,7 @@ COPY test/xtream-content-hub-private-range.test.mjs ./test/xtream-content-hub-pr
 RUN node --check src/xtream-content-hub-private-range.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-content-hub-private-range.test.mjs
 COPY test/linode-readonly-bridge.test.mjs ./test/linode-readonly-bridge.test.mjs
 RUN node --check src/admin-control-center.mjs && node --test test/linode-readonly-bridge.test.mjs
+COPY test/linode-heartbeat.test.mjs ./test/linode-heartbeat.test.mjs
+RUN node --check src/linode-heartbeat.mjs && node --test test/linode-heartbeat.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
