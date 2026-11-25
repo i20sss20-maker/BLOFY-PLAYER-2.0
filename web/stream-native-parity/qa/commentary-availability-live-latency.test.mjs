@@ -38,7 +38,7 @@ test('disabled external commentary returns explicit status while primary TV audi
  const win={};
  const video={muted:false,volume:0.7,addEventListener(){},removeEventListener(){}};
  runInNewContext(sidecar,{window:win,Audio:function(){throw Error('must not open audio source')},
-  fetch:async()=>({ok:false,status:503}),encodeURIComponent,Promise,setTimeout,clearTimeout});
+  fetch:async()=>({ok:false,status:503,json:async()=>({error:'commentary_not_enabled'})}),encodeURIComponent,Promise,setTimeout,clearTimeout});
  const manager=win.BlofyCommentary.create(video,'1312445');
  const tracks=await manager.load();
  assert.equal(tracks.length,0);
@@ -51,4 +51,17 @@ test('protected commentary API checks authentication before feature availability
  assert.match(server,/if\(p==='\/api\/audio\/catalog'&&method==='GET'\)\{\s*if\(!h\)return json\(401/);
  assert.match(server,/if\(p\.startsWith\('\/api\/audio\/track\/'\)&&method==='GET'\)\{\s*if\(!h\)return json\(401/);
  assert.match(server,/BLOFY_WEB_COMMENTARY_ENABLED!=='1'/);
+});
+
+test('upstream commentary outage is not mislabeled as disabled web settings',async()=>{
+ const win={};
+ const video={muted:false,volume:0.7,addEventListener(){},removeEventListener(){}};
+ runInNewContext(sidecar,{window:win,Audio:function(){throw Error('must not open audio source')},
+  fetch:async()=>({ok:false,status:503,json:async()=>({error:'commentary_unavailable'})}),
+  encodeURIComponent,Promise,setTimeout,clearTimeout});
+ const manager=win.BlofyCommentary.create(video,'1312445');
+ await manager.load();
+ assert.equal(manager.failure(),'source_unavailable');
+ assert.equal(video.muted,false);
+ manager.destroy()
 });
