@@ -217,4 +217,32 @@ window.addEventListener('pagehide',function(event){
  releaseLiveOnPageExit(event)
 });`);
 
+
+change("function playDirectMpegts(video,id,statusElement){",`// Desktop full-screen can use the same authenticated TS gateway as native
+// clients, avoiding an unnecessary per-viewer HLS encoding pipeline.
+// Keep the proven HLS path for TV, touch devices, and unsupported MSE.
+function preferDesktopDirectLive(family,mediaSource){
+ if(family!=='desktop'||!mediaSource||typeof mediaSource.isTypeSupported!=='function')return false;
+ try{return mediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"')===true}catch(e){return false}
+}
+function playDirectMpegts(video,id,statusElement){`);
+change(" if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}",` if(isLive){
+  var family=document.documentElement.getAttribute('data-blofy-device');
+  if(preferDesktopDirectLive(family,window.MediaSource))
+   playDirectMpegts(video,String(id),document.getElementById('player-status'));
+  else playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)
+ }`);
+change("    transport.on(window.mpegts.Events.ERROR,function(){\n     if(alive())fallback('تعذر فك ترميز MPEG-TS من المصدر؛ جار تجربة مشغّل HLS.')\n    });",`    transport.on(window.mpegts.Events.ERROR,function(type,detail,info){
+     if(!alive())return;
+     var statusCode=Number(info&&(info.code||info.status)||0);
+     // Admission failures are not decoder failures. Do not create another
+     // source request via HLS immediately when the provider is busy.
+     if(statusCode===429||statusCode===503){
+      stopPlayback(false);
+      playerStatus('مصدر القناة مشغول مؤقتًا. اضغط إعادة المحاولة بعد لحظات.',true);
+      return
+     }
+     fallback('تعذر فك ترميز MPEG-TS من المصدر؛ جار تجربة مشغّل HLS.')
+    });`);
+
 new Function(app);writeFileSync('app.js',app);
