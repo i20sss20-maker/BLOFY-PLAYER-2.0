@@ -90,5 +90,54 @@ app=change(app," if(!S.play)return;var old=S.play;S.play=null;"," if(!S.play)ret
 app=change(app,"  if(status)status.textContent=String(message||'');","  if(status)status.textContent=String(message||'');\n  var dialogStatus=document.getElementById('player-commentary-dialog-status');\n  if(dialogStatus)dialogStatus.textContent=String(message||'');");
 app=change(app,"   '<div class=\"native-player-choice-items\">'+options.map(function(option,index){","   (heading==='المعلقين • BLOFY'?'<p class=\"small muted\" id=\"player-commentary-dialog-status\" role=\"status\" aria-live=\"polite\"></p>':'')+\n   '<div class=\"native-player-choice-items\">'+options.map(function(option,index){");
 
+
+ // Remember an explicitly selected subtitle by identity, not track index.
+ // A reconnect can reorder tracks, so only restore a matching track.
+app=change(app," var subtitleButton=document.getElementById('player-subtitles');",` function subtitleIdentity(track){
+  return {language:String(track.lang||track.language||'').toLowerCase(),label:String(track.name||track.label||'').trim().toLowerCase()};
+ }
+ function findSubtitleIdentity(tracks,pref){
+  var matches=[];
+  for(var i=0;i<tracks.length;i++){
+   var v=subtitleIdentity(tracks[i]);
+   if(pref.label&&v.label===pref.label&&(!pref.language||!v.language||pref.language===v.language))return i;
+   if(pref.language&&v.language===pref.language)matches.push(i)
+  }
+  return matches.length===1?matches[0]:-1
+ }
+ function saveSubtitlePreference(track){
+  state.subtitlePreference={id:String(state.id),off:!track,identity:track?subtitleIdentity(track):null};
+ }
+ function restoreSubtitlePreference(){
+  var pref=state.subtitlePreference,rec=S.play;
+  if(!pref||String(state.id)!==pref.id||!rec||rec.video!==video||S.playerView!==state)return;
+  var engine=rec.engine,native=video.textTracks,list=[];
+  if(engine&&engine.subtitleTracks&&engine.subtitleTracks.length){
+   if(pref.off){
+    if(engine.subtitleTrack!==-1)engine.subtitleTrack=-1;
+    if(engine.subtitleDisplay)engine.subtitleDisplay=false;
+   }else{
+    var index=findSubtitleIdentity(engine.subtitleTracks,pref.identity);
+    if(index>=0){if(engine.subtitleTrack!==index)engine.subtitleTrack=index;if(!engine.subtitleDisplay)engine.subtitleDisplay=true}
+   }
+   return
+  }
+  if(!native)return;
+  for(var i=0;i<native.length;i++)if(native[i].kind==='captions'||native[i].kind==='subtitles')list.push(native[i]);
+  var chosen=pref.off?-1:findSubtitleIdentity(list,pref.identity);
+  if(!pref.off&&chosen<0)return;
+  for(var n=0;n<list.length;n++){
+   var mode=n===chosen?'showing':'disabled';
+   if(list[n].mode!==mode)list[n].mode=mode
+  }
+ }
+ var subtitleButton=document.getElementById('player-subtitles');`);
+app=change(app,"select:function(){for(var n=0;n<list.length;n++)list[n].mode='disabled';playerStatus('تم إيقاف الترجمة')}","select:function(){for(var n=0;n<list.length;n++)list[n].mode='disabled';saveSubtitlePreference(null);playerStatus('تم إيقاف الترجمة')}");
+app=change(app,"select:function(){for(var n=0;n<list.length;n++)list[n].mode=n===index?'showing':'disabled';playerStatus('تم اختيار الترجمة')}","select:function(){for(var n=0;n<list.length;n++)list[n].mode=n===index?'showing':'disabled';saveSubtitlePreference(track);playerStatus('تم اختيار الترجمة')}");
+app=change(app,"engine.subtitleTrack=-1;for(var n=0;n<list.length;n++)list[n].mode='disabled';playerStatus('تم إيقاف الترجمة')","engine.subtitleTrack=-1;for(var n=0;n<list.length;n++)list[n].mode='disabled';saveSubtitlePreference(null);playerStatus('تم إيقاف الترجمة')");
+app=change(app,"engine.subtitleDisplay=true;engine.subtitleTrack=index;playerStatus('تم اختيار الترجمة')","engine.subtitleDisplay=true;engine.subtitleTrack=index;saveSubtitlePreference(track);playerStatus('تم اختيار الترجمة')");
+app=change(app," state.noticeObserverTimer=setInterval(function(){\n  dismissRecoveredPlaybackNotice(state,Date.now())"," state.noticeObserverTimer=setInterval(function(){\n  try{restoreSubtitlePreference()}catch(e){}\n  dismissRecoveredPlaybackNotice(state,Date.now())");
+app=change(app,"   id=newId;state.id=id;state.commentary=newCommentary(id);","   id=newId;state.id=id;state.subtitlePreference=null;state.commentary=newCommentary(id);");
+
 new Function(app);
 writeFileSync('app.js',app);writeFileSync('server.ts',server);
