@@ -159,4 +159,35 @@ change("maxBufferLength:bufferProfile.buffer,maxBufferHole:1.5,","maxBufferLengt
 // Aborted XHR must release the STOP accounting exactly once too.
 change(" xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;finishMediaStop();"," xhr.onerror=xhr.ontimeout=xhr.onabort=function(){if(!done){done=true;finishMediaStop();");
 
+
+change("function liveRetryHint(detail){",`function liveStartupDecision(record,context){
+ if(!context.active||record.ready||record.reconnecting||context.userPaused||record.autoplayBlocked)return 'stop';
+ if(context.hidden||context.offline||record.retryTimer||record.capacityTimer||record.originTimer)return 'defer';
+ // A decoder may remain paused while waiting for media, even without a
+ // user pause or autoplay restriction. That is not a reason to give up.
+ return 'recover'
+}
+function liveRetryHint(detail){`);
+change(" record.startupTimer=setTimeout(function(){\n  record.startupTimer=null;\n  if(!alive()||record.ready||record.reconnecting||video.paused)return;\n  recoverConnection()\n },50000);",` function startupCheck(){
+  record.startupTimer=null;
+  var decision=liveStartupDecision(record,{active:alive()&&video.isConnected&&
+   (preview?S.route==='live'&&String(S.selected)===String(id):
+    S.route==='player'&&S.playerView&&S.playerView.video===video&&String(S.playerView.id)===String(id)),
+   userPaused:!preview&&S.playerView&&S.playerView.userPaused,
+   hidden:document.hidden,offline:navigator.onLine===false});
+  if(decision==='defer'){record.startupTimer=setTimeout(startupCheck,10000);return}
+  if(decision==='recover')recoverConnection()
+ }
+ record.startupTimer=setTimeout(startupCheck,50000);
+ function handleLivePlayRejection(error){
+  if(!alive())return;
+  if(error&&error.name==='NotAllowedError'){
+   record.autoplayBlocked=true;
+   status('اضغط تشغيل ▶');
+  }
+ }`);
+change("if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})","if(p&&p.catch)p.catch(handleLivePlayRejection)");
+change("record.manifestParsed=true;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}","record.manifestParsed=true;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}");
+change("  record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;","  record.autoplayBlocked=false;record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;");
+
 new Function(app);writeFileSync('app.js',app);
