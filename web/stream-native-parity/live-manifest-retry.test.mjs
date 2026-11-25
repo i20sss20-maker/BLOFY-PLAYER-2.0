@@ -66,3 +66,7 @@ test('provider retry hint accepts only bounded integer seconds from XHR or Fetch
  assert.match(app,/Math\.max\(liveCapacityRetryMs\(record\.capacityRetries\),liveRetryHint\(detail\)\)/);
  assert.match(app,/Math\.max\(liveOriginRetryMs\(record\.originRetries\),liveRetryHint\(detail\)\)/);
 });
+
+test('live HLS has explicit forward and back buffer caps',()=>{
+ assert.match(app,/maxBufferLength:bufferProfile\.buffer,maxMaxBufferLength:preview\?45:60,backBufferLength:preview\?12:30/);
+});
