@@ -70,3 +70,17 @@ test('provider retry hint accepts only bounded integer seconds from XHR or Fetch
 test('live HLS has explicit forward and back buffer caps',()=>{
  assert.match(app,/maxBufferLength:bufferProfile\.buffer,maxMaxBufferLength:preview\?45:60,backBufferLength:preview\?12:30/);
 });
+
+test('startup recovers when decoder stays paused but no user gesture is required',()=>{
+ const a=app.indexOf('function liveStartupDecision('),b=app.indexOf('function liveRetryHint(',a);
+ const decide=new Function(app.slice(a,b)+';return liveStartupDecision')();
+ assert.equal(decide({},{active:true,paused:true}),'recover');
+ assert.equal(decide({autoplayBlocked:true},{active:true}),'stop');
+ assert.equal(decide({},{active:true,userPaused:true}),'stop');
+ assert.equal(decide({},{active:true,hidden:true}),'defer');
+ assert.equal(decide({},{active:true,offline:true}),'defer');
+ assert.equal(decide({originTimer:1},{active:true}),'defer');
+ assert.equal(decide({reconnecting:true},{active:true}),'stop');
+ assert.equal(decide({},{active:false}),'stop');
+ assert.match(app,/error\.name==='NotAllowedError'/);
+});
