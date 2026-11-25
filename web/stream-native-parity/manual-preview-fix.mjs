@@ -593,4 +593,24 @@ change(" if(shouldUseNativeHls(video)){\n  record.nativeHls=true;\n  video.src=m
   video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}return`);
 change("2026.11.25.8 • '+(installedWebApp()", "2026.11.25.9 • '+(installedWebApp()");
 
+
+change(" if(S.previewToFullPending)return;\n if(S.previewRecoveryStop)", " if(S.previewToFullPending)return;\n if(installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElementById('live-status');if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق؛ أعد الضغط بعد لحظات.';return}\n if(S.previewRecoveryStop)");
+change(" if(isLive&&(S.previewStopPending||S.previewRecoveryStop)){", " if(isLive&&installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElementById('live-status');if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق؛ أعد الضغط بعد لحظات.';return}\n if(isLive&&(S.previewStopPending||S.previewRecoveryStop)){");
+change("     if(response.status===401||response.status===403){", "     if(response.status===401||response.status===403||response.status===400){");
+change("     deferAdmission(hint)\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});",`     if(response.status===404){
+      // A retired session cannot be revived. Start a new SID using the
+      // existing serialized STOP path after the server's cooldown.
+      record.originTimer=setTimeout(function(){
+       if(!alive())return;
+       playHls(video,kind,id,extension,track,statusElement,preview,Math.min((record.recoveryAttempt||0)+1,4))
+      },liveSessionRetryDelay(record.recoveryAttempt||0,hint));return
+     }
+     deferAdmission(hint)
+    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});`);
+change("     if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}\n     status('مصدر البث مشغول أو غير متاح مؤقتًا؛ جار انتظار اتصال متاح…');",`     if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
+     if(admissionAttempt>=5){
+      status('المصدر مشغول حاليًا. اضغط إعادة المحاولة أو اختر قناة متاحة.');return
+     }
+     status('مصدر البث مشغول أو غير متاح مؤقتًا؛ جار انتظار اتصال متاح…');`);
+
 new Function(app);writeFileSync('app.js',app);
