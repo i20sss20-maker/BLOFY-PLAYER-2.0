@@ -2846,7 +2846,17 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
+   // One-second LIVE segments can start closer to the live edge with a
+   // three-segment safety margin. Keep the stable non-low-latency decoder
+   // path for older TVs; throttle automatic manifest errors to avoid a
+   // burst of repeated 503 admissions against a one-feed provider.
+   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,
+    liveSyncDurationCount:3,liveMaxLatencyDurationCount:10,maxBufferLength:35,
+    maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,
+    manifestLoadingTimeOut:30000,manifestLoadingMaxRetry:2,
+    manifestLoadingRetryDelay:1600,manifestLoadingMaxRetryTimeout:7000,
+    levelLoadingMaxRetry:2,levelLoadingRetryDelay:1600,levelLoadingMaxRetryTimeout:7000,
+    fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(error){
     if(alive()&&!offerIosPlayGesture(error,video,preview))status('اضغط تشغيل ▶')
    })}catch(e){if(alive()&&!offerIosPlayGesture(e,video,preview))status('اضغط تشغيل ▶')}});
