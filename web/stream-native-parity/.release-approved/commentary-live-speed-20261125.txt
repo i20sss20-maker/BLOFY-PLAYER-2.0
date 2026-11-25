@@ -1,0 +1,7 @@
+APPROVED WEB RELEASE — 2026-11-25
+Change: PR #906 merged as 62f395293b7d79a9724e4d73391a73cc23e80faa
+Scope: live-only HLS target 3 segments and bounded origin manifest retries; embedded audio/commentators menu; true external audio availability status; authenticated catalogue; protected catalogue preview; no VOD/source quota changes.
+Gates: dedicated native-web-downloads/CI SUCCESS, browser UI SUCCESS, isolated Railway pilot SUCCESS. Generic Android Google Play verify remains unrelated.
+Web service variable: BLOFY_WEB_COMMENTARY_ENABLED=1 (separate portal audio source authorization remains enforced).
+Rollback: known good official web deployment ba6f1811-b81a-4b48-ad88-17a7788afb4c, revision f43292c.
+No claim of 20-minute uninterrupted LIVE or configured external audio until real device/provider evidence.
