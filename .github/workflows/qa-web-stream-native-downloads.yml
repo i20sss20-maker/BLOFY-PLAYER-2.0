@@ -36,6 +36,7 @@ jobs:
       - run: node --check web/stream-native-parity/commentary-policy.mjs
       - run: node --test web/stream-native-parity/qa/commentary-native-parity.test.mjs
       - run: node --test web/stream-native-parity/qa/commentary-sidecar.test.mjs
+      - run: node --test web/stream-native-parity/qa/live-no-duplicate-manifest.test.mjs
       - run: node --test web/stream-native-parity/qa/web-download-native-parity.test.mjs
       - name: Verify production image includes feature modules
         run: docker build --tag blofy-stream-web-parity:qa web/stream-native-parity
