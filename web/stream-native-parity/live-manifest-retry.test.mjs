@@ -115,3 +115,24 @@ test('direct MPEG-TS retains documented stash buffer and disables latency chasin
  assert.match(app,/liveBufferLatencyChasing:false,liveSync:false/);
  assert.match(app,/autoCleanupMaxBackwardDuration:45,\s*autoCleanupMinBackwardDuration:15/);
 });
+
+test('direct reconnect backs off on network and capacity failures without racing engines',()=>{
+ const a=app.indexOf('function directLiveRetryDelay('),b=app.indexOf('function playDirectMpegts(',a);
+ const delay=new Function(app.slice(a,b)+';return directLiveRetryDelay')();
+ assert.deepEqual([0,1,2,3,4,99].map(n=>delay(n,false)),[2000,4000,8000,16000,20000,20000]);
+ assert.deepEqual([0,1,2,3,4,99].map(n=>delay(n,true)),[5000,10000,20000,30000,30000,30000]);
+ const start=app.indexOf(' function retryDirect(capacity)'),end=app.indexOf(' function fallback(msg)',start);
+ const source=app.slice(start,end);
+ const calls=[];let queued,active=true;
+ const record={recoveryAttempt:0,engine:{destroy(){calls.push('destroy')}},reconnecting:false};
+ const state={userPaused:false};
+ const doc={hidden:false},nav={onLine:true};
+ const video={pause(){},removeAttribute(){},load(){}};
+ const retry=new Function('record','state','video','document','navigator','alive','fallback','countVisualOutage','playerStatus','setTimeout','clearTimeout','clearInterval','recordLiveIncident','playDirectMpegts','directLiveRetryDelay','id','statusElement',source+';return retryDirect')(
+ record,state,video,doc,nav,()=>active,()=>calls.push('fallback'),()=>{},()=>{},(fn,ms)=>{queued={fn,ms};return 1},()=>{},()=>{},()=>{},()=>calls.push('reopen'),delay,'7',null);
+ retry(true);retry(true);assert.deepEqual(calls,['destroy']);assert.equal(queued.ms,5000);
+ doc.hidden=true;queued.fn();assert.equal(queued.ms,3000);assert.deepEqual(calls,['destroy']);
+ doc.hidden=false;state.userPaused=true;queued.fn();assert.deepEqual(calls,['destroy']);
+ state.userPaused=false;queued.fn();assert.deepEqual(calls,['destroy','reopen']);
+ active=false;queued.fn();assert.deepEqual(calls,['destroy','reopen']);
+});
