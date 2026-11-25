@@ -161,7 +161,8 @@ if(p==='/api/player-diagnostic'&&method==='POST'){
   createHmac('sha256',KEY).update(kind+':'+rawId).digest('hex').slice(0,12):null;
  const pos=Math.max(0,Math.min(21600,Math.round(Number(data?.position)||0)));
  const duration=Math.max(0,Math.min(21600,Math.round(Number(data?.duration)||0)));
- console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,errorCode,itemRef,position:pos,duration});
+ const runtime=['installed','browser','preview'].includes(data?.runtime)?data.runtime:'unknown';
+ console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,runtime,errorCode,itemRef,position:pos,duration});
  return json(200,{ok:true});
 }
 if(p==='/api/session'&&method==='GET'){
