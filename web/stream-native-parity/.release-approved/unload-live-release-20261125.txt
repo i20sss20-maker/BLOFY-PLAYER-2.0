@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Release only the departing live viewer SID on non-persisted pagehide, using beacon/keepalive fallback. VOD, legacy shared sessions and bfcache untouched. Preview 1d0f5658-7a30-4708-b9d5-03d1c6162f07 SUCCESS; 65 tests passed, 0 failed. Provider admission limit remains in recent logs; no guarantee of channel availability. Rollback f52da50a-0825-49cc-97b0-6eb1f6275649.
