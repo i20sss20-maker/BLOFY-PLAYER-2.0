@@ -1,0 +1,6 @@
+WEB RELEASE CANDIDATE — 2026-11-25
+Scope: search request lifecycle and timeout, live-only commentary navigation, safe audio fallback, exposed subtitle selection, and first-picture startup watchdog.
+Preview deployment 90524a80-d765-4f6d-9f28-fba178110a41: SUCCESS on revision df3038b484a4dc2961ce8445e4d96831d3832a96; 30 build tests passed, 0 failed.
+No changes to media worker, Android applications, provider limits, authorization or commentary feature flags.
+Production rollback deployment: 39b64455-c32f-4565-811c-1ee6beecc200, revision 97e81e0a6e7f664616d305bb994b5d3bddb4d4e4.
+Continuous authenticated playback, full subtitle extraction and external commentary remain unverified. Do not claim these passed.
