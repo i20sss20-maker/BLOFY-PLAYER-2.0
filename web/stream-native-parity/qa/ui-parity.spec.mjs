@@ -394,7 +394,8 @@ test('native live dock matches Android controls, favors channels and surfs witho
  await expect(page.locator('#player-root')).toBeVisible();
  await expect(page.locator('#player-title-text')).toHaveText('قناة اختبار');
  await expect(page.locator('#player-mute')).toHaveCount(0);
- await expect(page.locator('.native-player-dock .native-player-control')).toHaveCount(8);
+ await expect(page.locator('.native-player-dock .native-player-control')).toHaveCount(9);
+ await expect(page.locator('#player-commentary')).toBeVisible();
  await expect(page.locator('#player-health-shortcut')).toBeVisible();
  await page.locator('#player-health-shortcut').click();
  await expect(page.locator('#player-health-panel')).toBeVisible();
@@ -1029,4 +1030,41 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
  await expect.poll(()=>events.filter(x=>x==='stop-ultra').length,{timeout:12000}).toBeGreaterThan(0);
  await expect.poll(()=>events.filter(x=>x==='manifest-original').length,{timeout:12000}).toBeGreaterThan(previousOriginalManifests);
  expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(events.lastIndexOf('stop-ultra'));
+});
+
+test('VOD download controls respect default-off gate and never claim saved files',async({page})=>{
+ await page.route('**/api/download/**',async route=>route.fulfill({
+  status:503,contentType:'application/json',
+  body:'{"error":"downloads_not_enabled"}'
+ }));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await expect(page.locator('[data-download="movie:11"]')).toBeVisible();
+ await page.locator('[data-download="movie:11"]').click();
+ await expect(page.locator('#web-download-message')).toContainText('غير مفعلة');
+ await page.locator('[data-go="downloads"]').first().click();
+ await expect(page.locator('#downloads-history')).toContainText('ما بدأت أي تنزيلات');
+ await page.locator('[data-go="series"]').first().click();
+ await page.locator('[data-details="series:21"]').click();
+ await page.locator('[data-episodes="21"]').first().click();
+ await expect(page.locator('[data-download="series:55"]')).toBeVisible();
+});
+
+test('commentators page opens the channel-specific protected voice menu without changing VOD',async({page})=>{
+ await page.route('**/api/audio/catalog?*',async route=>route.fulfill({
+  status:200,contentType:'application/json',
+  body:JSON.stringify({ok:true,tracks:[{id:'anis-max-01',label:'بلوفي سبورت • معلق 1',format:'progressive',delaySeconds:0}]})
+ }));
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="commentators"]').first().click();
+ await expect(page.locator('.commentator-library h2')).toContainText('المعلقين');
+ await expect(page.locator('[data-commentator-channel="31"]')).toBeVisible();
+ await page.locator('[data-commentator-channel="31"]').click();
+ await expect(page.locator('#player-commentary')).toBeVisible();
+ await expect(page.locator('#player-choice-panel')).toContainText('الصوت الأصلي للقناة');
+ await expect(page.locator('#player-choice-panel')).toContainText('بلوفي سبورت');
+ await page.locator('#player-choice-close').click();
+ await page.locator('#player-back').click();
+ await expect(page.locator('[data-go="commentators"]')).toBeVisible();
 });

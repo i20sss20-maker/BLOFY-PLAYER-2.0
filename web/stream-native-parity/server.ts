@@ -1,4 +1,6 @@
 import {readCatalogPage} from './catalog-array-reader.mjs';
+import {validCommentaryChannel,channelTracks,publicCommentaryTracks,safeCommentaryUrl} from './commentary-policy.mjs';
+import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 import {preferAppleLiveStart} from './hls-ios-live-profile.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
@@ -46,6 +48,8 @@ function normalizeSearch(text){
   .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
 }
 const catalogPageCache=createCatalogPageCache();
+let activeVodDownloads=0;
+const MAX_VOD_DOWNLOADS=2;
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
@@ -53,9 +57,9 @@ const u=new URL(req.url);const p=u.pathname;const method=req.method;
 // Serve only exact, first-party native brand fonts. Never accept an arbitrary
 // /fonts path or redirect to an external CDN from the video application.
 const isNativeArabicFont=p==='/fonts/IBMPlexSansArabic-Regular.ttf'||p==='/fonts/IBMPlexSansArabic-SemiBold.ttf';
-if(method==='GET'&&(isNativeArabicFont||p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
+if(method==='GET'&&(isNativeArabicFont||p==='/app.js'||p==='/stream-commentary.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
  const file=p.slice(1);
- const mime=isNativeArabicFont?'font/ttf':p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':(p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png')?'image/png':'application/manifest+json; charset=utf-8';
+ const mime=isNativeArabicFont?'font/ttf':p==='/app.js'||p==='/stream-commentary.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':(p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png')?'image/png':'application/manifest+json; charset=utf-8';
  const asset=Bun.file(new URL('./'+file,import.meta.url));
  if(!await asset.exists())return json(404,{error:'static_asset_missing'});
  const headers=noCache({'Content-Type':mime,...(p==='/sw.js'?{'Service-Worker-Allowed':'/'}:{})});
@@ -107,6 +111,75 @@ if(p==='/vendor/hls.min.js'&&method==='GET'){
 }
 
 const h=auth(req);if(!h)return json(401,{ok:false,error:'activation_required'});
+
+/* Channel-scoped BLOFY commentary. These routes reuse the validated,
+ * HttpOnly STREAM session. Never return source URLs, tokens or Xtream data. */
+async function commentaryForChannel(channel){
+ const res=await fetch(ORIGIN+'/api/v1/stream/audio/catalog',{
+  headers:{Authorization:h.Authorization,Accept:'application/json'},
+  redirect:'manual',signal:AbortSignal.timeout(9000)});
+ if(!res.ok||res.status>=300||res.status<200||Number(res.headers.get('content-length')||0)>262144)
+  return {status:res.status===401||res.status===403?403:res.status===429?429:503,tracks:[]};
+ // Bound chunked catalogues as well as Content-Length; do not buffer
+ // an untrusted unlimited response from a third-party-backed catalogue.
+ const reader=res.body?.getReader();if(!reader)return {status:502,tracks:[]};
+ const parts=[];let size=0;
+ try{
+  while(true){
+   const next=await reader.read();if(next.done)break;
+   size+=next.value?.byteLength||0;
+   if(size>262144){try{await reader.cancel()}catch{};return {status:502,tracks:[]}}
+   parts.push(Buffer.from(next.value))
+  }
+ }finally{try{reader.releaseLock()}catch{}}
+ let body;try{body=JSON.parse(Buffer.concat(parts).toString('utf8'))}
+ catch{return {status:502,tracks:[]}}
+ return {status:200,tracks:channelTracks(body,channel)};
+}
+if(p==='/api/audio/catalog'&&method==='GET'){
+ if(Bun.env.BLOFY_WEB_COMMENTARY_ENABLED!=='1')return json(503,{error:'commentary_not_enabled'});
+ const channel=u.searchParams.get('channel')||'';
+ if(!validCommentaryChannel(channel))return json(400,{error:'invalid_channel'});
+ try{
+  const result=await commentaryForChannel(channel);
+  if(result.status!==200)return json(result.status,{error:'commentary_unavailable'});
+  return json(200,{ok:true,channel,tracks:publicCommentaryTracks(result.tracks)});
+ }catch{return json(503,{error:'commentary_unavailable'})}
+}
+if(p.startsWith('/api/audio/track/')&&method==='GET'){
+ if(Bun.env.BLOFY_WEB_COMMENTARY_ENABLED!=='1')return json(503,{error:'commentary_not_enabled'});
+ const match=/^\/api\/audio\/track\/([A-Za-z0-9_-]{1,64})$/.exec(p);
+ const channel=u.searchParams.get('channel')||'';
+ if(!match||!validCommentaryChannel(channel))return json(400,{error:'invalid_commentary_request'});
+ try{
+  const lookup=await commentaryForChannel(channel);
+  if(lookup.status!==200)return json(lookup.status,{error:'commentary_unavailable'});
+  const track=lookup.tracks.find(t=>t.id===match[1]);
+  if(!track||!safeCommentaryUrl(track.source))return json(404,{error:'commentary_track_not_found'});
+  const upstream=await fetch(track.source,{
+   headers:{Authorization:h.Authorization,Accept:track.format==='hls'?'application/vnd.apple.mpegurl,audio/*;q=0.9':'audio/*,application/octet-stream;q=0.9'},
+   redirect:'manual',signal:req.signal});
+  if(!upstream.ok||upstream.status!==200||!upstream.body){
+   try{await upstream.body?.cancel()}catch{}
+   return json(upstream.status===401||upstream.status===403?403:upstream.status===429?429:502,
+     {error:'commentary_stream_unavailable'});
+  }
+  const contentType=String(upstream.headers.get('content-type')||'').toLowerCase();
+  if(!/^(audio\/(?:mpeg|aac|mp4|x-m4a|ogg|webm)|application\/(?:octet-stream|vnd\.apple\.mpegurl|x-mpegurl))\b/.test(contentType)){
+   try{await upstream.body?.cancel()}catch{}
+   return json(415,{error:'commentary_format_unsupported'});
+  }
+  // Only progressive audio is offered in this initial web gate. Rewriting
+  // relative HLS playlist/segment URLs must be separately authenticated.
+  if(track.format==='hls'){
+   try{await upstream.body?.cancel()}catch{}
+   return json(415,{error:'commentary_hls_not_ready'});
+  }
+  return new Response(upstream.body,{status:200,headers:noCache({
+   'Content-Type':contentType,'Accept-Ranges':'none','X-Content-Type-Options':'nosniff'})});
+ }catch{return json(502,{error:'commentary_stream_unavailable'})}
+}
+
 if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
@@ -362,6 +435,63 @@ if(p.indexOf('/api/compatible/')===0&&method==='GET'){
   return new Response(response.body,{status:200,headers:noCache({'Content-Type':contentType,'X-Blofy-Media-Mode':'compatible-'+mode,'Accept-Ranges':'none'})});
  }catch(e){return json(502,{error:'compat_proxy_unavailable'})}
 }
+
+// File downloads are isolated from live and normal VOD playback.
+// A browser writes the streamed bytes to its own download manager;
+// it cannot be treated as a completed offline library item here.
+if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
+ if(!h)return json(401,{error:'activation_required'});
+ if(Bun.env.BLOFY_WEB_VOD_DOWNLOAD_ENABLED!=='1')
+  return json(503,{error:'downloads_not_enabled'});
+ const match=/^\/api\/download\/(movie|series)\/([1-9][0-9]{0,14})\.(mp4|mkv|avi|mov|ts)$/.exec(p);
+ if(!match||vodDownloadPath(match[1],match[2],match[3])!==p)
+  return json(400,{error:'invalid_download_path'});
+ if(activeVodDownloads>=MAX_VOD_DOWNLOADS)
+  return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
+ // Provider HEAD may fail or consume a licensed provider slot. Probe only
+ // the authenticated, local feature gate; do not claim this proves that
+ // the remote movie file is available or complete.
+ if(method==='HEAD')return new Response(null,{status:200,headers:noCache({'Accept-Ranges':'none'})});
+ const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
+ const ctrl=new AbortController();
+ const cancel=()=>ctrl.abort();
+ req.signal.addEventListener('abort',cancel,{once:true});
+ activeVodDownloads++;
+ let released=false;
+ const release=()=>{if(released)return;released=true;activeVodDownloads=Math.max(0,activeVodDownloads-1);req.signal.removeEventListener('abort',cancel)};
+ try{
+  const upstream=await fetch(target,{
+   method,headers:{Authorization:h.Authorization,Accept:'application/octet-stream,video/*;q=0.9','accept-encoding':'identity'},
+   redirect:'manual',signal:ctrl.signal
+  });
+  if(!downloadableResponse(upstream.status,upstream.headers.get('content-type'))||!upstream.body&&method==='GET'){
+   try{await upstream.body?.cancel()}catch{}
+   release();
+   return json(upstream.status===401||upstream.status===403?403:upstream.status===404?404:502,
+     {error:'download_source_unavailable'});
+  }
+  const out=noCache({'Content-Type':'application/octet-stream',
+    'Content-Disposition':'attachment; filename="'+attachmentFilename(match[1],match[2],match[3])+'"',
+    'X-Content-Type-Options':'nosniff','Accept-Ranges':'none'});
+  const length=upstream.headers.get('content-length');
+  if(length&&/^[1-9][0-9]{0,14}$/.test(length))out['Content-Length']=length;
+  if(method==='HEAD'){try{await upstream.body?.cancel()}catch{}release();return new Response(null,{status:200,headers:out})}
+  const reader=upstream.body.getReader();
+  // Pull one chunk at a time (no entire movie buffered in Railway RAM).
+  const stream=new ReadableStream({
+   async pull(controller){
+    try{
+     const chunk=await reader.read();
+     if(chunk.done){release();controller.close();return}
+     controller.enqueue(chunk.value);
+    }catch{release();controller.error(new Error('download_stream_interrupted'))}
+   },
+   async cancel(){cancel();try{await reader.cancel()}catch{}release()}
+  });
+  return new Response(stream,{status:200,headers:out});
+ }catch{release();return json(502,{error:'download_source_unreachable'})}
+}
+
 if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
  const m=p.match(/^\/api\/media\/(live|movie|series)\/([0-9]{1,15})\.(ts|m3u8|mp4|mkv|avi|mov)$/i);if(!m)return json(400,{error:'invalid_media_path'});
  const target=ORIGIN+'/api/v1/stream/media/'+m[1]+'/'+m[2]+'.'+m[3].toLowerCase();
