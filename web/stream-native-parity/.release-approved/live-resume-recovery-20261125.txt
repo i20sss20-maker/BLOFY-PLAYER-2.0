@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+HLS delayed recovery defers while paused, hidden or offline rather than abandoning recovery. Manual live play restarts reconnecting transport. Preview 431ea89f-45d9-4ab1-b3a9-1f56dc8389b1 SUCCESS; 70 tests passed, zero failed; healthcheck passed. Real customer long-duration playback remains unverified. Native apps, Xtream and provider limits unchanged. Rollback 8e9a5dd0-7d1a-452b-a4bf-bbce4be0495a.
