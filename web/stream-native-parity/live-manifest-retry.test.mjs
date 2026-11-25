@@ -199,3 +199,13 @@ test('direct startup defers in background and offline and never switches engine 
  record.autoplayBlocked=false;check();assert.equal(retries,1);
  assert.match(app,/var blockedRecord=S\.play;[\s\S]*?var result=video\.play\(\);/);
 });
+
+test('runtime diagnostic identifies installed, browser and preview modes without exposing UA',()=>{
+ const a=app.indexOf('function webRuntimeMode('),b=app.indexOf('function diagnose(',a);
+ const mode=new Function(app.slice(a,b)+';return webRuntimeMode')();
+ assert.equal(mode(true,false),'installed');
+ assert.equal(mode(false,false),'browser');
+ assert.equal(mode(true,true),'preview');
+ assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
+ assert.match(app,/2026\.11\.25\.6/);
+});
