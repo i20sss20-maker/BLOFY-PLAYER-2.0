@@ -2,7 +2,7 @@
  * Network-first ensures freshly deployed app assets appear immediately.
  * Offline copies allow the interface to open; protected content still needs auth.
  */
-const CACHE_NAME='blofy-stream-shell-v6';
+const CACHE_NAME='blofy-stream-shell-v7';
 const SHELL=['/','/app.js','/profile-transfer.js','/playback-acceptance.js','/styles.css','/stream-icon.svg','/apple-touch-icon.png','/icon-192.png','/icon-512.png','/manifest.webmanifest'];
 self.addEventListener('install',function(event){
  event.waitUntil((async function(){
