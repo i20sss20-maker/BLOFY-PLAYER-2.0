@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-25
+Installed Apple WebKit standalone user-agent recognition even without Safari token, when actual MSE/MMS capability is present. Restore the same retired live session after pagehide/pageshow, respecting user pause, offline status, authentication and route identity. Preview 001d44fd-362f-4c8d-87ed-2fa2a9fd161a SUCCESS; 73 tests passed, zero failed; healthcheck passed. Actual installed Apple hardware playback remains unverified. Native apps, Xtream, provider limits unchanged. Rollback 06a7fc89-8a5d-4051-b2e4-e777f60274dc.
