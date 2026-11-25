@@ -1,4 +1,5 @@
 FROM node:20-alpine
+RUN apk add --no-cache openssh-client
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
@@ -53,5 +54,7 @@ RUN node --check src/xtream-content-hub-range-pilot.mjs && node --check src/xtre
 # no unbounded HTTP Range requests, and no cross-source content.
 COPY test/xtream-content-hub-private-range.test.mjs ./test/xtream-content-hub-private-range.test.mjs
 RUN node --check src/xtream-content-hub-private-range.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-content-hub-private-range.test.mjs
+COPY test/linode-readonly-bridge.test.mjs ./test/linode-readonly-bridge.test.mjs
+RUN node --check src/admin-control-center.mjs && node --test test/linode-readonly-bridge.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]

@@ -1,5 +1,6 @@
 // Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
 import { readFile } from 'node:fs/promises';
+import {probeLinodeBridge} from './linode-readonly-bridge.mjs';
 import {siteOperatorReadiness} from './site-operator-readiness.mjs';
 
 export const CONTROL_CENTER_TARGETS = Object.freeze([
@@ -85,10 +86,11 @@ export async function controlCenterSnapshot() {
   if(cached && Date.now()-cachedAt<CACHE_MS)return cached;
   if(pending)return pending;
   pending=(async()=>{
-    const [checks,operatorReadiness]=await Promise.all([
+    const [checks,operatorReadiness,linode]=await Promise.all([
       Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target))),
-      siteOperatorReadiness()
+      siteOperatorReadiness(),probeLinodeBridge()
     ]);
+    if(linode)checks.push(linode);
     const result={
       product:'BLOFY CONTROL CENTER',version:1,mode:'read-only',
       checkedAt:new Date().toISOString(),
@@ -100,7 +102,7 @@ export async function controlCenterSnapshot() {
         reachable:checks.filter(c=>c.status==='reachable').length,
         failed:checks.filter(c=>['error','offline'].includes(c.status)).length
       },
-      scope:'HTTP service reachability only; no media playback or audio inspection',
+      scope:linode?'HTTP reachability and read-only Linode telemetry; no customer playback verification':'HTTP service reachability only; no media playback or audio inspection',
       phases:[
         {label:'إدارة STREAM والمصادر والمكتبة',state:'available'},
         {label:'الأكواد والمشتركون ولوحات الموزعين',state:'available'},
