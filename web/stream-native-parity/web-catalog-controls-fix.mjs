@@ -81,5 +81,14 @@ app=change(app,"  status.textContent=(count?'تم العثور على '+count+' 
 app=change(app," for(var i=0;i<kinds.length;i++)(function(k){\n  var xhr=pageRequest(k,'all',0,20", " draw();\n for(var i=0;i<kinds.length;i++)(function(k){\n  var xhr=pageRequest(k,'all',0,20");
 app=change(app,"    responses[k]=p.items.slice(0,20);","    delete previewKinds[k];\n    responses[k]=p.items.slice(0,20);");
 
+
+ // Engine replacement resets companion audio before the primary decoder
+ // changes its mute state. Keep original sound after recovery.
+app=change(app," if(!S.play)return;var old=S.play;S.play=null;"," if(!S.play)return;var old=S.play;S.play=null;\n if(old.kind==='live'&&!old.preview&&S.playerView&&S.playerView.video===old.video&&S.playerView.commentary){S.playerView.commentary.stop()}");
+ // Surface catalogue errors inside the visible selection panel, not only
+ // in the collapsed More menu. Use textContent for provider-facing labels.
+app=change(app,"  if(status)status.textContent=String(message||'');","  if(status)status.textContent=String(message||'');\n  var dialogStatus=document.getElementById('player-commentary-dialog-status');\n  if(dialogStatus)dialogStatus.textContent=String(message||'');");
+app=change(app,"   '<div class=\"native-player-choice-items\">'+options.map(function(option,index){","   (heading==='المعلقين • BLOFY'?'<p class=\"small muted\" id=\"player-commentary-dialog-status\" role=\"status\" aria-live=\"polite\"></p>':'')+\n   '<div class=\"native-player-choice-items\">'+options.map(function(option,index){");
+
 new Function(app);
 writeFileSync('app.js',app);writeFileSync('server.ts',server);
