@@ -63,3 +63,14 @@ test('logout closes active player before invalidating the cookie with bounded wa
  assert.match(logout,/pendingMediaStops>0&&Date\.now\(\)<deadline/);
  assert.match(logout,/Date\.now\(\)\+3500/);
 });
+
+test('aborted media STOP releases accounting exactly once, even if a late event arrives',()=>{
+ const {context,requests}=setup();let calls=0;
+ context.api('POST','/api/hls/live/31/ts/0/stop',{},()=>calls++);
+ assert.equal(context.pendingMediaStops,1);
+ requests[0].onabort();
+ assert.equal(context.pendingMediaStops,0);
+ requests[0].resolve(200);
+ assert.equal(context.pendingMediaStops,0);
+ assert.equal(calls,1);
+});
