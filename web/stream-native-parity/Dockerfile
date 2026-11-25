@@ -13,6 +13,8 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends chromium ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY qa/synthetic-live-browser.mjs /app/qa/
 RUN bun run ./qa/synthetic-live-browser.mjs
+COPY qa/synthetic-shaka-browser.mjs /app/qa/
+RUN bun run ./qa/synthetic-shaka-browser.mjs
 ENV PORT=8080
 EXPOSE 8080
 USER bun
