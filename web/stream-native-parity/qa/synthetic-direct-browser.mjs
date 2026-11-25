@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {chromium} from '@playwright/test';
 const dir=mkdtempSync(join(tmpdir(),'blofy-direct-browser-'));
-let browser,server;
+let browser,server,timer;
 try{
  const ff=spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=480x270:rate=25','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','36','-c:v','libx264','-preset','ultrafast','-g','50','-keyint_min','50','-sc_threshold','0','-pix_fmt','yuv420p','-c:a','aac','-f','segment','-segment_time','2','-segment_format','mpegts','-reset_timestamps','0',join(dir,'seg-%03d.ts')],{timeout:60000});
  assert.equal(ff.status,0,String(ff.stderr));
@@ -14,7 +14,7 @@ try{
  const configuration=app.match(/var transport=window\.mpegts\.createPlayer\(\{[\s\S]*?url:'\/api\/media\/live\/'\+enc\(id\)\+'\.ts'\s*\},(\{[\s\S]*?\})\);/)?.[1];
  assert.ok(configuration,'extract actual direct MPEG-TS config');
  const js=readFileSync('node_modules/mpegts.js/dist/mpegts.js');
- let requests=0,delivered=0,gapAt=0,cancelled=false,closed=false,timer;
+ let requests=0,delivered=0,gapAt=0,cancelled=false,closed=false;
  server=Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){
   const path=new URL(req.url).pathname;
   if(path==='/')return new Response('<!doctype html><video muted autoplay playsinline></video><script src="/mpegts.js"></script>',{headers:{'content-type':'text/html'}});
