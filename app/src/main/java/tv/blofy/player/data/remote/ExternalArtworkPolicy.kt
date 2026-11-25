@@ -6,8 +6,7 @@ import tv.blofy.player.core.identity.ExternalStreamConnectClient
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/** Public TMDB artwork only. Never persist arbitrary provider URLs, credentials,
- * redirects or tracking query strings from an external catalog. */
+/** Public provider artwork with guarded DNS, bounded redirects and no stored credentials. */
 internal object ExternalArtworkPolicy {
     private val path = Regex("/t/p/(?:original|w[0-9]{2,4}|h[0-9]{2,4})/[A-Za-z0-9_-]{1,120}\\.(?:jpg|jpeg|png|webp)", RegexOption.IGNORE_CASE)
     fun safeUrl(raw: String?): String? {
@@ -45,7 +44,19 @@ internal object ExternalArtworkPolicy {
     fun providerUrl(raw: String?, credentials: ExternalStreamConnectClient.Credentials?): String? =
         if (credentials == null) safeUrl(raw) else publicImageUrl(raw, credentials)
 
-    val client by lazy {
+    // Optimize only known TMDB sizes, not arbitrary provider URLs.
+    internal fun preferredDownloadUrl(raw: String, targetWidth: Int): String {
+        val url = safeUrl(raw)?.toHttpUrlOrNull() ?: return raw
+        val size = url.pathSegments[2]
+        val width = size.removePrefix("w").toIntOrNull()
+        val preferred = if (targetWidth <= 420) "w500" else "w780"
+        if (size != "original" && (width == null || width <= preferred.drop(1).toInt())) return raw
+        return url.newBuilder().setPathSegment(2, preferred).build().toString()
+    }
+
+    val client by lazy { clientFor(null) }
+
+    internal fun clientFor(credentials: ExternalStreamConnectClient.Credentials?) =
         ExternalStreamConnectVerifier.directClient.newBuilder()
             .connectTimeout(4,TimeUnit.SECONDS)
             .readTimeout(8,TimeUnit.SECONDS)
@@ -54,7 +65,7 @@ internal object ExternalArtworkPolicy {
             .addInterceptor { chain ->
                 val request = chain.request()
                 var url = request.url
-                if (publicImageUrl(url.toString()) == null || request.method != "GET")
+                if (publicImageUrl(url.toString(), credentials) == null || request.method != "GET")
                     throw IOException("Artwork route denied")
                 var response = chain.proceed(request.newBuilder().removeHeader("Authorization").removeHeader("Cookie").build())
                 var hops = 0
@@ -62,7 +73,7 @@ internal object ExternalArtworkPolicy {
                     val location = response.header("Location")
                     response.close()
                     val next = location?.let(url::resolve)
-                    if (++hops > 3 || next == null || publicImageUrl(next.toString()) == null ||
+                    if (++hops > 3 || next == null || publicImageUrl(next.toString(), credentials) == null ||
                         (url.scheme == "https" && next.scheme != "https"))
                         throw IOException("Artwork redirect denied")
                     url = next
@@ -72,5 +83,4 @@ internal object ExternalArtworkPolicy {
                 response
             }
             .build()
-    }
 }
