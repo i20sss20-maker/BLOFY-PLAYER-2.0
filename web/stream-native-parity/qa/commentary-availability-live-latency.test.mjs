@@ -27,6 +27,10 @@ test('LIVE commentator menu supports existing in-stream audio without another up
  assert.match(app,/manager\.select\('original'\)/);
  assert.match(app,/choicePanel\.hidden\|\|choiceOrigin!==origin/);
  assert.match(app,/المعلقون الخارجيون غير مفعّلين على السيرفر/);
+ assert.match(app,/id="commentator-voice-preview"/);
+ assert.match(app,/tracks\.filter\(function\(t\)/);
+ assert.match(app,/commentary_not_enabled/);
+ assert.match(app,/تقدر تجرب الصوتيات المدمجة/);
 });
 
 test('disabled external commentary returns explicit status while primary TV audio stays live',async()=>{
