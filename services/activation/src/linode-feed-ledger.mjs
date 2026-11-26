@@ -18,6 +18,12 @@ export async function ensureLinodeFeedLedger(db){
  await db.query(`CREATE TABLE IF NOT EXISTS blofy_linode_feed_requests (
  request_id uuid PRIMARY KEY, source_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
  )`);
+ await db.query(`CREATE TABLE IF NOT EXISTS blofy_linode_viewer_sessions (
+ session_id uuid PRIMARY KEY, source_id uuid NOT NULL, reservation_id uuid NOT NULL,
+ account_id uuid NOT NULL, channel_id text NOT NULL, generation text NOT NULL,
+ expires_at timestamptz NOT NULL, closed boolean NOT NULL DEFAULT false
+ )`);
+ await db.query('CREATE INDEX IF NOT EXISTS blofy_linode_viewers_reservation_idx ON blofy_linode_viewer_sessions(reservation_id, expires_at) WHERE NOT closed');
 }
 export function createLinodeFeedLedger(pool,env=process.env){
  const enabled=sourceId=>env.BLOFY_LINODE_FEED_LEDGER==='1'&&
@@ -55,6 +61,61 @@ export function createLinodeFeedLedger(pool,env=process.env){
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
      state='pending',generation=NULL,updated_at=now()`,[sourceId,channelId,requestId,reservationId]);
     return {ok:true,action:'start_once',reservationId,state:'pending'};
+   });
+  },
+  // Only authenticated server-owned input, not public request bodies.
+  // Same-source lock serializes viewer quotas and feed transitions.
+  async attachViewer({sourceId,reservationId,channelId,generation,sessionId,accountId,
+    accountQuota,authorizedUntil}={}){
+   const valid=x=>typeof x==='string'&&uuid.test(x)&&x===x.toLowerCase();
+   if(!enabled(sourceId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
+      ![reservationId,sessionId,accountId].every(valid)||typeof channelId!=='string'||
+      !channel.test(channelId)||typeof generation!=='string'||!/^[0-9a-f]{32}$/.test(generation)||
+      !Number.isSafeInteger(accountQuota)||accountQuota<1||accountQuota>150||
+      typeof authorizedUntil!=='string'||!Number.isFinite(Date.parse(authorizedUntil)))
+     return blocked('viewer_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||row.state!=='ready'||row.reservation_id!==reservationId||
+       row.channel_id!==channelId||row.generation!==generation)return blocked('feed_not_ready');
+    const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(clock.now).getTime();
+    const until=Math.min(Date.parse(authorizedUntil),now+60000);
+    if(until<=now+5000)return blocked('viewer_expired');
+    const {rows:[old]}=await c.query('SELECT * FROM blofy_linode_viewer_sessions WHERE session_id=$1',[sessionId]);
+    if(old&&(old.closed||new Date(old.expires_at).getTime()<=now||
+       old.account_id!==accountId||old.source_id!==sourceId||old.reservation_id!==reservationId||
+       old.channel_id!==channelId||old.generation!==generation))return blocked('viewer_session_closed_or_mismatch');
+    const {rows:[counts]}=await c.query(`SELECT count(*)::int AS total,
+      count(*) FILTER(WHERE account_id=$2)::int AS account
+      FROM blofy_linode_viewer_sessions
+      WHERE reservation_id=$1 AND NOT closed AND expires_at>$3 AND session_id<>$4`,
+      [reservationId,accountId,new Date(now),sessionId]);
+    if(counts.total>=150||counts.account>=accountQuota)return blocked('viewer_quota');
+    const expiresAt=new Date(until).toISOString();
+    const result=await c.query(`INSERT INTO blofy_linode_viewer_sessions
+      (session_id,source_id,reservation_id,account_id,channel_id,generation,expires_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT(session_id) DO UPDATE SET expires_at=EXCLUDED.expires_at
+      WHERE NOT blofy_linode_viewer_sessions.closed
+        AND blofy_linode_viewer_sessions.account_id=EXCLUDED.account_id
+        AND blofy_linode_viewer_sessions.source_id=EXCLUDED.source_id
+        AND blofy_linode_viewer_sessions.reservation_id=EXCLUDED.reservation_id
+        AND blofy_linode_viewer_sessions.channel_id=EXCLUDED.channel_id
+        AND blofy_linode_viewer_sessions.generation=EXCLUDED.generation
+        AND blofy_linode_viewer_sessions.expires_at>$8
+      RETURNING session_id`,[sessionId,sourceId,reservationId,accountId,channelId,generation,expiresAt,new Date(now)]);
+    if(result.rowCount!==1)return blocked('viewer_session_conflict');
+    return {ok:true,sessionId,reservationId,expiresAt};
+   });
+  },
+  async closeViewer({sourceId,reservationId,sessionId,accountId}={}){
+   if(!enabled(sourceId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
+     ![reservationId,sessionId,accountId].every(x=>typeof x==='string'&&uuid.test(x)))return blocked('viewer_invalid');
+   return tx(sourceId,async(c)=>{
+    const r=await c.query(`UPDATE blofy_linode_viewer_sessions SET closed=true
+      WHERE session_id=$1 AND source_id=$2 AND reservation_id=$3 AND account_id=$4`,
+      [sessionId,sourceId,reservationId,accountId]);
+    return r.rowCount===1?{ok:true}:blocked('viewer_session_mismatch');
    });
   },
   async transition({sourceId,reservationId,next,generation,releaseConfirmed}={}){
