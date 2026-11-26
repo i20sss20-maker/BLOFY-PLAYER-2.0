@@ -15,7 +15,7 @@ function fixture(){
    if(seen.has(args[0]))return {rowCount:0};seen.add(args[0]);return {rowCount:1};
   }
   if(sql.startsWith('INSERT INTO blofy_linode_feed_ledger')){
-   row={source_id:args[0],channel_id:args[1],request_id:args[2],reservation_id:args[3],state:'pending'};
+   row={source_id:args[0],channel_id:args[1],request_id:args[2],reservation_id:args[3],state:'pending',engine_id:args[4]};
   }
   if(sql.startsWith('UPDATE'))row.state=sql.match(/state='([^']+)'/)[1];
   return {rows:[]};
@@ -50,4 +50,9 @@ test('unknown cannot reopen or release without trusted confirmation',async()=>{
 test('disabled path never connects',async()=>{
  const ledger=createLinodeFeedLedger({connect(){throw Error('unexpected database access');}},{});
  assert.equal((await ledger.reserve({sourceId,requestId,channelId:'123'})).ok,false);
+});
+
+test('secondary engine is explicitly disabled by default',async()=>{
+ const {ledger}=fixture();
+ assert.equal((await ledger.reserve({sourceId,requestId,channelId:'123',engineId:'hostbrr'})).ok,false);
 });
