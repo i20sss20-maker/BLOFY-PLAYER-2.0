@@ -361,8 +361,13 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
  const id=p.slice('/api/commentary/'.length);if(!validCommentaryId(id))return json(404,{error:'unknown_track'});
  try{
   const r=await fetch(ORIGIN+'/api/v1/stream/media/audio/'+id,{headers:{Authorization:h.Authorization,Accept:'audio/*'},redirect:'manual',signal:req.signal});
-  const mime=(r.headers.get('content-type')||'').split(';')[0].toLowerCase();
-  if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/aacp','audio/mp4'].includes(mime)){
+  const rawMime=(r.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+  // Normalize only established audio aliases. Never label HTML/JSON or an
+  // unknown binary body as audio and never relax the authenticated origin.
+  const aliases:Record<string,string>={'audio/mp3':'audio/mpeg','audio/x-mpeg':'audio/mpeg','audio/x-mp3':'audio/mpeg','audio/x-aac':'audio/aac','audio/aacp':'audio/aac'};
+  const mime=Object.hasOwn(aliases,rawMime)?aliases[rawMime]:rawMime;
+  if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/mp4'].includes(mime)){
+   console.warn('commentary_upstream_rejected',{status:r.status,hasBody:!!r.body,mimeClass:rawMime.startsWith('audio/')?'audio_other':rawMime==='application/octet-stream'?'binary':rawMime==='application/json'?'json':'other'});
    await r.body?.cancel();return json(r.status===401||r.status===403?r.status:r.status===429?429:503,{error:'commentary_unavailable'})
   }
   return new Response(r.body,{headers:noCache({'Content-Type':mime,'Accept-Ranges':'none'})});
