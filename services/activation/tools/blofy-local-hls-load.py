@@ -37,9 +37,13 @@ def viewer(deadline, gate):
     seen = set()
     initial = None
     advanced = False
+    last_progress = None
+    max_gap = 0.0
+    playlist_time = None
     times = []
     size = errors = 0
     gate.wait()
+    started = time.monotonic()
     while time.monotonic() < deadline:
         try:
             raw, _ = fetch(BASE)
@@ -50,8 +54,11 @@ def viewer(deadline, gate):
             if not segments:
                 raise ValueError('empty playlist')
             urls = [urljoin(BASE, segment) for segment in segments]
+            if any(x == '#EXT-X-ENDLIST' for x in lines):
+                raise ValueError('static playlist rejected')
             if initial is None:
                 initial = set(urls)
+                playlist_time = time.monotonic()
             for url in urls:
                 if url in seen:
                     continue
@@ -61,29 +68,44 @@ def viewer(deadline, gate):
                 seen.add(url)
                 if url not in initial:
                     advanced = True
+                    now = time.monotonic()
+                    max_gap = max(max_gap, now - (last_progress or playlist_time))
+                    last_progress = now
                 if time.monotonic() >= deadline:
                     break
         except (OSError, ValueError, http.client.HTTPException):
             errors += 1
         time.sleep(max(0, min(1, deadline - time.monotonic())))
-    return len(seen) >= 2 and advanced, errors, size, times
+    max_gap = max(max_gap, time.monotonic() - (last_progress or started))
+    return len(seen) >= 2 and advanced, errors, size, times, max_gap
 
 
 def stage(count, seconds):
     gate = threading.Event()
-    deadline = time.monotonic() + seconds
+    ready = threading.Barrier(count + 1, timeout=15)
+    deadline = [None]
+    def run():
+        ready.wait()
+        gate.wait()
+        return viewer(deadline[0], gate)
     with cf.ThreadPoolExecutor(max_workers=count) as pool:
-        tasks = [pool.submit(viewer, deadline, gate) for _ in range(count)]
-        gate.set()
+        tasks = [pool.submit(run) for _ in range(count)]
+        try:
+            ready.wait()
+        finally:
+            deadline[0] = time.monotonic() + seconds
+            gate.set()
         rows = [f.result() for f in tasks]
     latencies = sorted(t for r in rows for t in r[3])
     p95 = latencies[math.ceil(len(latencies) * .95) - 1] if latencies else None
     progressed = sum(r[0] for r in rows)
     errors = sum(r[1] for r in rows)
+    worst_gap = max(r[4] for r in rows)
     result = dict(viewers=count, progressing_viewers=progressed, errors=errors,
                   segments=len(latencies), bytes=sum(r[2] for r in rows),
+                  max_progress_gap_seconds=round(worst_gap, 3),
                   p95_segment_seconds=round(p95, 3) if p95 is not None else None)
-    result['passed'] = progressed == count and errors == 0 and p95 is not None and p95 <= 2
+    result['passed'] = progressed == count and errors == 0 and p95 is not None and p95 <= 2 and worst_gap <= 8
     return result
 
 
@@ -91,7 +113,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--confirm-synthetic', action='store_true', required=True,
                         help='confirm port 3021 is serving synthetic QA media, not customer or provider traffic')
-    parser.add_argument('--seconds', type=int, default=15, choices=range(5, 21), metavar='5..20')
+    parser.add_argument('--seconds', type=int, default=30, choices=range(15, 121), metavar='15..120')
     parser.add_argument('--max-viewers', type=int, default=150, choices=STAGES)
     args = parser.parse_args()
     for count in STAGES:
