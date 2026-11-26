@@ -1301,6 +1301,40 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
    originStability:{coolingSources,recentSources:liveSourceFailureWindows.size},
    encoderCapacity:encoderCapacitySnapshot(now)})
  }
+ if(path.startsWith('/audio-compat/')){
+  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
+  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
+  const match=path.match(/^\/audio-compat\/(anis-[a-z0-9-]{1,54})$/);
+  const bearer=req.headers.get('authorization')||'';
+  if(!match)return json(404,{error:'invalid_audio_track'});
+  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return json(401,{error:'authorization_missing'});
+  if(active>=MAX_JOBS){noteEncoderCapacityDenied();return json(429,{error:'compat_capacity'})}
+  active++;
+  const controller=new AbortController();
+  let proc=null,released=false,timer=null,reader=null;
+  const release=()=>{if(!released){released=true;active=Math.max(0,active-1)}};
+  const stop=()=>{if(timer)clearTimeout(timer);controller.abort();if(proc){try{proc.kill()}catch{}}else release()};
+  req.signal.addEventListener('abort',stop,{once:true});
+  try{
+   if(req.signal.aborted){stop();return json(410,{error:'audio_cancelled'})}
+   timer=setTimeout(stop,12000);
+   const source=await fetch(BASE+'audio/'+match[1],{headers:{Authorization:bearer,Accept:'audio/*,video/mp2t'},redirect:'manual',signal:controller.signal});
+   if(!source.ok||!source.body){try{await source.body?.cancel()}catch{};stop();return json([401,403,429].includes(source.status)?source.status:502,{error:'audio_source_unavailable'})}
+   const mime=(source.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+   if(!['video/mp2t','audio/ogg','audio/flac','audio/mpeg','audio/aac','audio/aacp','audio/mp4'].includes(mime)){await source.body.cancel();stop();return json(415,{error:'unsupported_audio_container'})}
+   proc=Bun.spawn([FFMPEG,'-hide_banner','-loglevel','error','-nostdin','-probesize','1000000','-analyzeduration','1500000','-i','pipe:0','-map','0:a:0','-vn','-sn','-dn','-c:a','libmp3lame','-b:a','128k','-ac','2','-ar','44100','-f','mp3','pipe:1'],{stdin:source.body,stdout:'pipe',stderr:'ignore',signal:controller.signal});
+   proc.exited.then(()=>{release();controller.abort()},()=>{release();controller.abort()});
+   reader=proc.stdout.getReader();
+   const first=await reader.read();
+   clearTimeout(timer);timer=null;
+   if(first.done||!first.value?.byteLength){stop();return json(502,{error:'audio_no_output'})}
+   return new Response(new ReadableStream({
+    start(c){c.enqueue(first.value)},
+    async pull(c){try{const n=await reader.read();if(n.done){c.close();stop()}else c.enqueue(n.value)}catch(e){c.error(e);stop()}},
+    cancel(){stop();try{return reader.cancel()}catch{}}
+   }),{headers:{'Content-Type':'audio/mpeg','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','Accept-Ranges':'none'}});
+  }catch{stop();return json(502,{error:'audio_conversion_failed'})}
+ }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
