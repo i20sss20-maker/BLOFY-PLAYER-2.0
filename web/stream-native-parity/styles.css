@@ -1004,3 +1004,23 @@ html[data-blofy-device="tv"] .native-player-control{color:#fff;background:#192b3
 html[data-blofy-device="tv"] .native-player-control.native-player-primary{background:#17676c}
 html[data-blofy-device="tv"] .player-loading{background:#18242e;color:#fff}
 @media(min-width:1600px){html[data-blofy-device="tv"] .rail{width:220px}html[data-blofy-device="tv"] .rail-link{height:56px;font-size:20px}html[data-blofy-device="tv"] .home-hero{height:350px}html[data-blofy-device="tv"] .h-scroll .poster{flex-basis:205px;width:205px}html[data-blofy-device="tv"] .h-scroll .poster-art{height:285px}}
+
+/* Live TV catalog: stable three panes at 720p and 1080p. */
+html[data-blofy-device="tv"] .live-catalog{gap:0;min-height:0;height:calc(100vh - 114px)}
+html[data-blofy-device="tv"] .live-catalog .cat-rail{width:22%;min-width:150px}
+html[data-blofy-device="tv"] .live-catalog .channels{width:33%;min-width:190px}
+html[data-blofy-device="tv"] .live-catalog .pane-scroll{min-height:0;overflow-y:auto;overflow-x:hidden}
+html[data-blofy-device="tv"] .live-catalog .pane-head strong{font-size:21px;color:#fff}
+html[data-blofy-device="tv"] .live-catalog .cat-item{font-size:18px;line-height:1.4;padding:11px 12px;white-space:normal;overflow-wrap:break-word}
+html[data-blofy-device="tv"] .live-catalog .channel-item{min-height:62px;padding:8px 10px}
+html[data-blofy-device="tv"] .live-catalog .channel-image{width:48px;height:42px;margin-left:10px;background:#182b36}
+html[data-blofy-device="tv"] .live-catalog .channel-name{min-width:0}
+html[data-blofy-device="tv"] .live-catalog .preview-video-wrap video{top:0;right:0;bottom:0;left:0}
+html[data-blofy-device="tv"] .live-catalog .preview-controls h3{font-size:21px;color:#fff}
+html[data-blofy-device="tv"] .live-catalog .preview-controls .row{display:flex;flex-wrap:wrap;gap:0}
+html[data-blofy-device="tv"] .live-catalog .preview-controls .row .btn{margin:0 0 6px 6px;font-size:14px;padding:7px 10px}
+html[data-blofy-device="tv"] .live-catalog .preview-status{color:#b9ccd4;font-size:14px}
+html[data-blofy-device="tv"] .live-catalog .preview-video-wrap{min-height:145px}
+html[data-blofy-device="tv"] .live-catalog .preview-controls{padding:12px 14px}
+html[data-blofy-device="tv"] .live-catalog .preview-controls .chip{color:#071c20;background:#54ded0}
+@media(max-height:800px){html[data-blofy-device="tv"] .live-catalog .preview-controls p{margin:5px 0;min-height:0}html[data-blofy-device="tv"] .live-catalog .pane-head{padding:10px 12px}html[data-blofy-device="tv"] .live-catalog .channel-item{min-height:54px}}
