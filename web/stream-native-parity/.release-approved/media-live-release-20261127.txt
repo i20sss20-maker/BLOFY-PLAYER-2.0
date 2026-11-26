@@ -1,0 +1,1 @@
+Media worker hotfix: explicit locked-source cancellation and live-only 60s abandoned-session timeout. Keep licensed concurrency cap unchanged. Docker media QA required. Does not certify provider release or fix saturation by other active viewers. Previous deployment commit a0acd8725f649b456838160a0e6936979d2f2763.
