@@ -6,7 +6,7 @@ const request={requestId:'attempt-1',sourceId:'s',channelId:'10',authorized:true
 function fixture(state='empty'){
  const calls=[],claimed=new Set();
  const snapshot={entitlement:{sourceId:'s',redistributionAllowed:true,expiresAt:now+60000},feed:{sourceId:'s',state},capacity:{sourceId:'s',authoritative:true,scope:'all_paths',activeConnections:0,maxConnections:1,observedAt:now},workers:{hostbrr:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:0,viewerLimit:10}}};
- if(state==='ready')Object.assign(snapshot.feed,{engineId:'hostbrr',reservationId:'r',channelId:'10',generation:'g'});
+ if(state==='ready'){Object.assign(snapshot.feed,{engineId:'hostbrr',reservationId:'r',channelId:'10',generation:'g'});snapshot.feedProof={...snapshot.feed,authenticated:true,status:'private_hls_ready',observedAt:now,lastSegment:3,localSourceConnections:1};}
  const opts={enabled:true,clock:()=>now,readSnapshot:async()=>snapshot,ledger:{readRoutingState:async()=>snapshot.feed},claims:{claim:async({requestId})=>{if(claimed.has(requestId))return {acquired:false};claimed.add(requestId);return {acquired:true,token:requestId}},finish:async()=>true},start:async()=>{calls.push('start');return {ok:true,action:'feed_ready',sourceId:'s',channelId:'10',engineId:'hostbrr',reservationId:'r'}},release:async()=>{calls.push('release');return {ok:true,action:'released',sourceId:'s',engineId:'hostbrr',reservationId:'r'}},attach:async()=>{calls.push('attach');return {ok:true}}};
  return {opts,calls,snapshot};
 }
