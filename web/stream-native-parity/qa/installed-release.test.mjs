@@ -217,3 +217,10 @@ test('direct MPEG-TS handoff preserves unconfirmed HLS key and blocks overlappin
  play(video,'1',null);assert.equal(calls[1].path,calls[0].path);calls[1].cb(200);
  assert.equal(state.directStopKey,null);assert.equal(opened,1);
 });
+
+test('external player waits for retained internal transport retirement',()=>{
+ assert.match(app,/state\.externalPending\|\|state\.directStopPending\|\|state\.liveHlsHandoff\|\|state\.externalMode/);
+ assert.match(app,/stop=state\.directStopKey\?'\/api\/hls\/'\+state\.directStopKey\+'\/stop'/);
+ assert.match(app,/if\(st===200\|\|st===404\)\{state\.externalRetiringStop=null;state\.directStopKey=null;issue\(\)\}/);
+ assert.match(app,/state\.externalRetiringStop=null;state\.directStopKey=null;stopExternal\(\)/);
+});
