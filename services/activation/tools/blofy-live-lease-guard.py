@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed renewable lease for one already reserved live source.
 No source allocation, network request or service start is performed here."""
-import base64, json, os, re, stat, subprocess, tempfile, time
+import base64, json, os, re, stat, subprocess, tempfile, time, threading, signal, socket
 from pathlib import Path
 
 FIELDS=("version","engineId","sourceId","channelId","reservationId","sequence","issuedAt","expiresAt")
@@ -36,6 +36,7 @@ class LiveLeaseGuard:
         if set(identity)!=set(IDENTITY) or identity["engineId"] not in ("hostbrr","linode") or not all(isinstance(identity[k],str) and UUID.fullmatch(identity[k]) for k in ("sourceId","reservationId")) or not isinstance(identity["channelId"],str) or not re.fullmatch(r"[1-9][0-9]{0,14}",identity["channelId"]):raise LeaseError("LEASE_IDENTITY_INVALID")
         self.path=path;self.identity=dict(identity);self.state_dir=Path(state_dir);self.verify=verify
         self.clock=clock;self.monotonic=monotonic;self.reader=reader
+        self._lock=threading.RLock()
         self.seq=0;self.issued=0;self.expires=0;self.deadline=0;self.raw=None;self.started=False
     def refresh(self):
         try:
@@ -69,6 +70,45 @@ class LiveLeaseGuard:
         except LeaseError:raise
         except Exception as e:raise LeaseError("LEASE_UNAVAILABLE") from e
     def active(self):
-        self.refresh()
-        if self.monotonic()>=self.deadline or int(self.clock()*1000)>=self.expires:raise LeaseError("LEASE_EXPIRED")
-        return True
+        with self._lock:
+            self.refresh()
+            if self.monotonic()>=self.deadline or int(self.clock()*1000)>=self.expires:raise LeaseError("LEASE_EXPIRED")
+            return True
+
+
+def notify_watchdog():
+    # systemd's independent watchdog covers even a frozen interpreter.
+    address=os.environ.get("NOTIFY_SOCKET")
+    if not address:return
+    if address.startswith("@"):address="\0"+address[1:]
+    with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as s:
+        s.settimeout(0.1)
+        s.sendto(b"WATCHDOG=1",address)
+
+class LeaseWatchdog:
+    """Independently revoke a blocked source runtime when its lease expires.
+    Production runs in a systemd control group; killing the main process
+    does not certify provider release. The central ledger must remain held.
+    """
+    def __init__(self,guard,terminate=None,interval=0.5,notify=notify_watchdog):
+        self.guard=guard
+        self.terminate=terminate or (lambda:os.kill(os.getpid(),signal.SIGKILL))
+        self.interval=interval;self.notify=notify
+        self.closed=threading.Event();self.thread=None
+    def start(self):
+        self.guard.active()
+        if self.thread is not None:raise LeaseError("WATCHDOG_ALREADY_STARTED")
+        self.thread=threading.Thread(target=self.run,name="blofy-lease-watchdog",daemon=True)
+        self.thread.start()
+    def run(self):
+        while not self.closed.is_set():
+            try:
+                self.guard.active()
+                self.notify()
+            except Exception:
+                if not self.closed.is_set():self.terminate()
+                return
+            self.closed.wait(self.interval)
+    def stop_after_source_closed(self):
+        self.closed.set()
+        if self.thread is not None:self.thread.join(timeout=4)
