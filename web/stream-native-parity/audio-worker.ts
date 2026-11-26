@@ -15,15 +15,19 @@ Bun.serve({port:Number(Bun.env.PORT||8080),idleTimeout:60,async fetch(req){
  if(path==='/health'&&req.method==='GET')return json(ready?200:503,{ok:ready,service:'blofy-stream-web-audio'});
  if(!ready)return json(503,{error:'audio_worker_unavailable'});
  if(path==='/internal/metrics'&&req.method==='GET'&&secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(200,slots.snapshot());
- if(path.startsWith('/audio-compat/')){
+ const synthetic=path==='/internal/synthetic-audio';
+ if(synthetic&&Bun.env.BLOFY_WEB_SYNTHETIC_ONLY!=='1')return json(404,{error:'not_found'});
+ if(synthetic||path.startsWith('/audio-compat/')){
   if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
   if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
   const match=path.match(/^\/audio-compat\/(anis-[a-z0-9-]{1,54})$/);
   const bearer=req.headers.get('authorization')||'';
-  if(!match)return json(404,{error:'invalid_audio_track'});
-  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return json(401,{error:'authorization_missing'});
-  if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1')return json(403,{error:'synthetic_staging_only'});
-  const releaseSlot=slots.acquire(createHmac('sha256',SECRET).update(bearer).digest('hex'));
+  if(!synthetic){
+   if(!match)return json(404,{error:'invalid_audio_track'});
+   if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return json(401,{error:'authorization_missing'});
+   if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1')return json(403,{error:'synthetic_staging_only'});
+  }
+  const releaseSlot=slots.acquire(createHmac('sha256',SECRET).update(synthetic?'synthetic-fixture':bearer).digest('hex'));
   if(!releaseSlot)return json(429,{error:'audio_capacity'},{'Retry-After':'3'});
   const controller=new AbortController();
   let proc=null,released=false,timer=null,reader=null;
@@ -33,7 +37,9 @@ Bun.serve({port:Number(Bun.env.PORT||8080),idleTimeout:60,async fetch(req){
   try{
    if(req.signal.aborted){stop();return json(410,{error:'audio_cancelled'})}
    timer=setTimeout(stop,12000);
-   const source=await fetch(BASE+'audio/'+match[1],{headers:{Authorization:bearer,Accept:'audio/*,video/mp2t'},redirect:'manual',signal:controller.signal});
+   // Synthetic fixture uses the identical runtime conversion and slot path,
+   // without contacting any origin or accepting caller-supplied media.
+   const source=synthetic?new Response(fixture.stdout,{headers:{'Content-Type':'video/mp2t'}}):await fetch(BASE+'audio/'+match[1],{headers:{Authorization:bearer,Accept:'audio/*,video/mp2t'},redirect:'manual',signal:controller.signal});
    if(!source.ok||!source.body){try{void source.body?.cancel().catch(()=>{})}catch{};stop();return json([401,403,429].includes(source.status)?source.status:502,{error:'audio_source_unavailable'})}
    if(controller.signal.aborted){try{void source.body.cancel().catch(()=>{})}catch{};stop();return json(410,{error:'audio_cancelled'})}
    const mime=audioContainer(source.headers.get('content-type'));
