@@ -1,0 +1,32 @@
+name: QA web live soak
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'web/stream-native-parity/qa/synthetic-live-soak.mjs'
+      - '.github/workflows/web-live-soak-qa.yml'
+permissions:
+  contents: read
+jobs:
+  live-soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: web/stream-native-parity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser and FFmpeg
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chrome
+          if ! command -v ffmpeg >/dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg; fi
+      - name: Generate authorized synthetic live fixture
+        run: |
+          mkdir -p qa-soak
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=320x180:rate=15' -f lavfi -i 'sine=frequency=440:sample_rate=44100' -t 1230 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 30 -sc_threshold 0 -b:v 200k -c:a aac -b:a 48k -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename 'qa-soak/seg-%05d.ts' qa-soak/index.m3u8
+      - name: Verify 20 minutes of real decoded picture progress
+        run: node qa/synthetic-live-soak.mjs qa-soak
