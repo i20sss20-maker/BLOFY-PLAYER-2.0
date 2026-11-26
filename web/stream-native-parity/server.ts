@@ -366,8 +366,18 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
   // unknown binary body as audio and never relax the authenticated origin.
   const aliases:Record<string,string>={'audio/mp3':'audio/mpeg','audio/x-mpeg':'audio/mpeg','audio/x-mp3':'audio/mpeg','audio/x-aac':'audio/aac','audio/aacp':'audio/aac'};
   const mime=Object.hasOwn(aliases,rawMime)?aliases[rawMime]:rawMime;
+  // The authenticated origin has already verified the input bytes. Convert
+  // only known containers, without accepting generic binary/HTML/JSON.
+  if(r.ok&&r.body&&['video/mp2t','audio/ogg','audio/flac'].includes(mime)){
+   try{await r.body.cancel()}catch{}
+   const host=String(Bun.env.VIDAA_COMPAT_URL||''),secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
+   if(!/^http:\/\/blofy-stream-web-media\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
+   const converted=await fetch(host+'/audio-compat/'+id,{headers:{Authorization:h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
+   if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:'audio_conversion_unavailable'})}
+   return new Response(converted.body,{headers:noCache({'Content-Type':'audio/mpeg','Accept-Ranges':'none'})});
+  }
   if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/mp4'].includes(mime)){
-   console.warn('commentary_upstream_rejected',{status:r.status,hasBody:!!r.body,mimeClass:rawMime.startsWith('audio/')?'audio_other':rawMime==='application/octet-stream'?'binary':rawMime==='application/json'?'json':'other'});
+   console.warn('commentary_upstream_rejected',{status:r.status,hasBody:!!r.body,mimeClass:rawMime.startsWith('audio/')?'audio_other':rawMime==='application/octet-stream'?'binary':rawMime==='application/json'?'json':rawMime==='video/mp2t'?'transport_stream':'other'});
    await r.body?.cancel();return json(r.status===401||r.status===403?r.status:r.status===429?429:503,{error:'commentary_unavailable'})
   }
   return new Response(r.body,{headers:noCache({'Content-Type':mime,'Accept-Ranges':'none'})});
