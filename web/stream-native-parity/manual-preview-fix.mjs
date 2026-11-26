@@ -975,4 +975,10 @@ change("   playDirectMpegts(video,String(requestedState.id),statusElement)\n  }\
 change("  var oldKey=S.play&&S.play.video===video&&S.play.hlsKey;\n  if(queueLiveHlsHandoff", "  if(player.directStopPending||player.externalMode)return;\n  var oldKey=player.directStopKey||(S.play&&S.play.video===video&&S.play.hlsKey);\n  if(queueLiveHlsHandoff");
 change("   start:function(next){playerStatus('جار تشغيل القناة…');playHls(", "   start:function(next){player.directStopKey=null;playerStatus('جار تشغيل القناة…');playHls(");
 
+
+change("  if(S.route!=='player'||S.playerView!==state||state.externalPending||state.liveHlsHandoff)return;", "  if(S.route!=='player'||S.playerView!==state||state.externalPending||state.liveHlsHandoff||state.directStopPending)return;");
+change("   if(state.externalPending)return;\n   var record=S.play,selected=String(state.id),stop=record&&(record.stopUrl||(record.hlsKey&&'/api/hls/'+record.hlsKey+'/stop'));", "   if(state.externalPending||state.directStopPending||state.liveHlsHandoff||state.externalMode)return;\n   var record=S.play,selected=String(state.id),stop=state.directStopKey?'/api/hls/'+state.directStopKey+'/stop':record&&(record.stopUrl||(record.hlsKey&&'/api/hls/'+record.hlsKey+'/stop'));");
+change("    if(st===200||st===404){state.externalRetiringStop=null;issue()}", "    if(st===200||st===404){state.externalRetiringStop=null;state.directStopKey=null;issue()}");
+change("   state.externalRetiringStop=null;stopExternal()", "   state.externalRetiringStop=null;state.directStopKey=null;stopExternal()");
+
 new Function(app);writeFileSync('app.js',app);
