@@ -470,7 +470,6 @@ function webRuntimeMode(standalone,preview){
 }
 function diagnose(kind,phase,mode,code){`);
 change("  mode:actualMode,phase:phase,errorCode:", "  runtime:webRuntimeMode(installedWebApp(),kind==='live'&&S.route!=='player'),\n  mode:actualMode,phase:phase,errorCode:");
-change("BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>", "BLOFY STREAM Web • 2026.11.25.6 • '+(installedWebApp()?'تطبيق الشاشة الرئيسية':'المتصفح')+'</div>");
 
 
 change("function shouldUseNativeHls(video){",`// Installed Apple WebKit can omit the Safari token. Prefer its own HLS
@@ -514,12 +513,10 @@ change(" video.onerror=function(){if(alive()){\n  var unsupported=video.error&&(
    return
   }
   var unsupported=mediaError===4||mediaError===3;`);
-change("2026.11.25.6 • '+(installedWebApp()", "2026.11.25.7 • '+(installedWebApp()");
 
 
 change("script.src='/vendor/hls.min.js';", "script.src='/vendor/hls.min.js?v=1.5.20';");
 change("script.src='/vendor/mpegts.js';script.async=true;", "script.src='/vendor/mpegts.js?v=1.8.2';script.async=true;");
-change("2026.11.25.7 • '+(installedWebApp()", "2026.11.25.8 • '+(installedWebApp()");
 change('id="install-blofy-web">طريقة إضافة BLOFY</button>', 'id="install-blofy-web">طريقة إضافة BLOFY</button> <button class="btn secondary" type="button" id="refresh-web-shell">تحديث نسخة الويب</button>');
 change(" document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};", ` document.getElementById('refresh-web-shell').onclick=function(){
   if(S.route!=='settings'||navigator.onLine===false){
@@ -591,7 +588,6 @@ change(" if(shouldUseNativeHls(video)){\n  record.nativeHls=true;\n  video.src=m
    openInstalledManifest();return
   }
   video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(handleLivePlayRejection)}catch(e){}return`);
-change("2026.11.25.8 • '+(installedWebApp()", "2026.11.25.9 • '+(installedWebApp()");
 
 
 change(" if(S.previewToFullPending)return;\n if(S.previewRecoveryStop)", " if(S.previewToFullPending)return;\n if(installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElementById('live-status');if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق؛ أعد الضغط بعد لحظات.';return}\n if(S.previewRecoveryStop)");
@@ -653,7 +649,6 @@ change("     if(response.body&&response.body.cancel)response.body.cancel().catch
 change("     if(response.status===404){\n      // A retired session", "     if(response.status===404||failure&&failure.error==='hls_session_retired'){\n      if((record.recoveryAttempt||0)>=4){status('انتهت جلسة البث. اضغط إعادة المحاولة.');return}\n      // A retired session");
 change("       if(!alive())return;\n       playHls(video,kind,id,extension,track,statusElement,preview,Math.min((record.recoveryAttempt||0)+1,4))", "       if(!alive())return;\n       if(document.hidden||navigator.onLine===false||!preview&&S.playerView&&S.playerView.userPaused){deferAdmission(hint);return}\n       playHls(video,kind,id,extension,track,statusElement,preview,Math.min((record.recoveryAttempt||0)+1,4))");
 change("     deferAdmission(hint)\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});", "     deferAdmission(hint)\n     })\n    }).catch(function(){if(alive())deferAdmission(0)}).finally(function(){clearTimeout(timeout)});");
-change("2026.11.25.9 • '+(installedWebApp()", "2026.11.26.1 • '+(installedWebApp()");
 
 
 change(" if(!state||state.directStopPending)return;\n if(state.mode==='mpegts')",` if(!state||state.directStopPending)return;
@@ -701,7 +696,6 @@ change(" if(installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElem
   S.autoPreviewTimer=setTimeout(resumePreview,150);return
  }`);
 change("if(video.paused&&S.play.ready){","if(video.paused&&(S.play.ready||S.play.autoplayBlocked)){");
-change("2026.11.26.1 • '+(installedWebApp()", "2026.11.26.2 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.25.8');","target.searchParams.set('shell','2026.11.26.2');");
 
 
@@ -747,7 +741,6 @@ change("target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;","target.
 change("var hadScreen=!!target.querySelector('.story-row');","var hadScreen=!!target.querySelector('.home-hero');");
 change("var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-panel');","var panel=phoneLiveLayout()?document.getElementById('workspace'):document.querySelector(kind==='live'?'#channel-list':'.poster-panel');");
 
-change("2026.11.26.2 • '+(installedWebApp()", "2026.11.26.3 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.26.2');","target.searchParams.set('shell','2026.11.26.3');");
 
  // Retain the already received native admission response metadata. It is
@@ -755,9 +748,7 @@ change("target.searchParams.set('shell','2026.11.26.2');","target.searchParams.s
 change("  record.videoModeProbed=true;\n  fetch(manifest,", "  record.videoModeProbed=true;\n  var cachedInfo=record.admissionVideoInfo;\n  (cachedInfo?Promise.resolve(cachedInfo):fetch(manifest,");
 change("  }).then(function(info){\n   if(!info||!alive())return;\n   record.videoMode=info.mode;", "  })).then(function(info){\n   if(!info||!alive())return;\n   record.videoMode=info.mode;");
 change("     if(response.ok){\n      if(response.body&&response.body.cancel)", "     if(response.ok){\n      record.admissionVideoInfo={mode:response.headers.get('x-blofy-video-mode')||'',source:response.headers.get('x-blofy-source-resolution')||''};\n      if(response.body&&response.body.cancel)");
-change("2026.11.26.3 • '+(installedWebApp()", "2026.11.26.4 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.26.3');","target.searchParams.set('shell','2026.11.26.4');");
 
-change("2026.11.26.4 • '+(installedWebApp()", "2026.11.26.5 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.26.4');","target.searchParams.set('shell','2026.11.26.5');");
 new Function(app);writeFileSync('app.js',app);
