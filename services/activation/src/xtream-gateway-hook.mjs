@@ -46,6 +46,7 @@ import {inspectLinodeGatewayMapping} from './linode-gateway-mapping-qa.mjs';
 import {linodeMaintenanceActive,blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
 import {createLegacyIngress} from './blofy-engine-legacy-ingress.mjs';
 import {createRelayFenceEndpoint} from './blofy-engine-relay-fence-endpoint.mjs';
+import {prepareEngineSchema,resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
@@ -2774,6 +2775,17 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
 }
 
 
+// One-shot, opt-in migration. It creates only empty engine tables and a
+// legacy gate, does not enable any routing flags or open any provider socket.
+if(process.env.BLOFY_ENGINE_SCHEMA_PREPARE==='1'){
+ const prepare=setTimeout(()=>{
+  void ensureReady().then(async()=>{
+   const sourceId=await resolveApprovedEngineSource(pool);
+   const result=await prepareEngineSchema(pool,{sourceId});
+   console.info('BLOFY_ENGINE_SCHEMA_PREFLIGHT',JSON.stringify({...result,customerTrafficChanged:false,sourceMediaRequests:0}));
+  }).catch(()=>console.warn('BLOFY_ENGINE_SCHEMA_PREFLIGHT',JSON.stringify({ok:false,code:'schema_prepare_failed',customerTrafficChanged:false})));
+ },18000);prepare.unref?.();
+}
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtreamGateway(listener) {
   if (typeof listener !== 'function') return previousCreateServer(listener);
