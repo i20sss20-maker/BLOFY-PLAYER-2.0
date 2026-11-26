@@ -413,9 +413,9 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    return {error:'hls_start_cancelled',status:409}
   }
   if(!upstream.ok||!upstream.body){
-   const status=upstream.status,denial=classifyWebMediaAdmission(kind,status,upstream.headers.get('retry-after'));
+   const status=upstream.status,denial=classifyWebMediaAdmission(kind,status,upstream.headers.get('retry-after'),upstream.headers.get('x-blofy-live-status'));
    try{await upstream.body?.cancel()}catch{}
-   stopHls(session,'upstream_'+status);return denial
+   stopHls(session,denial.error==='live_source_channel_limit'?'source_channel_limit':'upstream_'+status);return denial
   }
   // Experimental continuity for ONE preapproved channel + bearer access ID.
   // All subsequent requests use the exact same first-party authorized URL.
