@@ -1,0 +1,6 @@
+FROM node:22-bookworm-slim
+WORKDIR /app
+COPY services/activation/src/blofy-engine-status-command.mjs services/activation/src/blofy-engine-status-response.mjs services/activation/src/blofy-engine-status-poll-qa.mjs ./src/
+COPY services/activation/tools/engine-control-qa/reverse.mjs ./tools/engine-control-qa/reverse.mjs
+USER node
+CMD ["node","tools/engine-control-qa/reverse.mjs"]
