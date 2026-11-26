@@ -13,6 +13,11 @@ export function createBoundedPilotPermit(db,{controllerKey,workerKeys,env=proces
   if(!ENGINES.has(engine)||!Object.hasOwn(workerKeys,engine)||!verifyWorkerStatus(e,{publicKey:workerKeys[engine],engineId:engine,challenge:e.status.challenge,now}))return {code:403,body:{ok:false}};
   const id=env.BLOFY_BOUNDED_PILOT_PERMIT_ID,expires=Number(env.BLOFY_BOUNDED_PILOT_EXPIRES_MS);
   if(env.BLOFY_BOUNDED_PILOT_EXCLUSIVE_CONFIRMED!=='1'||env.BLOFY_BOUNDED_PILOT_ENGINE!==engine||!UUID.test(id??'')||!Number.isSafeInteger(expires)||expires<=now||expires>now+600000)return {code:200,body:{ok:true,permit:null}};
+  if(e.status.deliveryActive!==true||e.status.heartbeatActive!==true)return {code:409,body:{ok:false}};
+  // An outstanding permit blocks issuance to any other engine, even after
+  // a process restart. Expiry is NOT evidence of physical provider release.
+  // A later operator window must independently reverify exclusivity.
+  if(db.prepare('SELECT permit_id FROM pilot_permits WHERE expires>? AND permit_id<>? LIMIT 1').get(now,id))return {code:409,body:{ok:false}};
   // Persist immutable expiry/target before dispatch. No change or reuse of ID.
   db.prepare('INSERT OR IGNORE INTO pilot_permits VALUES(?,?,?,?)').run(id,engine,now,expires);
   const row=db.prepare('SELECT * FROM pilot_permits WHERE permit_id=?').get(id);
