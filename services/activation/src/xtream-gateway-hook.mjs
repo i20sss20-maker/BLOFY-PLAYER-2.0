@@ -1999,6 +1999,11 @@ async function handleAuthorizedXtreamHls(req,res,match){
   const row=await gatewayItemById('live',gatewayId,account.source_id||null);
   if(!row||!row.server_enabled||String(row.server_id)!==token.s)
     return text(res,404,'Stream not found');
+  // Match the TS and M3U catalog policy on every HLS request, including
+  // ticket renewal. An existing ticket cannot bypass a subsequent hide.
+  const distributorScope=await distributorCatalog.forAccount(account);
+  if(await distributorCatalog.isHidden(distributorScope,'live',row.source_id))
+    return text(res,404,'Stream not found');
   if(renewed){
     // Never return expired provider URLs; a 307 keeps playlist/segment URI
     // semantics and is issued only to an already authorized, active viewer.
@@ -2010,14 +2015,18 @@ async function handleAuthorizedXtreamHls(req,res,match){
     return res.end();
   }
   let response;
+  const client=new AbortController();
+  const cancel=()=>client.abort();
+  req.once('aborted',cancel);res.once('close',cancel);
   try{
+    if(req.aborted||res.destroyed)return;
     const target=new URL(token.u);
     await assertPublicXtreamUrl(target.origin);
     const headers={'user-agent':String(req.headers['user-agent']||'BLOFY-Xtream-HLS/1.0').slice(0,250)};
     if(req.headers.range)headers.range=String(req.headers.range).slice(0,150);
     response=await checkedFetch(target,{
       method:req.method,headers,timeoutMs:16000,
-      signal:AbortSignal.timeout(35000)
+      signal:AbortSignal.any([client.signal,AbortSignal.timeout(35000)])
     });
     if(![200,206].includes(response.status)){
       await response.body?.cancel().catch(()=>{});
@@ -2054,13 +2063,16 @@ async function handleAuthorizedXtreamHls(req,res,match){
     }
     res.writeHead(response.status,output);
     if(req.method==='HEAD'||!response.body)return res.end();
-    await pipeline(Readable.fromWeb(response.body),res);
+    await pipeline(Readable.fromWeb(response.body),res,{signal:client.signal});
   }catch{
     // The encrypted URL and token must never appear in logs or error bodies.
+    if(req.aborted||res.destroyed)return;
     if(!res.headersSent)return text(res,502,'HLS segment unavailable');
     if(!res.destroyed)res.destroy();
   }finally{
-    if(req.method==='HEAD'&&response?.body)await response.body.cancel().catch(()=>{});
+    req.off('aborted',cancel);res.off('close',cancel);
+    if(response?.body&&!response.body.locked)await response.body.cancel().catch(()=>{});
+    client.abort();
   }
 }
 
