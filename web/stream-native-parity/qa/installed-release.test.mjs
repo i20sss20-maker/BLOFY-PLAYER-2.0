@@ -202,3 +202,18 @@ test('VOD upgrade retains old session on failure and admits only the latest requ
  calls[1].cb(404);assert.deepEqual(opened,['latest']);
  assert.equal(detached,1);assert.equal(state.vodUpgradeStop,null);
 });
+
+test('direct MPEG-TS handoff preserves unconfirmed HLS key and blocks overlapping engines',()=>{
+ assert.match(app,/oldKey=requestedState\.directStopKey\|\|\(old&&old\.hlsKey\)/);
+ assert.match(app,/requestedState\.directStopPending=true;requestedState\.directStopKey=oldKey/);
+ assert.match(app,/if\(player\.directStopPending\|\|player\.externalMode\)return/);
+ assert.match(app,/oldKey=player\.directStopKey\|\|\(S\.play&&S\.play\.video===video&&S\.play\.hlsKey\)/);
+ const a=app.indexOf('function playDirectMpegts('),b=app.indexOf(' stopPlayback(true);',a);
+ const video={isConnected:true},state={kind:'live',id:'1',video},S={route:'player',userVerified:true,accountEpoch:1,playerView:state,play:{hlsKey:'old-sid'}},calls=[];
+ let opened=0;
+ const play=new Function('S','stopPlayback','api','playerStatus','setTimeout','clearTimeout','document','navigator','opened',app.slice(a,b)+' opened(); } ;return playDirectMpegts')(
+  S,()=>{S.play=null},(method,path,body,cb)=>calls.push({path,cb}),()=>{},()=>1,()=>{},{hidden:false},{onLine:true},()=>opened++);
+ play(video,'1',null);calls[0].cb(503);assert.equal(state.directStopKey,'old-sid');assert.equal(opened,0);
+ play(video,'1',null);assert.equal(calls[1].path,calls[0].path);calls[1].cb(200);
+ assert.equal(state.directStopKey,null);assert.equal(opened,1);
+});
