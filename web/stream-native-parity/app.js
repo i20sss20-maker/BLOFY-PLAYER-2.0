@@ -1730,6 +1730,7 @@ function stopPlayback(sendStop){
  try{
   if(old.timer)clearTimeout(old.timer);
   if(old.stallTimer)clearTimeout(old.stallTimer);
+  if(old.quietWaitTimer)clearTimeout(old.quietWaitTimer);
   if(old.progressWatchdog)clearInterval(old.progressWatchdog);
   // Cancel the per-frame observer before switching media nodes, or a delayed
   // callback from an old channel may be mistaken for recovery of the new one.
@@ -1779,7 +1780,14 @@ function cleanupPlayer(){
  }
  stopPlayback(true)
 }
+function simpleLiveStatus(message,error){
+ if(error||!message)return message;
+ // Collapse internal progress phases, never actionable errors or play prompts.
+ if(/^جار |^انتهت جلسة المصدر؛ جار |^تغيّر تسلسل البث؛ جار |^مصدر البث مشغول أو غير متاح مؤقتًا؛ جار |^توقف مشغّل الفيديو دون طلب؛ جار |^تعليق في صورة البث؛ جار |^وصل الصوت أو توقيت البث لكن الصورة لم تظهر؛ جار /.test(message))return 'جار تشغيل القناة…';
+ return message
+}
 function playerStatus(message,error){
+ if(S.playerView&&S.playerView.kind==='live')message=simpleLiveStatus(message,error);
  var el=document.getElementById('player-status');
  if(el){el.style.display=message?'block':'none';el.textContent=message||'';el.className=error?'player-error':'player-loading'}
  var retry=document.getElementById('player-retry');
@@ -2180,7 +2188,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   var oldHlsKey=S.play.hlsKey;
   var token=(S.hlsStopEpoch||0)+1;S.hlsStopEpoch=token;
   stopPlayback(false);
-  if(statusElement)statusElement.textContent='جار إعادة تهيئة اتصال القناة…';
+  if(statusElement)statusElement.textContent=preview?'جار تحميل المعاينة…':'جار تشغيل القناة…';
   var settled=false,timer=setTimeout(function(){finish(0)},5500);
   function finish(status){
    if(settled)return;settled=true;clearTimeout(timer);
@@ -2361,7 +2369,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }).catch(function(){})
  }
  function status(text){if(!alive())return;
-  if(statusElement){statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
+  if(!preview&&kind==='live')text=simpleLiveStatus(text,false);
+  if(statusElement){if(statusElement.textContent!==text)statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
   else playerStatus(text)
  }
  video.onerror=function(){if(alive()){
@@ -2390,6 +2399,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    record.stableTimer=null;
    if(alive()&&record.ready&&video.readyState>=2)record.recoveryAttempt=0
   },120000);
+  if(record.quietWaitTimer){clearTimeout(record.quietWaitTimer);record.quietWaitTimer=null}
   status(preview?'● المعاينة تعمل':'● تشغيل البث');
   probeSourceVideoMode();
   if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
@@ -2405,7 +2415,11 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(!preview)recordLiveIncident('buffering');
   if(!record.bufferSince)record.bufferSince=Date.now();
   if(Date.now()-record.bufferSince>36000){recoverConnection();return}
-  status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
+  // Short decoder waits do not flash a loading message over moving video.
+  if(preview||!record.ready)status(preview?'جار تحميل المعاينة…':'جار تشغيل القناة…');
+  else if(!record.quietWaitTimer)record.quietWaitTimer=setTimeout(function(){
+   record.quietWaitTimer=null;if(alive()&&record.bufferSince&&!video.paused)status('جار تشغيل القناة…')
+  },900);
   if(record.stallTimer)clearTimeout(record.stallTimer);
   record.stallTimer=setTimeout(function(){
    record.stallTimer=null;
@@ -3020,7 +3034,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  S.route='player';
  showWebShellUpdateHint();
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
- '<div class="player-loading" id="player-status" role="status">جار تجهيز المشغّل…</div>'+
+ '<div class="player-loading" id="player-status" role="status">'+(isLive?'جار تشغيل القناة…':'جار تجهيز المشغّل…')+'</div>'+
  '<div class="mobile-seek-feedback" id="mobile-seek-feedback" hidden role="status" aria-live="polite"></div>'+
  '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
  '<div class="player-hud native-stream-hud">'+
@@ -3181,7 +3195,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
  };
  var guideToggle=document.getElementById('player-guide-toggle');
- if(guideToggle)guideToggle.onclick=function(){var guide=document.querySelector('.player-live-guide');if(guide){var show=guide.classList.toggle('phone-guide-open');this.setAttribute('aria-expanded',String(show));if(show&&moreToggle)moreToggle.click();revealControls()}};
+ if(guideToggle)guideToggle.onclick=function(){var guide=document.querySelector('.player-live-guide');if(guide){var show=guide.classList.toggle('phone-guide-open');this.setAttribute('aria-expanded',String(show));if(show){if(state.refreshLiveGuide)state.refreshLiveGuide();if(moreToggle)moreToggle.click()}revealControls()}};
  var controlHint=document.getElementById('player-control-hint'),dock=document.querySelector('.native-player-dock');
  if(dock&&controlHint){
   dock.addEventListener('focusin',function(e){
@@ -4404,6 +4418,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var requestedId=String(id);
    var el=document.getElementById('player-live-epg');
    if(!el)return;
+   if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
+   var guide=document.querySelector('.player-live-guide');
+   if(phoneLiveLayout()&&(!guide||!guide.classList.contains('phone-guide-open')))return;
    var cached=S.epgCache[String(id)],fresh=cached&&Date.now()-cached.time<300000;
    if(fresh)el.innerHTML=cached.html;
    else{

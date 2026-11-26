@@ -207,7 +207,7 @@ test('runtime diagnostic identifies installed, browser and preview modes without
  assert.equal(mode(false,false),'browser');
  assert.equal(mode(true,true),'preview');
  assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
- assert.match(app,/2026\.11\.26\.3/);
+ assert.match(app,/2026\.11\.26\.4/);
 });
 
 test('installed Apple HLS policy is restricted to supported standalone WebKit',()=>{
