@@ -940,3 +940,67 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
  html[data-blofy-device="touch"] .player-loading{top:calc(50% + 42px);background:#101820d9;border-radius:9px;font-size:12px;padding:8px 12px;pointer-events:none}
 }
 @media(max-width:360px){html[data-blofy-device="touch"] .native-stream-hud .native-player-dock{justify-content:flex-start}}
+
+/* TV-first compatibility. Explicit colors, dimensions and margins work without
+   CSS variables, flex gap, inset, aspect-ratio or eight-digit hex support. */
+html[data-blofy-device="tv"],html[data-blofy-device="tv"] body{background:#080e15;color:#f5f7fa;font-family:Tahoma,Arial,sans-serif;font-size:18px;background-image:none}
+html[data-blofy-device="tv"] .app{background:#080e15;animation:none}
+html[data-blofy-device="tv"] .rail{width:184px;padding:22px 12px;background:#101b26;border-left:1px solid #263644;overflow:auto}
+html[data-blofy-device="tv"] .brand{color:#56e0d3;font-size:27px;margin:6px auto 25px}
+html[data-blofy-device="tv"] .brand em{color:#d8e4e9;font-size:12px}
+html[data-blofy-device="tv"] .rail-link{color:#f5f7fa;background:#101b26;border:1px solid transparent;border-radius:10px;min-height:48px;height:48px;font-size:17px;margin-bottom:7px;padding:0 12px}
+html[data-blofy-device="tv"] .rail-link .symbol{color:#9ce1dc;margin-left:9px;width:26px;font-size:23px}
+html[data-blofy-device="tv"] .rail-link.active{color:#fff;background:#17444c;border-color:#31767a}
+html[data-blofy-device="tv"] .rail-foot{color:#b0c4ce;font-size:12px}
+html[data-blofy-device="tv"] .workspace{padding:22px 30px 36px;color:#f5f7fa}
+html[data-blofy-device="tv"] .toolbar h1{font-size:29px;color:#f5f7fa}
+html[data-blofy-device="tv"] .shelf-title h2{font-size:24px;color:#f5f7fa}
+html[data-blofy-device="tv"] .muted,html[data-blofy-device="tv"] .toolbar-note,html[data-blofy-device="tv"] .small{color:#b9ccd4}
+html[data-blofy-device="tv"] .btn{color:#071c20;background:#54ded0;border:1px solid #54ded0;font-size:16px;min-height:44px;border-radius:9px}
+html[data-blofy-device="tv"] .btn.secondary{color:#f5f7fa;background:#192b37;border-color:#3a5662}
+html[data-blofy-device="tv"] .home-hero{height:286px;background:#142330;border:0;border-radius:16px;margin-bottom:22px}
+html[data-blofy-device="tv"] .hero-art{top:0;right:0;bottom:0;left:0;opacity:.65;filter:none}
+html[data-blofy-device="tv"] .hero-shade{top:0;right:0;bottom:0;left:0;background:linear-gradient(90deg,rgba(8,14,21,.12),rgba(8,14,21,.97) 87%)}
+html[data-blofy-device="tv"] .hero-copy{max-width:64%;padding:25px 30px}
+html[data-blofy-device="tv"] .hero-title{color:#fff;font-size:36px;font-weight:bold;text-shadow:0 2px 5px #000}
+html[data-blofy-device="tv"] .hero-kicker{color:#64e5d7;font-size:16px}
+html[data-blofy-device="tv"] .hero-description{color:#e2edf0;font-size:17px}
+html[data-blofy-device="tv"] .hero-actions .btn{margin-left:10px}
+html[data-blofy-device="tv"] .story-row{display:flex;gap:0}
+html[data-blofy-device="tv"] .story{color:#fff;background:#142330;border:1px solid #2b414f;border-radius:12px;min-height:72px;margin-left:12px;font-size:19px;padding:14px;min-width:0}
+html[data-blofy-device="tv"] .story:last-child{margin-left:0}
+html[data-blofy-device="tv"] .story small{display:none}
+html[data-blofy-device="tv"] .shelf{margin-bottom:20px}
+html[data-blofy-device="tv"] .h-scroll{display:flex;gap:0;padding:7px 5px 10px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-snap-type:none}
+html[data-blofy-device="tv"] .h-scroll .poster{flex:0 0 166px;width:166px;margin-left:13px}
+html[data-blofy-device="tv"] .poster{background:#142330;color:#fff;border:1px solid #293e4b;border-radius:12px}
+html[data-blofy-device="tv"] .poster-art{display:block;height:232px;background:#192b37}
+html[data-blofy-device="tv"] .poster-art img{top:0;right:0;bottom:0;left:0}
+html[data-blofy-device="tv"] .poster-art .poster-badge{display:none}
+html[data-blofy-device="tv"] .poster-caption{display:block;min-height:50px;padding:10px;color:#fff}
+html[data-blofy-device="tv"] .poster-caption strong{color:#fff;font-size:16px}
+html[data-blofy-device="tv"] .poster-caption span{color:#b9ccd4;font-size:12px}
+html[data-blofy-device="tv"] .poster-grid,html[data-blofy-device="tv"] .search-result-grid{display:flex;flex-wrap:wrap;gap:0}
+html[data-blofy-device="tv"] .poster-grid .poster,html[data-blofy-device="tv"] .search-result-grid .poster{flex:0 0 18%;width:18%;margin:0 0 14px 2%}
+html[data-blofy-device="tv"] .poster-grid .poster-art,html[data-blofy-device="tv"] .search-result-grid .poster-art{height:210px;height:auto;padding-top:140%;aspect-ratio:auto}
+html[data-blofy-device="tv"] .cat-rail,html[data-blofy-device="tv"] .channels,html[data-blofy-device="tv"] .preview,html[data-blofy-device="tv"] .poster-panel{background:#111e29;color:#f5f7fa;border:1px solid #2b414f}
+html[data-blofy-device="tv"] .cat-rail,html[data-blofy-device="tv"] .channels{margin-left:12px}
+html[data-blofy-device="tv"] .pane-head,html[data-blofy-device="tv"] .preview-controls{background:#182b36;color:#f5f7fa}
+html[data-blofy-device="tv"] .pane-head small,html[data-blofy-device="tv"] .channel-name small,html[data-blofy-device="tv"] .preview-controls p{color:#b9ccd4;font-size:14px}
+html[data-blofy-device="tv"] .cat-item,html[data-blofy-device="tv"] .channel-item{color:#fff;border-bottom:1px solid #263644;font-size:16px;min-height:54px}
+html[data-blofy-device="tv"] .channel-name strong{color:#fff;font-size:17px}
+html[data-blofy-device="tv"] .cat-item.selected,html[data-blofy-device="tv"] .channel-item.selected{background:#17444c;border-color:#3c7478}
+html[data-blofy-device="tv"] .detail-title,html[data-blofy-device="tv"] .detail-plot,html[data-blofy-device="tv"] .episode-name,html[data-blofy-device="tv"] .setting-panel,html[data-blofy-device="tv"] .empty-state{color:#f5f7fa}
+html[data-blofy-device="tv"] .detail-subtitle,html[data-blofy-device="tv"] .episode-meta{color:#b9ccd4}
+html[data-blofy-device="tv"] .input{background:#101b26;color:#fff;border:1px solid #45616c}
+html[data-blofy-device="tv"] .episode-row,html[data-blofy-device="tv"] .empty-state{background:#142330;color:#fff;border:1px solid #2b414f}
+html[data-blofy-device="tv"] .h-scroll::-webkit-scrollbar,html[data-blofy-device="tv"] .rail::-webkit-scrollbar,html[data-blofy-device="tv"] .workspace::-webkit-scrollbar,html[data-blofy-device="tv"] .pane-scroll::-webkit-scrollbar,html[data-blofy-device="tv"] .poster-panel::-webkit-scrollbar{display:none;width:0;height:0}
+html[data-blofy-device="tv"] button,html[data-blofy-device="tv"] [tabindex],html[data-blofy-device="tv"] .screen-appear,html[data-blofy-device="tv"] .skeleton{transition:none;animation:none}
+html[data-blofy-device="tv"][data-blofy-input="remote"] button:focus,html[data-blofy-device="tv"][data-blofy-input="remote"] .remote-focus{outline:3px solid #60f5df!important;outline-offset:1px;box-shadow:none;transform:none}
+html[data-blofy-device="tv"] .player-overlay{top:0;right:0;bottom:0;left:0}
+html[data-blofy-device="tv"] .player-hud.native-stream-hud{background:#101923;color:#f5f7fa}
+html[data-blofy-device="tv"] .player-hud .player-title{color:#fff;font-size:23px}
+html[data-blofy-device="tv"] .native-player-control{color:#fff;background:#192b37;border:1px solid #46606c;margin:3px}
+html[data-blofy-device="tv"] .native-player-control.native-player-primary{background:#17676c}
+html[data-blofy-device="tv"] .player-loading{background:#18242e;color:#fff}
+@media(min-width:1600px){html[data-blofy-device="tv"] .rail{width:220px}html[data-blofy-device="tv"] .rail-link{height:56px;font-size:20px}html[data-blofy-device="tv"] .home-hero{height:350px}html[data-blofy-device="tv"] .h-scroll .poster{flex-basis:205px;width:205px}html[data-blofy-device="tv"] .h-scroll .poster-art{height:285px}}
