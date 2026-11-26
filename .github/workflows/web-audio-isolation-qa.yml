@@ -23,7 +23,18 @@ jobs:
           KEY="$(openssl rand -hex 32)"
           trap 'docker rm -f blofy-audio-qa >/dev/null 2>&1 || true' EXIT
           docker run -d --name blofy-audio-qa -p 127.0.0.1:18080:8080 -e VIDAA_AUDIO_KEY="$KEY" blofy-audio-qa
-          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:18080/health
+          ready=0
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --fail --max-time 3 http://127.0.0.1:18080/health; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            docker logs --tail 50 blofy-audio-qa
+            exit 1
+          fi
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/audio-compat/anis-test)" = 403
           test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $KEY" http://127.0.0.1:18080/audio-compat/anis-test)" = 401
           curl --fail -H "x-compat-secret: $KEY" http://127.0.0.1:18080/internal/metrics
