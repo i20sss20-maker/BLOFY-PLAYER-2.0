@@ -1,0 +1,174 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+
+// Reproduce SDK failure without silently navigating away or creating duplicate
+// orders: branded drop-in should show the existing official hosted link.
+test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is absent',async()=>{
+ const code=readFileSync(new URL('../web/store-cart.js',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../web/store-cart.html',import.meta.url),'utf8');
+ const storage=new Map();
+ const customerId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const orderId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const sessionId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const token='x'.repeat(43);
+ const item={sku:'stream-3m',quantity:1};
+ storage.set('blofy.shop.cart.v1',JSON.stringify([item]));
+ storage.set('blofy.shop.cart.owner.v1',customerId);
+ const events=new Map(),nodes=new Map(),calls=[],redirects=[];
+ let serverRecovery=false,simulateLostResponse=false;
+ function el(id=''){
+  const node={id,hidden:false,disabled:false,style:{},dataset:{},children:[],value:'',
+   textContent:'',className:'',setAttribute(){},remove(){},click(){},
+   addEventListener(type,handler){events.set((this.id||'element')+':'+type,handler);},
+   append(...items){this.children.push(...items);},
+   replaceChildren(...items){this.children=[...items];},
+   scrollIntoView(){}};
+  if(id)nodes.set(id,node);return node;
+ }
+ const scriptListeners=new Map();
+ const document={
+   getElementById(id){return nodes.get(id)||el(id);},
+   createElement(tag){
+     const n=el();
+     if(tag==='script')n.addEventListener=(event,fn)=>scriptListeners.set(event,fn);
+     return n;
+   },
+   head:{appendChild(){setTimeout(()=>scriptListeners.get('error')?.(),0)}}
+ };
+ // Pre-create named elements so repeated calls to getElementById keep identity.
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ const fetch=async(path,opts={})=>{
+  calls.push({path,method:opts.method||'GET'});
+  const response=(status,data)=>({ok:status>=200&&status<300,status,
+    json:async()=>data});
+  if(path==='/api/v1/store/account')return response(200,{customerId,email:'test@example.com'});
+  if(path==='/api/v1/store/account/cart'&&opts.method!=='POST')
+   return response(200,{items:[item],couponCode:'',revision:3});
+  if(path==='/api/v1/store/products')return response(200,{checkoutAvailable:true});
+  if(path==='/api/v1/store/cart/pending')return response(200,serverRecovery?
+   {ok:true,pending:true,orderId,sessionId,
+     sessionExpiresAt:new Date(Date.now()+8*60000).toISOString(),
+     orderNumber:'BF-261118-BBBBBBBB',status:'pending'}:{ok:true,pending:false});
+  if(path==='/api/v1/store/cart/quote')return response(200,{codeCount:1,
+   subtotalMinor:5000,discountMinor:0,totalMinor:5000,
+   items:[{...item,lineTotalMinor:5000}]});
+  if(path==='/api/v1/store/orders/status')return response(200,{orderId,status:'pending',fulfilled:false});
+  if(path==='/api/v1/store/cart/checkout'&&simulateLostResponse){
+   // Provider session exists, but the final HTTP response never reached browser.
+   serverRecovery=true;throw Error('network_response_lost');
+  }
+  if(path==='/api/v1/store/cart/checkout')return response(201,{
+   provider:'geidea',checkoutMode:'modal',sku:'cart',orderId,
+   sessionId,sessionExpiresAt:new Date(Date.now()+14*60000).toISOString(),
+   accessToken:token,orderNumber:'BF-261118-BBBBBBBB',
+   priceMinor:5000,currency:'SAR'
+  });
+  throw Error('Unexpected fetch: '+path);
+ };
+ const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+ const session=new Map();
+ const sessionStorage={getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,v),removeItem:k=>session.delete(k)};
+ const location={search:'',origin:'https://blofyplayer.com',
+  assign(url){redirects.push(url);}};
+ const ctx={window:{},document,fetch,localStorage,sessionStorage,location,
+  history:{replaceState(){}},URLSearchParams,console,confirm:()=>true,setTimeout,clearTimeout};
+ vm.runInNewContext(code,ctx,{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,15));
+ const button=nodes.get('checkout');
+ assert.equal(button.disabled,false,'a verified and saved cart can pay');
+ assert.equal(typeof ctx.window.GeideaCheckout,'undefined','modal SDK intentionally unavailable');
+ const click=events.get('checkout:click');assert.equal(typeof click,'function');
+ click();
+ await new Promise(resolve=>setTimeout(resolve,15));
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
+ const hosted='https://www.ksamerchant.geidea.net/hpp/checkout/?'+sessionId;
+ assert.deepEqual(redirects,[],'drop-in mode stays on the BLOFY checkout page');
+ assert.equal(nodes.get('geidea-embedded-panel').hidden,false);
+ assert.equal(nodes.get('geidea-hosted-fallback').href,hosted);
+ assert.match(nodes.get('geidea-embedded-notice').textContent,/نفس جلسة الدفع/);
+ assert.equal(nodes.get('open-geidea').href,hosted,'manual same-session fallback link exists');
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.equal(session.get('blofy.shop.order.'+orderId),token,'receipt secret stays local');
+ assert.equal(nodes.get('started').hidden,true,'cart stays focused on basket and payment');
+ assert.doesNotMatch(html,/geideaCheckout.min.js/);
+ assert.equal(JSON.parse(session.get('blofy.shop.pending-checkout.v1')).orderId,orderId,
+   'new session is preserved for safe recovery after browser back');
+ // Simulate returning to the cart before completing Geidea payment. Never open
+ // a second Geidea session, even if the customer presses the button again.
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(nodes.get('checkout').disabled,false,'continue button remains usable for same session');
+ assert.equal(nodes.get('open-geidea').href,hosted,'customer can resume the SAME Geidea session');
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.equal(nodes.get('started').hidden,true,'no pending-order banner on cart');
+ const sameSessionCount=calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length;
+ events.get('checkout:click')();
+ await new Promise(resolve=>setTimeout(resolve,10));
+ assert.equal(redirects.at(-1),hosted,'button resumes only original provider session');
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,sameSessionCount);
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1,
+   'reloading the page cannot create another payment session');
+ // Switching device or clearing tab sessionStorage must still recover using the
+ // verified account; no payment token or previous checkout secret is required.
+ session.clear();serverRecovery=true;
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,25));
+ assert.equal(nodes.get('checkout').disabled,false,
+   'customer can resume cross-device payment from the cart');
+ assert.equal(nodes.get('open-geidea').href,hosted);
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.equal(nodes.get('copy-private-link').hidden,true,
+   'owner recovery never fabricates a private receipt bearer token');
+ assert.equal(nodes.get('started').hidden,true);
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
+ // Lost checkout response: server has created exactly one provider session,
+ // browser must look it up from verified account instead of blindly retrying.
+ session.clear();serverRecovery=false;simulateLostResponse=true;
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(nodes.get('checkout').disabled,false,'preflight first finds no outstanding session');
+ const beforeLost=calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length;
+ const lostClick=events.get('checkout:click');
+ lostClick();
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,beforeLost+1);
+ assert.equal(nodes.get('checkout').disabled,false,'recovered payment can be resumed');
+ assert.equal(nodes.get('open-geidea').href,hosted);
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.equal(nodes.get('copy-private-link').hidden,true,'lost response never invents secret');
+ assert.match(nodes.get('message').textContent,/إكمال الدفع/);
+
+ // Old basket checkout must not prevent shopping for a different product.
+ // The account's current basket still has a mandatory server preflight.
+ simulateLostResponse=false;serverRecovery=false;
+ session.clear();
+ session.set('blofy.shop.pending-checkout.v1',JSON.stringify({
+   orderId,sessionId,orderNumber:'BF-261118-BBBBBBBB',accountId:customerId,
+   cartSnapshot:JSON.stringify({items:[{sku:'xtream-3m',quantity:1}],couponCode:''}),
+   expiresAt:Date.now()+60000
+ }));
+ session.set('blofy.shop.order.'+orderId,token);
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(nodes.get('checkout').disabled,false,'different basket not frozen by stale sessionStorage');
+});

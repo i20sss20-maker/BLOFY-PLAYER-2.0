@@ -2,6 +2,7 @@ const el = id => document.getElementById(id);
 const state = {
   xtreamServers: [],
   xtreamTotals: {},
+  minuteWatch: null,
   unavailableBySource: new Map(),
   xtreamLoadSequence: 0,
   nativeCsrfToken: '',
@@ -250,9 +251,11 @@ function serverCard(item) {
     [item.enabled ? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر', 'toggle-enabled', item.enabled ? 'button source-toggle-stop' : 'button primary'],
     [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
     ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
+    ['⚠️ تحديث البكج واعتماد حذف المحتوى', 'sync-package', 'button danger'],
     ['🔎 تشخيص الاتصال الذكي', 'smart-connection', 'button primary'],
     ['فحص الاتصال', 'test', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
+    ['📡 تقرير ثبات البث', 'live-stability', 'button primary'],
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
     ['اختبار بيانات مسلسل', 'probe-series', 'button ghost'],
     ['اختبار تشغيل حلقة', 'probe-episode', 'button ghost'],
@@ -263,9 +266,24 @@ function serverCard(item) {
     buttons.splice(2,0,['⏹ إلغاء المزامنة','cancel-sync','button ghost']);
   }
   buttons.forEach(([text, action, cls]) => {
+    if(action==='sync-package'){
+      const button=make('button',cls,text);
+      button.type='button';button.dataset.action=action;
+      button.title='مزامنة باقة Xtream مع إمكانية إزالة المحتوى المحذوف بعد التحقق من رد المزود مرتين';
+      button.disabled=Boolean(item.syncing);
+      actions.append(button);
+      return;
+    }
     if(action==='retry-unavailable'){
       const button=make('button',cls,text);
       button.type='button';button.dataset.action=action;
+      actions.append(button);
+      return;
+    }
+    if(action==='live-stability'){
+      const button=make('button',cls,text);
+      button.type='button';button.dataset.action=action;
+      button.title='مراجعة الانقطاعات المسجلة خلال ساعة وحد اتصال المزود؛ دون تشغيل بث أو تغيير أكواد';
       actions.append(button);
       return;
     }
@@ -311,6 +329,7 @@ function serverCard(item) {
       '⚠️ سعة Xtream: اتصال واحد معلَن من المزود، ومشترك بين جميع الأكواد. زيادة الأجهزة وحدها لا تزيد سعة المصدر؛ يلزم رفع حد الاتصالات لدى المزود أو ترخيص إعادة بث.'));
   }
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
+  updateMinuteWatchNotice(info,item);
   updateSourceAccountWarnings(info,item);
   if(item.syncProgress){
     const typeNames={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
@@ -401,6 +420,7 @@ function refreshSourceCard(card, item) {
   }
   const info=card.querySelector('.server-info');
   if(info){
+    updateMinuteWatchNotice(info,item);
     updateSourceAccountWarnings(info,item);
     let interrupted=info.querySelector('.sync-interrupted-note');
     if(item.status==='syncing'&&!item.syncing){
@@ -424,6 +444,30 @@ function refreshSourceCard(card, item) {
   }
 }
 
+
+function updateMinuteWatchNotice(parent,item){
+ if(!parent)return;
+ let label=parent.querySelector('.minute-watch-note');
+ const watch=state.minuteWatch;
+ if(!watch?.enabled||watch.sourceId!==item.id){
+  label?.remove();return;
+ }
+ if(!label){label=make('span','sync-progress-note minute-watch-note');parent.append(label);}
+ const types={live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
+ const status={
+  starting:'بداية المراقبة',checking:'جارٍ فحص جديد',importing:'استيراد التغييرات',
+  completed:'اكتمل تحديث المحتوى',unchanged:'المحتوى مطابق للمصدر',
+  partial:'تحذير جزئي',failed:'فشل الفحص',deferred:'الانتظار لانشغال المصدر'
+ }[watch.status]||'مراقبة نشطة';
+ const checked=watch.checkedAt
+   ?' · آخر فحص: '+new Date(watch.checkedAt).toLocaleTimeString('ar-SA')
+   :' · لم يبدأ أول فحص بعد';
+ const changed=Array.isArray(watch.changedTypes)&&watch.changedTypes.length
+   ?' · تغيّرت: '+watch.changedTypes.map(t=>types[t]||t).join('، ')
+   :'';
+ const trouble=watch.lastError?' · يوجد تنبيه في المزامنة':'';
+ label.textContent='🔄 مزامنة ذكية كل دقيقة · '+status+checked+changed+trouble;
+}
 
 function renderHomeMetrics(){
   const totals=state.xtreamTotals||{};
@@ -462,6 +506,19 @@ function renderXtream() {
   el('xtSeries').textContent = Number(totals.series || 0).toLocaleString();
   renderHomeMetrics();
   renderStudioOverview();
+  const watchLine=el('minuteCatalogWatchStatus');
+  if(watchLine){
+    const watch=state.minuteWatch;
+    const statuses={checking:'فحص التغييرات الآن',importing:'جاري استيراد الجديد',
+      completed:'آخر تحديث نجح',unchanged:'محتوى السيرفر مطابق للمكتبة',
+      partial:'بعض فحوصات المصدر لم تكتمل',failed:'فشل فحص، وستتم إعادة المحاولة',
+      starting:'في انتظار أول فحص',deferred:'المصدر مشغول'};
+    watchLine.textContent=watch?.enabled
+      ?'🔄 مراقبة Xtream التلقائية: كل دقيقة عند خلو المصدر · '+
+       (statuses[watch.status]||'تعمل')+
+       (watch.checkedAt?' · آخر فحص '+new Date(watch.checkedAt).toLocaleString('ar-SA'):'')
+      :'المراقبة التلقائية الدقيقة غير مفعلة لهذا المصدر.';
+  }
   const text=el('xtreamTotalsNotice');
   if(text){
     const count=Number(totals.live||0)+Number(totals.movie||0)+Number(totals.series||0);
@@ -581,15 +638,17 @@ async function loadXtream(silent = false, strict = false) {
   const seq=++state.xtreamLoadSequence;
   if (!silent) el('xtreamLoading').hidden = false;
   try {
-    const [data,unavailable]=await Promise.all([
+    const [data,unavailable,minuteWatch]=await Promise.all([
       api('/api/v1/admin/xtream/servers'),
-      api('/api/v1/admin/xtream/unavailable-media').catch(()=>null)
+      api('/api/v1/admin/xtream/unavailable-media').catch(()=>null),
+      api('/api/v1/admin/xtream/minute-watch/status').catch(()=>null)
     ]);
     // Ignore stale requests started before a later refresh or mutation.
     if(seq!==state.xtreamLoadSequence) {
       if(strict)throw new Error('xtream_readback_superseded');
       return null;
     }
+    state.minuteWatch=minuteWatch;
     state.nativeCsrfToken=String(data.csrfToken||'');
     state.xtreamServers = Array.isArray(data.items) ? data.items : [];
     state.xtreamTotals = data.totals || {};
@@ -1022,6 +1081,30 @@ async function handleServerAction(item, card, button) {
       showMessage(isEnable
         ?(`تم حفظ ${next?'تفعيل':'إيقاف'} المصدر «${item.name}» في قاعدة البيانات، وسيبقى كذلك بعد تحديث الصفحة.`)
         :(`تم حفظ ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'للعملاء':'عن العملاء'}.`));
+    } else if (action === 'live-stability') {
+      writeFeedback('جارٍ قراءة مؤشرات البث وقيود المصدر دون فتح اتصالات فيديو…');
+      const result=await api('/api/v1/admin/xtream-gateway/live-stability?sourceId='+
+        encodeURIComponent(item.id));
+      const m=result.metrics||{};
+      const details=result.findings||[];
+      const messages={
+        source_drops:'المصدر يغلق اتصال البث',
+        short_ends:'انتهاء سريع للبث',
+        client_closures:'انقطاع من جهة العميل أو الوسيط',
+        provider_limit:'حساب المصدر بلغ حد الاتصالات',
+        provider_restream_not_confirmed:'إعادة البث الجماعي غير مؤكدة لدى المصدر',
+        provider_denials:'المزود يرفض بعض الاتصالات',
+        insufficient_samples:'البيانات غير كافية لتأكيد الثبات'
+      };
+      const summary='📡 ثبات آخر ساعة (هذه النسخة من السيرفر فقط): '+
+        'بدأ '+Number(m.started||0)+' · انقطاع المصدر '+Number(m.liveTsSourceDrops||0)+
+        ' · استعادة ناجحة '+Number(m.liveTsRecoverySuccesses||0)+
+        ' · إغلاق عميل/وسيط '+Number(m.clientOrProxyClosed||0)+
+        ' · فشل '+Number(m.failed||0)+
+        ' · ملاحظات: '+(details.map(c=>messages[c]||c).join('، ')||'لا توجد حوادث مؤكدة ضمن العينة')+
+        ' · لا يشمل التقرير نسخ Railway الأخرى أو المشغلات المتصلة مباشرة بالمزود.';
+      writeFeedback(summary);
+      showMessage('تم إصدار تقرير ثبات البث للمصدر «'+item.name+'». راجع تفاصيله أسفل بطاقة المصدر.');
     } else if (action === 'retry-unavailable') {
       writeFeedback('جارٍ إعادة فحص الملفات المسجلة والمتاحة لإعادة الفحص في هذا المصدر فقط…');
       const result=await api('/api/v1/admin/xtream/unavailable-media/recheck-now',{
@@ -1131,6 +1214,18 @@ async function handleServerAction(item, card, button) {
         // because the follow-up display refresh timed out.
         showMessage('حُفظ طلب الحذف في قاعدة البيانات، لكن تعذّر تأكيد تحديث القائمة: '+readError.message,'error');
       }
+    } else if (action==='sync-package') {
+      const confirmName=window.prompt('تحديث باقة المصدر «'+item.name+'» قد يزيل آلاف العناصر غير الموجودة عند مزود Xtream. سيتحقق الخادم من أي انخفاض كبير بقراءة ثانية قبل اعتماد الحذف. للتأكيد اكتب اسم المصدر كما هو: '+item.name);
+      if(confirmName!==item.name){
+        showMessage('تم إلغاء تحديث البكج: اسم المصدر غير مطابق.');
+        return;
+      }
+      const queued=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(item.id)+'/sync',{
+        method:'POST',body:JSON.stringify({types:['live','movie','series'],confirmProviderPackage:true,confirmation:confirmName})
+      });
+      showMessage(queued.queued
+        ?'تم قبول تحديث باقة «'+item.name+'» في الانتظار. إزالة المحتوى القديم مشروطة بنجاح التحقق.'
+        :'بدأ تحديث باقة «'+item.name+'». لا يعتبر الحذف مكتملاً قبل انتهاء المزامنة وظهور الأعداد الجديدة.');
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
       const queued=await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
@@ -1298,6 +1393,37 @@ function renderCategoryManager(){
   }
   if(matches.length>show.length)
     target.append(make('p','muted','تم عرض أول 240 قسمًا. ابحث بالاسم للوصول إلى البقية.'));
+}
+
+async function restoreProviderCategoryOrder(){
+ const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
+ const button=el('categoryRestoreProviderBtn');
+ if(!serverId||!state.categories.length){
+  showMessage('اختر مصدرًا ونوع محتوى يحتوي على أقسام أولًا.','error');return;
+ }
+ const source=state.xtreamServers.find(x=>x.id===serverId)?.name||'المصدر';
+ if(!window.confirm('إرجاع ترتيب أقسام '+source+' الأصلي من Xtream ('+
+  state.categories.length+' قسم)؟ ستبقى الأقسام المخفية مخفية.'))return;
+ button.disabled=true;const oldLabel=button.textContent;
+ button.textContent='جارٍ جلب ترتيب السيرفر…';
+ try{
+  const result=await api('/api/v1/admin/xtream/categories/auto-sort',{
+   method:'POST',body:JSON.stringify({serverId,mediaType,mode:'provider'})
+  });
+  await loadCategories();
+  showMessage(result.unchanged?'الترتيب يطابق السيرفر الأصلي بالفعل.':
+   '✅ تم استرجاع ترتيب '+Number(result.updated||0).toLocaleString('en-US')+
+   ' قسمًا كما هي في Xtream، مع بقاء الإخفاء.');
+ }catch(error){
+  const message={
+   xtream_provider_order_catalog_out_of_date:'الأقسام تغيرت لدى المزود. زامن محتوى المصدر أولًا ثم أعد المحاولة.',
+   xtream_provider_order_fetch_failed:'فشل جلب الترتيب الأصلي من مزود Xtream. لم يتغير ترتيبك.',
+   xtream_provider_order_unavailable:'مزود Xtream لم يُرجع قائمة أقسام صالحة.',
+   xtream_provider_order_invalid_response:'مزود Xtream أعاد بيانات أقسام غير صالحة. لم يتغير ترتيبك.',
+   xtream_category_busy_retry:'المصدر مشغول؛ حاول بعد انتهاء المزامنة.'
+  };
+  showMessage('تعذر استعادة ترتيب السيرفر: '+(message[error.message]||error.message),'error');
+ }finally{button.disabled=false;button.textContent=oldLabel;}
 }
 
 async function autoSortCurrentCategories(){
@@ -1849,6 +1975,21 @@ async function loadBlofyPlaybackHealth(){
     const asMs=value=>value===null||value===undefined?'—':Number(value).toLocaleString('en-US')+' ms';
     const stats=[
       ['بدأ التشغيل',m.started??0],
+      ['استعادة البث المباشر من المصدر نفسه',m.liveTsRecoverySuccesses??0],
+      ['عينات قياس انقطاع الوسائط عند إعادة الاتصال',m.liveTsRecoveryGapSamples??0],
+      ['وسيط زمن استعادة بيانات TS',asMs(m.medianLiveTsRecoveryGapMs)],
+      ['95% من استعادة بيانات TS خلال',asMs(m.p95LiveTsRecoveryGapMs)],
+      ['انقطاعات إعادة اتصال ≥3 ثوانٍ',m.liveTsRecoveryGapsOver3s??0],
+      ['انقطاعات إعادة اتصال ≥10 ثوانٍ',m.liveTsRecoveryGapsOver10s??0],
+      ['استكمال فيلم/حلقة من موضع التوقف',m.vodRangeResumeSuccesses??0],
+      ['توقف بيانات المصدر أثناء البث',m.liveTsSourceDrops??0],
+      ['متوسط عمر اتصال المصدر الوسيط',asMs(m.medianLiveTsSourceUptimeMs)],
+      ['انتهاء بث المصدر (EOF)',m.sourceDropByReason?.live_ts_source_eof??0],
+      ['المصدر قطع الاتصال',m.sourceDropByReason?.live_ts_source_transport_error??0],
+      ['توقف المصدر عن إرسال البيانات',m.sourceDropByReason?.live_ts_source_stalled??0],
+      ['استعادة البث استنفدت محاولاتها',m.liveTsRecoveryExhausted??0],
+      ['استعادة البث أوقفها حد السرعة',m.liveTsRecoveryRateLimited??0],
+      ['استعادة البث أوقفها حد الجلسة',m.liveTsRecoveryBudgetExhausted??0],
       ['تصاريح مشاركة أُصدرت',m.sharedTicketsIssued??0],
       ['رجوع للمسار السابق عند تعذر التصريح',m.sharedGrantFallbacks??0],
       ['فشل بدء البث',m.failed??0],
@@ -1884,6 +2025,10 @@ async function loadBlofyPlaybackHealth(){
       xtream_transport_dns_failed:'تعذر DNS للمصدر؛ تأكد من العنوان',
       xtream_transport_connection_refused:'المصدر رفض اتصال الشبكة؛ راجع المنفذ والبروتوكول',
       xtream_transport_connection_reset:'المصدر قطع الاتصال قبل استلام الفيديو',
+      live_ts_reconnect_exhausted:'المصدر انقطع ولم تنجح محاولتا استعادة البث',
+      live_ts_reconnect_denied:'المصدر رفض طلب استعادة البث أو أرسل محتوى غير صالح',
+      live_ts_reconnect_rate_limited:'توقف مؤقت لتجنب تكرار اتصالات المصدر بسرعة',
+      live_ts_reconnect_budget_exhausted:'بلغت جلسة المشاهدة الحد الآمن لمحاولات الاستعادة',
       xtream_transport_timeout:'اتصال المصدر لم يكتمل في الوقت المحدد',
       xtream_transport_tls_invalid:'شهادة HTTPS بالمصدر غير صحيحة أو لا تطابق العنوان',
       xtream_transport_unreachable:'تعذر اتصال السيرفر بمصدر الفيديو',
@@ -1909,11 +2054,26 @@ async function loadBlofyPlaybackHealth(){
       }
       issues.append(item);
     }
-    if(!recent.length){
-      issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
+    const drops=Array.isArray(m.recentSourceDrops)?m.recentSourceDrops:[];
+    const causes={
+      live_ts_source_eof:'المصدر أنهى بث HTTP المفتوح',
+      live_ts_source_transport_error:'اتصال المصدر انقطع بخطأ شبكة',
+      live_ts_source_stalled:'المصدر توقف عن إرسال البيانات (45 ثانية)'
+    };
+    for(const row of drops.slice(0,5)){
+      const item=make('div','blofy-playback-issue');
+      const uptime=Number.isFinite(row.durationMs)?
+        ' · الاتصال استمر '+Math.round(row.durationMs/1000)+' ثانية':'';
+      item.append(make('strong','','ملاحظة مصدر · بث مباشر'),
+        make('small','',String(causes[row.reason]||'انقطع اتصال المصدر')+
+          uptime+' · '+new Date(row.at).toLocaleString('ar-SA')));
+      issues.append(item);
+    }
+    if(!recent.length&&!drops.length){
+      issues.append(make('p','muted','لا توجد أخطاء تشغيل أو انقطاعات مصدر مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
-    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403)، ولا يعني حدوث عطل بالمصدر. نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. زمن الاستعادة هو مدة توقف نقل TS عند الخادم، وليس مدة الشاشة السوداء على جهاز العميل. وعند عدم وجود عينات سيظهر — بدل صفر. استعادة البث تعني استقبال بيانات TS صالحة من المصدر بعد إعادة الاتصال؛ لا تثبت عدم ظهور شاشة سوداء أو استمرار الصوت على الجهاز. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403). نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
       (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
   }catch(error){
     note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;
@@ -2391,6 +2551,7 @@ for(const [id,grouped] of [['categoryGroupedView',true],['categoryFlatView',fals
   });
 }
 el('categoryAutoSortBtn').addEventListener('click',autoSortCurrentCategories);
+el('categoryRestoreProviderBtn').addEventListener('click',restoreProviderCategoryOrder);
 el('categoryManagerRows').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action][data-category-id]');
   if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));

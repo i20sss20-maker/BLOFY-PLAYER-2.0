@@ -1,10 +1,20 @@
-import { databaseOptions } from './database-options.mjs';
+import { databaseOptions, observeIdleDatabaseErrors } from './database-options.mjs';
 import { withDatabaseStartRetry } from './startup-db-retry.mjs';
 import http from 'node:http';
+import {configureHostbrrWorkerHeartbeat,receiveHostbrrWorkerHeartbeat} from './hostbrr-worker-heartbeat.mjs';
+import {configureLinodeHeartbeat,receiveLinodeHeartbeat} from './linode-heartbeat.mjs';
 import { servePrivacyPage } from './privacy-pages.mjs';
 import { PUBLIC_ANALYTICS_CSP, withPublicAnalytics } from './public-analytics.mjs';
+import { createSiteAnalyticsHandlers } from './site-analytics.mjs';
+import { createWhatsAppCloudHandlers } from './whatsapp-cloud-hook.mjs';
 import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
+import { createStoreShowcaseHandlers } from './store-showcase.mjs';
+import { createStoreBrandingHandlers } from './store-branding.mjs';
+import { createStoreCommercialInsightsHandlers } from './store-commercial-insights.mjs';
+import { createStoreMerchandisingHandlers } from './store-merchandising.mjs';
+import { createStoreRetentionInsightsHandlers } from './store-retention-insights.mjs';
+import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
 import crypto from 'node:crypto';
@@ -55,6 +65,9 @@ if (!/^[a-fA-F0-9]{64}$/.test(PLAYLIST_ENCRYPTION_KEY)) {
 const pool = new Pool({
   ...databaseOptions(DATABASE_URL)
 });
+observeIdleDatabaseErrors(pool);
+configureLinodeHeartbeat(pool);
+configureHostbrrWorkerHeartbeat(pool);
 
 const authIpLimiter = createFixedWindowLimiter({ limit: AUTH_IP_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
 const authDeviceLimiter = createFixedWindowLimiter({ limit: AUTH_DEVICE_RATE_LIMIT, windowMs: AUTH_RATE_WINDOW_MS });
@@ -177,7 +190,14 @@ async function authorizedDevice(deviceId, activationCode, req) {
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
 const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin, authorizedDevice });
 const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
-const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson });
+const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
+const storeShowcase = createStoreShowcaseHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeBranding = createStoreBrandingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeCommercialInsights = createStoreCommercialInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
+const storeMerchandising = createStoreMerchandisingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeRetentionInsights = createStoreRetentionInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
+const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
+const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
 
 async function initializeDatabase() {
@@ -280,6 +300,192 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
+function withCustomerAccountNavigation(html){
+  // No dead customer-account links on the public storefront until login email is configured.
+  const ready=process.env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&
+    String(process.env.BLOFY_CUSTOMER_RESEND_API_KEY||'').startsWith('re_')&&
+    String(process.env.BLOFY_CUSTOMER_MAIL_FROM||'').includes('@');
+  if(ready)return html;
+  return html.replaceAll('<a href="/store/account">حسابي</a>','')
+    .replace('<a class="secondary" id="account-import" href="/store/account">احفظ طلبك في حسابي</a>','');
+}
+
+async function serveStorefront(res, product = null, offer = false) {
+  // Public store, with dedicated canonical detail pages. No client-supplied markup.
+  let source = await readFile(new URL('../web/store.html', import.meta.url), 'utf8');
+  if (product === 'stream' || product === 'xtream') {
+    source = source.replace('data-blofy-storefront="1"',
+      'data-blofy-storefront="1" data-shop-product="'+product+'"');
+    const title=product==='stream'?'اشتراك STRONG 8K عبر BLOFY STREAM':'اشتراك STRONG 8K Xtream عبر BLOFY PLAYER';
+    const path='/products/'+product;
+    source=source.replace(/<title>[^<]+<\/title>/,'<title>'+title+' | أسعار 40 و70 و120 ريال</title>');
+    source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
+      '<link rel="canonical" href="https://www.blofyplayer.com'+path+'">');
+  }
+  if (offer) {
+    source=source.replace('data-blofy-storefront="1"','data-blofy-storefront="1" data-shop-offer="1"');
+    source=source.replace(/<title>[^<]+<\/title>/,'<title>عرض اشتراكين سنويين بـ200 ريال | BLOFY</title>');
+    source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
+      '<link rel="canonical" href="https://www.blofyplayer.com/store/offers">');
+  }
+  const file = Buffer.from(withPublicAnalytics(withCustomerAccountNavigation(source)),'utf8');
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': file.length,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'strict-transport-security': 'max-age=31536000',
+    'content-security-policy': PUBLIC_ANALYTICS_CSP
+      .replace("script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+        "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.ksamerchant.geidea.net")
+      .replace("img-src 'self' data: https://www.google-analytics.com https://region1.google-analytics.com",
+        "img-src 'self' data: https:")
+      .replace("connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com",
+        "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net")
+      + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'"
+  });
+  res.end(file);
+}
+
+async function serveStoreAssetFile(res,name,type) {
+  const file=await readFile(new URL('../web/'+name,import.meta.url));
+  res.writeHead(200,{
+    'content-type':type,'content-length':file.length,
+    'cache-control':'public,max-age=900',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
+async function serveStoreShowcaseScript(res) {
+  const file=await readFile(new URL('../web/store-showcase.js',import.meta.url));
+  res.writeHead(200,{
+    'content-type':'application/javascript; charset=utf-8',
+    'content-length':file.length,'cache-control':'public, max-age=900',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
+async function serveStoreOfferScript(res) {
+  const file=await readFile(new URL('../web/store-offers.js',import.meta.url));
+  res.writeHead(200,{
+    'content-type':'application/javascript; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=3600',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
+
+async function serveCartPage(res,kind){
+  const name=kind==='cart'?'store-cart.html':kind==='account'?'store-account.html':'store-orders.html';
+  const source=await readFile(new URL('../web/'+name,import.meta.url),'utf8');
+  const gated=withCustomerAccountNavigation(source);
+  const html=kind==='cart'?withPublicAnalytics(gated):gated;
+  const file=Buffer.from(html,'utf8');
+  res.writeHead(200,{
+    'content-type':'text/html; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'no-store',
+    'x-content-type-options':'nosniff',
+    'x-frame-options':'DENY',
+    'referrer-policy':'no-referrer',
+    'strict-transport-security':'max-age=31536000',
+    'content-security-policy':kind==='cart'?
+      PUBLIC_ANALYTICS_CSP
+        .replace("script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+          "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.ksamerchant.geidea.net")
+        .replace("connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com",
+          "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net")
+        + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'":
+      "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+  });res.end(file);
+}
+async function serveCartAsset(res,name){
+  const entries={
+    'cart.css':['store-cart.css','text/css; charset=utf-8'],
+    'cart.js':['store-cart.js','application/javascript; charset=utf-8'],
+    'order-tracking.js':['store-order-tracking.js','application/javascript; charset=utf-8'],
+    'account.js':['store-account.js','application/javascript; charset=utf-8']
+  };
+  const asset=entries[name];
+  if(!asset)return;
+  const file=await readFile(new URL('../web/'+asset[0],import.meta.url));
+  res.writeHead(200,{
+    'content-type':asset[1],'content-length':file.length,
+    'cache-control':'public, max-age=1800',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
+async function serveStoreDesign(res) {
+  const file=await readFile(new URL('../web/store-premium.css',import.meta.url));
+  res.writeHead(200,{
+    'content-type':'text/css; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=3600',
+    'x-content-type-options':'nosniff',
+    'strict-transport-security':'max-age=31536000'
+  });
+  res.end(file);
+}
+
+async function serveStoreTrialPage(req,res){
+  const file=await readFile(new URL('../web/store-trial.html',import.meta.url));
+  res.writeHead(200,{
+   'content-type':'text/html; charset=utf-8',
+   'content-length':file.length,'cache-control':'no-store, private',
+   'x-content-type-options':'nosniff','x-frame-options':'DENY',
+   'referrer-policy':'no-referrer','strict-transport-security':'max-age=31536000',
+   'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+  });
+  res.end(req.method==='HEAD'?undefined:file);
+}
+function serveStoreInfo(res, slug) {
+  const markup=storeInfoPage(slug);
+  if(!markup){res.writeHead(404,{'cache-control':'no-store'});return res.end();}
+  const file=Buffer.from(withPublicAnalytics(withCustomerAccountNavigation(markup)),'utf8');
+  res.writeHead(200,{
+    'content-type':'text/html; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=120',
+    'x-content-type-options':'nosniff',
+    'x-frame-options':'DENY',
+    'referrer-policy':'strict-origin-when-cross-origin',
+    'strict-transport-security':'max-age=31536000',
+    'content-security-policy':PUBLIC_ANALYTICS_CSP+"; base-uri 'none'"
+  });
+  res.end(file);
+}
+
+async function serveStoreGraphic(res, name) {
+  const filename=({stream:'store-stream.svg',xtream:'store-xtream.svg',strong8k:'store-strong8k-banner.svg',player:'store-player-banner.svg',bundle:'store-bundle-banner.svg'})[name];
+  if (!filename) throw new Error('store_graphic_unavailable');
+  const file=await readFile(new URL('../web/'+filename,import.meta.url));
+  res.writeHead(200,{
+    'content-type':'image/svg+xml; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=86400',
+    'x-content-type-options':'nosniff',
+    'content-security-policy':"default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
+  });
+  res.end(file);
+}
+
+async function serveStorePhoto(res, name) {
+  // First-party, locally hosted renders of the marketing banners.
+  const filename=({strong8k:'banner-strong8k-ai.jpg',player:'banner-player-ai.jpg'})[name];
+  if(!filename){res.writeHead(404);return res.end();}
+  const file=await readFile(new URL('../web/'+filename,import.meta.url));
+  res.writeHead(200,{
+    'content-type':'image/jpeg',
+    'content-length':file.length,
+    'cache-control':'public, max-age=86400, immutable',
+    'x-content-type-options':'nosniff',
+    'strict-transport-security':'max-age=31536000',
+    'content-security-policy':"default-src 'none'; sandbox"
+  });
+  res.end(file);
+}
+
 async function serveStatusPage(res, fileName = 'status.html') {
   // Only internal constant filenames are passed; never derive public file paths from URLs.
   const publicPage = fileName === 'guide.html' || fileName === 'support.html' || fileName === 'en.html' || fileName === 'es.html' || fileName === 'fr.html';
@@ -329,6 +535,16 @@ function serveSitemap(res) {
   <url><loc>https://blofyplayer.com/support</loc></url>
   <url><loc>https://blofyplayer.com/privacy</loc></url>
   <url><loc>https://blofyplayer.com/status</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/offers</loc></url>
+  <url><loc>https://www.blofyplayer.com/products/stream</loc></url>
+  <url><loc>https://www.blofyplayer.com/products/xtream</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/trial</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/about</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/faq</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/terms</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/contact</loc></url>
+  <url><loc>https://www.blofyplayer.com/privacy</loc></url>
+  <url><loc>https://www.blofyplayer.com/support</loc></url>
 </urlset>`;
   res.writeHead(200, {
     'content-type': 'application/xml; charset=utf-8',
@@ -388,8 +604,19 @@ async function activationCheck(req, res) {
     if (status === 'expired' && row.status !== 'blocked') {
       await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);
     }
+    // A busy marketing launch can make thousands of valid installations
+    // check their entitlement repeatedly. Verification and expiry handling
+    // above still run on EVERY request; only the administrative last-seen
+    // heartbeat is coalesced for 60 seconds to reduce PostgreSQL WAL writes,
+    // vacuum pressure and row churn without hiding version/platform changes.
     await client.query(
-      'UPDATE devices SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3 WHERE device_id=$1',
+      `UPDATE devices
+       SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3
+       WHERE device_id=$1 AND (
+         last_seen_at IS NULL OR last_seen_at <= NOW()-INTERVAL '60 seconds'
+         OR last_app_version IS DISTINCT FROM $2
+         OR last_platform IS DISTINCT FROM $3
+       )`,
       [deviceId, appVersion, platform]
     );
     await client.query('COMMIT');
@@ -730,7 +957,22 @@ const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerC
 const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
+    if(await receiveLinodeHeartbeat(req,res,requestUrl,json))return;
+    if(await receiveHostbrrWorkerHeartbeat(req,res,requestUrl,json))return;
     const requestHost = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    // Geidea/Apple Pay verifies exact domain bytes. Serve on every BLOFY host
+    // before the api-to-site redirect, with no authentication or HTML wrapper.
+    if (['GET','HEAD'].includes(req.method || '') &&
+        requestUrl.pathname === '/.well-known/apple-developer-merchantid-domain-association') {
+      const file = await readFile(new URL('../web/.well-known/apple-developer-merchantid-domain-association', import.meta.url));
+      res.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        'content-length': file.length,
+        'cache-control': 'public, max-age=300',
+        'x-content-type-options': 'nosniff'
+      });
+      return res.end(req.method === 'HEAD' ? undefined : file);
+    }
     if (
       requestHost === 'api.blofyplayer.com' &&
       ['GET', 'HEAD'].includes(req.method || '') &&
@@ -796,7 +1038,72 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeRetentionInsights(req,res,requestUrl)) return;
+    if (await storeMerchandising(req,res,requestUrl)) return;
+    if (await storeCommercialInsights(req,res,requestUrl)) return;
+    if (await storeBranding(req,res,requestUrl)) return;
+    if (await storeShowcase(req,res,requestUrl)) return;
+    if (await siteAnalytics(req,res,requestUrl)) return;
+    if (await whatsappCloud(req,res,requestUrl)) return;
     if (await servePrivacyPage(req, res, requestUrl)) return;
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
+    if(['GET','HEAD'].includes(req.method)&&['/store/cart','/store/cart/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'cart');
+    if(['GET','HEAD'].includes(req.method)&&['/store/orders','/store/orders/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'orders');
+    if(['GET','HEAD'].includes(req.method)&&['/store/account','/store/account/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'account');
+    if(['GET','HEAD'].includes(req.method)&&
+       ['/store/cart.css','/store/cart.js','/store/order-tracking.js','/store/account.js'].includes(requestUrl.pathname))
+      return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/checkout-theme.css')
+      return await serveStoreAssetFile(res,'store-checkout-theme.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/visual.css')
+      return await serveStoreAssetFile(res,'store-visual.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.js')
+      return await serveStoreAssetFile(res,'store-assistant.js','application/javascript; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.css')
+      return await serveStoreAssetFile(res,'store-assistant.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant'){
+      const raw=await readFile(new URL('../web/store-assistant.html',import.meta.url));
+      const html=Buffer.from(withPublicAnalytics(raw.toString('utf8')),'utf8');
+      res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':html.length,
+        'cache-control':'public,max-age=120','x-content-type-options':'nosniff',
+        'x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin',
+        'content-security-policy':PUBLIC_ANALYTICS_CSP+"; base-uri 'none'",
+        'strict-transport-security':'max-age=31536000'});
+      return res.end(html);
+    }
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.css')
+      return await serveStoreAssetFile(res,'store-market.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.js')
+      return await serveStoreAssetFile(res,'store-market.js','application/javascript; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/showcase.js')
+      return await serveStoreShowcaseScript(res);
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
+      return await serveStoreOfferScript(res);
+    if (['GET','HEAD'].includes(req.method) && ['/store/trial','/store/trial/'].includes(requestUrl.pathname))
+      return await serveStoreTrialPage(req,res);
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/trial.js')
+      return await serveStoreAssetFile(res,'store-trial.js','application/javascript; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/trial.css')
+      return await serveStoreAssetFile(res,'store-trial.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/design.css')
+      return await serveStoreDesign(res);
+    if (['GET','HEAD'].includes(req.method)&&['/store/offers','/store/offers/'].includes(requestUrl.pathname))
+      return await serveStorefront(res,null,true);
+    const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
+    const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|faq|contact|terms)\/?$/);
+    const storePhotoMatch=requestUrl.pathname.match(/^\/store\/media\/(strong8k|player)\.jpg$/);
+    if (['GET','HEAD'].includes(req.method) && storePhotoMatch)
+      return await serveStorePhoto(res,storePhotoMatch[1]);
+    const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream|strong8k|player|bundle)\.svg$/);
+    if (['GET','HEAD'].includes(req.method) && storeProductMatch)
+      return await serveStorefront(res,storeProductMatch[1]);
+    if (['GET','HEAD'].includes(req.method) && storeInfoMatch)
+      return serveStoreInfo(res,storeInfoMatch[1]);
+    if (['GET','HEAD'].includes(req.method) && storeImageMatch)
+      return await serveStoreGraphic(res,storeImageMatch[1]);
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/en' || requestUrl.pathname === '/en/')) return await serveStatusPage(res, 'en.html');
@@ -804,7 +1111,7 @@ const server = http.createServer(async (req, res) => {
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/fr' || requestUrl.pathname === '/fr/')) return await serveStatusPage(res, 'fr.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/support' || requestUrl.pathname === '/support/')) return await serveStatusPage(res, 'support.html');
-    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
+    if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/portal') return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (serveIndexNowKey(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/robots.txt') return serveRobots(res);

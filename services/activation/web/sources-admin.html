@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/blofy-gemini-ui.css?v=20261109-fix">
   <link rel="stylesheet" href="/stream-premium.css?v=20261107-smart-v1">
   <link rel="stylesheet" href="/stream-simple-mode.css?v=20261108-simple-1">
+  <link rel="stylesheet" href="/stream-dual-access.css?v=20261118-v1">
 </head>
 <body>
   <div class="source-shell">
@@ -23,6 +24,7 @@
         <a class="active" href="#home" data-sidebar-tab="home"><span>◈</span>الرئيسية</a>
         <a href="#xtream" data-sidebar-tab="xtream"><span>▤</span>المصادر والمشتركون</a>
         <a href="#xtream" id="streamCodeRenewShortcut"><span>↻</span>فحص وتجديد كود STREAM</a>
+        <a href="#xtream" data-blofy-dual-shortcut><span>⇄</span>تحويل الأكواد وXtream</a>
         <a href="#catalog" data-sidebar-tab="catalog"><span>▦</span>المكتبة</a>
         <a href="https://blofy-stream-api-production.up.railway.app/operator" target="_blank" rel="noopener noreferrer"><span>◉</span>لوحة إعادة البث ↗</a>
         <a href="#studio" data-sidebar-tab="studio"><span>⚙</span>التحكم المتقدم</a>
@@ -71,6 +73,7 @@
                 <span aria-hidden="true">＋</span> إدارة المصادر
               </button>
               <button type="button" class="button ghost" data-open-workspace="accounts">المشتركون <span aria-hidden="true">↗</span></button>
+              <button type="button" class="button ghost" data-blofy-dual-shortcut>⇄ تحويل الكود وXtream</button>
             </div>
             <div class="stream-horizon-caption"><span class="horizon-lock" aria-hidden="true">✧</span> بيانات العملاء ومسارات التشغيل الحالية محفوظة</div>
           </div>
@@ -217,6 +220,77 @@
           <div class="intro-step"><strong>2</strong><span>أنشئ بيانات الدخول</span></div>
         </section>
 
+
+        <section class="panel gateway-dual-access" id="streamDualAccess" aria-labelledby="dualTitle">
+          <div class="dual-heading">
+            <div><span class="panel-kicker">ONE SUBSCRIPTION · TWO LOGIN METHODS</span>
+              <h2 id="dualTitle">نفس الاشتراك: كود BLOFY ⇄ Xtream</h2>
+              <p>استخرج طريقة الدخول الأخرى من الحساب الموجود. لا نغيّر الكود القديم، ولا بيانات Xtream، ولا تاريخ انتهاء الاشتراك.</p>
+            </div>
+            <span class="dual-chip">للمشرف فقط · محمي</span>
+          </div>
+          <div class="dual-flow-grid">
+            <article class="dual-flow" aria-labelledby="dualCodeHeading">
+              <div class="dual-flow-header"><span class="dual-flow-icon" aria-hidden="true">🔗</span>
+                <div><h3 id="dualCodeHeading">من كود BLOFY إلى Xtream</h3>
+                  <p>أدخل كودًا مفعّلًا واستخرج Host وUsername وPassword.</p></div>
+              </div>
+              <form class="dual-form" id="dualCodeForm" autocomplete="off">
+                <label for="dualVoucher">كود اشتراك BLOFY STREAM
+                  <input id="dualVoucher" type="text" inputmode="numeric" autocapitalize="off"
+                    autocomplete="off" spellcheck="false" maxlength="32" placeholder="أدخل الكود الحالي" required>
+                </label>
+                <button type="submit" id="dualCodeToXtream" class="button primary dual-action">استخراج بيانات Xtream</button>
+              </form>
+              <p id="dualCodeStatus" class="dual-status" role="status" aria-live="polite">الفحص لا يستهلك الكود ولا يجدد الاشتراك.</p>
+              <div id="dualXtreamResult" class="dual-result" hidden>
+                <div class="dual-result-header"><strong>بيانات نفس الحساب</strong><small id="dualXtreamExpiry"></small></div>
+                <div class="dual-result-fields">
+                  <div class="dual-result-field"><span>Host</span><code id="dualHostValue"></code></div>
+                  <div class="dual-result-field"><span>Username</span><code id="dualUserValue"></code></div>
+                  <div class="dual-result-field"><span>Password</span><code id="dualPasswordValue"></code></div>
+                </div>
+                <div class="dual-result-actions">
+                  <button class="button primary" id="dualCopyXtream" type="button">نسخ البيانات</button>
+                  <button class="button ghost" id="dualHideXtream" type="button">إخفاء الآن</button>
+                </div>
+              </div>
+            </article>
+            <article class="dual-flow" aria-labelledby="dualAccountHeading">
+              <div class="dual-flow-header"><span class="dual-flow-icon" aria-hidden="true">📱</span>
+                <div><h3 id="dualAccountHeading">من حساب Xtream إلى كود BLOFY</h3>
+                  <p>اختر حسابًا موجودًا لاسترجاع نفس الكود أو ربط كود واحد به.</p></div>
+              </div>
+              <form class="dual-form" id="dualAccountForm" autocomplete="off">
+                <div class="dual-inline">
+                  <label for="dualAccountSearch">اسم المشترك أو Username
+                    <input type="search" id="dualAccountSearch" autocomplete="off"
+                      placeholder="ابحث عن حساب Xtream" spellcheck="false">
+                  </label>
+                  <button id="dualAccountRefresh" type="button" class="button ghost">↻ تحديث</button>
+                </div>
+                <label for="dualAccountSelect">اختر حساب Xtream
+                  <select id="dualAccountSelect" size="4" aria-describedby="dualAccountCount">
+                    <option value="">اضغط على البحث لتحميل الحسابات</option>
+                  </select>
+                </label>
+                <span class="dual-count" id="dualAccountCount">النتائج تُحمّل عند فتح البحث فقط.</span>
+                <button type="submit" id="dualXtreamToCode" class="button primary dual-action" disabled>استخراج كود BLOFY المرتبط</button>
+              </form>
+              <p id="dualAccountStatus" class="dual-status" role="status" aria-live="polite">إذا لم يوجد كود مرتبط، سيُنشأ واحد بنفس تاريخ الانتهاء بعد التأكيد.</p>
+              <div id="dualVoucherResult" class="dual-result" hidden>
+                <div class="dual-result-header"><strong>كود BLOFY STREAM</strong><small id="dualVoucherExpiry"></small></div>
+                <code id="dualAppCodeValue" class="dual-result-code"></code>
+                <p class="dual-disclaimer" id="dualVoucherExplanation"></p>
+                <div class="dual-result-actions">
+                  <button class="button primary" type="button" id="dualCopyCode">نسخ الكود</button>
+                  <button class="button ghost" type="button" id="dualHideCode">إخفاء الآن</button>
+                </div>
+              </div>
+            </article>
+          </div>
+          <p class="dual-disclaimer">تُعرض البيانات الحساسة لمدة 90 ثانية فقط وتُخفى عند مغادرة الصفحة. نقل الكود لجهاز آخر يظل خاضعًا لموافقة الجهاز؛ لا تُتاح بيانات المصادر الأصلية.</p>
+        </section>
 
         <section class="panel gateway-panel">
           <div class="panel-head gateway-title-row">
@@ -653,6 +727,7 @@
           <div class="catalog-smart-quick" id="catalogSmartQuick" aria-label="اختصارات تصفح المكتبة">
             <span class="catalog-smart-quick-label">✨ وصول سريع</span>
           </div>
+          <p class="muted" id="minuteCatalogWatchStatus" role="status">جارٍ قراءة حالة مراقبة المحتوى التلقائية…</p>
           <div class="category-manager">
             <div class="category-manager-head">
 <div><h3>أقسام مرتبة وواضحة</h3><p>اعرض التصنيفات حسب اللغة والسنة، ثم اختر «ترتيب ذكي» ليظهر ترتيب الأقسام نفسه للمشتركين. لا يتغير اسم القسم أو محتواه.</p></div>
@@ -666,7 +741,8 @@
                 <option value="alphabetical">أبجديًا بحسب اسم القسم</option>
               </select>
               <button id="categoryAutoSortBtn" class="button ghost" type="button">تطبيق الترتيب</button>
-              <small>الترتيب الذكي يعتمد على اسم القسم الموجود، ويضع الأحدث أولًا إذا كانت السنة مكتوبة. لن يخمّن سنوات المحتوى غير المعروفة.</small>
+              <button id="categoryRestoreProviderBtn" class="button primary" type="button" title="استعادة ترتيب أقسام Xtream الأصلي دون المساس بالأقسام المخفية">↩ ترتيب السيرفر الأصلي</button>
+              <small>«ترتيب السيرفر الأصلي» يعيد جلب ترتيب الأقسام من Xtream ويستبدل الترتيب الأبجدي في BLOFY. سيبقى إخفاء الأقسام وأكواد العملاء كما هي.</small>
             </div>
             <div class="category-view-toggle" role="group" aria-label="طريقة عرض التصنيفات">
               <button id="categoryGroupedView" class="button primary" type="button" aria-pressed="true">▦ مجموعات حسب اللغة والسنة</button>
@@ -743,6 +819,7 @@
   <script src="/blofy-gemini-ui.js?v=20261109-fix" defer></script>
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
+  <script src="/stream-dual-access.js?v=20261118-v1" defer></script>
   <script src="/stream-premium.js?v=20261107-queue-v2" defer></script>
 </body>
 </html>

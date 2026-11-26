@@ -62,11 +62,12 @@ function showCredentials(credentials) {
   gx('gatewayCredentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function renderGatewayBatch(credentials){
-  gatewayState.lastIssued=credentials.map(x=>({
+function renderGatewayBatch(credentials,items=[]){
+  gatewayState.lastIssued=credentials.map((x,index)=>({
     serverUrl:String(x.serverUrl||''),
     username:String(x.username||''),
     password:String(x.password||''),
+    accountId:String(items[index]?.id||''),
     appCode:''
   }));
   const panel=gx('gatewayBatchCredentials'),rows=gx('gatewayBatchRows');
@@ -76,21 +77,22 @@ function renderGatewayBatch(credentials){
     const details=gatewayNode('div','gateway-batch-details');
     details.append(gatewayNode('strong','',account.username));
     details.append(gatewayNode('code','',account.serverUrl+' · '+account.password));
-    const button=gatewayNode('button','button ghost','إصدار كود تطبيق BLOFY');
+    const button=gatewayNode('button','button ghost','ربط نفس الحساب بكود BLOFY');
     button.type='button';
     button.addEventListener('click',async()=>{
-      if(!window.confirm('هل تريد إصدار كود تفعيل تطبيق BLOFY لهذا الحساب؟'))return;
+      if(!window.confirm('إصدار كود BLOFY مرتبط بنفس حساب Xtream ونفس تاريخ الانتهاء؟ لن ننشئ اشتراكًا جديدًا.'))return;
       button.disabled=true;
       try{
-        const result=await gatewayApi('/api/v1/admin/blofy-codes',{
-          method:'POST',body:JSON.stringify({
-            source:'custom',host:account.serverUrl,username:account.username,password:account.password
-          })
+        if(!/^[0-9a-f-]{36}$/i.test(account.accountId))
+          throw new Error('رقم حساب Xtream غير متاح في نتيجة الإنشاء.');
+        const result=await gatewayApi('/api/v1/admin/xtream-gateway/link/xtream-to-code',{
+          method:'POST',cache:'no-store',
+          body:JSON.stringify({accountId:account.accountId})
         });
         if(!result.code)throw new Error('blofy_code_not_returned');
         account.appCode=String(result.code);
         button.replaceWith(gatewayNode('strong','gateway-app-code', 'كود التطبيق: '+account.appCode));
-        gatewayMessage('تم إصدار كود BLOFY لهذا الحساب. احفظه الآن مع بيانات Xtream.');
+        gatewayMessage('كود BLOFY مرتبط بنفس حساب Xtream والمدة، وليس اشتراكًا جديدًا.');
       }catch(error){
         button.disabled=false;
         gatewayMessage('تعذر إصدار كود BLOFY: '+error.message,'error');
@@ -353,7 +355,39 @@ function renderGatewayAccounts() {
       finally{renew.disabled=false}
     });
 
+    // Same existing Xtream account -> code used by BLOFY STREAM.
+    // No new Xtream username/password, no subscription renewal or migration.
+    const linkedCode=gatewayNode('button','button ghost','📱 استخراج كود BLOFY');
+    linkedCode.type='button';
+    linkedCode.title='نفس الاشتراك وتاريخ الانتهاء. لا ينشئ حساب Xtream جديدًا.';
+    linkedCode.addEventListener('click',async()=>{
+      if(!window.confirm('ربط هذا الحساب بكود BLOFY STREAM دون تجديد الاشتراك أو تغيير بيانات Xtream؟'))return;
+      linkedCode.disabled=true;
+      try{
+        const data=await gatewayApi('/api/v1/admin/xtream-gateway/link/xtream-to-code',{
+          method:'POST',cache:'no-store',body:JSON.stringify({accountId:item.id})
+        });
+        const output=gatewayNode('div','gateway-linked-code');
+        const value=gatewayNode('code','',data.code);
+        const copy=gatewayNode('button','button ghost','نسخ الكود');
+        copy.type='button';copy.addEventListener('click',()=>copyText(data.code,'تم نسخ كود BLOFY المرتبط.'));
+        const hide=gatewayNode('button','button ghost','إخفاء');
+        hide.type='button';hide.addEventListener('click',()=>output.remove());
+        output.append(value,copy,hide);
+        card.querySelector('.gateway-linked-code')?.remove();
+        card.append(output);
+        gatewayMessage(data.created?'تم إنشاء كود مرتبط بالحساب الحالي فقط.':'تم استخراج نفس كود الاشتراك الموجود.');
+      }catch(error){
+        const why=String(error.message||'');
+        gatewayMessage('تعذر ربط كود BLOFY: '+({
+          stream_link_account_expiry_required:'لا يمكن إنشاء كود لحساب بدون تاريخ انتهاء.',
+          stream_link_legacy_code_not_recoverable:'الكود القديم غير قابل للاسترجاع ولا يمكن تغييره دون موافقة منفصلة.',
+          stream_link_saleh_source_only:'الربط الجديد متاح لمصدر saleh فقط.'
+        }[why]||why),'error');
+      }finally{linkedCode.disabled=false}
+    });
     actions.append(copy, renew, toggle, reset, rotate, remove);
+    actions.insertBefore(linkedCode,remove);
     card.append(main, actions);
     list.append(card);
   }
@@ -432,7 +466,8 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
         expiresAt:new Date(Date.now()+days*86400000).toISOString()
       })
     });
-    renderGatewayBatch(Array.isArray(data.credentials)?data.credentials:[]);
+    renderGatewayBatch(Array.isArray(data.credentials)?data.credentials:[],
+      Array.isArray(data.items)?data.items:[]);
     gatewayMessage('تم إصدار '+String(data.count||0)+' حساب Xtream. انسخ Host وUsername وPassword الآن، أو حمّل ملف CSV.');
     await loadGateway();
   } catch (error) {
@@ -543,6 +578,11 @@ function initStreamCodeManagement(){
   const details=gx('streamCodeLookupDetails'),help=gx('streamCodeRecoveryHelp');
   const renew=gx('streamCodeRenewButton'),transfer=gx('streamCodeTransferButton');
   const transferred=gx('streamCodeTransferred'),transferValue=gx('streamCodeTransferredValue');
+  // Exact-code lookup already requires the authenticated admin session.
+  // Never put a code in the URL or reveal Xtream passwords automatically.
+  const extract=gatewayNode('button','button ghost','🔗 استخراج Xtream من نفس الكود');
+  extract.type='button';extract.disabled=true;extract.hidden=true;
+  panel?.append(extract);
   if(!form||!entry||!status||!panel||!details||!renew||!transfer)return;
   let current=null;
   const normalize=v=>String(v||'').trim().toUpperCase()
@@ -553,6 +593,7 @@ function initStreamCodeManagement(){
   const date=ms=>ms?new Date(ms).toLocaleString('ar-SA'):'غير محدد';
   function reset(){
     current=null;panel.hidden=true;renew.disabled=true;
+    extract.hidden=true;extract.disabled=true;
     transfer.hidden=true;transfer.disabled=true;
     transferred.hidden=true;
     if(transferValue)transferValue.textContent='';
@@ -566,7 +607,8 @@ function initStreamCodeManagement(){
     const item=record.item,sub=record.subscription;
     details.replaceChildren(
       row('الكود',mask(item)),
-      row('النوع',item.channel==='app'?'تفعيل تطبيق STREAM':'بيانات Xtream'),
+      row('النوع',item.dualAccessEnabled?'تطبيق BLOFY + Xtream':
+        item.channel==='app'?'تفعيل تطبيق STREAM':'بيانات Xtream'),
       row('الحالة',item.status==='revoked'?'ملغي':!sub.redeemed?'جديد ولم يُستخدم':
         sub.active?'مفعّل وصالح':sub.expired?'منتهي المدة':!sub.accountEnabled?'الحساب موقوف':'يحتاج مراجعة'),
       row('تاريخ التفعيل',date(item.redeemedAt)),
@@ -575,6 +617,8 @@ function initStreamCodeManagement(){
       row('الحساب المرتبط',sub.accountExists?'موجود':'لا يوجد')
     );
     renew.disabled=!sub.canExtend;
+    extract.hidden=!sub.active;
+    extract.disabled=!sub.active;
     transfer.hidden=!sub.redeemed;
     transfer.textContent=item.channel==='app'?
       'إصدار كود بديل لنقل الجهاز':'إصدار كود استرداد بيانات Xtream';
@@ -616,6 +660,22 @@ function initStreamCodeManagement(){
     }finally{if(submit)submit.disabled=false}
   }
   form.addEventListener('submit',e=>{e.preventDefault();void lookup();});
+  extract.addEventListener('click',async()=>{
+    if(!current?.subscription?.active)return;
+    const code=normalize(entry.value);
+    if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code))return;
+    if(!window.confirm('إظهار بيانات Xtream المرتبطة بهذا الكود؟ يجب تسليمها لصاحب الاشتراك فقط.'))return;
+    extract.disabled=true;
+    try{
+      const result=await gatewayApi('/api/v1/admin/xtream-gateway/link/code-to-xtream',{
+        method:'POST',cache:'no-store',body:JSON.stringify({code})
+      });
+      showCredentials(result.credentials);
+      status.textContent='هذه بيانات Xtream لنفس الاشتراك، ولم يتغير الكود أو موعد الانتهاء.';
+    }catch(error){
+      status.textContent='تعذر استخراج Xtream: '+String(error.message||'خطأ غير معروف').slice(0,110);
+    }finally{extract.disabled=!current?.subscription?.active}
+  });
   renew.addEventListener('click',async()=>{
     const record=current;
     if(!record?.subscription?.canExtend)return;

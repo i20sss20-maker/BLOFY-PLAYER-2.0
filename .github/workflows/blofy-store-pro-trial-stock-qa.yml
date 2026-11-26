@@ -1,0 +1,48 @@
+name: BLOFY STORE PRO one-day trial stock QA
+
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/store-trial-inventory.mjs'
+      - 'services/activation/src/store-customer-account.mjs'
+      - 'services/activation/src/commercial-handlers.mjs'
+      - 'services/activation/src/server.mjs'
+      - 'services/activation/web/store-trial.*'
+      - 'services/activation/web/store-inventory.*'
+      - 'services/activation/web/store.html'
+      - 'services/activation/test/store-trial-inventory.test.mjs'
+      - '.github/workflows/blofy-store-pro-trial-stock-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  one-day-trials:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - name: Install service
+        working-directory: services/activation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify safe module and browser JS syntax
+        working-directory: services/activation
+        run: |
+          node --check src/store-trial-inventory.mjs
+          node --check src/store-customer-account.mjs
+          node --check src/commercial-handlers.mjs
+          node --check src/server.mjs
+          node --check web/store-trial.js
+          node --check web/store-inventory.js
+      - name: Trial creation, abuse prevention and paid-order regression
+        working-directory: services/activation
+        run: |
+          node --test test/store-trial-inventory.test.mjs test/storefront.test.mjs test/store-cart-payment.test.mjs test/store-bundle-payment.test.mjs test/store-customer-account.test.mjs

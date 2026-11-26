@@ -5,6 +5,11 @@ import { createGooglePlayReviewHandler } from './google-play-review.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 import { createTapPaymentHandlers } from './tap-payments.mjs';
 import { createGeideaLiveHandlers } from './geidea-live.mjs';
+import { createStoreGeideaHandlers } from './store-geidea-checkout.mjs';
+import { createStoreCustomerHandlers } from './store-customer-account.mjs';
+import { createStoreTrialInventory } from './store-trial-inventory.mjs';
+import { createStoreCodeRegister } from './store-code-register.mjs';
+import { createStoreDbDiagnostics } from './store-db-diagnostics.mjs';
 import { createZidPaymentHandlers } from './zid-payments.mjs';
 import { createZidOAuthHandlers } from './zid-oauth.mjs';
 
@@ -17,7 +22,7 @@ const entitled = row => row && ['active','trial'].includes(row.status) &&
 const validDeviceId = value => /^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(String(value || ''));
 const validActivationCode = value => /^\d{6}$/.test(String(value || ''));
 
-export function createCommercialHandlers({pool, keyHex, json, readJson, env = process.env}) {
+export function createCommercialHandlers({pool, keyHex, json, readJson, requireAdmin, env = process.env}) {
   const auth = createSubscriberSessionAuthorizer({pool, keyHex, env, requireActive:false});
   const credentials = createActivationCredentialCodec(keyHex);
   const googlePlayReview = createGooglePlayReviewHandler({pool,keyHex,json,readJson});
@@ -33,6 +38,48 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
   const geideaPayments = createGeideaLiveHandlers({pool,json,readJson,authorize,env});
+  const customerAccounts = createStoreCustomerHandlers({pool,json,readJson,keyHex,
+    authorizeAdmin:requireAdmin,env});
+  const storePayments = createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin:requireAdmin,
+    onCheckoutOrder:customerAccounts.linkCheckoutOrder,
+    requireCheckoutCustomer:customerAccounts.checkoutIdentity,env});
+  const storeTrials = createStoreTrialInventory({pool,json,readJson,keyHex,
+    authorizeAdmin:requireAdmin,getAuthenticatedCustomer:customerAccounts.authenticatedCustomer,env});
+  const storeDbDiagnostics=createStoreDbDiagnostics({pool,json,authorizeAdmin:requireAdmin});
+  const storeCodeRegister=createStoreCodeRegister({pool,json,readJson,keyHex,
+    authorizeAdmin:requireAdmin,ensureSchema:storePayments.ensureStoreSchema});
+  // One shared stock automation runner per service process. Database advisory
+  // issuance locks serialize across replicas; no customer codes enter logs.
+  // Trial stock starts at 30+30 when empty; subsequent refills are triggered
+  // only below 10 available for a SKU. Paid stock uses the same 10→30 rule.
+  if(env.BLOFY_STORE_AUTO_REFILL_ENABLED==='true'||
+     env.BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED==='true'){
+    let refillBusy=false;
+    const refill=async()=>{
+      if(refillBusy)return;
+      refillBusy=true;
+      try{
+        if(env.BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED==='true'){
+          const trial=await storeTrials.autoRefillTrials();
+          if(trial?.generated)console.info('[blofy-trial-stock-refill]',JSON.stringify({
+            generated:trial.generated,available:trial.available}));
+        }
+        if(env.BLOFY_STORE_AUTO_REFILL_ENABLED==='true'){
+          const paid=await storePayments.autoRefillPaidStock();
+          if(paid?.generated)console.info('[blofy-paid-stock-refill]',JSON.stringify({
+            generated:paid.generated,plans:paid.plans.map(p=>({sku:p.sku,after:p.after}))}));
+        }
+      }catch(error){
+        console.warn('[blofy-stock-refill]',String(error?.message||'refill_unavailable').slice(0,100));
+      }finally{refillBusy=false;}
+    };
+    const first=setTimeout(()=>void refill(),5000);
+    first.unref?.();
+    const periodic=setInterval(()=>void refill(),30*60*1000);
+    periodic.unref?.();
+  }
+  customerAccounts.setReconciler(storePayments.reconcileCustomerOrder);
+  customerAccounts.setStoreSchema(storePayments.ensureStoreSchema);
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
   const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
@@ -193,6 +240,11 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     const path=url.pathname;
     if (await googlePlayReview(req,res,url)) return true;
     if (await zidOAuth(req,res,url)) return true;
+    if (await customerAccounts(req,res,url)) return true;
+    if (await storeDbDiagnostics(req,res,url)) return true;
+    if (await storeCodeRegister(req,res,url)) return true;
+    if (await storeTrials(req,res,url)) return true;
+    if (await storePayments(req,res,url)) return true;
     if (await geideaPayments(req,res,url)) return true;
     if (await zidPayments(req,res,url)) return true;
     if (env.BLOFY_PAYMENT_PROVIDER === 'geidea' && path === '/api/v1/payments/tap/test-checkout') {json(res,404,{error:'not_found'});return true;}

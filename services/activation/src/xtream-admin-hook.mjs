@@ -61,6 +61,7 @@ import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
+import {fingerprintXtreamListing,createMinuteCatalogWatcher} from './xtream-minute-catalog-watch.mjs';
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
@@ -88,7 +89,7 @@ import {ensureAiScanSchema,recordAiAnalyzedBatch,getAiScanProgress} from './stre
 import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
-import { sortXtreamCategories } from './xtream-category-sort.mjs';
+import { sortXtreamCategories,sortXtreamCategoriesLikeProvider } from './xtream-category-sort.mjs';
 import {createStudioPro} from './xtream-studio-pro.mjs';
 import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
@@ -98,6 +99,8 @@ import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamDistributors} from './stream-distributors.mjs';
+import {createStreamConnectPairing,createConnectExpiryMaintenance} from './stream-connect-pairing.mjs';
+import {createConnectHttp} from './stream-connect-http.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -327,6 +330,7 @@ async function ensureReady() {
       await client.query(`INSERT INTO blofy_xtream_studio_branding(id,display_name)
         VALUES(1,'BLOFY STREAM') ON CONFLICT(id) DO NOTHING`);
       await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 100000');
+      await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS manual_sort BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_items_filter ON blofy_xtream_items(server_id,media_type,category_id,enabled,name)');
@@ -1543,7 +1547,9 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
     FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sort_order int,sync_token text)
     ON CONFLICT(server_id,media_type,source_category_id) DO UPDATE SET
       name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,
-      sort_order=EXCLUDED.sort_order,sync_token=EXCLUDED.sync_token,
+      sort_order=CASE WHEN blofy_xtream_categories.manual_sort
+        THEN blofy_xtream_categories.sort_order ELSE EXCLUDED.sort_order END,
+      sync_token=EXCLUDED.sync_token,
        updated_at=CASE WHEN
          (blofy_xtream_categories.name,blofy_xtream_categories.parent_id,
           blofy_xtream_categories.sort_order) IS DISTINCT FROM
@@ -1661,10 +1667,37 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
   return accepted;
 }
 
+// A provider can deliberately shrink an Xtream package, but an HTTP 200
+// containing a truncated list is not proof of deletion. Verify a SECOND
+// complete upstream listing against the exact distinct imported IDs before
+// allowing an operator-confirmed 90-100% reduction to become visible.
+async function verifyProviderPackageReduction(row,mediaType,creds,syncToken,expectedCount){
+  const rows=await pool.query(`SELECT source_id FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type=$2 AND sync_token=$3`,[row.id,mediaType,syncToken]);
+  const unmatched=new Set(rows.rows.map(x=>String(x.source_id)));
+  if(unmatched.size!==expectedCount)
+    throw new Error('xtream_package_first_snapshot_mismatch');
+  const response=await checkedFetch(
+    xtreamApiUrl(row.base_url,creds.username,creds.password,TYPE_ACTIONS[mediaType].items),
+    {timeoutMs:180000,sourceId:row.id});
+  let match=true;
+  const seen=new Set();
+  await parseTopLevelJsonArray(response.body,async raw=>{
+    const item=normalizeXtreamItem(mediaType,raw,syncToken);
+    if(!item||seen.has(item.sourceId))return;
+    seen.add(item.sourceId);
+    if(!unmatched.delete(item.sourceId))match=false;
+  });
+  if(!match||unmatched.size!==0||seen.size!==expectedCount)
+    throw new Error('xtream_package_second_snapshot_mismatch');
+  return true;
+}
+
 async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategories=false}={}) {
   // A 290k-row catalog must not be deleted in one transaction. That held
   // locks long enough to block source pause/delete, and then timed out.
   // Keep imported rows, prune stale ones in committed bounded batches.
+  let removedItems=0,removedCategories=0;
   for(const table of preserveCategories?['blofy_xtream_items']:['blofy_xtream_items','blofy_xtream_categories']){
     for(;;){
       if(cancelledSources.has(serverId))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
@@ -1693,6 +1726,8 @@ async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategori
             [serverId,mediaType,JSON.stringify(result.rows)]);
         }
         await client.query('COMMIT');
+        if(table==='blofy_xtream_items')removedItems+=result.rowCount;
+        else removedCategories+=result.rowCount;
       } catch(error) {
         await client.query('ROLLBACK').catch(()=>{});
         throw error;
@@ -1720,6 +1755,7 @@ async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategori
     WHERE c.server_id=counts.server_id AND c.media_type=counts.media_type
       AND c.source_category_id=counts.source_category_id
       AND c.item_count IS DISTINCT FROM counts.count`,[serverId,mediaType]);
+  return {removedItems,removedCategories};
 }
 
 async function calculateCounts(serverId) {
@@ -1732,7 +1768,7 @@ async function calculateCounts(serverId) {
   return counts;
 }
 
-async function syncServer(id, requestedTypes = ['live','movie','series']) {
+async function syncServer(id, requestedTypes = ['live','movie','series'], {confirmProviderPackage=false}={}) {
   if (syncLocks.has(id)) throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
   const row = await serverById(id);
   if (!row) throw Object.assign(new Error('xtream_server_not_found'), { status: 404 });
@@ -1782,15 +1818,23 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
           (SELECT COUNT(*)::int FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 AND sync_token=$3) AS items,
           (SELECT COUNT(*)::int FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2 AND sync_token=$3) AS categories`,
           [id,mediaType,syncToken])).rows[0];
+        const previousCount=Number(before.items),importedCount=Number(imported.items);
+        const largeReduction=importedCount===0||
+          (previousCount>=50&&importedCount<Math.ceil(previousCount*0.10));
+        const verifiedPackageReduction=Boolean(confirmProviderPackage&&largeReduction&&
+          await verifyProviderPackageReduction(row,mediaType,creds,syncToken,importedCount));
         const decision=assessXtreamSync({
-          previousItems:Number(before.items),importedItems:Number(imported.items),
-          previousCategories:Number(before.categories),importedCategories:Number(imported.categories)
+          previousItems:previousCount,importedItems:importedCount,
+          previousCategories:Number(before.categories),importedCategories:Number(imported.categories),
+          verifiedPackageReduction
         });
         if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
-        await finalizeTypeSync(id, mediaType, syncToken,{preserveCategories:decision.preserveCategories});
+        const removed=await finalizeTypeSync(id, mediaType, syncToken,{preserveCategories:decision.preserveCategories});
         if(decision.preserveCategories)failures.push(mediaType+': xtream_categories_preserved');
         details[mediaType] = { categories:decision.preserveCategories?Number(before.categories):decision.categories,
-          items:decision.items,preservedOldCategories:decision.preserveCategories };
+          items:decision.items,preservedOldCategories:decision.preserveCategories,
+          removedItems:removed.removedItems,removedCategories:removed.removedCategories,
+          verifiedPackageReduction };
       }catch(error){
         failures.push(mediaType+': '+redactXtreamError(error));
         console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
@@ -1803,6 +1847,8 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
     const catalogRevision=await bumpXtreamCatalogRevision(pool,id,'sync');
+    if(confirmProviderPackage)console.info('BLOFY_XTREAM_PACKAGE_RECONCILE',JSON.stringify({
+      sourceId:id,counts,details,partial:Boolean(partialWarning),catalogRevision}));
     return { id, counts, details, partialWarning,catalogRevision };
   } catch (error) {
     const message = redactXtreamError(error);
@@ -2084,14 +2130,14 @@ function startSync(id, types, options={}) {
       // Scheduled imports used to report only successful QUEUE acceptance.
       // Deliver a sanitized terminal outcome after the actual database
       // import so Studio Pro can retry a partial / failed media type.
-      const settled=async(state)=>{
+      const settled=async(state,result=null)=>{
         if(typeof options?.onSettled!=='function')return;
-        try{await options.onSettled({state});}
+        try{await options.onSettled({state,result});}
         catch{console.warn('BLOFY_STUDIO_CATALOG_OUTCOME',{code:'operator_outcome_record_failed'});}
       };
       try{
-        const result=await syncServer(id,types);
-        await settled(result.partialWarning?'partial':'completed');
+        const result=await syncServer(id,types,options);
+        await settled(result.partialWarning?'partial':'completed',result);
         return result;
       }catch(error){
         await settled('failed');
@@ -2102,7 +2148,7 @@ function startSync(id, types, options={}) {
       if(daily)await markDailyCatalogRunning(controlPool,{
        sourceId:id,day:options.day}).catch(()=>{});
       try{
-        const result=await syncServer(id,types);
+        const result=await syncServer(id,types,options);
         if(daily)await recordDailyCatalogOutcome(controlPool,{
          sourceId:id,day:options.day,
          state:result.partialWarning?'partial':'completed'}).catch(()=>{});
@@ -2128,6 +2174,36 @@ async function approvedSalehMirrorSource(){
  return resolveExclusiveApprovedSaleh(controlPool);
 }
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
+const minuteCatalogWatch=createMinuteCatalogWatcher({
+ db:controlPool,sourceById:serverById,
+ approvedSource:approvedSalehMirrorSource,
+ enabled:()=>process.env.BLOFY_XTREAM_MINUTE_SYNC_ENABLED==='1',
+ sourceBusy:id=>syncQueue.has(id)||syncLocks.has(id),
+ startSync,
+ fetchSnapshot:async(source,mediaType)=>{
+  const creds=decryptCredentials(source);
+  return fingerprintXtreamListing({
+   mediaType,load:kind=>checkedFetch(
+    xtreamApiUrl(source.base_url,creds.username,creds.password,
+     TYPE_ACTIONS[mediaType][kind]),{timeoutMs:90000,sourceId:source.id})
+  });
+ },
+ onEvent:event=>console.info('BLOFY_XTREAM_MINUTE_WATCH',JSON.stringify(event))
+});
+// Poll no faster than once per minute. Cross-replica PostgreSQL lease ensures
+// only one worker checks/imports; heavy full imports happen only on changes.
+const minuteWatchTick=()=>{
+ if(process.env.BLOFY_XTREAM_MINUTE_SYNC_ENABLED!=='1')return;
+ void minuteCatalogWatch.tick().catch(error=>console.warn(
+  'BLOFY_XTREAM_MINUTE_WATCH',JSON.stringify({
+   code:'minute_tick_error',reason:redactXtreamError(error)})));
+};
+const minuteWatchTimer=setInterval(minuteWatchTick,60000);
+minuteWatchTimer.unref?.();
+const minuteWatchStartup=setTimeout(minuteWatchTick,45000);
+minuteWatchStartup.unref?.();
+
+
 async function dailyCatalogTick(){
   const selected=await approvedSalehMirrorSource();
   const scheduleEnv={...process.env,
@@ -2157,6 +2233,156 @@ const dailyCatalogStartupTimer=setTimeout(()=>{
    customerCutover:false})));
 },40000);
 dailyCatalogStartupTimer.unref?.();
+// An operator can request one fresh source-bound package reconciliation
+// without borrowing a customer's Xtream credentials or restarting subscribers.
+// Railway replicas use a durable PostgreSQL claim: the same approved key
+// cannot re-run after a crash or redeploy. A failed task is visible in the
+// ledger and must be retried by an explicit new key or the admin button.
+async function operatorPackageSyncOnce(){
+  const key=String(process.env.BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY||'').trim();
+  if(!/^operator-package-[a-z0-9_-]{8,64}$/.test(key))return;
+  const selected=await approvedSalehMirrorSource();
+  if(!selected.ok)return;
+  const source=await serverById(selected.sourceId);
+  if(!source||source.enabled!==true||source.publish_catalog!==true||
+      String(source.name||'').trim().toLowerCase()!=='saleh')return;
+  if(syncQueue.has(source.id)||syncLocks.has(source.id))return;
+  const table='blofy_xtream_operator_package_sync';
+  try{
+    await controlPool.query(`CREATE TABLE IF NOT EXISTS ${table} (
+      event_key TEXT PRIMARY KEY,source_id UUID NOT NULL,
+      state TEXT NOT NULL DEFAULT 'claimed',
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ)`);
+  }catch(error){
+    if(error?.code!=='23505'||error?.constraint!=='pg_type_typname_nsp_index')throw error;
+    const exists=await controlPool.query('SELECT to_regclass($1::text) AS oid',
+      ['public.'+table]);
+    if(!exists.rows?.[0]?.oid)throw error;
+  }
+  const claimed=await controlPool.query(`INSERT INTO ${table}(event_key,source_id)
+    VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING event_key`,
+    [key,source.id]);
+  if(!claimed.rowCount)return;
+  try{
+    const queued=startSync(source.id,['live','movie','series'],{
+      confirmProviderPackage:true,
+      onSettled:async({state})=>{
+        await controlPool.query(`UPDATE ${table}
+          SET state=$2,completed_at=NOW() WHERE event_key=$1`,
+          [key,state]);
+        console.info('BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+          code:'package_sync_terminal',state,sourceId:source.id}));
+      }
+    });
+    await controlPool.query(`UPDATE ${table} SET state='accepted'
+      WHERE event_key=$1 AND state='claimed'`,[key]);
+    console.info('BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+      code:'package_sync_accepted',sourceId:source.id,queued:queued.queued}));
+  }catch(error){
+    await controlPool.query(`DELETE FROM ${table}
+      WHERE event_key=$1 AND state='claimed'`,[key]).catch(()=>{});
+    console.warn('BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+      code:'package_sync_enqueue_failed',sourceId:source.id,
+      reason:redactXtreamError(error)}));
+  }
+}
+if(process.env.BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY){
+  const operatorTimer=setTimeout(()=>{
+    void operatorPackageSyncOnce().catch(()=>console.warn(
+      'BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+        code:'package_sync_boot_failed'})));
+  },20000);
+  operatorTimer.unref?.();
+  const operatorRetryTimer=setInterval(()=>{
+    void operatorPackageSyncOnce().catch(()=>{});
+  },120000);
+  operatorRetryTimer.unref?.();
+}
+
+// One-time operator-authorized reconciliation of a named LIVE package category.
+// Scope is the single approved saleh source, with EXACT name matching only.
+// This hides the category from BLOFY customers; it NEVER deletes a provider
+// category or edits customer subscriptions, codes or upstream credentials.
+async function operatorHideRemovedLiveCategory(){
+  const enabled=process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_ENABLED==='1';
+  const requested=String(process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_NAME||'').trim();
+  const permittedNames=new Set(['bein ss','ar| bein entertainment ss ▶ الترفيهية']);
+  if(!enabled||!permittedNames.has(requested.toLowerCase()))return;
+  const approved=await approvedSalehMirrorSource();
+  if(!approved.ok)return console.warn('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
+    code:'approved_source_missing'}));
+  const source=await serverById(approved.sourceId);
+  if(!source||String(source.name||'').trim().toLowerCase()!=='saleh'||
+      !source.enabled||!source.publish_catalog)return;
+  const sourceId=source.id;
+  const before=await controlPool.query(`SELECT source_category_id,name,enabled,item_count
+    FROM blofy_xtream_categories WHERE server_id=$1 AND media_type='live'
+      AND lower(btrim(name))=lower($2)`,[sourceId,requested]);
+  const nearby=await controlPool.query(`SELECT name,enabled,item_count
+    FROM blofy_xtream_categories WHERE server_id=$1 AND media_type='live'
+      AND lower(name) LIKE '%bein%' AND lower(name) LIKE '%ss%'
+    ORDER BY name LIMIT 15`,[sourceId]);
+  // Check which category list the saved Xtream source actually receives.
+  // This is read-only metadata: no media requests or provider configuration.
+  let upstream={checked:false,status:null,matching:0,nearby:0};
+  try{
+    const creds=decryptCredentials(source);
+    const response=await checkedFetch(
+      xtreamApiUrl(source.base_url,creds.username,creds.password,'get_live_categories'),
+      {timeoutMs:30000,sourceId});
+    let matching=0,near=0;
+    await parseTopLevelJsonArray(response.body,async raw=>{
+      const c=normalizeXtreamCategory('live',raw,'audit');
+      if(!c)return;
+      const norm=c.name.trim().toLowerCase();
+      if(norm===requested.toLowerCase())matching++;
+      if(norm.includes('bein')&&norm.includes('ss'))near++;
+    });
+    upstream={checked:true,status:response.status,matching,nearby:near};
+  }catch{
+    upstream={checked:false,status:null,matching:0,nearby:0};
+  }
+  // Never hide a fuzzy match. If the exact category has already disappeared
+  // from the imported catalogue, no write is required.
+  let updated=0;
+  if(before.rows.length){
+    const change=await controlPool.query(`UPDATE blofy_xtream_categories
+      SET enabled=FALSE,updated_at=NOW()
+      WHERE server_id=$1 AND media_type='live'
+        AND lower(btrim(name))=lower($2) AND enabled=TRUE
+      RETURNING source_category_id`,[sourceId,requested]);
+    updated=change.rowCount;
+  }
+  const after=await controlPool.query(`SELECT
+      COUNT(*)::int AS matched,
+      COUNT(*) FILTER(WHERE enabled=TRUE)::int AS still_visible
+    FROM blofy_xtream_categories
+    WHERE server_id=$1 AND media_type='live'
+      AND lower(btrim(name))=lower($2)`,[sourceId,requested]);
+  // A visibility-only change needs a catalog version bump, otherwise app
+  // clients may continue showing a cached copy even for newly issued codes.
+  // The source and customer credentials remain unchanged.
+  const catalogRevision=before.rows.length
+    ?await bumpXtreamCatalogRevision(controlPool,sourceId,'operator_edit')
+    :null;
+  console.info('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
+    code:'category_reconciled',sourceId,category:requested,
+    localMatched:before.rows.length,localWasVisible:before.rows.filter(x=>x.enabled).length,
+    localItemCount:before.rows.reduce((n,x)=>n+Number(x.item_count||0),0),
+    updated,remainingVisible:Number(after.rows[0]?.still_visible||0),
+    catalogRevision,upstream,nearbyLocalCount:nearby.rows.length,
+    nearbyNames:nearby.rows.map(x=>({name:x.name,visible:x.enabled})),
+    sourceCredentialsUnchanged:true,subscriptionCodesUnchanged:true
+  }));
+}
+if(process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_ENABLED==='1'){
+  const timer=setTimeout(()=>{void operatorHideRemovedLiveCategory()
+    .catch(e=>console.warn('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',
+      JSON.stringify({code:'category_reconcile_failed',reason:redactXtreamError(e)})));},15000);
+  timer.unref?.();
+}
+
 // One-off READ-ONLY ledger preflight. Creates only the transfer-intake
 // metadata table if absent; no intent rows, source video, uploads or copies.
 if(process.env.BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE_ON_BOOT==='1'){
@@ -2840,11 +3066,50 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
   return result.rows[0];
 }
 
+// Fetch original category positions using the configured Xtream source
+// credentials. Do this before taking a database lock. No media is requested.
+async function fetchXtreamOriginalCategoryOrder(serverId,mediaType){
+ const source=await serverById(serverId);
+ if(!source?.enabled)throw Object.assign(
+  new Error('xtream_provider_order_source_unavailable'),{status:409});
+ const credentials=decryptCredentials(source);
+ let response;
+ try{
+  response=await checkedFetch(xtreamApiUrl(source.base_url,
+   credentials.username,credentials.password,TYPE_ACTIONS[mediaType].categories),
+   {timeoutMs:60000,sourceId:serverId});
+ }catch{
+  throw Object.assign(new Error('xtream_provider_order_fetch_failed'),{status:503});
+ }
+ const providerOrder=new Map();
+ let position=0;
+ try{
+  await parseTopLevelJsonArray(response.body,async raw=>{
+   const c=normalizeXtreamCategory(mediaType,raw,'provider_restore');
+   if(!c)return;
+   position++;
+   if(position>1500)throw Error('xtream_provider_order_too_many');
+   if(!providerOrder.has(c.sourceCategoryId))
+    providerOrder.set(c.sourceCategoryId,{
+     order:xtreamProviderOrder(raw,position,'category'),index:position
+    });
+  });
+ }catch{
+  throw Object.assign(new Error('xtream_provider_order_invalid_response'),{status:409});
+ }
+ if(!providerOrder.size)throw Object.assign(
+  new Error('xtream_provider_order_unavailable'),{status:409});
+ return providerOrder;
+}
+
 // Operator-triggered, transactional reordering only. No catalog rows,
 // visibility, subscriber entitlements or upstream credentials are touched.
 async function autoSortCategories(serverId,mediaType,mode){
-  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first'].includes(mode))
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first','provider'].includes(mode))
     throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
+  // Read upstream before PostgreSQL transaction: no long network waits under lock.
+  const providerOrder=mode==='provider'
+    ?await fetchXtreamOriginalCategoryOrder(serverId,mediaType):null;
   const client=await pool.connect();
   try{
     await client.query('BEGIN');
@@ -2862,16 +3127,22 @@ async function autoSortCategories(serverId,mediaType,mode){
       return{updated:0,mode,unchanged:true};
     }
     const current=records.rows.map(row=>String(row.source_category_id));
-    const ordered=sortXtreamCategories(records.rows,mode);
+    const ordered=mode==='provider'
+      ?sortXtreamCategoriesLikeProvider(records.rows,providerOrder)
+      :sortXtreamCategories(records.rows,mode);
     const unchanged=current.every((id,index)=>id===ordered[index]);
-    if(!unchanged){
-      await client.query(`UPDATE blofy_xtream_categories c
-        SET sort_order=rank.pos::int,updated_at=NOW()
+    // Keep manual/alphabetical order through later automatic catalog imports.
+    // Restoring the upstream order clears overrides so future upstream changes
+    // flow through naturally. Flags, names and category membership are unchanged.
+    await client.query(`UPDATE blofy_xtream_categories c
+        SET sort_order=rank.pos::int,manual_sort=$4::boolean,updated_at=NOW()
         FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
-        WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
-        [serverId,mediaType,ordered]);
-    }
+        WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id
+          AND (c.sort_order IS DISTINCT FROM rank.pos::int
+               OR c.manual_sort IS DISTINCT FROM $4::boolean)`,
+        [serverId,mediaType,ordered,mode!=='provider']);
     await client.query('COMMIT');
+    if(!unchanged)await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
     return{updated:ordered.length,mode,unchanged};
   }catch(error){
     await client.query('ROLLBACK').catch(()=>{});
@@ -2896,7 +3167,7 @@ async function moveCategory(serverId, mediaType, categoryId, direction) {
     if(next<0||next>=ids.length||next===at){await client.query('COMMIT');return {moved:false};}
     ids.splice(next,0,...ids.splice(at,1));
     await client.query(`UPDATE blofy_xtream_categories c
-      SET sort_order=rank.pos::int,updated_at=NOW()
+      SET sort_order=rank.pos::int,manual_sort=TRUE,updated_at=NOW()
       FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
       WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
       [serverId,mediaType,ids]);
@@ -3236,7 +3507,29 @@ async function callLocalGateway(method,path,body){
 
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
+const connectEnabled=process.env.BLOFY_STREAM_CONNECT_ENABLED==='1';
+const connectPairing=createStreamConnectPairing({pool,keyHex:process.env.BLOFY_STREAM_CONNECT_KEY,enabled:connectEnabled});
+const connectHttp=createConnectHttp({enabled:connectEnabled,pairing:connectPairing});
+if(connectEnabled){
+ const maintenance=createConnectExpiryMaintenance({pairing:connectPairing,enabled:true,
+  onError:code=>console.warn('BLOFY_CONNECT_MAINTENANCE',JSON.stringify({code}))});
+ const connectExpiryTimer=setInterval(()=>void maintenance.tick(),60000);
+ connectExpiryTimer.unref?.();
+ const connectExpiryStartup=setTimeout(()=>void maintenance.tick(),30000);
+ connectExpiryStartup.unref?.();
+}
 const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
+  playbackSnapshot:sourceId=>xtreamPlaybackSnapshot(Date.now(),sourceId),
+  rewardsRedemptionEnabled:process.env.BLOFY_DISTRIBUTOR_REWARDS_REDEMPTION==='1',
+  linkCodeToXtream:async code=>{
+    const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/link/code-to-xtream',{code});
+    if(result.status===200&&result.data?.credentials){
+      const c=result.data.credentials;
+      c.serverUrl=XTREAM_CUSTOMER_HOST;
+      c.m3uUrl=c.serverUrl+'/get.php?'+new URLSearchParams({username:c.username,password:c.password,type:'m3u_plus',output:'ts'});
+    }
+    return {status:result.status,body:result.data};
+  },
   // Read-only, active/published catalog for the precisely pinned saleh source.
   listCatalog:async args=>(await listCatalog({
     type:args.type,serverId:args.sourceId,q:args.q,
@@ -3295,6 +3588,7 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+  if(p==='/internal/blofy-stream/connect/issue')return connectHttp.handle(req,res,{operation:'issue',bridgeAuthorized:true});
   // Authoritative code/reseller schema and read-permission proof WITHOUT
   // calling legacy GET handlers that may run CREATE/ALTER migrations.
   // Fixed path, owner bridge auth above, no rows/identities/data returned.
@@ -3474,13 +3768,14 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,201,await streamDistributors.createAdmin(await readJson(req)),
       {'cache-control':'no-store'});
   const distributorAdminAction=p.match(
-    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits)$/i);
+    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits|bonus|bonus-policy|permissions|report)$/i);
   if(req.method==='POST'&&distributorAdminAction){
     const id=distributorAdminAction[1],cmd=distributorAdminAction[2];
     const payload=await readJson(req);
+    if(cmd==='report')return json(res,200,await streamDistributors.adminReport(id),{'cache-control':'no-store'});
     const settings=cmd==='credits'?{credits:payload.credits}:
       cmd==='status'?{enabled:payload.enabled===true}:
-      cmd==='limits'?{dailyLimit:payload.dailyLimit}:{resetPassword:true};
+      cmd==='limits'?{dailyLimit:payload.dailyLimit}:cmd==='bonus'?{bonusQuarters:payload.bonusQuarters,requestId:payload.requestId,reason:payload.reason}:cmd==='bonus-policy'?{bonusRates:payload.bonusRates}:cmd==='permissions'?{permissionSettings:payload.permissionSettings}:{resetPassword:true};
     return json(res,200,await streamDistributors.setAdmin(id,settings),
       {'cache-control':'no-store'});
   }
@@ -3495,8 +3790,10 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='logout')return json(res,200,await streamDistributors.logout(token));
     if(command==='list')return json(res,200,
       await streamDistributors.issued(token,payload),{'cache-control':'no-store'});
+    if(command==='quality')return json(res,200,await streamDistributors.quality(token),{'cache-control':'no-store, private'});
     if(command==='analytics')return json(res,200,
       await streamDistributors.analytics(token),{'cache-control':'no-store'});
+     if(command==='redeem-rewards')return json(res,200,await streamDistributors.redeemRewards(token,payload),{'cache-control':'no-store'});
     if(command==='activity')return json(res,200,
       await streamDistributors.activity(token,payload),{'cache-control':'no-store'});
     if(command==='export')return json(res,200,
@@ -3517,7 +3814,7 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='issue')return json(res,200,await streamDistributors.issue(token,payload),
       {'cache-control':'no-store'});
     if(command==='reveal')return json(res,200,
-      await streamDistributors.reveal(token,payload.issueId),{'cache-control':'no-store'});
+      await streamDistributors.reveal(token,payload.issueId,{includeXtream:payload.includeXtream===true}),{'cache-control':'no-store'});
     if(command==='library')return json(res,200,
       await streamDistributors.library(token,payload),{'cache-control':'no-store'});
     if(command==='library-categories')return json(res,200,
@@ -4340,6 +4637,7 @@ http.createServer = function withBlofyXtream(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if(url.pathname==='/api/v1/stream/connect/redeem')return await connectHttp.handle(req,res,{operation:'redeem'});
       if(url.pathname.startsWith('/internal/blofy-stream/')) {
         try{return await unifiedStreamBridge(req,res,url)}
         catch(error){
@@ -4524,6 +4822,9 @@ http.createServer = function withBlofyXtream(listener) {
           return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
         }
       }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/minute-watch/status') {
+        return json(res,200,await minuteCatalogWatch.status());
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
         const items = (await serverRows()).map(adminServer);
         const totals = items.reduce((acc, item) => {
@@ -4619,8 +4920,14 @@ http.createServer = function withBlofyXtream(listener) {
           if(!source)return json(res,404,{error:'xtream_server_not_found'});
           if(!source.enabled)return json(res,409,{error:'xtream_source_paused'});
           if(!selected.length)return json(res,400,{error:'xtream_sync_types_invalid'});
-          const job=startSync(id,selected);
-          return json(res, 202, { started: true, queued:job.queued,queuePosition:job.position,id,types:selected });
+          const confirmProviderPackage=body.confirmProviderPackage===true;
+          if(confirmProviderPackage&&(
+            String(body.confirmation||'')!==String(source.name||'')||
+            source.publish_catalog!==true))
+            return json(res,400,{error:'xtream_package_reduction_confirmation_required'});
+          const job=startSync(id,selected,{confirmProviderPackage});
+          return json(res, 202, { started: true, queued:job.queued,queuePosition:job.position,id,types:selected,
+            confirmedPackageReduction:confirmProviderPackage });
         }
       }
 

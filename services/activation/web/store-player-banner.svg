@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-label="تصميم تجريدي لواجهة BLOFY PLAYER للمفضلة والتفاصيل والبحث">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#061023"/><stop offset=".5" stop-color="#10274c"/><stop offset="1" stop-color="#060e22"/></linearGradient>
+ <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1b477c"/><stop offset="1" stop-color="#122548"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#5693ef" stop-opacity=".5"/><stop offset="1" stop-color="#183669" stop-opacity="0"/></radialGradient>
+ <pattern id="mesh" width="66" height="66" patternUnits="userSpaceOnUse"><path d="M66 0H0V66" stroke="#9dc3ff" opacity=".05" fill="none"/></pattern>
+ <filter id="shadow"><feDropShadow dx="0" dy="26" stdDeviation="23" flood-color="#01040e" flood-opacity=".86"/></filter></defs>
+<rect width="1600" height="640" fill="url(#bg)"/><rect width="1600" height="640" fill="url(#mesh)"/>
+<circle cx="1230" cy="275" r="470" fill="url(#halo)"/>
+<g filter="url(#shadow)" transform="translate(936 66) rotate(4 300 240)">
+ <rect width="620" height="490" rx="26" fill="#061526" stroke="#5287ce" stroke-width="3"/>
+ <rect x="15" y="15" width="590" height="460" rx="17" fill="#0a1c3a"/>
+ <rect x="28" y="30" width="535" height="46" rx="11" fill="#142b51"/>
+ <circle cx="56" cy="52" r="9" fill="#72bcff"/>
+ <rect x="78" y="43" width="113" height="15" rx="7" fill="#38669e"/>
+ <rect x="420" y="43" width="124" height="15" rx="7" fill="#32537c"/>
+ <rect x="28" y="97" width="90" height="349" rx="12" fill="#0d2852"/>
+ <rect x="46" y="123" width="54" height="10" rx="5" fill="#6893cb"/>
+ <rect x="46" y="156" width="54" height="10" rx="5" fill="#436da5"/>
+ <rect x="46" y="189" width="54" height="10" rx="5" fill="#436da5"/>
+ <rect x="142" y="100" width="420" height="178" rx="16" fill="url(#card)"/>
+ <circle cx="378" cy="174" r="77" stroke="#85baff" opacity=".17" stroke-width="18" fill="none"/>
+ <path d="M308 155L308 225 367 190Z" fill="#f0f7ff" opacity=".82"/>
+ <rect x="163" y="123" width="130" height="13" rx="6" fill="#a4c5f6" opacity=".66"/>
+ <rect x="163" y="147" width="90" height="10" rx="5" fill="#608cce" opacity=".75"/>
+ <g fill="#183765"><rect x="142" y="300" width="129" height="133" rx="14"/><rect x="286" y="300" width="129" height="133" rx="14"/><rect x="430" y="300" width="133" height="133" rx="14"/></g>
+ <g fill="none" stroke="#86b6f2" stroke-width="5" opacity=".4"><path d="M158 418l45-71 51 71M302 418l48-63 49 63M447 418l49-66 48 66"/></g>
+</g>
+<g filter="url(#shadow)" transform="translate(733 270) rotate(-9 105 120)">
+ <rect width="221" height="267" rx="22" fill="#10284a" stroke="#548ee5" stroke-width="3"/>
+ <rect x="15" y="15" width="191" height="238" rx="15" fill="#183966"/>
+ <circle cx="110" cy="96" r="49" stroke="#91bdff" stroke-width="10" fill="none" opacity=".8"/>
+ <path d="M100 70l30 28-43 40" stroke="#daefff" stroke-width="8" fill="none"/>
+ <rect x="41" y="176" width="139" height="11" rx="6" fill="#9fcaff" opacity=".8"/>
+ <rect x="69" y="197" width="85" height="9" rx="5" fill="#77a4ed" opacity=".6"/>
+ </g>
+</svg>

@@ -3,57 +3,865 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#070b16">
+<meta name="theme-color" content="#080e1d">
 <meta name="robots" content="noindex,nofollow">
 <meta name="description" content="BLOFY ONE - لوحة تحكم BLOFY الموحدة">
-<title>BLOFY ONE | مركز التحكم الموحد</title>
+<title>BLOFY ONE | العملاء والمبيعات والاشتراكات</title>
 <link rel="icon" href="/blofy-logo.png" type="image/png">
-<link rel="stylesheet" href="/blofy-one.css?v=1">
-<script src="/blofy-one.js?v=1" defer></script>
+<link rel="stylesheet" href="/blofy-one.css?v=20261118-integrated-1">
+<link rel="stylesheet" href="/blofy-one-role-split.css?v=20261119-statistics-v2">
+<script src="/blofy-one.js?v=20261118-integrated-1" defer></script>
+<link rel="stylesheet" href="/blofy-one-customers.css?v=20261118-v1">
+<script src="/blofy-one-customers.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-legacy.css?v=20261118-v1">
+<script src="/blofy-one-legacy.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-stream.css?v=20261118-v1">
+<script src="/blofy-one-stream.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-operations.css?v=20261118-v1">
+<script src="/blofy-one-operations.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-modern.css?v=20261118-v2">
+<script src="/blofy-one-modern.js?v=20261118-v2" defer></script>
+<script src="/blofy-one-code-center.js?v=20261122-trialleads-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-trial-leads.css?v=20261122-v1">
+<script src="/blofy-one-trial-leads.js?v=20261122-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-code-register.css?v=20261121-credentials-v1">
+<script src="/blofy-one-code-register.js?v=20261121-unified-v1" defer></script>
+<script src="/blofy-one-unified-extract.js?v=20261121-unified-v1" defer></script>
+<script src="/blofy-one-xtream-register.js?v=20261121-credentials-v1" defer></script>
+<script src="/blofy-one-xtream-credential-edit.js?v=20261121-credentials-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-code-manager.css?v=20261118-v1">
+<script src="/blofy-one-code-manager.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-store-ops.css?v=20261118-v2">
+<script src="/blofy-one-store-ops.js?v=20261118-v1" defer></script>
+<script src="/blofy-one-store-sales.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-paid-leads.css?v=20261122-v1">
+<script src="/blofy-one-paid-leads.js?v=20261122-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-launch.css?v=20261118-v1">
+<script src="/blofy-one-launch.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-capacity.css?v=20261118-v1">
+<script src="/blofy-one-capacity.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
 <aside class="one-rail">
-  <a class="one-brand" href="/one"><span class="one-brand-icon" aria-hidden="true">B</span><span>BLOFY <b>ONE</b><small>منصة الإدارة الموحدة</small></span></a>
-  <nav class="one-nav" aria-label="التنقل الرئيسي">
-    <a class="selected" href="/one" aria-current="page"><span aria-hidden="true">◈</span> مركز التحكم</a>
-    <a href="/sources-admin#xtream"><span aria-hidden="true">▤</span> المصادر وXtream</a>
-    <a href="/sources-admin#catalog"><span aria-hidden="true">▦</span> مكتبة المحتوى</a>
-    <a href="/admin#codes"><span aria-hidden="true">⌁</span> أكواد الاشتراك</a>
-    <a href="/admin#devices"><span aria-hidden="true">▣</span> الأجهزة والتفعيل</a>
-    <a href="/admin#releases"><span aria-hidden="true">⇩</span> إصدارات التطبيق</a>
-    <a href="/admin#support"><span aria-hidden="true">◌</span> الدعم والعملاء</a>
+  <a class="one-brand" href="/one"><span class="one-brand-icon" aria-hidden="true">B</span><span>BLOFY <b>ONE</b><small>مركز العملاء والمبيعات</small></span></a>
+  <nav class="one-nav" id="one-nav" aria-label="إدارة العملاء والمبيعات">
+    <span class="one-nav-caption">BLOFY ONE · الإدارة التجارية</span>
+    <a class="one-nav-home selected" href="/one"><span aria-hidden="true">▦</span> ملخص الأعمال</a>
+    <a class="one-nav-create" href="#one-issue"><span aria-hidden="true">＋</span> إصدار كود جديد</a>
+    <a href="#customers"><span aria-hidden="true">♧</span> العملاء والاشتراكات</a>
+    <a href="#one-code-register"><span aria-hidden="true">▤</span> جميع الأكواد والعملاء</a>
+    <a href="#one-trial-stock"><span aria-hidden="true">🎁</span> طلبات التجربة والمتابعة</a>
+    <a href="#stream-management"><span aria-hidden="true">◈</span> حسابات STREAM وXtream</a>
+    <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استرجاع الأكواد</a>
+    <a href="#one-distributors"><span aria-hidden="true">♙</span> الموزعون</a>
+    <a href="#one-store-sales"><span aria-hidden="true">▣</span> المبيعات والعملاء المشترون</a>
+    <a href="#one-renewal-ops"><span aria-hidden="true">◈</span> التجديدات والمدفوعات</a>
+    <a href="#one-sales"><span aria-hidden="true">◫</span> تقارير مبيعات PLAYER</a>
+    <a href="#one-growth"><span aria-hidden="true">◷</span> التسويق ونمو المبيعات</a>
+    <details class="one-nav-advanced">
+      <summary><span aria-hidden="true">⚙</span> أدوات البيع والدعم <span class="one-nav-chevron" aria-hidden="true">⌄</span></summary>
+      <div class="one-advanced-links">
+        <a href="/admin/store-inventory">مخزون المنتجات والأكواد</a>
+        <a href="#one-code-register">بحث موحد بالكود أو بريد العميل</a>
+        <a href="/admin/visitors">إحصائيات زوار المتجر</a>
+        <a href="/admin#support">طلبات دعم العملاء</a>
+        <a href="/distributor">دخول الموزّع المستقل</a>
+      </div>
+    </details>
+    <div class="one-panel-switch" role="group" aria-label="الانتقال إلى لوحة العمليات">
+      <span class="one-panel-switch-label">للمصادر والبث والتخزين والتطبيقات</span>
+      <a class="one-panel-switch-link" href="/admin">⚙ افتح الإدارة التقنية ←</a>
+    </div>
   </nav>
   <div class="one-rail-bottom">
     <span class="one-secure"><span aria-hidden="true">●</span> جلسة مشرف آمنة</span>
-    <a href="/admin">الإدارة التفصيلية ←</a>
+    <a href="/admin">الإدارة التقنية ←</a>
     <a href="/status">حالة الخدمات ←</a>
   </div>
 </aside>
 <main id="main" class="one-main">
   <header class="one-top">
-    <div class="one-trail">BLOFY <span>/</span> ONE <span>/</span> OVERVIEW</div>
+    <div class="one-trail">BLOFY <span>/</span> ONE <span>/</span> <strong>إدارة العملاء والمبيعات</strong></div>
     <div class="one-top-actions">
       <a href="/connect" target="_blank" rel="noopener noreferrer">بوابة الجهاز ↗</a>
       <a href="https://updates.blofyplayer.com/downloads" target="_blank" rel="noopener noreferrer">مركز التحميل ↗</a>
-      <button id="one-refresh" type="button">↻ تحديث الحالة</button>
+      <button id="one-refresh" type="button">↻ تحديث البيانات</button>
+      <a class="one-top-issue" href="#one-issue">＋ إنشاء كود</a>
     </div>
   </header>
-  <section class="one-hero">
+  <section class="one-hero" aria-labelledby="one-home-title">
     <div class="one-hero-copy">
-      <div class="one-eyebrow"><span class="one-glow"></span> ONE CONTROL · EXISTING SYSTEMS</div>
-      <h1>كل بلوفي.<br><em>من مكان واحد.</em></h1>
-      <p>المصادر، المشتركون، أكواد التفعيل، أجهزة العملاء، والتحديثات. واجهة موحدة مرتبطة بالأنظمة العاملة حاليًا، بدون نقل بياناتك أو تغيير مسارات العملاء.</p>
+      <div class="one-eyebrow"><span class="one-glow"></span> BLOFY ONE · BUSINESS CENTER</div>
+      <h1 id="one-home-title">عملاؤك واشتراكاتك<br><em>بدون قوائم متكررة.</em></h1>
+      <p>أنشئ أكواد الاشتراكات، تابع العملاء والموزعين، وشوف طلبات المتجر والتجديدات والمبيعات. إدارة البث والمصادر والتخزين والتطبيقات صارت في لوحة الإدارة التقنية المنفصلة.</p>
       <div class="one-hero-buttons">
-        <a class="one-primary" href="/sources-admin#xtream">إدارة BLOFY STREAM <span>←</span></a>
-        <a class="one-secondary" href="/admin#codes">أكواد BLOFY <span>←</span></a>
+        <a class="one-primary" href="#one-issue">＋ إنشاء كود الآن <span>←</span></a>
+        <a class="one-secondary" href="#customers">▣ إدارة العملاء <span>←</span></a>
       </div>
+      <div class="one-hero-trust"><span>● جلسة مشرف محمية</span><span>● بيانات مباشرة</span><span>● بدون تغيير اشتراكات عند العرض</span></div>
     </div>
     <div class="one-hero-orbit" aria-hidden="true">
-      <span class="one-ring one-ring-1"></span><span class="one-ring one-ring-2"></span><span class="one-ring one-ring-3"></span>
-      <span class="one-core">B<span>ONE</span></span><span class="one-orbit-note">STREAM · PLAYER · CONTROL</span>
+      <div class="one-hero-visual">
+        <div class="one-visual-header"><b>BLOFY</b><span>ONE</span><i></i></div>
+        <div class="one-visual-chart"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="one-visual-row"><i>◈</i><strong>إصدار الأكواد</strong><em>إدارة</em></div>
+        <div class="one-visual-row"><i>▦</i><strong>إدارة العملاء</strong><em>الاشتراكات</em></div>
+        <div class="one-visual-row"><i>◉</i><strong>الطلبات والتجديدات</strong><em>المبيعات</em></div>
+      </div>
     </div>
   </section>
+  <details id="one-db-audit" class="one-db-audit" aria-labelledby="one-db-audit-title">
+    <summary id="one-db-audit-title">🛡️ تشخيص قاعدة بيانات BLOFY — قراءة فقط (اضغط للعرض)</summary>
+    <div class="one-db-audit-content">
+      <p>يرصد ضغط الاتصالات وانتظار أقفال PostgreSQL. أعداد التعارضات والأحجام مؤشرات تراكمية منذ تصفير إحصائيات القاعدة، ولا تعني وحدها وجود عطل الآن.</p>
+      <div class="one-db-stats" aria-label="مقاييس PostgreSQL الحالية">
+        <span>اتصالات: <strong id="one-db-connections">—</strong></span>
+        <span>استعلامات نشطة: <strong id="one-db-active">—</strong></span>
+        <span>بانتظار الأقفال: <strong id="one-db-waiting">—</strong></span>
+        <span>أطول معاملة: <strong id="one-db-longest">—</strong></span>
+        <span>تعارضات تراكمية: <strong id="one-db-deadlocks">—</strong></span>
+      </div>
+      <p id="one-db-status" role="status" aria-live="polite">افتح القسم لقراءة الحالة من السيرفر.</p>
+      <button type="button" id="one-db-refresh">↻ تحديث مؤشرات قاعدة البيانات</button>
+      <p>إذا ظهرت تعارضات متكررة أو خطأ مساحة الذاكرة المشتركة، راجع سجلات Postgres وخطة معالجة الأقفال قبل تغيير إعدادات الذاكرة أو إعادة تشغيل الخدمة.</p>
+    </div>
+  </details>
+  <section class="one-quick-stats" aria-label="ملخص حالة الأعمال">
+    <div class="one-quick-stat"><span class="one-quick-icon">▣</span><div><small>أجهزة العملاء</small><strong id="one-dashboard-customers">—</strong></div><span class="one-mini-indicator">PLAYER</span></div>
+    <div class="one-quick-stat"><span class="one-quick-icon">♧</span><div><small>أكواد STREAM المسجلة</small><strong id="one-dashboard-codes">—</strong></div><span class="one-mini-indicator">STREAM</span></div>
+    <div class="one-quick-stat"><span class="one-quick-icon">✧</span><div><small>أكواد لم تُستخدم</small><strong id="one-dashboard-unused">—</strong></div><span class="one-mini-indicator">LIVE</span></div>
+    <div class="one-quick-stat"><span class="one-quick-icon">◉</span><div><small>مصادر نشطة</small><strong id="one-dashboard-sources">—</strong></div><span class="one-mini-indicator">Xtream</span></div>
+  </section>
+  <div class="one-workbar" role="group" aria-label="تنقّل سريع">
+    <span class="one-workbar-label">وصول سريع</span>
+    <a href="#one-issue" class="is-primary">＋ إنشاء كود</a>
+    <a href="#customers">العملاء</a>
+    <a href="#legacy-xtream">استخراج Xtream</a>
+    <a href="#stream-management">سجل الأكواد</a>
+    <a href="#one-sales">المبيعات</a>
+    <a href="#one-growth">جاهزية الزحمة</a>
+    <label class="one-jump-label" for="one-quick-jump">انتقل إلى القسم
+      <select id="one-quick-jump" aria-label="الانتقال إلى قسم من إدارة الأعمال">
+        <option value="">اختر قسمًا…</option>
+        <option value="one-issue">إنشاء كود</option>
+        <option value="customers">العملاء</option>
+        <option value="stream-management">اشتراكات Xtream وأكواد STREAM</option>
+        <option value="legacy-xtream">استخراج الكود القديم</option>
+
+        <option value="one-distributors">الموزعون</option>
+        <option value="one-sales">المدفوعات</option>
+        <option value="one-growth">المبيعات والتسويق والجاهزية</option>
+
+      </select>
+    </label>
+  </div>
+  <section class="one-issue" id="one-issue" aria-labelledby="one-issue-title">
+      <div class="one-issue-eyebrow"><span class="one-issue-live">✦ أسرع إجراء</span><span>كود جديد من نفس الحساب الإداري</span></div>
+      <div class="one-section-heading"><div><span class="one-kicker">MANUAL CODE ISSUANCE · OWNER ONLY</span>
+        <h3 id="one-issue-title">إنشاء كود اشتراك <span>بخطوات واضحة</span></h3></div></div>
+      <p class="one-footnote">يُصدر النظام الأكواد الجديدة من مصدر صالح المفعّل فقط. لا تُباع تلقائيًا ولا يبدأ احتساب المدة قبل أول تفعيل. اختر نوع الكود والمدة والعدد، وشاهد ملخص العملية قبل التأكيد. لا نغيّر بيانات أي عميل عند فتح هذه الصفحة.</p>
+      <div class="one-issue-flow" aria-label="مراحل الإنشاء">
+        <span class="is-current"><b>1</b> حدّد الاشتراك</span>
+        <span><b>2</b> أكّد الإصدار</span>
+        <span><b>3</b> انسخ الكود أو فعّل Xtream</span>
+      </div>
+      <div class="one-issue-presets" role="group" aria-label="مدد جاهزة">
+        <span>اختيار سريع للمدة:</span>
+        <button type="button" data-one-days="1">يوم واحد</button>
+        <button type="button" data-one-days="7">أسبوع</button>
+        <button type="button" data-one-days="30">شهر</button>
+        <button type="button" data-one-days="90">3 أشهر</button>
+        <button type="button" data-one-days="180">6 أشهر</button>
+        <button type="button" data-one-days="365" class="is-active">سنة كاملة</button>
+      </div>
+      <form id="one-issue-form" class="one-issue-form" autocomplete="off">
+        <label>نوع الكود
+          <select name="channel" id="one-issue-channel"><option value="app">كود تطبيق BLOFY STREAM</option>
+            <option value="xtream">كود Xtream</option></select>
+        </label>
+        <label>مدة الاشتراك بعد أول تفعيل
+          <select name="durationDays" id="one-issue-days">
+            <option value="1">يوم واحد (24 ساعة)</option><option value="7">أسبوع (7 أيام)</option>
+            <option value="30">شهر (30 يومًا)</option><option value="90">3 أشهر (90 يومًا)</option>
+            <option value="180">6 أشهر (180 يومًا)</option><option value="365" selected>سنة (365 يومًا)</option>
+          </select>
+        </label>
+        <label>عدد الأكواد (1–20)
+          <input name="quantity" id="one-issue-quantity" type="number" min="1" max="20" value="1" required inputmode="numeric">
+        </label>
+        <label>حد الاتصالات المتزامنة
+          <select name="maxConnections" id="one-issue-connections"><option value="1">اتصال واحد</option>
+            <option value="2">اتصالان</option></select>
+        </label>
+        <label class="one-issue-wide">اسم الدفعة أو العميل
+          <input name="label" id="one-issue-label" type="text" maxlength="95" value="BLOFY STREAM" required autocomplete="off">
+        </label>
+        <div class="one-issue-preview" role="status" aria-live="polite">
+          <span class="one-issue-preview-label">ملخّص العملية</span>
+          <strong id="one-issue-preview">كود واحد · BLOFY STREAM · 365 يومًا · اتصال واحد</strong>
+          <small>المصدر: saleh · يبدأ الحساب عند أول تفعيل · لا توجد رسوم مسجلة تلقائيًا</small>
+        </div>
+        <button id="one-issue-submit" type="submit"><span aria-hidden="true">＋</span> إنشاء الأكواد وتأكيدها</button>
+      </form>
+      <p class="one-ops-status" id="one-issue-status" aria-live="polite" role="status">لن يصدر أي كود حتى تؤكد الطلب بنفسك.</p>
+      <div id="one-issue-result" class="one-issue-result" hidden>
+        <div class="one-issue-success-heading"><span class="one-issue-success-icon" aria-hidden="true">✓</span>
+          <div><strong>تم إصدار الأكواد بنجاح</strong><small>انسخها الآن، ثم راجع سجل الأكواد من هذه اللوحة.</small></div>
+        </div>
+        <div id="one-issue-code-list" class="one-issue-list"></div>
+        <div id="one-issue-xtream-result" class="one-issue-xtream-result" hidden role="region" aria-label="بيانات دخول Xtream">
+          <div class="one-issue-xtream-heading"><strong>بيانات Xtream جاهزة</strong>
+            <small>تم تفعيل الكود وبدأت مدته الآن. هذه البيانات خاصة بالعميل؛ انسخها ثم أخفِها.</small></div>
+          <div class="one-issue-xtream-fields">
+            <div><span>Host / رابط السيرفر</span><code id="one-issue-xtream-host" dir="ltr"></code></div>
+            <div><span>Username / المستخدم</span><code id="one-issue-xtream-username" dir="ltr"></code></div>
+            <div><span>Password / كلمة المرور</span><code id="one-issue-xtream-password" dir="ltr"></code></div>
+            <div class="one-issue-xtream-m3u"><span>رابط M3U الكامل</span><code id="one-issue-xtream-m3u" dir="ltr"></code></div>
+          </div>
+          <div class="one-issue-xtream-actions">
+            <button type="button" id="one-issue-xtream-copy">نسخ بيانات Xtream</button>
+            <button type="button" id="one-issue-xtream-m3u-copy">نسخ M3U</button>
+            <button type="button" id="one-issue-xtream-hide">إخفاء بيانات الدخول</button>
+          </div>
+        </div>
+        <p class="one-issue-countdown" id="one-issue-countdown" aria-live="off"></p>
+        <div class="one-stream-secret-actions">
+          <button type="button" id="one-issue-copy">نسخ الأكواد</button>
+          <button type="button" id="one-issue-hide">إخفاء الأكواد</button>
+          <a class="one-issue-results-link" href="#stream-management">عرض سجل الأكواد ←</a>
+        </div>
+        <small>عند اختيار «كود Xtream» يظهر زر «تفعيل واستخراج Xtream» بجانب كل كود. الضغط عليه بعد التأكيد يبدأ الاشتراك فورًا ويعرض Host وUsername وPassword وM3U. إذا رغبت أن تبدأ المدة لدى العميل، انسخ الكود فقط ولا تفعّله هنا. تبقى الأكواد وبيانات الدخول ظاهرة حتى تخفيها يدويًا أو تغادر الصفحة.</small>
+      </div>
+    </section>
+
+
+  <section class="one-overview one-growth" id="one-growth" aria-labelledby="one-growth-title">
+  <div class="one-section-heading one-growth-heading">
+    <div><span class="one-kicker">BLOFY OPERATIONS · LAUNCH COMMAND CENTER</span>
+      <h2 id="one-growth-title">مركز الزحمة والمبيعات — بيانات حقيقية</h2>
+      <p>إحصائيات المتجر بموافقة الزائر فقط، ونتائج التفعيل والدفع المسجلة والخدمات. <strong>لا نفترض أعداد المشاهدين أو تسوية البنك.</strong></p>
+    </div>
+    <div class="one-growth-actions">
+      <label for="one-growth-days">الفترة
+        <select id="one-growth-days"><option value="7">7 أيام</option><option value="30" selected>30 يومًا</option><option value="90">90 يومًا</option></select>
+      </label>
+      <button type="button" id="one-growth-refresh">↻ تحديث المركز</button>
+    </div>
+  </div>
+  <p class="one-growth-status" id="one-growth-status" role="status" aria-live="polite">جارٍ تحميل مؤشرات الطلبات والخدمات من المصادر المسجلة…</p>
+  <div class="one-growth-metrics" aria-label="مؤشرات المتجر">
+    <article><small>جلسات المتجر التي وافقت على القياس</small><strong id="one-growth-sessions">—</strong><span>ليست أشخاصًا فريدين</span></article>
+    <article><small>مشاهدات صفحات الموقع</small><strong id="one-growth-views">—</strong><span>بموافقة القياس</span></article>
+    <article><small>نقرات واتساب</small><strong id="one-growth-wa-clicks">—</strong><span>لا تعني وصول الرسالة</span></article>
+    <article><small>بدء الدفع من الموقع</small><strong id="one-growth-checkout-starts">—</strong><span>ليس دفعًا ناجحًا</span></article>
+    <article><small>طلبات المتجر المسجلة مدفوعة</small><strong id="one-growth-store-paid">—</strong><span>وفق سجلات Geidea المؤكدة داخل الموقع</span></article>
+    <article><small>قيمة طلبات المتجر المسجلة مدفوعة</small><strong id="one-growth-store-revenue">—</strong><span>ريال · ليست تسوية بنكية أو صافي ربح</span></article>
+  </div>
+  <div class="one-growth-columns">
+    <section class="one-growth-panel" aria-labelledby="one-growth-funnel-title">
+      <div class="one-growth-panel-head"><h3 id="one-growth-funnel-title">رحلة العميل من الإعلان إلى الدفع</h3><span>مؤشرات مستقلة</span></div>
+      <div id="one-growth-funnel" class="one-growth-funnel" role="group" aria-label="عدد أحداث مراحل رحلة العميل">
+        <div><span>مشاهدات</span><strong id="one-growth-funnel-views">—</strong></div>
+        <div><span>اهتمام بالمنتج</span><strong id="one-growth-funnel-product">—</strong></div>
+        <div><span>بدء الدفع</span><strong id="one-growth-funnel-checkout">—</strong></div>
+        <div><span>طلبات مدفوعة</span><strong id="one-growth-funnel-paid">—</strong></div>
+      </div>
+      <p>الأحداث قد تتكرر لنفس العميل؛ هذه مقارنة عددية وليست معدل تحويل دقيق. طلبات الدفع مصدرها قاعدة المتجر.</p>
+      <a href="/admin/visitors">التحليلات التفصيلية ←</a>
+    </section>
+    <section class="one-growth-panel" aria-labelledby="one-growth-campaigns-title">
+      <div class="one-growth-panel-head"><h3 id="one-growth-campaigns-title">الحملات ومصادر الزيارات</h3><span>آخر فترة محددة</span></div>
+      <div class="one-growth-table-wrap" tabindex="0" role="region" aria-label="مصادر الزيارات بالموافقة">
+        <table><thead><tr><th>المصدر</th><th>الحملة</th><th>الجلسات</th></tr></thead>
+        <tbody id="one-growth-campaigns"><tr><td colspan="3">جارٍ التحميل…</td></tr></tbody></table>
+      </div>
+      <p>المصادر المجهولة أو زيارات من لم يوافقوا على التحليل لا تظهر في هذه الأرقام.</p>
+    </section>
+  </div>
+  <div class="one-growth-panel one-growth-readiness">
+    <div class="one-growth-panel-head"><h3>جاهزية البيع واستقبال الزبائن</h3>
+      <a href="/admin/control-center/health">مركز التشخيص التفصيلي ←</a></div>
+    <div class="one-growth-readiness-grid" aria-label="نتائج جاهزية الخدمات والدفع">
+      <div><span class="one-growth-signal" id="one-growth-health-activation" data-state="pending">غير مؤكد</span><strong>تفعيل BLOFY PLAYER</strong><small>HTTP وقاعدة البيانات، لا اختبار جهاز عميل</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-downloads" data-state="pending">غير مؤكد</span><strong>موقع التحميلات</strong><small>صحة الخدمة فقط؛ لا يثبت اكتمال ملف APK</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-stream" data-state="pending">غير مؤكد</span><strong>BLOFY STREAM API</strong><small>الخدمة تستجيب، وليس فحص مشاهدة قناة</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-payment" data-state="pending">غير مؤكد</span><strong>دفع Geidea داخل المتجر</strong><small>قابلية بدء الدفع، ليست تسوية مالية</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-fulfillment" data-state="pending">غير مؤكد</span><strong>تسليم الأكواد بعد الدفع</strong><small>فحص كل كود ومدة ونوع وسلامة تخزينه لآخر 500 طلب مدفوع خلال 90 يومًا، وليس تسوية البنك</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-stock" data-state="pending">غير مؤكد</span><strong>مخزون الأكواد الجاهزة</strong><small>يمكن للنظام توليد أكواد عند الدفع وفق التحقق</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-customers" data-state="pending">غير مؤكد</span><strong>حسابات العملاء</strong><small>تسجيل البريد الموثق، حفظ الطلبات والتنبيهات؛ لا يثبت وصول البريد</small></div>
+       <div><span class="one-growth-signal" id="one-growth-health-whatsapp" data-state="warn">رابط فقط</span><strong>واتساب خدمة العملاء</strong><small>الرد الآلي الرسمي يتطلب توصيل Meta وتفعيل الاشتراك في أحداث Webhook</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-media" data-state="warn">غير مُقاس</span><strong>سعة المشاهدين والبث</strong><small>نحتاج قياس ضغط آمن بمصدر مرخّص قبل تحديد عدد المشاهدين</small></div>
+    </div>
+    <p id="one-growth-issues" class="one-growth-issues" role="status" aria-live="polite">لا يمكن اعتماد جاهزية المبيعات إلا بعد فحص حالات الطلبات والدفع.</p>
+  </div>
+  <div class="one-growth-next">
+    <a href="#one-issue"><b>＋</b><span><strong>إنشاء كود</strong><small>إصدار وتخصيص داخل BLOFY ONE</small></span></a>
+    <a href="/admin/store-inventory"><b>▤</b><span><strong>مخزون المتجر</strong><small>مراجعة المخزون والتوليد</small></span></a>
+    <a href="#one-distributors"><b>♙</b><span><strong>الموزعون</strong><small>حسابات مستقلة وأرصدة</small></span></a>
+    <a href="https://wa.me/966568941484" target="_blank" rel="noopener noreferrer"><b>◉</b><span><strong>واتساب</strong><small>المحادثة الحالية، ليست API آلية</small></span></a>
+  </div>
+</section>
+
+<section class="one-overview one-capacity" id="one-capacity" aria-labelledby="one-capacity-title">
+  <div class="one-section-heading">
+    <div><span class="one-kicker">BLOFY LIVE RELAY · VERIFIED TELEMETRY</span>
+      <h2 id="one-capacity-title">مراقبة اتصال البث المباشر</h2>
+      <p class="one-capacity-intro">قياسات فعلية من ريلاي STREAM الداخلي: الاتصالات التي يراها الريلاي، والضغط والتنبيهات المتعلقة بالمصدر. لا يرسل هذا القسم طلبات مشاهدة جديدة ولا يغيّر عدد الاتصالات أو الأكواد.</p>
+    </div>
+    <div class="one-capacity-actions">
+      <span class="one-capacity-indicator" id="one-capacity-indicator" data-state="unknown">غير مؤكّد</span>
+      <button type="button" id="one-capacity-refresh">↻ فحص الاتصال</button>
+    </div>
+  </div>
+  <p id="one-capacity-status" role="status" aria-live="polite">جارٍ قراءة بيانات المراقبة الحقيقية…</p>
+  <div class="one-capacity-metrics" aria-label="مؤشرات ريلاي STREAM الداخلية">
+    <article><small>مشاهدو الريلاي الداخلي الحاليون</small><strong id="one-capacity-viewers">—</strong><em>لا يمثل جميع مشتركي BLOFY</em></article>
+    <article><small>مصادر بث مشتركة نشطة</small><strong id="one-capacity-feeds">—</strong><em>في هذه النسخة من الريلاي فقط</em></article>
+    <article><small>حد المشاهدين الداخلي لكل بث</small><strong id="one-capacity-feed-limit">—</strong><em>لا يقيس الحد المسموح من Xtream</em></article>
+    <article><small>تذاكر الوصول النشطة</small><strong id="one-capacity-tickets">—</strong><em>ليست اشتراكات عميل</em></article>
+    <article><small>طلبات مرفوضة بسبب السعة</small><strong id="one-capacity-capacity-rejected">—</strong><em>عداد منذ بدء عملية الريلاي</em></article>
+    <article><small>أخطاء اتصال المصدر</small><strong id="one-capacity-provider-failures">—</strong><em>عداد عملية الريلاي</em></article>
+    <article><small>إعادة الاتصال بالمصدر</small><strong id="one-capacity-reconnects">—</strong><em>للريلاي فقط، لا كل الأجهزة</em></article>
+    <article><small>عينات رسم المشاهدين</small><strong id="one-capacity-samples">—</strong><em>آخر عينات المراقبة المتاحة</em></article>
+  </div>
+  <div class="one-capacity-layout">
+    <section class="one-capacity-card" aria-labelledby="one-capacity-alert-title">
+      <h3 id="one-capacity-alert-title">التنبيهات الفعلية</h3>
+      <ul id="one-capacity-alerts" class="one-capacity-alerts"><li>لم تصل بيانات الفحص بعد.</li></ul>
+      <p>التنبيهات تجمع تغيّر الأخطاء والانقطاعات من مراقبة الريلاي، وليست إصدارًا آليًا لأوامر على المصدر.</p>
+    </section>
+    <section class="one-capacity-card" aria-labelledby="one-capacity-trend-title">
+      <h3 id="one-capacity-trend-title">اتجاه مشاهدي الريلاي</h3>
+      <div class="one-capacity-trend" id="one-capacity-trend" role="img" aria-label="رسم اتجاه العدد المقاس للمشاهدين في الريلاي"></div>
+      <p id="one-capacity-playback-note">فحص المشغل: جارٍ التحقق من البيانات.</p>
+      <a href="/admin/control-center" class="one-ops-link">فتح تشخيص STREAM الكامل ←</a>
+    </section>
+  </div>
+  <p class="one-capacity-foot"><strong>تنبيه تجاري:</strong> لا نعلن قدرة 100 أو 1000 مشاهد بناءً على هذه الشاشة. لا بد من موافقة المزود وقياس ضغط تدريجي على مصدر مرخّص. لا نقوم بأي اختبار ضغط تلقائي على قنوات العملاء.</p>
+</section>
+<section class="one-launchpad" aria-label="اختصارات العمل اليومي">
+    <div class="one-section-heading"><div><span class="one-kicker">YOUR WORKSPACE</span>
+      <h2>كل أدواتك... باختصار واضح</h2></div><span class="one-note">اختر المهمة وابدأ مباشرة</span></div>
+    <div class="one-fast-grid">
+      <a href="#customers"><b aria-hidden="true">▣</b><strong>العملاء</strong><small>الاسم والجوال والأجهزة</small></a>
+      <a href="#stream-management"><b aria-hidden="true">◈</b><strong>الأكواد والاشتراكات</strong><small>البحث والتحويل والكشف</small></a>
+      <a href="#legacy-xtream"><b aria-hidden="true">⇄</b><strong>الأكواد القديمة</strong><small>استخراج Xtream من نفس الاشتراك</small></a>
+      <a href="#one-sources"><b aria-hidden="true">◉</b><strong>المصادر</strong><small>حالة المصادر والمزامنة</small></a>
+      <a href="#one-storage"><b aria-hidden="true">▥</b><strong>التخزين</strong><small>Content Hub والتنزيلات</small></a>
+      <a href="#one-distributors"><b aria-hidden="true">♙</b><strong>الموزعون</strong><small>الحسابات والأرصدة</small></a>
+    </div>
+  </section>
+    <section class="one-overview one-store-sales" id="one-store-sales" aria-labelledby="one-store-sales-title">
+      <div class="one-section-heading">
+        <div><span class="one-kicker">BLOFY STORE · RECORDED GEIDEA ORDERS</span>
+          <h2 id="one-store-sales-title">مبيعات متجر BLOFY وطلبات الدفع</h2></div>
+        <button id="one-store-sales-refresh" type="button" class="one-ops-primary">↻ تحديث المبيعات</button>
+      </div>
+      <p class="one-footnote">إحصائيات الطلبات المسجلة في متجر BLOFY للمنتجات والسلة والتجديدات، وليست تحويلات واتساب أو مبيعات PLAYER المنفصلة أو تسوية بنكية. قراءة فقط، ولا يظهر رقم البطاقة أو كود العميل.</p>
+      <div class="one-store-sales-stats" aria-label="ملخص المبيعات المسجلة">
+        <article><small>قيمة الطلبات المسجلة مدفوعة (كل الوقت)</small><strong id="one-store-sales-gross">—</strong></article>
+        <article><small>قيمة الطلبات المسجلة مدفوعة (آخر 30 يومًا)</small><strong id="one-store-sales-30d">—</strong></article>
+        <article><small>الطلبات المسجلة مدفوعة</small><strong id="one-store-sales-paid">—</strong></article>
+        <article><small>الطلبات قيد التحقق من الدفع</small><strong id="one-store-sales-pending">—</strong></article>
+        <article class="one-store-sales-alert-stat"><small>قيد التحقق لأكثر من 20 دقيقة</small><strong id="one-store-sales-overdue">—</strong></article>
+        <article><small>طلبات فاشلة أو ملغاة</small><strong id="one-store-sales-failed">—</strong></article>
+      </div>
+      <form id="one-store-sales-form" class="one-store-sales-controls" autocomplete="off">
+        <label for="one-store-sales-filter">حالة الطلب
+          <select id="one-store-sales-filter">
+            <option value="all">كل الحالات</option>
+            <option value="paid">مدفوع</option>
+            <option value="pending">قيد التحقق</option>
+            <option value="failed">فشل</option>
+            <option value="cancelled">ملغي</option>
+          </select>
+        </label>
+        <label for="one-store-sales-search">بحث برقم الطلب أو بريد الحساب
+          <input id="one-store-sales-search" type="search" maxlength="100" autocomplete="off" placeholder="رقم الطلب أو البريد">
+        </label>
+        <button type="submit" class="one-ops-primary">بحث</button>
+      </form>
+      <p id="one-store-sales-status" class="one-store-sales-status" role="status" aria-live="polite">جارٍ قراءة مبيعات المتجر المسجلة…</p>
+      <div class="one-renewal-table-wrap" tabindex="0" role="region" aria-label="قائمة طلبات متجر BLOFY">
+        <table class="one-renewal-table">
+          <thead><tr><th>الطلب / العميل</th><th>المنتج</th><th>الحالة</th><th>المبلغ المسجل</th><th>التاريخ</th></tr></thead>
+          <tbody id="one-store-sales-rows"><tr><td colspan="5">جارٍ التحميل…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="one-renewal-pager">
+        <button type="button" id="one-store-sales-prev" disabled>السابق</button>
+        <span id="one-store-sales-page">—</span>
+        <button type="button" id="one-store-sales-next" disabled>التالي</button>
+      </div>
+      <p class="one-footnote">الطلب «مدفوع» يعني أن حالته مسجلة مدفوعة داخل BLOFY، وليس إثبات تسوية بنكية أو وصول الأكواد للبريد. للطلبات المعلّقة لا تُعد الدفع أو تصدر أكوادًا يدويًا قبل التحقق من Geidea وسجلات التسليم.</p>
+
+      <section id="one-paid-leads" class="one-paid-leads" aria-labelledby="one-paid-leads-title">
+        <div class="one-section-heading"><div><span class="one-kicker">PAID CUSTOMERS · CONTACTS & FOLLOW-UP</span>
+          <h3 id="one-paid-leads-title">👤 العملاء المشترون من متجر BLOFY</h3></div>
+          <button id="one-paid-leads-refresh" type="button">↻ تحديث المشترين</button></div>
+        <p class="one-footnote">طلبات الشراء المسجلة «مدفوعة» فقط، بالاسم والجوال والبريد عندما يكون الطلب مرتبطًا بحساب العميل الموثّق. طلبات الزوار القديمة دون حساب تظهر من دون اختلاق بيانات تواصل.</p>
+        <form id="one-paid-leads-search-form" class="one-paid-leads-filters" autocomplete="off">
+          <label>اسم أو جوال أو بريد أو رقم الطلب<input id="one-paid-leads-query" type="search"
+            maxlength="100" placeholder="ابحث عن المشتري أو الطلب" spellcheck="false"></label>
+          <label>المنتج<select id="one-paid-leads-channel"><option value="all">كل المشتريات</option>
+            <option value="app">STREAM والسلة</option><option value="xtream">Xtream والسلة</option></select></label>
+          <label>حالة المتابعة<select id="one-paid-leads-followup"><option value="all">جميع الحالات</option>
+            <option value="new">جديد</option><option value="contacted">تم التواصل</option>
+            <option value="offer_sent">عرض مرسل</option><option value="converted">جدد الاشتراك</option>
+            <option value="do_not_contact">عدم التواصل</option></select></label>
+          <button type="submit">⌕ بحث</button>
+        </form>
+        <p id="one-paid-leads-status" role="status" aria-live="polite">جارٍ قراءة المشترين الفعليين…</p>
+        <div class="one-renewal-table-wrap" tabindex="0" role="region" aria-label="سجل مشترين BLOFY المدفوع">
+          <table class="one-renewal-table one-paid-leads-table">
+            <thead><tr><th>اسم العميل</th><th>الجوال والبريد</th><th>الطلب والمنتج</th>
+              <th>المبلغ</th><th>وقت الدفع</th><th>التفعيل والمتابعة</th><th>الإجراءات</th></tr></thead>
+            <tbody id="one-paid-leads-rows"><tr><td colspan="7">جارٍ جلب الطلبات المدفوعة…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="one-renewal-pager"><button id="one-paid-leads-prev" type="button" disabled>← السابق</button>
+          <span id="one-paid-leads-page">—</span>
+          <button id="one-paid-leads-next" type="button" disabled>التالي →</button></div>
+        <p class="one-footnote">المراسلة بالعروض تتطلب موافقة العميل الصريحة؛ المشترون السابقون بلا موافقة مسجلة غير مشتركين في التسويق. لا رسائل تلقائية من هذه الصفحة.</p>
+      </section>
+      <dialog id="one-paid-lead-dialog" class="one-paid-lead-dialog" aria-labelledby="one-paid-lead-title">
+        <div class="one-paid-lead-dialog-head"><h3 id="one-paid-lead-title">ملف العميل المشتري</h3>
+          <button id="one-paid-lead-close" type="button">✕ إغلاق</button></div>
+        <div id="one-paid-lead-detail-grid" class="one-paid-lead-detail-grid"></div>
+        <div class="one-paid-lead-actions">
+          <button id="one-paid-lead-copy-phone" type="button">📋 نسخ الجوال</button>
+          <button id="one-paid-lead-copy-email" type="button">📋 نسخ البريد</button>
+          <a id="one-paid-lead-whatsapp" target="_blank" rel="noopener noreferrer" hidden>↗ واتساب بعد الموافقة</a>
+        </div>
+        <form id="one-paid-lead-followup-form" autocomplete="off">
+          <label>حالة المتابعة<select id="one-paid-lead-followup-state">
+            <option value="new">جديد</option><option value="contacted">تم التواصل</option>
+            <option value="offer_sent">تم إرسال عرض (بعد موافقة العميل)</option>
+            <option value="converted">تم تجديد الاشتراك</option>
+            <option value="do_not_contact">عدم التواصل</option></select></label>
+          <label>ملاحظة داخل الإدارة<textarea id="one-paid-lead-note" maxlength="250" rows="3"
+            placeholder="ملخص المتابعة دون كلمات مرور أو أكواد"></textarea></label>
+          <div class="one-paid-lead-actions">
+            <button id="one-paid-lead-save" type="submit">✓ حفظ المتابعة</button>
+            <button id="one-paid-lead-cancel" type="button">إلغاء</button>
+          </div>
+        </form><p id="one-paid-lead-detail-status" role="status" aria-live="polite"></p>
+      </dialog>
+    </section>
+    <section class="one-overview one-renewal-ops" id="one-renewal-ops" aria-labelledby="one-renewal-ops-title">
+      <div class="one-section-heading">
+        <div><span class="one-kicker">STORE CUSTOMER SUBSCRIPTIONS · VERIFIED RENEWALS</span>
+          <h2 id="one-renewal-ops-title">اشتراكات العملاء وتجديدات Geidea</h2></div>
+        <button id="one-renewal-ops-refresh" type="button" class="one-ops-primary">↻ تحديث السجل</button>
+      </div>
+      <p class="one-footnote">بيانات للقراءة فقط من طلبات العملاء المدفوعة والمرتبطة بحساباتهم في المتجر؛ لا تمثل كل أكواد الإدارة أو المبيعات الخارجية. لا نعرض الكود الكامل أو بيانات البطاقة. حالات Geidea هنا هي ما سُجّل في BLOFY وليست كشف تسوية بنكية.</p>
+      <div class="one-renewal-stats" aria-label="مؤشرات اشتراكات المتجر وتجديداته">
+        <article><small>التجديدات المسجلة مدفوعة</small><strong id="one-renewal-paid">—</strong></article>
+        <article><small>التجديدات قيد الدفع</small><strong id="one-renewal-pending">—</strong></article>
+        <article><small>طلبات التجديد المعلّقة أكثر من 20 دقيقة</small><strong id="one-renewal-overdue">—</strong></article>
+        <article><small>الاشتراكات المنتهية خلال 7 أيام</small><strong id="one-renewal-expiring">—</strong></article>
+        <article><small>تنبيهات انتهاء الاشتراك قبلها مزود البريد</small><strong id="one-renewal-reminder-accepted">—</strong></article>
+        <article><small>تنبيهات استنفدت محاولات الإرسال</small><strong id="one-renewal-reminder-exhausted">—</strong></article>
+      </div>
+      <form id="one-renewal-ops-form" class="one-renewal-controls" autocomplete="off">
+        <label>عرض السجل
+          <select id="one-renewal-view">
+            <option value="subscriptions">اشتراكات عملاء المتجر</option>
+            <option value="renewals">سجل تجديد نفس الكود</option>
+          </select>
+        </label>
+        <label>الحالة
+          <select id="one-renewal-filter">
+            <option value="all">كل الحالات</option>
+            <option value="active">نشط</option>
+            <option value="expiring">ينتهي خلال 7 أيام</option>
+            <option value="expired">منتهي</option>
+            <option value="unused">لم يُفعّل</option>
+            <option value="revoked">ملغى</option>
+            <option value="disabled">يحتاج مراجعة</option>
+          </select>
+        </label>
+        <label>بحث آمن
+          <input id="one-renewal-search" type="search" maxlength="100" autocomplete="off" placeholder="البريد أو رقم الطلب أو الكود المخفي">
+        </label>
+        <button class="one-ops-primary" type="submit">بحث</button>
+      </form>
+      <p id="one-renewal-status" class="one-renewal-status" role="status" aria-live="polite">جارٍ فحص سجل المتجر…</p>
+      <div class="one-renewal-table-wrap" tabindex="0" role="region" aria-label="اشتراكات المتجر والتجديدات">
+        <table class="one-renewal-table"><thead><tr id="one-renewal-head"><th>العميل</th><th>الكود المخفي</th><th>القناة</th><th>الحالة</th><th>انتهاء الاشتراك</th></tr></thead>
+          <tbody id="one-renewal-rows"><tr><td colspan="5">جارٍ التحميل…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="one-renewal-pager">
+        <button id="one-renewal-prev" type="button" disabled>السابق</button>
+        <span id="one-renewal-page">—</span>
+        <button id="one-renewal-next" type="button" disabled>التالي</button>
+      </div>
+      <p class="one-footnote">التجديد المدفوع يمدد نفس الكود بعد تحقق Geidea. إذا ظهر تجديد معلق، لا تعِد إنشاء طلب أو تمديدًا يدويًا قبل فحص عملية الدفع مع المزود؛ هذه الصفحة لا تنفذ خصومات أو تمديدات.</p>
+    </section>
+    <section id="customers" class="one-overview one-customers" aria-labelledby="one-customers-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">CUSTOMER OPERATIONS</span><h2 id="one-customers-title">العملاء والاشتراكات — مباشرة من BLOFY ONE</h2></div>
+      <a href="/admin#devices">الإدارة المتقدمة والتجديد ←</a>
+    </div>
+    <p class="one-footnote">بيانات فعلية من نظام BLOFY PLAYER الحالي. يمكنك البحث وتحديث معلومات العميل وإيقاف جهازه بعد التأكيد. أكواد STREAM منفصلة عن بيانات أجهزة PLAYER.</p>
+    <div class="one-customer-metrics" id="one-customer-metrics" aria-label="ملخص الاشتراكات">
+      <article><span>الأجهزة المسجّلة</span><strong id="one-customer-total">—</strong></article>
+      <article><span>لديها رقم جوال</span><strong id="one-customer-phones">—</strong></article>
+      <article><span>أكواد نشطة حسب آخر فحص</span><strong id="one-codes-active">—</strong></article>
+      <article><span>أكواد تنتهي خلال 7 أيام</span><strong id="one-codes-expiring">—</strong></article>
+    </div>
+    <form id="one-customer-search-form" class="one-customer-search" autocomplete="off">
+      <label for="one-customer-query">ابحث عن عميل أو جهاز أو رقم جوال
+        <input id="one-customer-query" name="q" type="search" maxlength="120"
+          autocomplete="off" placeholder="الاسم، رقم الجهاز أو الجوال">
+      </label>
+      <label for="one-customer-filter">الحالة
+        <select id="one-customer-filter" name="filter">
+          <option value="all">كل الأجهزة</option>
+          <option value="withPhone">لديهم رقم جوال</option>
+          <option value="withoutPhone">بدون رقم جوال</option>
+          <option value="active">الاشتراكات السارية</option>
+          <option value="trial">التجارب</option>
+          <option value="expiring7d">تنتهي خلال 7 أيام</option>
+          <option value="expired">المنتهية</option>
+          <option value="blocked">الموقوفة</option>
+          <option value="recent">تواصل خلال 10 دقائق</option>
+          <option value="inactive7d">لم يتواصل منذ 7 أيام</option>
+        </select>
+      </label>
+      <label for="one-customer-sort">الترتيب
+        <select id="one-customer-sort" name="sort">
+          <option value="newest">الأحدث تسجيلًا</option>
+          <option value="seen">آخر تواصل</option>
+          <option value="expiry">الأقرب انتهاءً</option>
+        </select>
+      </label>
+      <button type="submit" class="one-customer-primary">⌕ بحث</button>
+      <button id="one-customer-refresh" type="button">↻ تحديث</button>
+    </form>
+    <p class="one-customer-status" id="one-customer-status" role="status" aria-live="polite">حمّل بيانات العملاء لعرض القائمة.</p>
+    <div class="one-customer-table-wrap" tabindex="0" role="region" aria-label="قائمة العملاء قابلة للتمرير">
+      <table class="one-customer-table"><thead><tr>
+        <th>العميل / الجهاز</th><th>الحالة</th><th>الانتهاء</th><th>آخر تواصل</th><th>رقم الجوال</th><th>إجراء</th>
+      </tr></thead><tbody id="one-customer-rows"><tr><td colspan="6">جارٍ قراءة أجهزة BLOFY…</td></tr></tbody></table>
+    </div>
+    <div class="one-customer-pager">
+      <button type="button" id="one-customer-prev" disabled>السابق</button>
+      <span id="one-customer-page">—</span>
+      <button type="button" id="one-customer-next" disabled>التالي</button>
+      <button type="button" id="one-customer-export">↓ تصدير الصفحة CSV</button>
+    </div>
+    <p class="one-footnote">«آخر تواصل» لا يعني أن بث القناة يعمل. التصدير يحتوي بيانات تواصل العملاء المسجلين فقط؛ استخدمها ضمن صلاحيات الإدارة.</p>
+  </section>
+  <dialog id="one-customer-dialog" class="one-customer-dialog" aria-labelledby="one-customer-dialog-title">
+    <div class="one-customer-dialog-head">
+      <div><span class="one-kicker">CUSTOMER PROFILE</span><h2 id="one-customer-dialog-title">إدارة بيانات العميل</h2></div>
+      <button type="button" id="one-customer-dialog-close" aria-label="إغلاق سجل العميل">×</button>
+    </div>
+    <div class="one-customer-dialog-summary" id="one-customer-dialog-summary"></div>
+    <form id="one-customer-edit-form" class="one-customer-edit-form" autocomplete="off">
+      <label>اسم العميل<input type="text" name="name" maxlength="120" autocomplete="off"></label>
+      <label>الجوال<input type="tel" name="phone" maxlength="32" autocomplete="off"></label>
+      <label>البريد الإلكتروني<input type="email" name="email" maxlength="254" autocomplete="off"></label>
+      <label>ملاحظات داخلية<textarea name="notes" rows="3" maxlength="2000" placeholder="ملاحظات الإدارة، لا تُسجل كلمات المرور"></textarea></label>
+      <p class="one-customer-status" id="one-customer-edit-status" role="status" aria-live="polite"></p>
+      <div class="one-customer-dialog-actions">
+        <button class="one-customer-primary" id="one-customer-save" type="submit">حفظ بيانات العميل</button>
+        <button id="one-customer-toggle-block" type="button">إيقاف الجهاز</button>
+        <a href="/admin#devices">الإدارة المتقدمة ←</a>
+      </div>
+    </form>
+    <p class="one-footnote">تعديل بيانات العميل وإيقاف الجهاز لا يجدد اشتراكه ولا يغير كود Xtream. مدة التجديد تُدار من سجل التفعيل الأصلي.</p>
+  </dialog>
+  <section class="one-overview one-legacy" id="legacy-xtream" aria-labelledby="one-legacy-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">BLOFY STREAM · LEGACY & CURRENT VOUCHERS</span>
+        <h2 id="one-legacy-title">استخراج Xtream من الأكواد الجديدة والقديمة</h2></div>
+      <a href="/sources-admin#dual">التحويل بالاتجاهين ←</a>
+    </div>
+    <p class="one-footnote">أدخل الكود الأصلي الكامل من BLOFY STREAM، سواء الجديد (8–12 رقمًا) أو القديم (24 خانة Hex). نقرأ حسابه الحالي من السيرفر ولا ننشئ اشتراكًا آخر أو نغيّر تاريخ انتهائه. لا يدعم رمز الاقتران المكوّن من 6 خانات أو كود تفعيل BLOFY PLAYER المنفصل.</p>
+    <div class="one-legacy-layout">
+      <div class="one-legacy-step">
+        <div class="one-legacy-step-heading"><span class="one-legacy-num">1</span>
+          <div><h3>فحص الكود القديم</h3><small>فحص قراءة فقط، لا يستهلك الكود أو يفعّله</small></div>
+        </div>
+        <form id="one-legacy-lookup-form" class="one-legacy-form" autocomplete="off">
+          <label for="one-legacy-code">كود BLOFY STREAM
+            <input id="one-legacy-code" type="text" autocomplete="off" spellcheck="false"
+              autocapitalize="off" maxlength="32" placeholder="8–12 رقمًا أو 24 حرفًا من الكود القديم" required>
+          </label>
+          <button class="one-legacy-action" id="one-legacy-lookup-btn" type="submit">فحص الكود</button>
+        </form>
+        <p class="one-legacy-status" id="one-legacy-status" role="status" aria-live="polite">الأكواد القديمة المرتبطة بحساب Xtream مفعل قابلة للفحص بنفس الكود الأصلي.</p>
+        <div id="one-legacy-info" class="one-legacy-info" hidden>
+          <div><span>نوع الكود</span><strong id="one-legacy-kind">—</strong></div>
+          <div><span>حالة الاشتراك</span><strong id="one-legacy-state">—</strong></div>
+          <div><span>تاريخ الانتهاء</span><strong id="one-legacy-expiry">—</strong></div>
+          <div><span>الحساب مرتبط</span><strong id="one-legacy-linked">—</strong></div>
+          <div><span>بصمة الكود</span><strong id="one-legacy-hint">—</strong></div>
+        </div>
+      </div>
+      <div class="one-legacy-step">
+        <div class="one-legacy-step-heading"><span class="one-legacy-num">2</span>
+          <div><h3>استخراج بيانات Xtream</h3>
+            <small>لن تظهر بيانات الحساب إلا عند التأكيد</small></div>
+        </div>
+        <p class="one-legacy-note">إذا كان الكود مستعملًا واشتراكه نشطًا وحسابه مرتبطًا، تستخرج Host وUsername وPassword من بيانات BLOFY الداخلية. الكود غير المفعّل لا تصدر له بيانات دخول تلقائيًا.</p>
+        <button class="one-legacy-action" id="one-legacy-extract-btn" type="button" disabled>استخراج Host / Username / Password</button>
+        <div id="one-legacy-credentials" class="one-legacy-credentials" hidden>
+          <div class="one-legacy-credential"><span>Host</span><code id="one-legacy-host" dir="ltr"></code></div>
+          <div class="one-legacy-credential"><span>Username</span><code id="one-legacy-user" dir="ltr"></code></div>
+          <div class="one-legacy-credential"><span>Password</span><code id="one-legacy-password" dir="ltr"></code></div>
+          <div class="one-legacy-actions">
+            <button id="one-legacy-copy" type="button">نسخ بيانات Xtream</button>
+            <button id="one-legacy-hide" type="button">إخفاء البيانات</button>
+          </div>
+          <small>تبقى بيانات الدخول ظاهرة حتى تخفيها يدويًا أو تغادر الصفحة. لا تستخدمها إلا لحساب صاحب الاشتراك.</small>
+        </div>
+        <p class="one-legacy-hint">إذا لم يكن الكود في قاعدة BLOFY STREAM الحالية أو كانت كلمة المرور القديمة غير محفوظة بشكل قابل للاسترجاع، لن نُنشئ بيانات وهمية أو نغيّر حساب العميل. استخدم إدارة الاسترداد المتقدمة بعد التحقق من صاحب الاشتراك.</p>
+      </div>
+    </div>
+    <details class="one-legacy-batch" id="one-legacy-batch-section">
+      <summary>📋 فحص مجموعة أكواد قديمة معًا — حتى 20 كودًا (بدون كشف كلمات المرور)</summary>
+      <p class="one-legacy-note">ضع كودًا كاملًا في كل سطر. يفحص النظام وجود الكود وحالة التفعيل وإمكانية استعادة بيانات Xtream، دون تغيير أي اشتراك. عند ظهور «جاهز» اختر الكود ثم استخدم زر استخراج البيانات بعد التأكيد.</p>
+      <form class="one-legacy-batch-form" id="one-legacy-batch-form" autocomplete="off">
+        <label for="one-legacy-batch-codes">الأكواد القديمة أو الرقمية — كود في كل سطر
+          <textarea id="one-legacy-batch-codes" rows="5" maxlength="800" spellcheck="false"
+            autocomplete="off" placeholder="ABCDEF123456ABCDEF123456&#10;12345678" required></textarea>
+        </label>
+        <button type="submit" id="one-legacy-batch-run" class="one-legacy-action">فحص الأكواد المحددة</button>
+        <button type="button" id="one-legacy-batch-clear">مسح النتائج</button>
+      </form>
+      <p role="status" aria-live="polite" class="one-legacy-status" id="one-legacy-batch-status">الفحص آمن للقراءة فقط. إذا لم يوجد كود في السجلات الحالية فلن نخمّن بيانات اشتراكه.</p>
+      <div class="one-legacy-batch-table-wrap" id="one-legacy-batch-results" hidden tabindex="0" role="region"
+        aria-label="نتائج فحص الأكواد القديمة">
+        <table class="one-legacy-batch-table">
+          <thead><tr><th>#</th><th>الكود المخفي</th><th>النوع</th><th>حالة الربط</th><th>تاريخ الانتهاء</th><th>الإجراء</th></tr></thead>
+          <tbody id="one-legacy-batch-rows"></tbody>
+        </table>
+      </div>
+      <p class="one-legacy-hint">تُمسح الأكواد من واجهة الفحص عند إغلاق الصفحة، وعند إخفاء التبويب، وبعد ثلاث دقائق. لا يتم عرض كلمات المرور ضمن نتائج المجموعة، ولا حفظ الأكواد في سجل المتصفح.</p>
+    </details>
+  </section>
+  <section class="one-overview one-stream" id="stream-management" aria-labelledby="one-stream-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">BLOFY STREAM · Xtream · INTEGRATED OPERATIONS</span>
+        <h2 id="one-stream-title">إدارة حسابات Xtream وأكواد STREAM</h2></div>
+      <button type="button" id="one-stream-refresh" class="one-stream-primary">↻ تحديث الحسابات والأكواد</button>
+    </div>
+    <p class="one-footnote">كل العمليات هنا داخل BLOFY ONE نفسه، من قواعد الحسابات والأكواد القائمة؛ لا تحتاج للانتقال إلى لوحة أخرى. لا تُعرض كلمات المرور في قوائم العملاء.</p>
+    <div class="one-stream-summary" aria-label="إحصائيات BLOFY STREAM المسجلة">
+      <article><span>حسابات Xtream</span><strong id="one-stream-accounts-total">—</strong></article>
+      <article><span>حسابات سارية ومفعّلة</span><strong id="one-stream-active-accounts">—</strong></article>
+      <article><span>أكواد STREAM الصادرة</span><strong id="one-stream-code-total">—</strong></article>
+      <article><span>أكواد استُخدمت</span><strong id="one-stream-redeemed">—</strong></article>
+      <article><span>أكواد غير مستعملة</span><strong id="one-stream-unused">—</strong></article>
+      <article><span>تنتهي خلال 7 أيام</span><strong id="one-stream-expiring">—</strong></article>
+    </div>
+    <p class="one-stream-status" id="one-stream-overall-status" role="status" aria-live="polite">جارٍ تحميل بيانات STREAM الفعلية من لوحة الإدارة المحمية…</p>
+    <div class="one-stream-sections">
+      <section class="one-stream-card" aria-labelledby="one-stream-account-title">
+        <div class="one-section-heading"><div><span class="one-kicker">XTREAM ACCOUNTS</span><h3 id="one-stream-account-title">المشتركون وحسابات Xtream</h3></div></div>
+        <div class="one-stream-controls">
+          <label for="one-stream-account-search">بحث عن مشترك<input id="one-stream-account-search" type="search" maxlength="100" autocomplete="off" placeholder="اسم العميل أو Username"></label>
+          <label for="one-stream-account-filter">الحالة
+            <select id="one-stream-account-filter">
+              <option value="all">الكل</option><option value="active">نشط</option>
+              <option value="expiring">ينتهي قريبًا</option><option value="expired">منتهي</option>
+              <option value="disabled">موقوف</option>
+            </select>
+          </label>
+        </div>
+        <p class="one-stream-caption" id="one-stream-accounts-count">—</p>
+        <div class="one-stream-table-wrap" tabindex="0" role="region" aria-label="حسابات Xtream">
+          <table class="one-stream-table"><thead><tr>
+            <th>اسم المشترك</th><th>Username</th><th>الحالة</th><th>الانتهاء</th><th>اتصالات</th><th>الإجراء</th>
+          </tr></thead><tbody id="one-stream-accounts-rows"><tr><td colspan="6">جارٍ تحميل الحسابات…</td></tr></tbody></table>
+        </div>
+        <p class="one-stream-caption">اختيار «استرجاع كود» يكشف الكود الأصلي إن كان محفوظًا، أو ينشئ كودًا واحدًا مرتبطًا بنفس الحساب إذا لم يوجد؛ لا يتغير تاريخ الانتهاء أو بيانات Xtream. الإجراء يحتاج تأكيدًا صريحًا.</p>
+      </section>
+      <section class="one-stream-card" aria-labelledby="one-stream-code-title">
+        <div class="one-section-heading"><div><span class="one-kicker">STREAM VOUCHERS</span><h3 id="one-stream-code-title">سجل الأكواد الجديدة والقديمة</h3></div></div>
+        <div class="one-stream-controls">
+          <label for="one-stream-code-search">بحث في جميع الأكواد — القديمة والجديدة
+            <input id="one-stream-code-search" type="search" maxlength="80" autocomplete="off" spellcheck="false" placeholder="اسم العميل، رقم الجوال أو الكود الأصلي الكامل">
+          </label>
+          <label for="one-stream-code-filter">حالة الكود
+            <select id="one-stream-code-filter"><option value="all">الكل</option>
+              <option value="unused">لم يُستخدم</option><option value="redeemed">مستخدم</option>
+              <option value="revoked">ملغى</option>
+            </select>
+          </label>
+        </div>
+        <p class="one-stream-caption" id="one-stream-codes-count">—</p>
+        <div class="one-stream-table-wrap" tabindex="0" role="region" aria-label="أكواد STREAM">
+          <table class="one-stream-table"><thead><tr>
+            <th>العميل / الكود المخفي</th><th>النوع</th><th>الحالة</th><th>الانتهاء</th><th>الحساب</th><th>الإجراء</th>
+          </tr></thead><tbody id="one-stream-codes-rows"><tr><td colspan="6">جارٍ تحميل الأكواد…</td></tr></tbody></table>
+        </div>
+        <div class="one-stream-pager">
+          <button id="one-stream-codes-prev" type="button" disabled>السابق</button>
+          <span id="one-stream-codes-page">—</span>
+          <button id="one-stream-codes-next" type="button" disabled>التالي</button>
+        </div>
+        <p class="one-stream-caption">البحث يشمل سجل الأكواد كاملًا ويعمل بالاسم أو رقم الجوال أو الكود الأصلي القديم والجديد؛ الكود المُدخل يُرسل في جسم طلب محمي، وليس في رابط الصفحة. لا نعرض الكود الكامل إلا للمشرف وبعد التأكيد، وإذا كان محفوظًا في المخزن المشفّر.</p>
+      </section>
+    </div>
+    <section class="one-stream-commercial" aria-labelledby="one-stream-sales-title">
+      <div><span class="one-kicker">STREAM SALES REGISTER · NOT PAYMENT SETTLEMENT</span>
+        <h3 id="one-stream-sales-title">إحصائيات بيع الأكواد المسجلة</h3></div>
+      <div class="one-stream-commercial-grid">
+        <div><span>أكواد محددة كمباعة</span><strong id="one-stream-sold">—</strong></div>
+        <div><span>قيمة المبيعات المدخلة بالسجل</span><strong id="one-stream-revenue">—</strong></div>
+        <div><span>عمليات نقل الأكواد</span><strong id="one-stream-transfers">—</strong></div>
+      </div>
+      <p class="one-footnote">هذه بيانات السجل اليدوي لأكواد STREAM فقط، وليست إثبات تحصيل عبر Geidea أو تسوية بنكية أو مبيعات متجر Xtream.</p>
+    </section>
+        <div class="one-stream-secret" id="one-stream-secret" hidden role="region" aria-label="الكود المسترجع">
+      <strong id="one-stream-secret-title">الكود المسترجع</strong>
+      <code id="one-stream-secret-code" dir="ltr"></code>
+      <small id="one-stream-secret-description">يبقى الكود ظاهرًا حتى تخفيه يدويًا أو تغادر الصفحة.</small>
+      <div class="one-stream-secret-actions">
+        <button type="button" id="one-stream-secret-copy">نسخ الكود</button>
+        <button type="button" id="one-stream-secret-xtream">استخراج Xtream من هذا الكود</button>
+        <button type="button" id="one-stream-secret-hide">إخفاء الكود</button>
+      </div>
+    </div>
+  </section>
+<dialog id="one-code-manager" class="one-code-manager" aria-labelledby="one-code-manager-title">
+  <div class="one-code-manager-heading">
+    <div><span class="one-kicker">BLOFY ONE · STREAM CODE MANAGER</span>
+      <h2 id="one-code-manager-title">إدارة كود الاشتراك</h2>
+      <p id="one-code-manager-subtitle">تعديل الكود المسجل دون الانتقال إلى لوحة أخرى</p></div>
+    <button type="button" id="one-code-manager-close" class="one-code-manager-close" aria-label="إغلاق إدارة الكود">×</button>
+  </div>
+  <div class="one-code-manager-summary" aria-label="بيانات الكود الحالية">
+    <div><small>العميل / الدفعة</small><strong id="one-code-manager-name">—</strong></div>
+    <div><small>الكود المخفي</small><strong id="one-code-manager-hint" dir="ltr">—</strong></div>
+    <div><small>الحالة</small><strong id="one-code-manager-state">—</strong></div>
+    <div><small>انتهاء الاشتراك</small><strong id="one-code-manager-expiry">—</strong></div>
+    <div><small>النوع</small><strong id="one-code-manager-channel">—</strong></div>
+    <div><small>البيع المسجّل</small><strong id="one-code-manager-sold">—</strong></div>
+  </div>
+  <div class="one-code-manager-tabs" role="group" aria-label="اختر عملية على الكود">
+    <button type="button" data-one-code-action="sell" id="one-code-action-sell">تسجيل بيع يدوي</button>
+    <button type="button" data-one-code-action="extend" id="one-code-action-extend">تمديد الاشتراك</button>
+    <button type="button" data-one-code-action="relogin" id="one-code-action-relogin">دخول بنفس الكود</button>
+    <button type="button" data-one-code-action="revoke" id="one-code-action-revoke">إلغاء غير مستخدم</button>
+  </div>
+  <section class="one-code-manager-detail" id="one-code-panel-sell" hidden aria-labelledby="one-code-sell-title">
+    <h3 id="one-code-sell-title">تسجيل عملية بيع يدوي في سجل الأكواد</h3>
+    <p>هذه العملية تحفظ اسم المشتري ورقم تواصله وسعر البيع في سجل BLOFY STREAM فقط. <strong>لا تُحصّل مبلغًا ولا تتحقق من Geidea.</strong> لا تستخدمها إلا بعد إتمام البيع خارج النظام.</p>
+    <form id="one-code-sell-form" autocomplete="off">
+      <label>اسم المشتري<input id="one-code-buyer-name" name="buyerName" maxlength="80" autocomplete="off" placeholder="اسم العميل" required></label>
+      <label>رقم الجوال<input id="one-code-buyer-phone" name="buyerPhone" type="tel" dir="ltr" maxlength="22" autocomplete="off" placeholder="05xxxxxxxx" required></label>
+      <label>السعر المسجّل بالريال<input id="one-code-sell-price" name="priceSar" type="number" min="0" max="100000" step="0.01" inputmode="decimal" placeholder="100.00" required></label>
+      <label>قناة البيع<select id="one-code-sell-channel" name="channel">
+        <option value="manual">بيع يدوي</option><option value="whatsapp">واتساب</option>
+        <option value="store_manual">متجر — تسجيل يدوي فقط</option></select></label>
+      <button type="submit" class="one-code-submit">تأكيد تسجيل البيع</button>
+    </form>
+  </section>
+  <section class="one-code-manager-detail" id="one-code-panel-extend" hidden aria-labelledby="one-code-extend-title">
+    <h3 id="one-code-extend-title">تمديد مدة الاشتراك المسجل</h3>
+    <p>التمديد يغيّر تاريخ انتهاء الكود وحساب Xtream المرتبط بالفعل. <strong>هذا التغيير لا يتراجع تلقائيًا، ولا تُسجل دفعة مالية.</strong></p>
+    <form id="one-code-extend-form" autocomplete="off">
+      <label>المدة الإضافية<select id="one-code-extend-days" name="days">
+        <option value="30">30 يومًا</option><option value="90">3 أشهر · 90 يومًا</option>
+        <option value="180">6 أشهر · 180 يومًا</option><option value="365">سنة · 365 يومًا</option>
+      </select></label>
+      <button type="submit" class="one-code-submit">تأكيد التمديد</button>
+    </form>
+  </section>
+  <section class="one-code-manager-detail" id="one-code-panel-relogin" hidden aria-labelledby="one-code-relogin-title">
+    <h3 id="one-code-relogin-title">السماح بالدخول مرة واحدة بنفس الكود</h3>
+    <p>يتيح استخدام الكود الأصلي على جهاز جديد <strong>لمرة واحدة خلال 10 دقائق</strong>. لا يجدد المدة ولا يغير الكود، لكنه يمنح وصولًا مؤقتًا؛ تحقق من مالك الاشتراك قبل التنفيذ.</p>
+    <button class="one-code-submit" id="one-code-relogin-submit" type="button">تأكيد السماح بالدخول</button>
+  </section>
+  <section class="one-code-manager-detail one-code-danger" id="one-code-panel-revoke" hidden aria-labelledby="one-code-revoke-title">
+    <h3 id="one-code-revoke-title">إلغاء كود غير مستخدم</h3>
+    <p>يلغي الكود الذي لم يُفعّل ولم يُسجّل عليه بيع. لن تستطيع إعادة تفعيله، وهذا لا يلغي اشتراكًا مُفعّلًا بالفعل.</p>
+    <label>للتأكيد اكتب كلمة <strong>إلغاء</strong><input id="one-code-revoke-confirm" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="إلغاء"></label>
+    <button class="one-code-submit one-code-danger-button" id="one-code-revoke-submit" type="button">إلغاء هذا الكود نهائيًا</button>
+  </section>
+  <p id="one-code-manager-status" class="one-code-manager-status" role="status" aria-live="polite">اختر إجراءً لعرض تفاصيله.</p>
+  <div class="one-code-manager-footer">
+    <small>تُحمّل أحدث بيانات الكود من السيرفر قبل تنفيذ العملية. عند انقطاع الاتصال بعد الإرسال، افحص سجل الأكواد قبل إعادة الطلب.</small>
+    <button type="button" id="one-code-manager-done">إغلاق</button>
+  </div>
+</dialog>
+<section class="one-overview one-ops" id="one-sources" aria-labelledby="one-sources-title">
+  <div class="one-section-heading"><div><span class="one-kicker">SOURCE OPERATIONS · LIVE DATABASE</span>
+    <h2 id="one-sources-title">المصادر والمزامنة</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-sources-refresh">↻ تحديث</button>
+      <a href="/sources-admin#xtream">إدارة المصدر المتقدمة ←</a></div></div>
+  <p class="one-footnote">يعرض بيانات مصادر Xtream الموجودة في BLOFY حاليًا دون كشف روابط Host الأصلية أو كلمات مرور المصادر. فحص الاتصال لا يعني أن جميع القنوات تعمل.</p>
+  <div class="one-ops-stats">
+    <article><span>مصادر مسجلة</span><strong id="one-src-total">—</strong></article>
+    <article><span>مصادر مفعّلة</span><strong id="one-src-active">—</strong></article>
+    <article><span>تنشر مكتبتها</span><strong id="one-src-published">—</strong></article>
+    <article><span>مصادر عليها تنبيهات</span><strong id="one-src-alerts">—</strong></article>
+  </div>
+  <label class="one-ops-search">بحث عن مصدر <input id="one-sources-search" type="search" autocomplete="off" maxlength="90" placeholder="اسم المصدر"></label>
+  <p id="one-sources-status" class="one-ops-status" role="status" aria-live="polite">جارٍ قراءة قائمة المصادر…</p>
+  <div class="one-ops-table-scroller" role="region" aria-label="قائمة المصادر" tabindex="0">
+    <table class="one-ops-table"><thead><tr><th>المصدر</th><th>الحالة</th><th>النشر</th><th>آخر مزامنة</th><th>فحص المصدر</th></tr></thead>
+      <tbody id="one-sources-rows"><tr><td colspan="5">جارٍ التحقق…</td></tr></tbody></table>
+  </div>
+</section>
+<section class="one-overview one-ops" id="one-storage" aria-labelledby="one-storage-title">
+  <div class="one-section-heading"><div><span class="one-kicker">CONTENT HUB · PRIVATE STORAGE</span>
+    <h2 id="one-storage-title">التخزين والتنزيلات والمواسم</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-storage-refresh">↻ تحديث</button>
+      <a href="/admin/content-hub">إدارة النقل المتقدمة ←</a></div></div>
+  <p class="one-footnote">فحص مباشر للتهيئة والتخزين والطابور الداخلي. لا يبدأ هذا القسم تنزيلًا أو نقلًا تلقائيًا، ولا يختبر ملكية حقوق المحتوى.</p>
+  <div class="one-ops-stats">
+    <article><span>قاعدة بيانات Content Hub</span><strong id="one-hub-database">—</strong></article>
+    <article><span>وصول التخزين الخاص</span><strong id="one-hub-bucket">—</strong></article>
+    <article><span>عملية نقل جارية</span><strong id="one-hub-pilot">—</strong></article>
+    <article><span>تشغيل النقل المجزأ</span><strong id="one-hub-batch">—</strong></article>
+  </div>
+  <p id="one-storage-status" class="one-ops-status" role="status" aria-live="polite">جارٍ قراءة حالة Content Hub…</p>
+  <h3 class="one-ops-subhead">آخر المهام المسجلة</h3>
+  <div id="one-hub-runs" class="one-ops-rows" aria-live="polite"></div>
+</section>
+<section class="one-overview one-ops" id="one-distributors" aria-labelledby="one-distributors-title">
+  <div class="one-section-heading"><div><span class="one-kicker">DISTRIBUTORS · STREAM SERVICE</span>
+    <h2 id="one-distributors-title">الموزعون وحسابات التوزيع</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-distributors-refresh">↻ تحديث</button>
+      <a href="/admin/control-center">إدارة الموزعين المتقدمة ←</a>
+      <a href="/distributor">دخول الموزع المستقل ←</a></div></div>
+  <p class="one-footnote">تعرض البيانات التي تسمح بها واجهة مشرف STREAM المحمية. لوحة الموزع لها صلاحيات دخول مستقلة؛ لا تُعرض كلمات المرور أو بيانات الدخول هنا.</p>
+  <div class="one-ops-stats one-ops-two">
+    <article><span>عدد الموزعين الظاهرين</span><strong id="one-dist-total">—</strong></article>
+    <article><span>موزعون مفعّلون</span><strong id="one-dist-active">—</strong></article>
+  </div>
+  <label class="one-ops-search">بحث عن موزع <input id="one-distributors-search" type="search" autocomplete="off" maxlength="90" placeholder="الاسم أو المستخدم"></label>
+  <p id="one-distributors-status" class="one-ops-status" role="status" aria-live="polite">جارٍ التحقق من سجل الموزعين…</p>
+  <div class="one-ops-table-scroller" role="region" aria-label="قائمة الموزعين" tabindex="0">
+    <table class="one-ops-table"><thead><tr><th>الموزع</th><th>اسم المستخدم</th><th>الحالة</th><th>الرصيد المتاح</th></tr></thead>
+    <tbody id="one-distributors-rows"><tr><td colspan="4">جارٍ التحقق…</td></tr></tbody></table>
+  </div>
+</section>
+<section class="one-overview one-ops" id="one-releases" aria-labelledby="one-releases-title">
+  <div class="one-section-heading"><div><span class="one-kicker">APP DISTRIBUTION · REAL RELEASE CATALOG</span>
+    <h2 id="one-releases-title">الإصدارات والتحديثات</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-releases-refresh">↻ تحديث</button>
+      <a href="/admin#releases">التحكم المتقدم بالإصدارات ←</a></div></div>
+  <p class="one-footnote">الإصدارات الموجودة في كتالوج BLOFY PLAYER الفعلي، وليست نسخًا مولّدة من اللوحة. تغيير الإصدار الأساسي يؤثر على روابط التحديث؛ يتم فقط بعد تأكيد صريح والتحقق الخارجي من توقيع APK.</p>
+  <div class="one-ops-stats one-ops-two">
+    <article><span>الإصدار الأساسي المسجّل</span><strong id="one-release-primary">—</strong></article>
+    <article><span>الإصدارات في الكتالوج</span><strong id="one-release-count">—</strong></article>
+  </div>
+  <p id="one-releases-status" class="one-ops-status" role="status" aria-live="polite">جارٍ قراءة سجل الإصدارات…</p>
+  <div class="one-ops-table-scroller" role="region" aria-label="الإصدارات المنشورة" tabindex="0">
+    <table class="one-ops-table"><thead><tr><th>اسم الإصدار</th><th>رقم البناء</th><th>القناة</th><th>الحالة</th><th>إدارة</th></tr></thead>
+    <tbody id="one-releases-rows"><tr><td colspan="5">جارٍ تحميل الإصدارات…</td></tr></tbody></table>
+  </div>
+  <p class="one-footnote">الاختيار «اعتماد أساسي» سيغيّر الإصدار الذي يعرضه الكتالوج؛ لا يرفع APK أو يثبت توقيعه. لا يؤثر في اشتراكات العملاء، لكن قد يؤثر في التحديثات المتاحة لهم.</p>
+</section>
   <section class="one-overview" aria-labelledby="health-title">
     <div class="one-section-heading">
       <div><span class="one-kicker">PRODUCTION HEALTH</span><h2 id="health-title">حالة المنصة الآن</h2></div>
@@ -84,16 +892,53 @@
     </div>
     <p class="one-footnote">هذه أعداد قاعدة البيانات وليست قنوات أو مشاهدين يعملون الآن. لا تُعدّ تصريحًا بإعادة توزيع المحتوى.</p>
   </section>
-  <section class="one-overview" aria-labelledby="actions-title">
-    <div class="one-section-heading"><div><span class="one-kicker">OPERATIONS</span><h2 id="actions-title">مراكز الإدارة</h2></div><span class="one-note">الأنظمة والروابط الحالية دون ترحيل</span></div>
-    <div class="one-cards">
-      <a class="one-module" href="/sources-admin#xtream"><span class="one-icon">◈</span><span class="one-module-text"><strong>BLOFY STREAM</strong><small>Xtream · M3U · اختبار المصادر · المشتركين</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#codes"><span class="one-icon">⌁</span><span class="one-module-text"><strong>أكواد الاشتراك</strong><small>إنشاء الكود، ربط المصدر، التجديد والإلغاء</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#devices"><span class="one-icon">▣</span><span class="one-module-text"><strong>تفعيل BLOFY PLAYER</strong><small>إدارة الأجهزة، أرقام التواصل وصلاحيات التفعيل</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/sources-admin#catalog"><span class="one-icon">▦</span><span class="one-module-text"><strong>مكتبة القنوات والأفلام</strong><small>المحتوى المفهرس والفئات وأدوات الإدارة</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#releases"><span class="one-icon">⇩</span><span class="one-module-text"><strong>الإصدارات والتحديثات</strong><small>نسخ التطبيق المعتمدة وتحديث العملاء</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#support"><span class="one-icon">◌</span><span class="one-module-text"><strong>الدعم والعملاء</strong><small>الطلبات، البحث عن الأجهزة وسجل العملاء</small></span><span class="one-arrow">↖</span></a>
+  <section class="one-overview" aria-labelledby="readiness-title">
+    <div class="one-section-heading"><div><span class="one-kicker">INTEGRATED OPERATIONS</span>
+      <h2 id="readiness-title">جاهزية وحدات الإدارة</h2></div>
+      <a href="/admin/control-center/health">التشخيص التفصيلي ←</a>
     </div>
+    <div class="one-readiness-banner" id="one-readiness-summary" role="status" aria-live="polite">جارٍ فحص اتصال وحدات STREAM القائمة…</div>
+    <div class="one-readiness-grid" id="one-readiness-list" aria-live="polite"></div>
+    <p class="one-footnote">هذه قراءة جاهزية واجهات الإدارة، وليست إثبات تشغيل القنوات أو صلاحية اشتراكات العملاء أو نجاح نقل الملفات.</p>
+  </section>
+  <section class="one-overview" aria-labelledby="actions-title">
+    <div class="one-section-heading"><div><span class="one-kicker">OPERATIONS</span><h2 id="actions-title">مهام المبيعات والعملاء</h2></div><span class="one-note">بحث فوري في الأدوات</span></div>
+    <div class="one-module-search"><label for="one-module-filter">ابحث عن قسم أو مهمة</label>
+      <input id="one-module-filter" type="search" autocomplete="off" placeholder="مثلاً: الأكواد، العملاء، الموزعين، الطلبات" aria-controls="one-module-list">
+      <small id="one-module-count" aria-live="polite"></small>
+    </div>
+    <div class="one-cards" id="one-module-list">
+       <a class="one-module" href="#one-issue"><span class="one-icon">＋</span><span class="one-module-text"><strong>إصدار الأكواد</strong><small>إنشاء اشتراكات جديدة وتحديد المدة والعدد</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#customers"><span class="one-icon">♧</span><span class="one-module-text"><strong>العملاء</strong><small>البحث، بيانات التواصل، والاشتراكات</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#stream-management"><span class="one-icon">▤</span><span class="one-module-text"><strong>حسابات Xtream وأكواد STREAM</strong><small>إدارة الحسابات والأكواد والتجديد</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#legacy-xtream"><span class="one-icon">⇄</span><span class="one-module-text"><strong>استرجاع بيانات Xtream</strong><small>الاشتراكات الجديدة والقديمة</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-distributors"><span class="one-icon">♙</span><span class="one-module-text"><strong>الموزعون</strong><small>الحسابات والأرصدة</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-store-sales"><span class="one-icon">▣</span><span class="one-module-text"><strong>طلبات المتجر</strong><small>متابعة الطلبات والمبيعات</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="/admin/store-inventory"><span class="one-icon">▤</span><span class="one-module-text"><strong>مخزون الاشتراكات</strong><small>إدارة منتجات المتجر والأكواد</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-renewal-ops"><span class="one-icon">◈</span><span class="one-module-text"><strong>التجديدات</strong><small>المدفوعات وتجديد اشتراكات العملاء</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="/admin/visitors"><span class="one-icon">◫</span><span class="one-module-text"><strong>تسويق المتجر</strong><small>زيارات الموقع ومصادر العملاء</small></span><span class="one-arrow">↖</span></a>
+    </div>
+  </section>
+<section class="one-overview one-sales" id="one-sales" aria-labelledby="one-sales-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">RECORDED ORDERS · BLOFY PLAYER</span>
+        <h2 id="one-sales-title">الطلبات والمدفوعات المسجلة</h2></div>
+      <button id="one-sales-refresh" type="button" class="one-sales-refresh">↻ تحديث البيانات</button>
+    </div>
+    <p class="one-footnote">هذه أرقام طلبات تفعيل BLOFY PLAYER المسجلة في قاعدة بيانات الموقع فقط؛ لا تشمل مبيعات BLOFY STREAM أو Xtream أو اتفاقات واتساب. لا تعني المبالغ تسوية من البنك أو صافي الربح.</p>
+    <div class="one-sales-metrics" aria-label="ملخص الطلبات المدفوعة">
+      <article><span>قيمة الطلبات المسجلة مدفوعة</span><strong id="one-sales-gross">—</strong><small>بالريال السعودي · ليست صافي الإيراد</small></article>
+      <article><span>عدد الطلبات المدفوعة</span><strong id="one-sales-paid">—</strong><small>حسب الحالة المحفوظة في الموقع</small></article>
+      <article><span>قيمة الطلبات المدفوعة خلال 30 يومًا</span><strong id="one-sales-30d">—</strong><small>آخر 30 يومًا، وفق تاريخ الدفع المحفوظ</small></article>
+      <article><span>الطلبات بانتظار الدفع</span><strong id="one-sales-pending">—</strong><small>لا تُحسب ضمن المدفوع</small></article>
+    </div>
+    <p class="one-sales-status" id="one-sales-status" role="status" aria-live="polite">جارٍ طلب الملخص المالي الموثق من قاعدة البيانات…</p>
+    <div class="one-sales-footnotes">
+      <span>طلبات مرتجعة: <strong id="one-sales-refunded">—</strong></span>
+      <span>طلبات فاشلة: <strong id="one-sales-failed">—</strong></span>
+      <span>طلبات ملغاة: <strong id="one-sales-cancelled">—</strong></span>
+    </div>
+    <div class="one-sales-alert" role="note">مبيعات اشتراكات STREAM وXtream التي تُنجز عبر واتساب غير مرتبطة بتقارير هذه القاعدة. لا نعرض لها أرقامًا أو مبالغ حتى يوجد سجل طلبات ودفع موثق مستقل.</div>
   </section>
   <section class="one-lab" aria-labelledby="lab-title">
     <div><span class="one-kicker">MEDIA LAB · OPERATOR ONLY</span><h2 id="lab-title">تجربة محرك البث المستقل</h2>
@@ -101,7 +946,7 @@
     </div>
     <div class="one-lab-actions"><a class="one-lab-link" href="/one/media-lab">▶ افتح مشغل البث التجريبي</a><button id="one-smoke" type="button">اختبار مقطع تجريبي</button><output id="one-smoke-result" role="status" aria-live="polite">لم يبدأ الاختبار</output></div>
   </section>
-  <footer class="one-footer"><span>BLOFY ONE · CONTROL PLANE</span><span>الموقع والتفعيلات محفوظة. محرك البث لم يُحوّل إلى العملاء.</span></footer>
+  <footer class="one-footer"><span>BLOFY ONE · SALES & CUSTOMERS</span><span>الأكواد والعملاء والطلبات هنا؛ المصادر والبث والتخزين والتحديثات في الإدارة التقنية.</span></footer>
 </main>
 </div>
 </body>

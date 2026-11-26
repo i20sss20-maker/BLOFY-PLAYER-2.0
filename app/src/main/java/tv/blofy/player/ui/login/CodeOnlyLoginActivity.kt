@@ -142,6 +142,15 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             setPadding(dp(6), dp(20), dp(6), dp(4))
         }
         panel.addView(statusView)
+        if (tv.blofy.player.BuildConfig.BUILD_TYPE == "codeDemo") {
+            panel.addView(Button(this).apply {
+                text = "BLOFY CONNECT • تجربة اشتراك خارجي"
+                isAllCaps = false
+                setOnClickListener {
+                    startActivity(Intent(this@CodeOnlyLoginActivity, ExternalStreamConnectActivity::class.java))
+                }
+            })
+        }
         codeField.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 activateButton.performClick(); true

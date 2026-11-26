@@ -32,6 +32,6 @@ test('no phantom sync queued for a paused or removed source',()=>{
   const handler=server.slice(server.indexOf("if (action === 'sync' && req.method === 'POST')"),server.indexOf("const categoryMatch = url.pathname.match"));
   assert.match(handler,/if\(!source\)return json\(res,404/);
   assert.match(handler,/if\(!source\.enabled\)return json\(res,409/);
-  assert.match(handler,/const job=startSync\(id,selected\)/);
+  assert.match(handler,/const job=startSync\(id,selected,\{confirmProviderPackage\}\)/);
   assert.match(handler,/queued:job\.queued,queuePosition:job\.position/);
 });

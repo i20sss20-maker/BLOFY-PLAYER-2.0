@@ -1,0 +1,261 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>BLOFY ONE | مخزون الاشتراكات</title><link rel="icon" href="/blofy-logo.png"><link rel="stylesheet" href="/admin/store-inventory/style.css">
+<link rel="stylesheet" href="/store/visual.css?v=20261119-2"><script src="/admin/store-inventory/app.js?v=3" defer></script></head><body data-blofy-store-admin="1">
+<header><a href="/one" class="logo"><img src="/blofy-logo.png" alt=""> BLOFY <b>ONE</b></a><nav><a href="/one">لوحة الإدارة</a><a href="/admin/visitors">إحصائيات الزوار</a><a href="/admin">إدارة العملاء</a><a href="/" target="_blank" rel="noopener">زيارة المتجر</a></nav></header>
+<main><div class="intro"><span>STORE OPERATIONS</span><h1>إدارة متجر BLOFY</h1><p>تحكّم في البنرات والألوان والنبذة ومنتجات المتجر، وراجع الطلبات والمبيعات والأكواد والكوبونات من مكان واحد.</p></div>
+<section class="showcase-admin" id="branding-admin" aria-labelledby="branding-heading">
+ <div class="intro"><span>HOMEPAGE & BRAND</span><h2 id="branding-heading">تصميم الصفحة الرئيسية والبنرات</h2>
+  <p>غيّر النصوص وصورة البانر والنبذة ورقم التواصل وهوية الألوان، ثم اضغط حفظ. تظهر التغييرات في المتجر دون تعديل ملفات أو أسعار الاشتراكات.</p></div>
+ <form id="branding-form" class="panel branding-panel">
+  <div class="branding-grid">
+   <div><label for="branding-announcement">الشريط العلوي (إعلان قصير)</label><input id="branding-announcement" maxlength="150" required></div>
+   <div><label for="branding-theme">ألوان المتجر</label><select id="branding-theme"><option value="violet">بنفسجي BLOFY وأبيض</option><option value="ocean">أزرق وأبيض</option><option value="rose">وردي وأبيض</option></select></div>
+   <div><label for="branding-heroTitle">عنوان البانر الرئيسي</label><input id="branding-heroTitle" maxlength="55" required></div>
+   <div><label for="branding-heroHighlight">العبارة المميزة في البانر</label><input id="branding-heroHighlight" maxlength="65" required></div>
+   <div class="branding-full"><label for="branding-heroDescription">وصف البانر</label><textarea id="branding-heroDescription" maxlength="250" rows="2" required></textarea></div>
+   <div class="branding-full"><label for="branding-heroImage">صورة البانر الرئيسي (رابط HTTPS أو الصورة الحالية)</label>
+    <input id="branding-heroImage" maxlength="700" dir="ltr" required placeholder="/store/media/strong8k.jpg"><small>لأفضل نتيجة استخدم صورة عريضة بنسبة 16:9 وبجودة واضحة.</small></div>
+   <div class="branding-full"><label for="branding-aboutTitle">عنوان نبذة «من نحن»</label><input id="branding-aboutTitle" maxlength="90" required></div>
+   <div class="branding-full"><label for="branding-aboutDescription">نبذة تعريفية عن BLOFY</label><textarea id="branding-aboutDescription" maxlength="850" rows="4" required></textarea></div>
+   <div><label for="branding-whatsapp">رقم واتساب بصيغة دولية (9665...)</label><input id="branding-whatsapp" dir="ltr" pattern="9665[0-9]{8}" maxlength="12" required></div>
+   <div><label for="branding-xHandle">اسم حساب X بدون @</label><input id="branding-xHandle" dir="ltr" pattern="[A-Za-z0-9_]{1,15}" maxlength="15" required></div>
+  </div>
+  <div class="branding-actions"><button type="submit" id="branding-save">حفظ تصميم المتجر</button>
+   <a href="/" target="_blank" rel="noopener noreferrer">فتح الصفحة الرئيسية ↗</a></div>
+  <output id="branding-status" role="status" aria-live="polite"></output>
+  <small>التعديلات تخص المحتوى والهوية البصرية فقط. تسعير الاشتراكات ومدفوعات جيديا محميان بإعدادات مستقلة. لا تضف شعارات شركات غير مرتبطة بالمتجر.</small>
+ </form>
+</section>
+<section class="admin-merchandising" id="merchandising-admin" aria-labelledby="merchandising-heading">
+  <div class="intro"><span>VISUAL MERCHANDISING</span><h2 id="merchandising-heading">إدارة البنرات وأقسام الواجهة</h2>
+   <p>تحكم في البانرين الثاني والثالث وصورهما وروابطهما، وحدد الأقسام الظاهرة للزوار. البانر الأول موجود في إعدادات هوية المتجر أعلاه.</p></div>
+  <form id="merchandising-form" class="panel">
+   <div class="merchandising-layout">
+    <fieldset class="merchandising-banner" data-editor-slide="0">
+     <legend>البانر الثاني — العرض الترويجي</legend>
+     <label for="merch-slide-0-title">عنوان البانر</label><input id="merch-slide-0-title" type="text" maxlength="55" required>
+     <label for="merch-slide-0-highlight">عبارة مميزة</label><input id="merch-slide-0-highlight" type="text" maxlength="55" required>
+     <label for="merch-slide-0-description">الوصف</label><textarea id="merch-slide-0-description" maxlength="240" rows="2" required></textarea>
+     <label for="merch-slide-0-imageUrl">صورة البانر HTTPS أو صورة من المتجر</label>
+     <input id="merch-slide-0-imageUrl" type="text" maxlength="700" dir="ltr" required>
+     <label for="merch-slide-0-cta">نص الزر</label><input id="merch-slide-0-cta" maxlength="40" required>
+     <label for="merch-slide-0-href">وجهة الزر</label><select id="merch-slide-0-href">
+      <option value="/store/offers">صفحة العروض</option><option value="/#products">الاشتراكات</option>
+      <option value="/store/trial">التجربة</option><option value="/store/cart">السلة</option>
+      <option value="/products/stream">منتج ستريم</option><option value="/products/xtream">منتج بلاير</option>
+      <option value="/store/contact">مركز الدعم</option><option value="/#categories">التصنيفات</option>
+     </select>
+     <label class="merch-checkbox" for="merch-slide-0-active"><input id="merch-slide-0-active" type="checkbox"> إظهار هذا البانر</label>
+    </fieldset>
+    <fieldset class="merchandising-banner" data-editor-slide="1">
+     <legend>البانر الثالث — تعريف بالمنتجات</legend>
+     <label for="merch-slide-1-title">عنوان البانر</label><input id="merch-slide-1-title" type="text" maxlength="55" required>
+     <label for="merch-slide-1-highlight">عبارة مميزة</label><input id="merch-slide-1-highlight" type="text" maxlength="55" required>
+     <label for="merch-slide-1-description">الوصف</label><textarea id="merch-slide-1-description" maxlength="240" rows="2" required></textarea>
+     <label for="merch-slide-1-imageUrl">صورة البانر HTTPS أو صورة من المتجر</label>
+     <input id="merch-slide-1-imageUrl" type="text" maxlength="700" dir="ltr" required>
+     <label for="merch-slide-1-cta">نص الزر</label><input id="merch-slide-1-cta" maxlength="40" required>
+     <label for="merch-slide-1-href">وجهة الزر</label><select id="merch-slide-1-href">
+      <option value="/#products">الاشتراكات</option><option value="/store/offers">صفحة العروض</option>
+      <option value="/store/trial">التجربة</option><option value="/store/cart">السلة</option>
+      <option value="/products/stream">منتج ستريم</option><option value="/products/xtream">منتج بلاير</option>
+      <option value="/store/contact">مركز الدعم</option><option value="/#categories">التصنيفات</option>
+     </select>
+     <label class="merch-checkbox" for="merch-slide-1-active"><input id="merch-slide-1-active" type="checkbox"> إظهار هذا البانر</label>
+    </fieldset>
+   </div>
+   <fieldset class="merch-visibility">
+    <legend>الأقسام الظاهرة في الصفحة الرئيسية</legend>
+    <div class="merch-visibility-grid">
+     <label for="merch-section-categories"><input id="merch-section-categories" type="checkbox"> التصنيفات</label>
+     <label for="merch-section-offers"><input id="merch-section-offers" type="checkbox"> عرض الاشتراكين</label>
+     <label for="merch-section-featured"><input id="merch-section-featured" type="checkbox"> منتجات الإدارة</label>
+     <label for="merch-section-about"><input id="merch-section-about" type="checkbox"> نبذة عن BLOFY</label>
+     <label for="merch-section-questions"><input id="merch-section-questions" type="checkbox"> الأسئلة الشائعة</label>
+    </div>
+    <small>تبقى باقات الاشتراك الأساسية والسلة متاحتين دائمًا. إخفاء العرض من الصفحة لا يغير أسعار المنتجات أو الطلبات السابقة.</small>
+   </fieldset>
+   <div class="merch-actions"><button type="submit" id="merch-save">حفظ البنرات والأقسام</button>
+    <a href="/" target="_blank" rel="noopener noreferrer">معاينة المتجر ↗</a></div>
+   <output id="merch-status" role="status" aria-live="polite"></output>
+  </form>
+</section>
+<section class="showcase-admin" id="showcase-admin" aria-labelledby="showcase-heading">
+  <div class="intro"><span>PRODUCT MANAGER</span><h2 id="showcase-heading">إدارة منتجات المتجر</h2>
+    <p>أضف المنتجات والصور والتصنيفات، وعدّل ظهورها وترتيبها. الاشتراكات التي تختار لها كودًا معتمدًا تُباع بالسعر المحمي في خادم BLOFY؛ المنتجات الأخرى تُعرض للاستفسار فقط حتى يُجهز نظام تسليمها.</p>
+  </div>
+  <div class="grid">
+    <form id="showcase-form" class="panel">
+      <h2 id="showcase-form-title">إضافة منتج</h2>
+      <input type="hidden" id="showcase-id">
+      <label for="showcase-name">اسم المنتج</label>
+      <input id="showcase-name" type="text" maxlength="110" required placeholder="اسم المنتج أو الباقة">
+      <label for="showcase-category">التصنيف</label>
+      <input id="showcase-category" maxlength="50" value="المنتجات" placeholder="مثل: التطبيقات، اشتراكات، عروض">
+      <label for="showcase-description">وصف المنتج</label>
+      <textarea id="showcase-description" rows="3" maxlength="1000" placeholder="وصف واضح لما يحصل عليه العميل"></textarea>
+      <label for="showcase-image">رابط الصورة (HTTPS أو صورة موجودة في الموقع)</label>
+      <input id="showcase-image" type="text" maxlength="700" placeholder="https://... أو /store/media/player.jpg" dir="ltr">
+      <label for="showcase-sku">طريقة البيع والتسليم</label>
+      <select id="showcase-sku">
+        <option value="">استفسار فقط — لا يوجد دفع لهذا المنتج</option>
+        <option value="stream-1m">BLOFY STREAM — شهر (25 ريال)</option>
+        <option value="stream-3m">BLOFY STREAM — 3 أشهر (50 ريال)</option>
+        <option value="stream-6m">BLOFY STREAM — 6 أشهر (70 ريال)</option>
+        <option value="stream-1y">BLOFY STREAM — سنة (120 ريال)</option>
+        <option value="xtream-1m">Xtream BLOFY — شهر (25 ريال)</option>
+        <option value="xtream-3m">Xtream BLOFY — 3 أشهر (50 ريال)</option>
+        <option value="xtream-6m">Xtream BLOFY — 6 أشهر (70 ريال)</option>
+        <option value="xtream-1y">Xtream BLOFY — سنة (120 ريال)</option>
+        <option value="bundle-2y">عرض اشتراكين سنويين (200 ريال)</option>
+      </select>
+      <label for="showcase-order">ترتيب الظهور (الأقل أولًا)</label>
+      <input id="showcase-order" type="number" min="0" max="9999" value="0">
+      <label class="showcase-check" for="showcase-active"><input type="checkbox" id="showcase-active"> نشر المنتج في الموقع</label>
+      <div class="showcase-actions"><button id="showcase-save" type="submit">حفظ المنتج</button>
+      <button id="showcase-cancel" type="button" class="btn-outline">إلغاء التعديل</button></div>
+      <output id="showcase-message" role="status" aria-live="polite"></output>
+    </form>
+    <div class="panel">
+      <div class="card-head"><h2>المنتجات المضافة</h2><button id="showcase-reload" type="button" class="btn-outline">تحديث القائمة</button></div>
+      <div id="showcase-list" class="showcase-list" aria-live="polite"><p>جارٍ تحميل المنتجات...</p></div>
+      <small>يمكنك إخفاء المنتج فورًا. إخفاء الصفحة لا يلغي أي طلب مدفوع أو أكواد أُصدرت سابقًا.</small>
+    </div>
+  </div>
+</section>
+<section class="stats" id="stats" aria-label="مخزون المتجر"><div class="notice">جارٍ تحميل بيانات المخزون...</div></section>
+<section class="panel" id="stock-warning" role="status" aria-live="polite">جارٍ فحص تنبيهات المخزون...</section>
+<section class="panel stock-refill" id="stock-refill" aria-label="تعبئة مخزون جميع الباقات المدفوعة">
+ <h2>⚡ تعبئة شاملة لمخزون STREAM وXtream</h2>
+ <p>8 باقات مستقلة: شهر، 3 أشهر، 6 أشهر، سنة × النوعين. يضيف النظام الأكواد الناقصة فقط ولا يمس أكواد العملاء. تبدأ المدة عند أول تفعيل ناجح.</p>
+ <label for="fill-all-target">الرصيد المطلوب لكل باقة</label>
+ <select id="fill-all-target"><option value="20" selected>20 كودًا</option><option value="30">30 كودًا</option><option value="50">50 كودًا</option><option value="10">10 أكواد</option></select>
+ <button id="fill-all" type="button">＋ تعبئة مخزون الباقات الثماني</button>
+ <output id="fill-all-status" role="status" aria-live="polite">التعبئة تتم عند التأكيد فقط؛ الأكواد تُحفظ مشفّرة.</output>
+</section>
+<section class="trial-stock-admin panel" id="trial-stock-admin" aria-labelledby="trial-stock-title">
+ <div class="intro"><span>ONE-DAY TRIAL INVENTORY</span><h2 id="trial-stock-title">مخزون أكواد التجربة — يوم واحد</h2>
+  <p>مخزون منفصل عن الأكواد المدفوعة: أنشئ أكواد STREAM أو Xtream لمدة يوم واحد. يبدأ اليوم عند أول تفعيل ناجح، وليس عند إنشاء الكود أو تسليمه.</p></div>
+ <div id="trial-stock-counts" class="stats" aria-live="polite"><div class="notice">جارٍ تحميل مخزون التجارب...</div></div>
+ <div class="trial-stock-grid">
+  <div>
+   <label for="trial-stock-type">نوع التجربة</label>
+   <select id="trial-stock-type"><option value="trial-stream-1d">BLOFY STREAM — يوم واحد</option><option value="trial-xtream-1d">Xtream — يوم واحد</option></select>
+  </div>
+  <div><label for="trial-stock-quantity">عدد الأكواد</label><input id="trial-stock-quantity" type="number" min="1" max="30" value="10" inputmode="numeric"></div>
+  <button type="button" id="trial-stock-generate">إنشاء وإضافة للمخزون</button>
+  <button type="button" id="trial-stock-refresh" class="btn-outline">↻ تحديث</button>
+ </div>
+ <output id="trial-stock-status" role="status" aria-live="polite"></output>
+ <div class="trial-stock-links"><a href="/store/trial" target="_blank" rel="noopener noreferrer">↗ صفحة طلب التجربة للعميل</a>
+  <small>كل حساب عميل موثّق بالبريد يستلم تجربة واحدة فقط من أحد النوعين. تفعيل التسليم المباشر يتم من إعدادات الخادم بعد الاختبار.</small></div>
+ <h3>آخر التجارب المسلّمة</h3>
+ <div id="trial-stock-recent" aria-live="polite" class="trial-stock-recent"><p>لم تُحمّل السجلات بعد.</p></div>
+ <p class="footnote">لا تُعرض الأكواد السرية في قائمة الإدارة ولا يُخلط هذا المخزون بالمخزون المدفوع. يمكن للعميل استرجاع تجربته عبر حسابه.</p>
+</section>
+<section class="grid">
+<article class="panel"><h2>إصدار دفعة جديدة</h2><p>توليد أكواد أصلية من خادم BLOFY وتسجيلها تلقائيًا بالمخزون. الكود محفوظ مشفرًا ولن يظهر ضمن القوائم العامة.</p>
+<label for="generate-sku">نوع الاشتراك</label><select id="generate-sku" class="sku"></select><label for="quantity">كم كود تبي تضيف؟</label><input id="quantity" type="number" min="1" max="100" value="10" inputmode="numeric">
+<button id="generate" type="button">إنشاء وإضافة للمخزون</button><small>الحد الأعلى 100 كود للدفعة. لا يتم التفعيل أو بدء المدة عند الإنشاء.</small></article>
+<article class="panel"><h2>رفع أكواد موجودة دفعة واحدة</h2><p>الصق الأكواد الأصلية الصادرة مسبقًا من نظام BLOFY، كودًا واحدًا في كل سطر. يتم رفض أي كود مستخدم أو من مصدر مختلف أو بمدة غير مطابقة.</p>
+<label for="import-sku">نوع الاشتراك</label><select id="import-sku" class="sku"></select><label for="bulk">الأكواد</label><textarea id="bulk" rows="8" placeholder="12345678&#10;87654321" spellcheck="false"></textarea>
+<button id="import" type="button">تحقق وارفع الأكواد</button><small>حد 100 كود لكل طلب. الاستيراد كله يُرفض إذا احتوى على كود غير مؤهل.</small></article>
+</section><output id="notice" role="status" aria-live="polite"></output>
+<section class="admin-orders" aria-labelledby="orders-heading">
+<div class="intro"><span>ORDER MANAGEMENT</span><h2 id="orders-heading">طلبات عملاء BLOFY</h2>
+<p>كل عملية شراء تحصل على رقم مستقل. هنا نراجع الحالات والمبالغ وتفاصيل السلة، بدون إظهار الأكواد السرية أو بيانات البطاقة.</p></div>
+<div class="order-filter"><label for="order-filter">حالة الطلب</label><select id="order-filter"><option value="all">جميع الطلبات</option><option value="paid">مدفوعة</option><option value="pending">قيد الدفع</option><option value="failed">فاشلة</option><option value="cancelled">ملغاة</option></select><button id="order-refresh" type="button">تحديث الطلبات</button></div>
+<div id="admin-orders" class="orders-table" role="table" aria-label="آخر 50 طلبًا"><p>جارٍ تحميل قائمة الطلبات...</p></div>
+<p class="footnote">لعرض الأكواد يجب التحقق من ملكية الطلب من رابط العميل الخاص، ولا يتم إظهار مفاتيح الوصول في لوحة الملخص. السجل يعرض آخر 50 طلبًا فقط.</p>
+</section>
+<section class="store-pro-hub" id="store-pro-hub" aria-labelledby="store-pro-title">
+ <div class="intro"><span>BLOFY STORE PRO</span><h2 id="store-pro-title">مركز تشغيل المتجر</h2>
+ <p>اختصارات للخدمات الحالية وتقارير جديدة. شغّل التجديد والمبيعات والموزعين من أدواتهم المصرح بها، بدون ربط أكواد العملاء بحملات تسويق غير معتمدة.</p></div>
+ <div class="store-pro-links">
+  <a href="#commercial-reports"><b>◫ تقارير المبيعات</b><small>الإيرادات والطلبات المدفوعة</small></a>
+  <a href="#retention-insights"><b>↻ التجديد والاحتفاظ</b><small>السلات المحفوظة والتنبيهات</small></a>
+  <a href="#merchandising-admin"><b>✧ البنرات والعروض</b><small>تحكم بأقسام الصفحة الرئيسية</small></a>
+  <a href="#campaign-hub"><b>◎ الحملات التسويقية</b><small>روابط تتبع وكوبونات وتقارير</small></a>
+  <a href="#showcase-admin"><b>▣ إدارة المنتجات</b><small>الإضافة والنشر والإخفاء</small></a>
+  <a href="/one#one-distributors" target="_blank" rel="noopener noreferrer"><b>♧ إدارة الموزعين ↗</b><small>قسم الموزعين في BLOFY ONE</small></a>
+  <a href="/admin/visitors" target="_blank" rel="noopener noreferrer"><b>↗ إحصاءات الزيارات</b><small>مصادر الحركة والأداء</small></a>
+  <a href="/store/assistant" target="_blank" rel="noopener noreferrer"><b>✦ مساعد المتجر ↗</b><small>إرشاد العملاء إلى الباقات والطلبات</small></a>
+  <a href="/admin" target="_blank" rel="noopener noreferrer"><b>♙ إدارة العملاء ↗</b><small>الحسابات والبيانات المخوّلة</small></a>
+ </div>
+</section>
+<section class="retention-insights" id="retention-insights" aria-labelledby="retention-title">
+ <div class="intro"><span>CUSTOMER RETENTION</span><h2 id="retention-title">العملاء والتجديد والسلات المحفوظة</h2>
+ <p>إحصاءات مجمعة، بدون كشف بريد العملاء أو أكوادهم. السلة المحفوظة لا تعني بالضرورة أنها مهجورة، ولا يتم إرسال رسائل تسويقية تلقائيًا دون موافقة العميل.</p></div>
+ <div class="panel">
+  <div class="retention-head"><h3>آخر 30 يومًا</h3><button id="retention-refresh" type="button" class="btn-outline">تحديث البيانات</button></div>
+  <div id="retention-metrics" class="retention-metrics" aria-live="polite"><p>جارٍ جلب إحصاءات العملاء...</p></div>
+  <output id="retention-status" role="status" aria-live="polite"></output>
+ </div>
+</section>
+<section class="commercial-reports" id="commercial-reports" aria-labelledby="commercial-heading">
+  <div class="intro"><span>BUSINESS INSIGHTS</span><h2 id="commercial-heading">لوحة أداء المتجر</h2>
+   <p>تقارير من سجل الطلبات الحقيقي فقط. الإيراد يُحتسب للطلبات المدفوعة المؤكدة، ولا نعدّ الطلبات المعلقة دخلًا. نسبة الإتمام تخص الطلبات المنشأة، وليست نسبة تحول زيارات الموقع.</p></div>
+  <div class="panel">
+   <div class="report-toolbar">
+     <label for="commercial-period">الفترة <select id="commercial-period">
+       <option value="7">آخر 7 أيام</option><option value="30" selected>آخر 30 يومًا</option><option value="90">آخر 90 يومًا</option>
+     </select></label>
+     <button type="button" id="commercial-refresh" class="btn-outline">تحديث التقرير</button>
+     <button type="button" id="commercial-export" class="btn-outline" disabled>تصدير ملخص CSV</button>
+   </div>
+   <div id="commercial-metrics" class="commercial-metrics" aria-live="polite"><p>جارٍ قراءة بيانات المبيعات...</p></div>
+   <div class="report-chart-head"><h3>الإيراد المؤكد يوميًا</h3><span>ريال سعودي</span></div>
+   <div id="commercial-trend" class="commercial-trend" aria-label="رسم بياني لإيراد الطلبات المدفوعة يوميًا" role="img"></div>
+   <h3>توزيع الطلبات المدفوعة حسب نوع الطلب</h3>
+   <p class="report-disclaimer">الطلبات متعددة المنتجات تظهر تحت «سلة متعددة المنتجات»، بدون تخمين توزيع إيرادها على باقات منفردة.</p>
+   <div id="commercial-products" class="commercial-product-table"></div>
+   <output id="commercial-notice" role="status" aria-live="polite"></output>
+  </div>
+</section>
+<section class="admin-sales" aria-labelledby="sales-heading">
+ <div class="intro"><span>STORE ANALYTICS</span><h2 id="sales-heading">مبيعات BLOFY والعروض</h2><p>إحصاءات الطلبات لآخر 90 يومًا؛ تظهر عمليات الدفع المؤكدة فقط ضمن الإيرادات، بما فيها عرض اشتراكين بـ200 ريال.</p></div>
+ <div class="sales-highlights" id="sales-highlights"><div class="notice">جارٍ تحميل إحصاءات المبيعات...</div></div>
+ <div class="sales-breakdown" id="sales-breakdown"></div>
+</section>
+<section class="campaign-hub" id="campaign-hub" aria-labelledby="campaign-hub-title">
+ <div class="intro"><span>MARKETING PERFORMANCE</span><h2 id="campaign-hub-title">مركز الحملات التسويقية</h2>
+ <p>اصنع رابط حملة قابلًا للنسخ، وراجع الزيارات المرتبطة به من إحصاءات الموقع التي وافق أصحابها على القياس. هذه التقارير لا تنسب إيرادات الدفع للحملة بدون ربط موثوق، ولا ترسل رسائل تلقائيًا.</p></div>
+ <div class="campaign-hub-grid">
+ <form id="campaign-link-form" class="panel" autocomplete="off">
+ <h3>إنشاء رابط حملة</h3>
+ <label for="campaign-name">اسم الحملة بالإنجليزية</label><input id="campaign-name" type="text" required maxlength="48" minlength="3" placeholder="winter_blofy" pattern="[a-z0-9_-]{3,48}" dir="ltr" aria-describedby="campaign-name-hint">
+ <small id="campaign-name-hint">حروف إنجليزية صغيرة أو أرقام أو _ أو - فقط؛ لتتبع المصدر دون بيانات عملاء.</small>
+ <label for="campaign-platform">منصة النشر</label>
+ <select id="campaign-platform"><option value="x">منصة X</option><option value="instagram">إنستغرام</option><option value="tiktok">تيك توك</option><option value="whatsapp">واتساب</option><option value="referral">شريك أو رابط مباشر</option></select>
+ <label for="campaign-destination">صفحة الحملة</label>
+ <select id="campaign-destination"><option value="/">الرئيسية</option><option value="/#products">الاشتراكات</option><option value="/store/offers">عرض الاشتراكين</option><option value="/products/stream">باقات STREAM</option><option value="/products/xtream">باقات Xtream</option><option value="/store/assistant">مساعد التسوق</option></select>
+ <label for="campaign-coupon">كوبون خصم فعّال (اختياري)</label><select id="campaign-coupon"><option value="">بدون كوبون</option></select>
+ <small>يعرض النظام الكوبونات الفعالة فقط بعد تحميل المبيعات. الكوبون يُدخل يدويًا في السلة؛ الرابط لا ينشئ كوبونًا ولا يخصم تلقائيًا.</small>
+ <button type="submit" id="campaign-generate">إنشاء الرابط والنص</button>
+ <label for="campaign-share-link">رابط المشاركة</label><textarea id="campaign-share-link" readonly rows="3" dir="ltr" aria-label="الرابط الجاهز للمشاركة"></textarea>
+ <label for="campaign-share-text">نص ترويجي مختصر</label><textarea id="campaign-share-text" readonly rows="4" aria-label="رسالة ترويجية جاهزة"></textarea>
+ <div class="campaign-copy-actions"><button id="campaign-copy-link" type="button" class="btn-outline">نسخ الرابط</button><button id="campaign-copy-text" type="button" class="btn-outline">نسخ النص</button></div>
+ <output id="campaign-builder-status" role="status" aria-live="polite"></output>
+ </form>
+ <div class="panel">
+ <div class="campaign-summary-head"><h3>نتائج الحملات المجمّعة</h3>
+ <label for="campaign-days">الفترة <select id="campaign-days"><option value="7">آخر 7 أيام</option><option value="30" selected>آخر 30 يومًا</option><option value="90">آخر 90 يومًا</option></select></label></div>
+ <div class="campaign-summary-actions"><button type="button" id="campaign-report-refresh" class="btn-outline">تحديث التقرير</button><a href="/admin/visitors" target="_blank" rel="noopener noreferrer">تفاصيل الزيارات ↗</a></div>
+ <div id="campaign-summary-metrics" class="campaign-summary-metrics"><span>جارٍ تحميل مؤشرات الزيارات...</span></div>
+ <h4>جلسات الحملات وفق موافقة الزائر</h4>
+ <div id="campaign-report-list" class="campaign-report-list" aria-live="polite"></div>
+ <p class="campaign-disclaimer">البيانات تسجل فقط الزيارات التي وافق أصحابها على الإحصاءات. لا تُعد عددًا للعملاء الفريدين، ولا تعني مبيعات أو أرباحًا منسوبة للحملات. المدفوعات تُراجع بشكل منفصل في لوحة المبيعات.</p>
+ <output id="campaign-report-status" role="status" aria-live="polite"></output>
+ </div>
+ </div>
+</section>
+<section class="grid coupon-admin" aria-label="كوبونات التخفيض">
+ <article class="panel"><h2>إنشاء كوبون خصم</h2><p>حدد رمزًا وتخفيضًا لا يتجاوز 30%، وعدد استخدامات محدودًا، ثم شاركه مع عملاء الحملات الإعلانية. لن يسمح النظام بكوبون منتهي أو غير فعّال.</p>
+ <label for="coupon-code">رمز الكوبون (إنجليزي وأرقام)</label><input id="coupon-code" type="text" autocomplete="off" maxlength="20" placeholder="BLOFY10" dir="ltr">
+ <label for="coupon-percent">نسبة الخصم %</label><input id="coupon-percent" type="number" min="1" max="30" value="10">
+ <label for="coupon-max">الحد الأقصى للاستخدامات</label><input id="coupon-max" type="number" min="1" max="100000" value="100">
+ <label for="coupon-days">مدة صلاحية الكوبون بالأيام</label><input id="coupon-days" type="number" min="1" max="365" value="30">
+ <button id="coupon-create" type="button">إنشاء كوبون</button></article>
+ <article class="panel"><h2>الكوبونات الموجودة</h2><p>يمكن تعطيل كوبون دون المساس بعمليات دفع بدأت به قبل التعطيل.</p><div id="coupon-list" class="coupon-list"></div></article>
+</section><output id="sales-notice" role="status" aria-live="polite"></output>
+<div class="foot"><p>ملاحظة: النظام يقبل الأكواد المؤهلة الموجودة فعلًا في قاعدة BLOFY، وليس أكوادًا عشوائية أو غير مملوكة. لا تشارك قائمة أكواد حقيقية خارج صفحة الإدارة المحمية.</p></div>
+</main></body></html>

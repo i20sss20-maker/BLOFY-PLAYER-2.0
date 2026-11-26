@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {createStreamDistributors,distributorPlanCost} from '../src/stream-distributors.mjs';
 
-function fixture(){
+function fixture({redemption=false}={}){
+ const redemptions=[];
  const distributors=[],sessions=[],issues=[],calls=[],statements=[],actions=[],creditEvents=[];
  const accounts=[],codes=[],events=[];
  const now=new Date('2026-11-12T04:00:00Z');
@@ -39,16 +40,49 @@ function fixture(){
    const delta=type==='opening'?args[2]:type==='adjustment'?args[2]:args[3];
    const balance=type==='opening'?args[2]:type==='adjustment'?args[3]:args[4];
    creditEvents.push({id:args[0],distributor_id:args[1],issue_id:issueId,
-    type,delta,balance_after:balance,details:{},created_at:now});
+    type,delta,balance_after:balance,details:(type==='adjustment'?args[4]:args[5])?JSON.parse(type==='adjustment'?args[4]:args[5]):{},created_at:now});
    return {rows:[]};
   }
+  if(sql.includes('AS granted_quarters'))return {rows:[{granted_quarters:creditEvents.filter(x=>x.distributor_id===args[0]&&x.details?.reason==='admin_bonus').reduce((n,x)=>n+x.details.bonusQuarters,0)}]};
+  if(sql.includes('SELECT * FROM blofy_stream_distributor_credit_events WHERE id=$1'))return {rows:creditEvents.filter(x=>x.id===args[0])};
+  if(sql.includes('AS spent_quarters'))return {rows:[{spent_quarters:redemptions.filter(x=>x.distributor_id===args[0]).reduce((n,x)=>n+x.quarters,0)}]};
+  if(sql.includes('SELECT * FROM blofy_stream_distributor_reward_redemptions'))return {rows:redemptions.filter(x=>x.distributor_id===args[0]&&x.request_id===args[1])};
+  if(sql.includes('INSERT INTO blofy_stream_distributor_reward_redemptions')){
+   const [id,distributor_id,request_id,quarters,credits,balance_after]=args;
+   redemptions.push({id,distributor_id,request_id,quarters,credits,balance_after});return {rows:[]};
+  }
+  if(sql.includes('AS pending_quarters')){
+   const start=new Date(args[1]);let quarters=0;
+   for(const e of creditEvents){
+    const i=issues.find(x=>x.id===e.issue_id&&x.distributor_id===e.distributor_id);
+    const code=codes.find(x=>x.id===i?.subject_id);
+    if(e.distributor_id!==args[0]||!i||i.kind!=='app'||i.status!=='done'||e.delta>=0||e.type!=='issue'||!code||code.redeemed_at||code.revoked_at||e.created_at<start||creditEvents.some(r=>r.distributor_id===e.distributor_id&&r.issue_id===e.issue_id&&r.type==='refund'))continue;
+    quarters+=e.details.bonusQuarters??(({30:1,90:2,180:4,365:8})[e.details.days]||0);
+   }
+   return {rows:[{pending_quarters:quarters}]};
+  }
+  if(sql.includes('AS reward_quarters')){
+   const start=new Date(args[1]);
+   let quarters=0;
+   for(const e of creditEvents){
+    const i=issues.find(x=>x.id===e.issue_id&&x.distributor_id===e.distributor_id);
+    if(e.distributor_id!==args[0]||!i||i.status!=='done'||e.delta>=0||!['issue','renew'].includes(e.type))continue;
+    const at=e.type==='issue'&&i.kind==='app'?codes.find(x=>x.id===i.subject_id)?.redeemed_at:e.created_at;
+    if(!at||at<start||creditEvents.some(r=>r.distributor_id===e.distributor_id&&r.issue_id===e.issue_id&&r.type==='refund'))continue;
+    quarters+=e.details.bonusQuarters??(({30:1,90:2,180:4,365:8})[e.details.days]||0);
+   }
+   return {rows:[{reward_quarters:quarters}]};
+  }
   if(sql.includes('FROM blofy_stream_distributor_credit_events')&&sql.includes('ORDER BY')){
-   const credits=creditEvents.filter(x=>x.distributor_id===args[0]);
-   const relogins=actions.filter(x=>x.distributor_id===args[0]&&x.action==='relogin')
+   const credits=creditEvents.filter(x=>x.distributor_id===args[0]&&(!args[2]||x.issue_id===args[2]));
+   const relogins=actions.filter(x=>x.distributor_id===args[0]&&x.action==='relogin'&&(!args[2]||x.issue_id===args[2]))
     .map(x=>({...x,type:'relogin',delta:0,balance_after:null,
       issue_id:x.issue_id,details:x.result||{},created_at:now}));
    return {rows:credits.concat(relogins).reverse()};
   }
+  if(sql==='SELECT * FROM blofy_stream_distributors WHERE id=$1')return {rows:distributors.filter(x=>x.id===args[0])};
+  if(sql.includes('SET permissions=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.permissions=JSON.parse(args[1]);return {rows:[row]};}
+  if(sql.includes('SET bonus_policy=$2::jsonb')){const row=distributors.find(x=>x.id===args[0]);if(!row)return {rows:[]};row.bonus_policy=JSON.parse(args[1]);return {rows:[row]};}
   if(sql.includes('SET daily_issue_limit=$2')){
    const row=distributors.find(x=>x.id===args[0]);
    if(!row)return {rows:[]};row.daily_issue_limit=args[1];return {rows:[row]};
@@ -174,7 +208,7 @@ function fixture(){
   }
   if(sql.includes('UPDATE blofy_stream_distributor_issues')&&sql.includes('SET customer_name=$3')){
    const item=issues.find(x=>x.id===args[0]&&x.distributor_id===args[1]);
-   item.customer_name=args[2];item.customer_phone=args[3];return {rows:[item]};
+   item.customer_name=args[2];item.customer_phone=args[3];item.customer_note=args[4];return {rows:[item]};
   }
   if(sql.includes('COUNT(*) FILTER')&&sql.includes('FROM blofy_stream_distributor_issues')){
    return {rows:[{total:issues.filter(x=>x.distributor_id===args[0]&&x.status==='done').length,
@@ -275,7 +309,12 @@ function fixture(){
  }
  const pool={query,async connect(){return {query,release(){}}}};
  const manager=createStreamDistributors({pool,clock:()=>now.getTime(),
-   trialKeyHex:'9'.repeat(64),
+   playbackSnapshot:sourceId=>{calls.push({type:'quality',sourceId});return {started:10,failed:2,interrupted:1,recovered:3,p95StartMs:2200,liveTsRecoveryGapSamples:3,p95LiveTsRecoveryGapMs:1100,liveTsSourceDrops:3,byKind:{live:{started:10,failed:2,interrupted:1,recovered:3}},recentIssues:[{itemId:123,sourceId,secret:'private'}],unexpected:'secret'}},
+   trialKeyHex:'9'.repeat(64),rewardsStart:'2026-11-12T00:00:00Z',rewardsRedemptionEnabled:redemption,
+   linkCodeToXtream:async code=>{
+     if(code!==issuedToken||!codes[0].redeemed_at)return {status:409,body:{ok:false}};
+     return {status:200,body:{ok:true,codeId,accountId,subscriptionUnchanged:true,credentials:{...credential},expiresAt:accounts[0].expires_at.getTime()}};
+   },
    rotateXtream:async id=>{
       calls.push({type:'rotation',id});
       if(id!==accountId)return {status:404,body:{ok:false}};
@@ -384,33 +423,25 @@ test('annual code deducts exactly twelve month credits and is locked to saleh',a
  assert.equal(f.calls.length,1,'never issue on a second source');
  assert.equal(f.distributors[0].credits,3,'no charge when saleh is unavailable');
 });
-test('one-day trials are free, phone-fingerprinted, limited, and repeat denied',async()=>{
+test('one-day trials permit repeated contact numbers but remain free, scoped and capped at 50',async()=>{
  const f=fixture();const created=await f.manager.createAdmin({
   name:'trial store',username:'trial-store',credits:0});
  const login=await f.manager.login({username:'trial-store',password:created.password});
  await assert.rejects(f.manager.issue(login.token,{kind:'xtream',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID()}),/distributor_trial_phone_required/);
+  requestId:crypto.randomUUID()}),/distributor_trial_phone_required/);
+ const requestId=crypto.randomUUID();
  const first=await f.manager.issue(login.token,{kind:'xtream',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'});
+  requestId,trialPhone:'0555555555'});
  assert.equal(first.issue.chargedCredits,0);
- assert.equal(f.distributors[0].credits,0);
- assert.match(f.issues[0].trial_customer_hash,/^[a-f0-9]{64}$/);
- assert.equal(JSON.stringify(f.issues).includes('0555555555'),false);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'}),
-  /distributor_trial_already_used/);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'+966555555555'}),
-  /distributor_trial_already_used/);
- await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'00966555555555'}),
-  /distributor_trial_already_used/);
- for(let n=0;n<4;n++)
+ assert.equal(f.issues[0].trial_customer_hash,null);
+ await f.manager.issue(login.token,{kind:'xtream',durationDays:1,requestId,trialPhone:'0555555555'});
+ assert.equal(f.issues.length,1,'same request remains idempotent');
+ for(let n=0;n<49;n++)
   await f.manager.issue(login.token,{kind:'app',durationDays:1,
-   maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'055555555'+n});
+   requestId:crypto.randomUUID(),trialPhone:['0555555555','+966555555555','12345678'][n%3]});
+ assert.equal(f.issues.length,50);
  await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
-  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555560'}),
-  /distributor_trial_daily_limit/);
+  requestId:crypto.randomUUID(),trialPhone:'0555555555'}),/distributor_trial_daily_limit/);
  assert.equal(f.distributors[0].credits,0);
 });
 test('organization is private to distributor; only actual saleh titles are editable',async()=>{
@@ -454,9 +485,11 @@ test('distributor can manage only own contacts, searchable ledger and customer d
  await assert.rejects(f.manager.customer(t2,{issueId:one.issue.id,name:'Other',
   phone:'0550000000'}),/distributor_issue_missing/);
  await f.manager.customer(t1,{issueId:one.issue.id,name:'Updated',
-  phone:'0558888888'});
+  phone:'0558888888',note:'Follow up next month'});
  assert.equal(f.issues[0].customer_name,'Updated');
  assert.equal(f.issues[0].customer_phone,'966558888888');
+ assert.equal((await f.manager.issued(t1)).items[0].customerNote,'Follow up next month');
+ assert.equal((await f.manager.issued(t2)).items.length,0);
 });
 test('renewal costs twelve credits, extends expiration atomically and does not double-charge retries',async()=>{
  const f=fixture();
@@ -683,4 +716,104 @@ test('merchant delivery preview is source-scoped, exact and read-only',async()=>
  await assert.rejects(f.manager.libraryDeliveryPreview(ta,{type:'invalid'}),
    /distributor_library_type_invalid/);
  assert.equal(f.statements.some(sql=>/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/.test(sql)),false);
+});
+
+test('one owned activated code reveals both access methods without changing wallet or issuance',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Dual A',username:'dual-test-a',credits:12}),b=await f.manager.createAdmin({name:'Dual B',username:'dual-test-b',credits:12});
+ const ta=(await f.manager.login({username:'dual-test-a',password:a.password})).token,tb=(await f.manager.login({username:'dual-test-b',password:b.password})).token;
+ f.codes[0].redeemed_at=null;
+ const issued=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ const id=f.issues[0].id;
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,0);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsPending,2);
+ await assert.rejects(f.manager.reveal(ta,id,{includeXtream:true}),/distributor_dual_access_activate_first/);
+ f.codes[0].redeemed_at=new Date('2026-11-12T04:00:00Z');
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,2);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsPending,0);
+ assert.equal((await f.manager.analytics(tb)).stats.rewardPointsEarned,0);
+ const plain=await f.manager.reveal(ta,id);assert.equal(plain.credentials,undefined);
+ await assert.rejects(f.manager.reveal(tb,id,{includeXtream:true}),/distributor_issue_missing/);
+ const dual=await f.manager.reveal(ta,id,{includeXtream:true});
+ assert.equal(dual.code,issued.code);assert.equal(dual.dualAccess,true);assert.equal(dual.credentials.username,'reseller_generated');
+ assert.equal(f.distributors[0].credits,0);assert.equal(f.issues.length,1);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,2);
+});
+
+test('reward redemption is opt-in, scoped and idempotent; never creates credits twice',async()=>{
+ const f=fixture({redemption:true}),a=await f.manager.createAdmin({name:'Reward A',username:'reward-a',credits:12}),b=await f.manager.createAdmin({name:'Reward B',username:'reward-b',credits:0});
+ const ta=(await f.manager.login({username:'reward-a',password:a.password})).token,tb=(await f.manager.login({username:'reward-b',password:b.password})).token;
+ await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ const req=crypto.randomUUID();
+ await assert.rejects(f.manager.redeemRewards(tb,{credits:1,requestId:req}),/distributor_rewards_insufficient/);
+ const r=await f.manager.redeemRewards(ta,{credits:2,requestId:req});
+ assert.equal(r.pointsUsed,2);assert.equal(r.balanceAfter,2);
+ assert.equal((await f.manager.redeemRewards(ta,{credits:2,requestId:req})).repeated,true);
+ assert.equal(f.distributors[0].credits,2);
+ await assert.rejects(f.manager.redeemRewards(ta,{credits:1,requestId:req}),/distributor_request_conflict/);
+ await assert.rejects(f.manager.redeemRewards(ta,{credits:1,requestId:crypto.randomUUID()}),/distributor_rewards_insufficient/);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsAvailable,0);
+ const off=fixture(),made=await off.manager.createAdmin({name:'Off',username:'reward-off',credits:12});
+ const t=(await off.manager.login({username:'reward-off',password:made.password})).token;
+ await assert.rejects(off.manager.redeemRewards(t,{credits:1,requestId:crypto.randomUUID()}),/distributor_rewards_redemption_disabled/);
+});
+
+test('admin bonus is auditable, scoped and idempotent',async()=>{
+ const f=fixture({redemption:true}),a=await f.manager.createAdmin({name:'Bonus A',username:'bonus-a',credits:0}),b=await f.manager.createAdmin({name:'Bonus B',username:'bonus-b',credits:0});
+ const ta=(await f.manager.login({username:'bonus-a',password:a.password})).token,tb=(await f.manager.login({username:'bonus-b',password:b.password})).token;
+ const requestId=crypto.randomUUID(),data={bonusQuarters:8,reason:'Special offer',requestId};
+ await f.manager.setAdmin(a.item.id,data);await f.manager.setAdmin(a.item.id,data);
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsAvailable,2);
+ assert.equal((await f.manager.analytics(tb)).stats.rewardPointsAvailable,0);
+ await assert.rejects(f.manager.setAdmin(b.item.id,data),/distributor_request_conflict/);
+ assert.equal((await f.manager.me(ta)).item.credits,0);
+});
+
+test('bonus policy changes future purchases only and customer history is scoped',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Policy A',username:'policy-a',credits:24}),b=await f.manager.createAdmin({name:'Policy B',username:'policy-b',credits:24});
+ const ta=(await f.manager.login({username:'policy-a',password:a.password})).token,tb=(await f.manager.login({username:'policy-b',password:b.password})).token;
+ const first=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ await f.manager.setAdmin(a.item.id,{bonusRates:{30:0,90:0,180:0,365:16}});
+ const second=await f.manager.issue(ta,{kind:'app',durationDays:365,requestId:crypto.randomUUID()});
+ assert.equal((await f.manager.analytics(ta)).stats.rewardPointsEarned,6);
+ assert.equal((await f.manager.me(tb)).item.bonusPolicy[365],8);
+ assert.equal((await f.manager.activity(ta,{issueId:first.issue.id})).items.length,1);
+ assert.equal((await f.manager.activity(tb,{issueId:second.issue.id})).items.length,0);
+ await assert.rejects(f.manager.setAdmin(a.item.id,{bonusRates:{30:0,90:0,180:0,365:41}}),/distributor_bonus_policy_invalid/);
+});
+
+test('operator permissions default to allowed and block disabled features server-side',async()=>{
+ const f=fixture({redemption:true}),a=await f.manager.createAdmin({name:'Access A',username:'access-a',credits:12}),b=await f.manager.createAdmin({name:'Access B',username:'access-b',credits:12});
+ const ta=(await f.manager.login({username:'access-a',password:a.password})).token,tb=(await f.manager.login({username:'access-b',password:b.password})).token;
+ const original=(await f.manager.me(ta)).item.permissions;
+ assert.ok(Object.values(original).every(Boolean));
+ const issued=await f.manager.issue(ta,{kind:'app',durationDays:30,requestId:crypto.randomUUID()});
+ await f.manager.setAdmin(a.item.id,{permissionSettings:Object.fromEntries(Object.keys(original).map(k=>[k,false]))});
+ for(const call of [()=>f.manager.issue(ta,{kind:'app',durationDays:30,requestId:crypto.randomUUID()}),()=>f.manager.issue(ta,{kind:'app',durationDays:1,requestId:crypto.randomUUID(),trialPhone:'12345678'}),()=>f.manager.renew(ta,{issueId:issued.issue.id,days:30,requestId:crypto.randomUUID()}),()=>f.manager.exportIssues(ta),()=>f.manager.redeemRewards(ta,{credits:1,requestId:crypto.randomUUID()}),()=>f.manager.customer(ta,{issueId:issued.issue.id,name:'Denied'}),()=>f.manager.relogin(ta,{issueId:issued.issue.id,requestId:crypto.randomUUID()}),()=>f.manager.rotateOwnedXtream(ta,{issueId:issued.issue.id,requestId:crypto.randomUUID()}),()=>f.manager.reveal(ta,issued.issue.id,{includeXtream:true})])await assert.rejects(call,/distributor_permission_denied/);
+ assert.equal((await f.manager.me(tb)).item.permissions.paidIssue,true);
+ assert.equal((await f.manager.issued(ta)).items.length,1);
+ assert.equal((await f.manager.me(ta)).item.credits,11);
+ await assert.rejects(f.manager.setAdmin(a.item.id,{permissionSettings:{paidIssue:true}}),/distributor_permissions_invalid/);
+});
+
+test('admin distributor report reads scoped wallet and issued sales data',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Report A',username:'report-a',credits:12}),b=await f.manager.createAdmin({name:'Report B',username:'report-b',credits:24});
+ const ta=(await f.manager.login({username:'report-a',password:a.password})).token;
+ await f.manager.issue(ta,{kind:'app',durationDays:30,requestId:crypto.randomUUID()});
+ const report=await f.manager.adminReport(a.item.id),other=await f.manager.adminReport(b.item.id);
+ assert.equal(report.stats.walletCredits,11);assert.equal(other.stats.walletCredits,24);
+ assert.equal(report.stats.paidTotal,1);assert.equal(other.stats.paidTotal,0);
+ assert.equal(report.item.id,a.item.id);assert.equal(other.item.id,b.item.id);
+ await assert.rejects(f.manager.adminReport(crypto.randomUUID()),/distributor_missing/);
+});
+
+test('distributor relay quality uses only published source and returns no item or private data',async()=>{
+ const f=fixture();await assert.rejects(f.manager.quality('invalid'),/distributor_unauthorized/);
+ const a=await f.manager.createAdmin({name:'Quality A',username:'quality-a',credits:1});
+ const token=(await f.manager.login({username:'quality-a',password:a.password})).token;
+ const report=await f.manager.quality(token);
+ assert.equal(report.scope,'shared_source_single_instance');assert.equal(report.decodedOnClient,false);
+ assert.equal(report.byKind.live.started,10);assert.equal(report.p95RecoveryGapMs,1100);
+ assert.equal(f.calls.find(x=>x.type==='quality').sourceId,f.salehId);
+ assert.equal(JSON.stringify(report).includes('private'),false);assert.equal('recentIssues' in report,false);
+ f.setSource(false);await assert.rejects(f.manager.quality(token),/distributor_saleh_source_unavailable/);
 });

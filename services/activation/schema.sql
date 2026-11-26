@@ -159,3 +159,17 @@ CREATE TABLE IF NOT EXISTS blofy_code_host_presets (
 );
 CREATE INDEX IF NOT EXISTS idx_blofy_codes_expiry ON blofy_code_subscriptions(expires_at)
   WHERE active = TRUE;
+
+-- Single sanitized read-only engine heartbeat, shared by portal replicas.
+CREATE TABLE IF NOT EXISTS blofy_linode_heartbeat (
+ singleton boolean PRIMARY KEY CHECK (singleton),
+ observed_at timestamptz NOT NULL,
+ report jsonb NOT NULL
+);
+
+-- Independent HostBrr monitoring record; never a capacity reservation.
+CREATE TABLE IF NOT EXISTS blofy_hostbrr_worker_heartbeat (
+ singleton boolean PRIMARY KEY CHECK(singleton),
+ observed_at timestamptz NOT NULL,
+ report jsonb NOT NULL
+);

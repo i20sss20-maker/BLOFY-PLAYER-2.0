@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#071327">
+<title>إحصائيات الزوار | BLOFY ONE</title>
+<link rel="icon" href="/blofy-logo.png">
+<link rel="stylesheet" href="/admin/visitors/style.css?v=1">
+<script src="/admin/visitors/app.js?v=1" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/one"><img src="/blofy-logo.png" width="43" height="43" alt=""> BLOFY <b>ONE</b></a>
+  <nav aria-label="التنقل في الإدارة">
+    <a href="/one">الإدارة الرئيسية</a>
+    <a href="/admin/store-inventory">مخزون ومبيعات المتجر</a>
+    <a href="/" target="_blank" rel="noopener noreferrer">المتجر</a>
+  </nav>
+</header>
+<main>
+  <div class="topline">
+    <div>
+      <span class="eyebrow">BLOFY ANALYTICS</span>
+      <h1>إحصائيات زوار المتجر</h1>
+      <p>تابع أداء إعلاناتك، زيارات العملاء، الصفحات والعروض الأكثر اهتمامًا، ومبيعات الاشتراكات المؤكدة.</p>
+    </div>
+    <div class="period">
+      <label for="days">الفترة</label>
+      <select id="days"><option value="7" selected>آخر 7 أيام</option><option value="30">آخر 30 يومًا</option><option value="90">آخر 90 يومًا</option></select>
+      <button id="refresh" type="button">تحديث الأرقام <span aria-hidden="true">↻</span></button>
+      <small id="last-updated">لم تُحمّل البيانات بعد</small>
+    </div>
+  </div>
+
+  <output id="state" role="status" aria-live="polite" class="state">جارٍ تحميل إحصائيات BLOFY...</output>
+
+  <section aria-labelledby="overview-title">
+    <div class="section-title"><span class="eyebrow">OVERVIEW</span><h2 id="overview-title">نظرة عامة</h2></div>
+    <div class="metrics" id="metrics">
+      <div class="metric placeholder">البيانات قيد التحميل…</div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="timeline-title">
+    <div class="panel-head">
+      <div><span class="eyebrow">DAILY PERFORMANCE</span><h2 id="timeline-title">الزيارات يومًا بيوم</h2><p>عدد مشاهدات الصفحات والجلسات التي وافق أصحابها على الإحصائيات.</p></div>
+      <div class="legend"><span><i class="legend-page"></i> مشاهدات</span><span><i class="legend-session"></i> جلسات</span></div>
+    </div>
+    <div class="timeline" id="timeline" aria-label="رسم أعمدة الزيارات اليومية">لا توجد بيانات.</div>
+  </section>
+
+  <div class="two-columns">
+    <section class="panel" aria-labelledby="sources-title"><div class="panel-head"><div><span class="eyebrow">ACQUISITION</span><h2 id="sources-title">من وين يجون العملاء؟</h2><p>مصادر الزيارات والجلسات: سناب، تيك توك، إنستغرام، جوجل وغيرها.</p></div></div><div id="sources" class="ranked-list">—</div></section>
+    <section class="panel" aria-labelledby="campaigns-title"><div class="panel-head"><div><span class="eyebrow">CAMPAIGNS</span><h2 id="campaigns-title">أداء الحملات الإعلانية</h2><p>تظهر عند استخدام روابط UTM في إعلانات سناب أو المنصات الأخرى.</p></div></div><div id="campaigns" class="ranked-list">—</div></section>
+  </div>
+
+  <div class="two-columns">
+    <section class="panel" aria-labelledby="pages-title"><div class="panel-head"><div><span class="eyebrow">CONTENT</span><h2 id="pages-title">الصفحات الأكثر زيارة</h2><p>لمعرفة المنتجات والعروض التي تجذب العملاء.</p></div></div><div id="pages" class="ranked-list">—</div></section>
+    <section class="panel" aria-labelledby="devices-title"><div class="panel-head"><div><span class="eyebrow">DEVICES</span><h2 id="devices-title">نوع أجهزة الزوار</h2><p>تصنيف تقريبي حسب حجم الشاشة، وليس هوية الجهاز.</p></div></div><div id="devices" class="ranked-list">—</div></section>
+  </div>
+
+  <section class="panel" aria-labelledby="actions-title">
+    <div class="panel-head"><div><span class="eyebrow">PURCHASE FUNNEL</span><h2 id="actions-title">اهتمام الزوار بالشراء</h2><p>ضغطات الشراء والعرض والتجربة وواتساب. المبيعات المؤكدة تُقرأ من طلبات المتجر، وليس من ضغطات الزوار.</p></div></div>
+    <div class="activity" id="activity">—</div>
+  </section>
+
+  <section class="panel tip" aria-labelledby="tips-title">
+    <span class="eyebrow">CAMPAIGN TRACKING</span>
+    <h2 id="tips-title">روابط جاهزة لقياس حملاتك</h2>
+    <p>شارك رابطًا منفصلًا في كل منصة، وبتشوف مصدر الزيارات في اللوحة. لا تضع أرقام جوالات العملاء أو معلوماتهم في معلمات الرابط.</p>
+    <div class="example-links" id="example-links">
+      <div><span>إعلانات سناب</span><code dir="ltr">https://www.blofyplayer.com/?utm_source=snapchat&amp;utm_medium=paid&amp;utm_campaign=launch</code><button type="button" data-copy="https://www.blofyplayer.com/?utm_source=snapchat&utm_medium=paid&utm_campaign=launch">نسخ</button></div>
+      <div><span>إعلانات تيك توك</span><code dir="ltr">https://www.blofyplayer.com/?utm_source=tiktok&amp;utm_medium=paid&amp;utm_campaign=launch</code><button type="button" data-copy="https://www.blofyplayer.com/?utm_source=tiktok&utm_medium=paid&utm_campaign=launch">نسخ</button></div>
+      <div><span>عرض الاشتراكين</span><code dir="ltr">https://www.blofyplayer.com/store/offers?utm_source=snapchat&amp;utm_medium=paid&amp;utm_campaign=double_year</code><button type="button" data-copy="https://www.blofyplayer.com/store/offers?utm_source=snapchat&utm_medium=paid&utm_campaign=double_year">نسخ</button></div>
+    </div>
+  </section>
+
+  <div class="bottom-note">
+    <strong>مهم:</strong> الإحصائيات تبدأ من تشغيل هذا النظام، ولا تُظهر الزيارات القديمة تلقائيًا. تُجمع بعد موافقة الزائر فقط، لذلك قد تكون أقل من إجمالي زوار الموقع. «الجلسات» تقدير لتبويبات المتصفح، وليست عدد أشخاص فريدين. «النشطون خلال 5 دقائق» تقدير للجلسات التي أرسلت تفاعلًا حديثًا، وليس عدد المتصلين لحظيًا. لا نسجل عناوين IP أو أكواد العملاء أو معلومات الدفع في هذه الإحصائيات. تُحذف بيانات القياس بعد 90 يومًا.
+  </div>
+</main>
+</body></html>

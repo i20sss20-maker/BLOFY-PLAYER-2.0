@@ -2,6 +2,7 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { safeXtreamArtwork } from './xtream-item-details.mjs';
 
 const SECRET_CONTEXT = Buffer.from('blofy-xtream-secret:v1', 'utf8');
 
@@ -187,7 +188,16 @@ export function normalizeXtreamItem(mediaType, raw, syncToken) {
   const sourceId = cleanText(isSeries ? raw.series_id : raw.stream_id, 128);
   const name = cleanText(raw.name ?? raw.title, 500);
   if (!sourceId || !name) return null;
-  const icon = cleanText(isSeries ? (raw.cover || raw.stream_icon) : raw.stream_icon, 2048);
+  // Providers differ in the image key used by list APIs. Many VOD panels
+  // omit stream_icon yet publish movie_image/cover_big, which previously left
+  // every imported movie card with no poster until a detail screen was opened.
+  // Retain a usable original icon; only accept safe public alternate URLs.
+  const primaryIcon = cleanText(isSeries ?
+    (raw.cover || raw.stream_icon) : raw.stream_icon, 2048);
+  const icon = primaryIcon && !/^(?:null|undefined)$/i.test(primaryIcon) ?
+    primaryIcon :
+    [raw.movie_image, raw.cover_big, raw.cover, raw.thumbnail]
+      .map(safeXtreamArtwork).find(Boolean) || null;
   const categoryId = cleanText(raw.category_id, 128);
   const extension = cleanText(raw.container_extension, 20);
   const metadata = {

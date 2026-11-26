@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="680" viewBox="0 0 1600 680" role="img" aria-label="تلفازان يمثلان اشتراكين سنويين مستقلين">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#060f25"/><stop offset=".52" stop-color="#102857"/><stop offset="1" stop-color="#07112b"/></linearGradient><radialGradient id="glow"><stop stop-color="#5389ef" stop-opacity=".58"/><stop offset="1" stop-color="#4870ce" stop-opacity="0"/></radialGradient><linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#426cb7"/><stop offset=".48" stop-color="#132e5c"/><stop offset="1" stop-color="#07172f"/></linearGradient><linearGradient id="gold"><stop stop-color="#d8b665"/><stop offset="1" stop-color="#9b7a3c"/></linearGradient><pattern id="lines" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#8aafe7" opacity=".07"/></pattern><filter id="drop"><feDropShadow dx="0" dy="24" stdDeviation="24" flood-opacity=".72" flood-color="#00050f"/></filter></defs>
+<rect width="1600" height="680" fill="url(#bg)"/><rect width="1600" height="680" fill="url(#lines)"/><ellipse cx="1170" cy="300" rx="520" ry="420" fill="url(#glow)"/>
+<path d="M1600 65Q1220 95 1040 345T570 692" fill="none" stroke="#8facf4" stroke-opacity=".19" stroke-width="3"/>
+<g filter="url(#drop)" transform="translate(972 80) rotate(6 245 218)">
+<rect x="0" y="0" width="505" height="386" rx="24" fill="#050f23" stroke="#6b8bc4" stroke-width="5"/><rect x="17" y="17" width="471" height="338" rx="14" fill="url(#screen)"/>
+<rect x="38" y="38" width="432" height="35" rx="8" fill="#17366a"/><circle cx="59" cy="55" r="7" fill="#7da8ef"/><rect x="84" y="49" width="140" height="11" rx="5" fill="#426dad"/>
+<rect x="38" y="92" width="257" height="155" rx="12" fill="#30558a"/><path d="M131 119L131 223 218 171Z" fill="#e3edff" fill-opacity=".8"/>
+<rect x="312" y="92" width="157" height="72" rx="10" fill="#1f4276"/><rect x="312" y="175" width="157" height="72" rx="10" fill="#274c86"/>
+<rect x="38" y="264" width="132" height="69" rx="10" fill="#1e3765"/><rect x="181" y="264" width="132" height="69" rx="10" fill="#2b4979"/><rect x="324" y="264" width="145" height="69" rx="10" fill="#183866"/>
+<path d="M189 386v24m92-24v24m-119 0h146" stroke="#8ca3ca" stroke-width="9" stroke-linecap="round"/>
+</g>
+<g filter="url(#drop)" transform="translate(734 255) rotate(-8 210 168)">
+<rect x="0" y="0" width="430" height="319" rx="24" fill="#06152a" stroke="#5985d1" stroke-width="5"/><rect x="18" y="18" width="394" height="259" rx="13" fill="url(#screen)"/>
+<rect x="38" y="35" width="357" height="33" rx="8" fill="#1a3e76"/><circle cx="58" cy="51" r="7" fill="#88c0fc"/><rect x="80" y="45" width="112" height="12" rx="6" fill="#4a7fbf"/>
+<rect x="38" y="87" width="218" height="124" rx="12" fill="#365e9b"/><circle cx="155" cy="150" r="47" fill="#6e98d8" fill-opacity=".35"/><path d="M138 113L138 186 200 150Z" fill="#e6f4ff" fill-opacity=".8"/>
+<rect x="270" y="87" width="124" height="56" rx="10" fill="#2e5088"/><rect x="270" y="154" width="124" height="57" rx="10" fill="#1e4379"/>
+<rect x="38" y="224" width="107" height="37" rx="10" fill="#1d3a71"/><rect x="156" y="224" width="107" height="37" rx="10" fill="#243f76"/><rect x="274" y="224" width="120" height="37" rx="10" fill="#1b4376"/>
+<path d="M170 319v23m76-23v23m-104 0h132" stroke="#89a7d9" stroke-width="8" stroke-linecap="round"/>
+</g>
+<circle cx="1386" cy="530" r="58" fill="#162e56" stroke="url(#gold)" stroke-width="4"/><path d="M1352 530h68M1386 497v67" stroke="#e2c27b" stroke-width="5" stroke-linecap="round"/>
+<path d="M1040 590c157 49 325 36 481-62" stroke="#6d8dce" stroke-width="2" stroke-opacity=".25" fill="none"/>
+</svg>

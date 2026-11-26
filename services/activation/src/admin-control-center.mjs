@@ -1,5 +1,9 @@
 // Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
 import { readFile } from 'node:fs/promises';
+import {probeHostbrrWorkerHeartbeat} from './hostbrr-worker-heartbeat.mjs';
+import {probeHostbrrGateway} from './hostbrr-gateway-monitor.mjs';
+import {probeLinodeHeartbeat} from './linode-heartbeat.mjs';
+import {probeLinodeBridge} from './linode-readonly-bridge.mjs';
 import {siteOperatorReadiness} from './site-operator-readiness.mjs';
 
 export const CONTROL_CENTER_TARGETS = Object.freeze([
@@ -85,10 +89,13 @@ export async function controlCenterSnapshot() {
   if(cached && Date.now()-cachedAt<CACHE_MS)return cached;
   if(pending)return pending;
   pending=(async()=>{
-    const [checks,operatorReadiness]=await Promise.all([
+    const [checks,operatorReadiness,linode,hostbrr,hostbrrWorker]=await Promise.all([
       Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target))),
-      siteOperatorReadiness()
+      siteOperatorReadiness(),(process.env.BLOFY_LINODE_HEARTBEAT_ENABLED==='true'?probeLinodeHeartbeat():probeLinodeBridge()),probeHostbrrGateway(),probeHostbrrWorkerHeartbeat()
     ]);
+    if(linode)checks.push(linode);
+    checks.push(hostbrr);
+    if(hostbrrWorker)checks.push(hostbrrWorker);
     const result={
       product:'BLOFY CONTROL CENTER',version:1,mode:'read-only',
       checkedAt:new Date().toISOString(),
@@ -100,7 +107,7 @@ export async function controlCenterSnapshot() {
         reachable:checks.filter(c=>c.status==='reachable').length,
         failed:checks.filter(c=>['error','offline'].includes(c.status)).length
       },
-      scope:'HTTP service reachability only; no media playback or audio inspection',
+      scope:'HTTP reachability, HostBrr gateway readiness and optional read-only Linode telemetry; no customer playback verification',
       phases:[
         {label:'إدارة STREAM والمصادر والمكتبة',state:'available'},
         {label:'الأكواد والمشتركون ولوحات الموزعين',state:'available'},

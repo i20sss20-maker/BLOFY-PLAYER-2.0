@@ -32,7 +32,7 @@ test('unsafe ordering data never becomes a SQL number',()=>{
 });
 test('upstream order is persisted on sync and used by catalog listing',async()=>{
  const code=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
- assert.match(code,/sort_order=EXCLUDED\.sort_order/);
+ assert.match(code,/sort_order=CASE WHEN blofy_xtream_categories\.manual_sort[\s\S]*?ELSE EXCLUDED\.sort_order END/);
  assert.match(code,/source_sort_order=EXCLUDED\.source_sort_order/);
  assert.match(code,/COALESCE\(c\.sort_order,2147483647\) ASC/);
  assert.match(code,/COALESCE\(i\.source_sort_order,2147483647\) ASC/);

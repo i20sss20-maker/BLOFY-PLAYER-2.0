@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {minor,plansFromConfig,createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} from '../src/geidea-live.mjs';
+import {minor,plansFromConfig,createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS,geideaHiddenWallets} from '../src/geidea-live.mjs';
 
 const publicKey='12345678-1234-4234-8234-123456789abc';
 const password='a-private-test-password-not-real';
@@ -63,6 +63,9 @@ test('live signed callback checks signature, amount, merchant, order and test fl
 });
 test('card-only session hides all provider wallets',()=>{
   assert.deepEqual([...CARD_ONLY_WALLETS],['apple-pay']);
+  assert.deepEqual(geideaHiddenWallets({}),['apple-pay']);
+  assert.deepEqual(geideaHiddenWallets({BLOFY_GEIDEA_APPLE_PAY_ENABLED:'false'}),['apple-pay']);
+  assert.deepEqual(geideaHiddenWallets({BLOFY_GEIDEA_APPLE_PAY_ENABLED:'true'}),[]);
   // Geidea Live merchant already has Google/Samsung disabled; hiding them
   // again causes create-session code 110/112 instead of displaying card form.
 });
@@ -93,4 +96,37 @@ test('paid only after actual captured Pay and no refunds',()=>{
   assert.throws(()=>verifiedPayment({...payment(),transactions:[]},order,config));
   assert.throws(()=>verifiedPayment({...payment(),merchantReferenceId:crypto.randomUUID()},order,config));
   assert.throws(()=>verifiedPayment(payment(),{...order,provider_reference:crypto.randomUUID()},config));
+});
+
+
+test('Apple Pay is gated and accepted only for verified captured wallet Pay',()=>{
+  const settled=payment();
+  settled.paymentMethod={type:'Card',brand:'visa',wallet:'ApplePay'};
+  settled.transactions[0].paymentMethod={type:'Card',brand:'visa',wallet:'ApplePay'};
+  assert.throws(()=>verifiedPayment(settled,order,config));
+  const approved={...config,applePayEnabled:true};
+  assert.equal(verifiedPayment(settled,order,approved),'paid');
+  const viaWallet=structuredClone(settled);
+  viaWallet.paymentMethod.type='Wallet';
+  viaWallet.transactions[0].paymentMethod.type='Wallet';
+  assert.equal(verifiedPayment(viaWallet,order,approved),'paid');
+  for (const other of ['GooglePay','SamsungPay','UnknownWallet']) {
+    const invalid=structuredClone(settled);
+    invalid.paymentMethod.wallet=other;
+    invalid.transactions[0].paymentMethod.wallet=other;
+    assert.throws(()=>verifiedPayment(invalid,order,approved));
+  }
+  for (const brand of ['amex','unknown']) {
+    const invalid=structuredClone(settled);
+    invalid.paymentMethod.brand=brand;
+    invalid.transactions[0].paymentMethod.brand=brand;
+    assert.throws(()=>verifiedPayment(invalid,order,approved));
+  }
+  assert.throws(()=>verifiedPayment({...settled,totalRefundedAmount:1},order,approved));
+  assert.throws(()=>verifiedPayment({...settled,isTest:true},order,approved));
+  assert.throws(()=>verifiedPayment({...settled,transactions:[]},order,approved));
+  assert.throws(()=>verifiedPayment({...settled,totalCapturedAmount:1},order,approved));
+  const mismatched=structuredClone(settled);
+  mismatched.transactions[0].paymentMethod.wallet=null;
+  assert.throws(()=>verifiedPayment(mismatched,order,approved));
 });

@@ -28,6 +28,22 @@ export function classifyXtreamCategory(name){
   };
 }
 
+// Restores Xtream's own category order without modifying hidden flags or media.
+export function sortXtreamCategoriesLikeProvider(rows,providerOrder){
+ if(!Array.isArray(rows)||!(providerOrder instanceof Map)||!providerOrder.size)
+  throw new Error('xtream_provider_order_unavailable');
+ const ids=rows.map(x=>String(x.source_category_id));
+ if(new Set(ids).size!==ids.length||ids.some(id=>!providerOrder.has(id)))
+  throw new Error('xtream_provider_order_catalog_out_of_date');
+ return ids.map(id=>{
+  const r=providerOrder.get(id);
+  if(!Number.isSafeInteger(r?.order)||r.order<0||
+     !Number.isSafeInteger(r?.index)||r.index<0)
+   throw new Error('xtream_provider_order_invalid');
+  return {id,order:r.order,index:r.index};
+ }).sort((a,b)=>a.order-b.order||a.index-b.index).map(x=>x.id);
+}
+
 export function sortXtreamCategories(rows,mode){
   if(!XTREAM_CATEGORY_SORT_MODES.includes(mode)||!Array.isArray(rows))
     throw new Error('xtream_category_sort_invalid');

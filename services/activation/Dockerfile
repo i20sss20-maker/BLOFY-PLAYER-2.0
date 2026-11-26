@@ -1,10 +1,22 @@
 FROM node:20-alpine
+RUN apk add --no-cache openssh-client
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 COPY schema.sql ./schema.sql
 COPY src ./src
 COPY web ./web
+# Minute catalog polling must be safe and build-verified before production.
+# This test uses synthetic in-memory Xtream lists, never provider credentials.
+COPY test/xtream-minute-catalog-watch.test.mjs ./test/xtream-minute-catalog-watch.test.mjs
+COPY test/xtream-live-ts-recovery.test.mjs ./test/xtream-live-ts-recovery.test.mjs
+COPY test/xtream-hls-playback.test.mjs ./test/xtream-hls-playback.test.mjs
+COPY test/xtream-media-read-deadline.test.mjs ./test/xtream-media-read-deadline.test.mjs
+RUN node --check src/xtream-media-read-deadline.mjs && node --test test/xtream-media-read-deadline.test.mjs
+RUN node --check src/xtream-hls-playback.mjs && node --test test/xtream-hls-playback.test.mjs
+COPY test/xtream-live-stability-summary.test.mjs ./test/xtream-live-stability-summary.test.mjs
+RUN node --check src/xtream-live-stability-summary.mjs && node --check src/xtream-live-ts-recovery.mjs && node --test test/xtream-live-ts-recovery.test.mjs test/xtream-live-stability-summary.test.mjs
+RUN node --check src/xtream-minute-catalog-watch.mjs && node --check src/xtream-admin-hook.mjs && node --check web/sources-admin.js && node --test test/xtream-minute-catalog-watch.test.mjs
 # Block any deployment with broken shared-live licensing, two-code limits,
 # redirect grants or source authorization. No provider network calls.
 COPY test/xtream-licensed-live-fanout.test.mjs ./test/xtream-licensed-live-fanout.test.mjs
@@ -42,5 +54,9 @@ RUN node --check src/xtream-content-hub-range-pilot.mjs && node --check src/xtre
 # no unbounded HTTP Range requests, and no cross-source content.
 COPY test/xtream-content-hub-private-range.test.mjs ./test/xtream-content-hub-private-range.test.mjs
 RUN node --check src/xtream-content-hub-private-range.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-content-hub-private-range.test.mjs
+COPY test/linode-readonly-bridge.test.mjs ./test/linode-readonly-bridge.test.mjs
+RUN node --check src/admin-control-center.mjs && node --test test/linode-readonly-bridge.test.mjs
+COPY test/linode-heartbeat.test.mjs ./test/linode-heartbeat.test.mjs
+RUN node --check src/linode-heartbeat.mjs && node --test test/linode-heartbeat.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]

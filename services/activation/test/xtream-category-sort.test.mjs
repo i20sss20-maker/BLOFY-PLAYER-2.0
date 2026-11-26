@@ -83,3 +83,31 @@ test('one-click sorting only updates selected category order in an authorized tr
   assert.match(js,/window\.confirm\(/);
   assert.match(js,/await loadCategories\(\)/);
 });
+
+
+test('restore Xtream source order after alphabetical sort without changing visibility',async()=>{
+ const {sortXtreamCategoriesLikeProvider}=await import('../src/xtream-category-sort.mjs');
+ const local=[{source_category_id:'a',enabled:false},{source_category_id:'b',enabled:true},{source_category_id:'c',enabled:true}];
+ const provider=new Map([['a',{order:20,index:2}],['b',{order:10,index:1}],['c',{order:30,index:3}]]);
+ const before=JSON.stringify(local);
+ assert.deepEqual(sortXtreamCategoriesLikeProvider(local,provider),['b','a','c']);
+ assert.equal(JSON.stringify(local),before);
+ assert.throws(()=>sortXtreamCategoriesLikeProvider(local,new Map([['a',{order:1,index:1}]])),/xtream_provider_order_catalog_out_of_date/);
+});
+
+test('original source button uses authenticated category snapshot and leaves hidden categories unchanged',async()=>{
+ const [backend,html,ui]=await Promise.all([
+  readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8'),
+  readFile(new URL('../web/sources-admin.html',import.meta.url),'utf8'),
+  readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8')
+ ]);
+ const segment=backend.slice(backend.indexOf('async function fetchXtreamOriginalCategoryOrder('),backend.indexOf('async function moveCategory('));
+ assert.match(segment,/TYPE_ACTIONS\[mediaType\]\.categories/);
+ assert.match(segment,/mode==='provider'/);
+ assert.match(segment,/sortXtreamCategoriesLikeProvider/);
+ assert.match(segment,/bumpXtreamCatalogRevision\(pool,serverId,'operator_edit'\)/);
+ assert.doesNotMatch(segment,/DELETE FROM blofy_xtream_categories|SET enabled=/);
+ assert.match(html,/id="categoryRestoreProviderBtn"/);
+ assert.match(ui,/function restoreProviderCategoryOrder\(/);
+ assert.match(ui,/mode:'provider'/);
+});

@@ -100,6 +100,25 @@ test('normalized catalog item keeps useful metadata but does not persist direct 
   assert.equal(JSON.stringify(item).includes('secret.example'), false);
 });
 
+test('Xtream VOD list imports alternate movie_image poster without source credentials', () => {
+  const movie = normalizeXtreamItem('movie', {
+    stream_id: 18, name: 'No stream icon',
+    stream_icon: '', movie_image: 'https://cdn.example/poster.jpg'
+  }, 'sync');
+  assert.equal(movie.iconUrl, 'https://cdn.example/poster.jpg');
+  const blocked = normalizeXtreamItem('movie', {
+    stream_id: 19, name: 'Unsafe alt', stream_icon: '',
+    movie_image: 'https://cdn.example/poster.jpg?password=hidden'
+  }, 'sync');
+  assert.equal(blocked.iconUrl, null);
+  const original = normalizeXtreamItem('movie', {
+    stream_id: 20, name: 'Existing poster',
+    stream_icon: 'https://old.example/cached.jpg',
+    movie_image: 'https://new.example/alternate.jpg'
+  }, 'sync');
+  assert.equal(original.iconUrl, 'https://old.example/cached.jpg');
+});
+
 test('account summary omits username and password returned by panels', () => {
   const summary = sanitizeXtreamAccount({
     user_info: { auth: 1, username: 'u', password: 'p', status: 'Active', max_connections: '2' },
