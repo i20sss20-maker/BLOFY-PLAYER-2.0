@@ -1,5 +1,6 @@
 // Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
 import { readFile } from 'node:fs/promises';
+import {probeHostbrrWorkerHeartbeat} from './hostbrr-worker-heartbeat.mjs';
 import {probeHostbrrGateway} from './hostbrr-gateway-monitor.mjs';
 import {probeLinodeHeartbeat} from './linode-heartbeat.mjs';
 import {probeLinodeBridge} from './linode-readonly-bridge.mjs';
@@ -88,12 +89,13 @@ export async function controlCenterSnapshot() {
   if(cached && Date.now()-cachedAt<CACHE_MS)return cached;
   if(pending)return pending;
   pending=(async()=>{
-    const [checks,operatorReadiness,linode,hostbrr]=await Promise.all([
+    const [checks,operatorReadiness,linode,hostbrr,hostbrrWorker]=await Promise.all([
       Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target))),
-      siteOperatorReadiness(),(process.env.BLOFY_LINODE_HEARTBEAT_ENABLED==='true'?probeLinodeHeartbeat():probeLinodeBridge()),probeHostbrrGateway()
+      siteOperatorReadiness(),(process.env.BLOFY_LINODE_HEARTBEAT_ENABLED==='true'?probeLinodeHeartbeat():probeLinodeBridge()),probeHostbrrGateway(),probeHostbrrWorkerHeartbeat()
     ]);
     if(linode)checks.push(linode);
     checks.push(hostbrr);
+    if(hostbrrWorker)checks.push(hostbrrWorker);
     const result={
       product:'BLOFY CONTROL CENTER',version:1,mode:'read-only',
       checkedAt:new Date().toISOString(),
