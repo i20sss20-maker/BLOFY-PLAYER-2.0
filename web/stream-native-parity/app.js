@@ -1515,6 +1515,7 @@ function stopPlayback(sendStop){
 function cleanupPlayer(){
  if(S.playerView){
   S.playerView.liveHlsHandoff=null;
+  clearVodBufferNotice(S.playerView);
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
@@ -1564,6 +1565,27 @@ function simpleLiveStatus(message,error){
  // Collapse internal progress phases, never actionable errors or play prompts.
  if(/^جار |^انتهت جلسة المصدر؛ جار |^تغيّر تسلسل البث؛ جار |^مصدر البث مشغول أو غير متاح مؤقتًا؛ جار |^توقف مشغّل الفيديو دون طلب؛ جار |^تعليق في صورة البث؛ جار |^وصل الصوت أو توقيت البث لكن الصورة لم تظهر؛ جار /.test(message))return 'جار تشغيل القناة…';
  return message
+}
+// Keep normal rebuffering quiet; show a notice only for sustained waits.
+function queueVodBufferNotice(video){
+ var state=S.playerView,record=S.play,mode=state&&state.mode;
+ if(!state||state.kind==='live'||state.video!==video||state.bufferNoticeTimer||video.paused)return;
+ var at=Number(video.currentTime)||0;
+ state.bufferNoticeTimer=setTimeout(function(){
+  state.bufferNoticeTimer=null;
+  if(S.route!=='player'||S.playerView!==state||S.play!==record||state.mode!==mode||
+     video.paused||document.hidden||Math.abs((Number(video.currentTime)||0)-at)>0.15)return;
+  var el=document.getElementById('player-status');
+  if(el&&el.classList.contains('player-error'))return;
+  playerStatus('جار التحميل…')
+ },2500)
+}
+function clearVodBufferNotice(state){
+ if(state.bufferNoticeTimer){clearTimeout(state.bufferNoticeTimer);state.bufferNoticeTimer=null}
+ if(S.playerView!==state)return;
+ var el=document.getElementById('player-status');
+ if(el&&el.classList.contains('player-loading')&&el.textContent==='جار التحميل…')
+  el.style.display='none'
 }
 function playerStatus(message,error){
  if(S.playerView&&S.playerView.kind==='live')message=simpleLiveStatus(message,error);
@@ -2251,7 +2273,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(preview||!record.ready)status(preview?'جار تحميل المعاينة…':'جار تشغيل القناة…');
   else if(!record.quietWaitTimer)record.quietWaitTimer=setTimeout(function(){
    record.quietWaitTimer=null;if(alive()&&record.bufferSince&&!video.paused)status('جار تشغيل القناة…')
-  },900);
+  },2500);
   if(record.stallTimer)clearTimeout(record.stallTimer);
   record.stallTimer=setTimeout(function(){
    record.stallTimer=null;
@@ -2562,7 +2584,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  };
  video.onwaiting=video.onstalled=function(){
   if(!alive()||video.paused)return;
-  playerStatus('جار تحميل الجزء المطلوب من الفيلم…');
+  queueVodBufferNotice(video);
   checkStall()
  };
  video.onended=function(){
@@ -2738,7 +2760,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
   if(state.completed&&video.currentTime<5)state.completed=false;
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready()
  };
- video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ video.onwaiting=function(){if(alive()&&rec.ready)queueVodBufferNotice(video)};
  video.onended=function(){
   if(!alive())return;
   var absolute=at+Math.max(0,Number(video.currentTime)||0),
@@ -3349,6 +3371,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   },30000)
  }
  function onPlayingEvent(){
+  clearVodBufferNotice(state);
   var stats=state.stats,now=Date.now();
   state.pictureObservationAllowed=true;
   if(!stats.firstFrameAt)observeFirstPicture();
@@ -3366,6 +3389,13 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('canplay',confirmSeek);
  video.addEventListener('loadeddata',confirmSeek);
  video.addEventListener('timeupdate',confirmSeek);
+ video.addEventListener('timeupdate',function(){
+  if(isLive||S.playerView!==state)return;
+  var at=Number(video.currentTime)||0,prev=state.lastBufferNoticeTime;
+  state.lastBufferNoticeTime=at;
+  if(Number.isFinite(prev)&&at-prev>0.15&&!video.paused&&!video.seeking)
+   clearVodBufferNotice(state)
+ });
  video.addEventListener('pause',onPauseEvent);
  video.addEventListener('error',function(){state.stats.errors++});
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
@@ -3830,7 +3860,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  };
  video.onwaiting=video.onstalled=function(){
   if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
-  playerStatus('جار تعبئة مخزن الفيديو…');
+  queueVodBufferNotice(video);
   if(state.directTimer)clearTimeout(state.directTimer);
   state.directTimer=setTimeout(function(){
    state.directTimer=null;
