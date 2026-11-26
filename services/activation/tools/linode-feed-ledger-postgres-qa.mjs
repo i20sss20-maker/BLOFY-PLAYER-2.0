@@ -35,8 +35,13 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.transition({...t,next:'ready',generation})).ok,true);
   const viewer={...t,channelId:'123',generation,sessionId:randomUUID(),accountId:randomUUID(),
     accountQuota:1,authorizedUntil:new Date(Date.now()+120000).toISOString()};
-  assert.equal((await restored.attachViewer(viewer)).ok,true);
-  assert.equal((await restored.attachViewer(viewer)).ok,true);
+  const firstGrant=await restored.attachViewer(viewer);
+  assert.equal(firstGrant.ok,true);
+  const shortGrant=await restored.attachViewer({...viewer,authorizedUntil:new Date(Date.now()+20000).toISOString()});
+  assert.equal(shortGrant.ok,true);
+  assert.ok(Date.parse(shortGrant.expiresAt)<Date.parse(firstGrant.expiresAt));
+  const {rows:[stored]}=await pool.query('SELECT expires_at FROM blofy_linode_viewer_sessions WHERE session_id=$1',[viewer.sessionId]);
+  assert.equal(new Date(stored.expires_at).toISOString(),firstGrant.expiresAt);
   assert.equal((await restored.attachViewer({...viewer,sessionId:randomUUID()})).reason,'viewer_quota');
   const other={...viewer,sessionId:randomUUID(),accountId:randomUUID()};
   assert.equal((await restored.attachViewer(other)).ok,true);
