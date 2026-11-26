@@ -50,7 +50,7 @@ try{
    }
    throw Error('no decoded '+name+' frame '+JSON.stringify({ready:video.readyState,network:video.networkState,time:video.currentTime,width:video.videoWidth,paused:video.paused,mediaError:video.error?.code,codec:MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'),events}));
   }
-  const ops={detach,current:()=>true,visible:()=>true,matches:r=>r.id===wanted,wait(){},error(){throw Error('handoff failed')},timer:setTimeout,clear:clearTimeout,retry:setTimeout,stop:(key,done)=>{stops.push(key);acks.push(done)},start:r=>play(r.id)};
+  const ops={detach,current:()=>true,visible:()=>true,matches:r=>r.id===wanted,wait(){},error(){throw Error('handoff failed')},timer:(fn,ms)=>setTimeout(fn,ms),clear:id=>clearTimeout(id),retry:(fn,ms)=>setTimeout(fn,ms),stop:(key,done)=>{stops.push(key);acks.push(done)},start:r=>play(r.id)};
   if(!Hls.isSupported()||!MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'))throw Error('Test browser does not support required H.264/AAC MSE');
   play('red');const first=await picture('red');
   wanted='blue';queueLiveHlsHandoff(state,{id:'blue'},'red-sid',ops);
