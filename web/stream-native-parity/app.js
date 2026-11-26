@@ -2196,6 +2196,15 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(statusElement){if(statusElement.textContent!==text)statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
   else playerStatus(text)
  }
+ // WebKit can resume presenting frames without a new playing event.
+ function clearRecoveredLiveLoading(){
+  if(!alive()||preview||kind!=='live'||!record.ready||record.reconnecting||
+     video.paused||video.seeking||document.hidden)return;
+  if(record.quietWaitTimer){clearTimeout(record.quietWaitTimer);record.quietWaitTimer=null}
+  if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+  if(statusElement&&statusElement.classList.contains('player-loading')&&
+     statusElement.textContent==='جار تشغيل القناة…')statusElement.style.display='none'
+ }
  video.onerror=function(){if(alive()){
   var unsupported=video.error&&(video.error.code===4||video.error.code===3);
   // Some VIDAA browsers advertise native HLS but cannot actually decode it.
@@ -2249,7 +2258,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(!alive()||video.paused)return;
    // Buffering can freeze with readyState=4: inspect actual progress.
    var progress=livePlaybackProgress(record,video,Date.now());
-   if(progress.advanced)return;
+   if(progress.advanced){clearRecoveredLiveLoading();return}
    record.stallChecks++;
    if(record.stallChecks>=3){recoverConnection();return}
    if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
@@ -2282,7 +2291,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
     return
    }
-   if(progress.advanced)return;
+   if(progress.advanced){clearRecoveredLiveLoading();return}
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
     if(!preview)recordLiveIncident(Number(video.videoWidth)>0&&Number(video.videoHeight)>0?
