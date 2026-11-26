@@ -313,7 +313,7 @@ function navigate(route,opts,replace){
  if(route!==S.route)rememberView();
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
  // Release any live preview session before leaving its page (not just full-screen player).
- if(S.play&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
+ if((S.play||S.playerView)&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
  if(S.route==='player'&&route!=='player'&&S.playerView&&S.playerView.video){
   try{S.playerView.video.pause();S.playerView.video.removeAttribute('src');S.playerView.video.load()}catch(e){}
   S.playerView=null;
@@ -1341,7 +1341,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.8</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.9</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -1514,6 +1514,7 @@ function stopPlayback(sendStop){
 }
 function cleanupPlayer(){
  if(S.playerView){
+  S.playerView.liveHlsHandoff=null;
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
@@ -1949,7 +1950,51 @@ function playDirectMpegts(video,id,statusElement){
   }catch(e){fallback('تعذر تهيئة المشغّل المباشر؛ جار الرجوع إلى HLS.')}
  })
 }
+// Keep one in-flight STOP for this player. Every subsequent request replaces
+// the desired channel, not the retiring source. Retry must confirm the same
+// old SID after a failed STOP rather than opening a second connection.
+function queueLiveHlsHandoff(state,request,oldKey,ops){
+ var pending=state.liveHlsHandoff;
+ if(!pending){
+  if(!oldKey)return false;
+  pending=state.liveHlsHandoff={key:oldKey,request:request,inflight:false,ack:false};
+  ops.detach()
+ }else pending.request=request;
+ function complete(){
+  if(state.liveHlsHandoff!==pending||!ops.current())return;
+  if(!ops.visible()){ops.error();return}
+  var latest=pending.request;
+  if(!ops.matches(latest))return;
+  state.liveHlsHandoff=null;ops.start(latest)
+ }
+ if(pending.ack){complete();return true}
+ if(pending.inflight)return true;
+ pending.inflight=true;ops.wait();
+ var slow=ops.timer(function(){if(state.liveHlsHandoff===pending&&ops.current()&&pending.inflight)ops.error()},6500);
+ ops.stop(pending.key,function(status){
+  ops.clear(slow);pending.inflight=false;
+  if(state.liveHlsHandoff!==pending||!ops.current())return;
+  if(status!==200&&status!==404){ops.error();return}
+  pending.ack=true;complete()
+ });
+ return true
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
+ var player=S.playerView;
+ if(!preview&&kind==='live'&&S.route==='player'&&player&&player.video===video){
+  var oldKey=S.play&&S.play.video===video&&S.play.hlsKey;
+  if(queueLiveHlsHandoff(player,{id:id,ext:extension,track:track,attempt:recoveryAttempt},oldKey,{
+   detach:function(){stopPlayback(false)},
+   current:function(){return S.route==='player'&&S.playerView===player&&video.isConnected&&S.userVerified},
+   visible:function(){return !document.hidden&&navigator.onLine!==false&&!player.userPaused},
+   matches:function(next){return String(player.id)===String(next.id)},
+   wait:function(){playerStatus('جار تشغيل القناة…')},
+   error:function(){playerStatus('تعذر إنهاء الاتصال السابق. أعد المحاولة.',true)},
+   timer:setTimeout,clear:clearTimeout,
+   stop:function(key,done){api('POST','/api/hls/'+key+'/stop',{},done)},
+   start:function(next){playHls(video,'live',next.id,next.ext,next.track,statusElement,false,next.attempt)}
+  }))return
+ }
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
  var ultra=!preview&&!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
