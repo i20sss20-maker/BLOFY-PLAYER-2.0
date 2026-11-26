@@ -3,6 +3,7 @@ import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
+import {createAdmission,readBoundedJson} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
@@ -50,6 +51,8 @@ const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categor
 // External players cannot reuse browser cookies. Issue an opaque, one-use
 // handoff scoped to one authorized live channel, never an Xtream credential.
 const externalTickets=new Map(),externalActive=new Map();
+const externalIssueGate=createAdmission({limit:8,maxKeys:2048,maxInflight:24});
+const diagnosticGate=createAdmission({limit:60,maxKeys:4096,maxInflight:64,perKeyInflight:4});
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
 function pruneExternalTickets(now=Date.now()){
  for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
@@ -57,6 +60,7 @@ function pruneExternalTickets(now=Date.now()){
 function revokeExternal(bearer){
  if(!bearer)return;
  const account=externalAccountKey(bearer);
+ externalIssueGate.revoke(account);
  for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
  const active=externalActive.get(account);if(active)active.abort()
 }
@@ -96,14 +100,16 @@ if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
 if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
 if(p==='/api/external/live'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
- let body;try{if(Number(req.headers.get('content-length')||0)>256)return json(413,{error:'invalid_payload'});body=await req.json()}catch{return json(400,{error:'invalid_payload'})}
- const id=String(body?.id||'');if(!/^[1-9][0-9]{0,14}$/.test(id))return json(400,{error:'invalid_channel'});
+ const account=externalAccountKey(h.Authorization),lease=externalIssueGate.acquire(account);
+ if(!lease.ok)return json(429,{error:'external_rate_limit'},{'Retry-After':String(lease.retryAfter)});
  try{
+  const input=await readBoundedJson(req,256);if(!input.ok)return json(input.status,{error:'invalid_payload'});
+  const id=String(input.value.id||'');if(!/^[1-9][0-9]{0,14}$/.test(id))return json(400,{error:'invalid_channel'});
   const checked=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(5000)});
   if(!checked.ok){try{await checked.body?.cancel()}catch{};return json(checked.status===401?401:503,{error:'session_unavailable'})}
   const session=await checked.json();if(!session.active)return json(401,{error:'activation_required'});
   pruneExternalTickets();
-  const account=externalAccountKey(h.Authorization);
+  if(!lease.current()||req.signal.aborted)return json(401,{error:'session_cancelled'});
   if(externalActive.has(account))return json(409,{error:'external_stream_active'});
   for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
   if(externalTickets.size>=256)return json(429,{error:'external_capacity'});
@@ -112,7 +118,7 @@ if(p==='/api/external/live'&&method==='POST'){
   const ticket=randomBytes(32).toString('base64url'),key=externalAccountKey(ticket);
   externalTickets.set(key,{id,account,bearer:h.Authorization,until:Math.min(now+120000,accountExpiry),accountExpiry});
   return json(200,{path:'/external/live/'+ticket+'.ts',expiresIn:120})
- }catch{return json(503,{error:'external_unavailable'})}
+ }catch{return json(503,{error:'external_unavailable'})}finally{lease.release()}
 }
 if(p.startsWith('/external/live/')){
  if(method!=='GET'&&method!=='HEAD')return json(405,{error:'method_not_allowed'});
@@ -211,12 +217,15 @@ if(p==='/api/health/media'&&method==='GET'){
  }catch{return json(503,{ok:false,player:'unreachable'})}
 }
 if(p==='/api/player-diagnostic'&&method==='POST'){
- let data;try{if(Number(req.headers.get('content-length')||0)>700)return json(413,{error:'too_large'});data=await req.json()}catch{return json(400,{error:'invalid_diagnostic'})}
+ const lease=diagnosticGate.acquire(externalAccountKey(h.Authorization));
+ if(!lease.ok)return json(429,{error:'diagnostic_rate_limit'},{'Retry-After':String(lease.retryAfter)});
+ try{
+ const input=await readBoundedJson(req,700);if(!input.ok)return json(input.status,{error:'invalid_diagnostic'});const data=input.value;
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
  if(!['live','movie','series'].includes(kind)||
   !['direct','audio','video','fullvod','vodhls','hls','mpegts'].includes(mode)||
   !['live_start','media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout'].includes(phase)||
-  errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
+  !Number.isInteger(errorCode)||errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
  const rawId=String(data?.itemId||'');
  const itemRef=/^[1-9][0-9]{0,14}$/.test(rawId)&&KEY?
   createHmac('sha256',KEY).update(kind+':'+rawId).digest('hex').slice(0,12):null;
@@ -225,6 +234,7 @@ if(p==='/api/player-diagnostic'&&method==='POST'){
  const runtime=['installed','browser','preview'].includes(data?.runtime)?data.runtime:'unknown';
  console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,runtime,errorCode,itemRef,position:pos,duration});
  return json(200,{ok:true});
+ }finally{lease.release()}
 }
 if(p==='/api/session'&&method==='GET'){
  try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok)return json(r.status===403?403:401,{active:false});const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null,
