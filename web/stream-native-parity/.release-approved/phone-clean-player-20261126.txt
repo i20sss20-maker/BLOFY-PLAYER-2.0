@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.3
+PR #932 merged at 6e88a03798b968a4137ca3b343fc7ac86f377a8f. Production Docker build passed (45870475156), including artwork recovery and phone layout regression checks. Android audit retains existing Google Play baseline mismatch, no Android changes. Compact player, phone landscape layout, artwork recovery, cache revision. No source quota or transport changes. Actual iPhone playback and poster availability remain device/source dependent. Rollback: deployment e27e2308-4e22-4b02-96d7-fd5bc8f38e16 revision 7cad9070c696c361e61d6136e8d4237d40013696.
