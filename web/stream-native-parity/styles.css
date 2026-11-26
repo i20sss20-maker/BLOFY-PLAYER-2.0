@@ -907,3 +907,17 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
  html[data-blofy-device="touch"] .app .catalog.posters .poster-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
  html[data-blofy-device="touch"] .player-hud.native-stream-hud{max-height:52dvh;padding:5px 14px;gap:4px}
 }
+
+/* Customer settings — quiet, compact and consistent with the native app. */
+.customer-settings{width:min(100%,680px);margin:0 auto;padding:8px 0 24px;display:flex;flex-direction:column;gap:18px}
+.customer-setting-group{display:flex;flex-direction:column;gap:0;border:1px solid #41687180;background:#10303b;border-radius:14px;overflow:hidden}
+.customer-setting-group>h3{font-size:12px;font-weight:600;color:#aacbd0;padding:13px 15px 7px;margin:0}
+.customer-setting-row,.customer-setting-group #refresh-web-shell{width:100%;display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:12px 15px;margin:0;border:0;border-radius:0;border-top:1px solid #aacbd01a;background:transparent;color:#f2fcfb;text-align:start;font:inherit;cursor:pointer}
+.customer-setting-row:focus-visible,.customer-setting-group #refresh-web-shell:focus-visible{outline:2px solid #46e4d0;outline-offset:-3px;background:#164550}
+.customer-setting-row span{color:#aacbd0;font-size:18px}
+.customer-setting-row:disabled{opacity:.6;cursor:default}
+.customer-setting-row.customer-logout{color:#ff9e9e}
+.customer-setting-feedback{font-size:12px;line-height:1.55;color:#aacbd0;margin:0;padding:8px 15px;overflow-wrap:anywhere}
+.customer-setting-feedback:empty{display:none}
+.customer-version{font-size:11px;color:#aacbd0;opacity:.65;text-align:center;margin:0}
+.customer-settings .settings-inline-confirm{padding:12px;margin:0;border-top:1px solid #aacbd01a}
