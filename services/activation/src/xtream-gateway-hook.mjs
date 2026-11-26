@@ -43,6 +43,7 @@ import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor }
 import {queryXtreamCatalogPageNoParallel} from './xtream-catalog-low-memory-query.mjs';
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
 import {inspectLinodeGatewayMapping} from './linode-gateway-mapping-qa.mjs';
+import {linodeMaintenanceActive,blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
@@ -1101,6 +1102,7 @@ async function recoverOriginalUnmappedEpisode(key){
 // STREAM ticket service. No alternate source, ID, credentials or CDN guessing.
 // Each probe reads only the first media chunk and cancels its remaining body.
 async function probeUnavailableMediaOnSameSource(key){
+ if(linodeMaintenanceActive())return 'transient';
  const params=key.kind==='movie'?[key.serverId,key.itemId]:
   [key.serverId,key.itemId,key.seriesId];
  const sql=key.kind==='movie'
@@ -1158,7 +1160,7 @@ async function probeUnavailableMediaOnSameSource(key){
 async function runDueUnavailableMedia({sourceId=null}={}){
  const totals={checked:0,recovered:0,stillMissing:0,transient:0,
   busy:false};
- if(unavailableRecoveryBusy||!recoveryEnabled())
+ if(linodeMaintenanceActive()||unavailableRecoveryBusy||!recoveryEnabled())
   return {...totals,busy:unavailableRecoveryBusy};
  unavailableRecoveryBusy=true;
  try{
@@ -2757,6 +2759,10 @@ http.createServer = function withBlofyXtreamGateway(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if(blocksDuringLinodeMaintenance(url.pathname)){
+        return text(res,503,'BLOFY STREAM temporary maintenance','text/plain; charset=utf-8',
+          {'retry-after':'60','cache-control':'no-store'});
+      }
       if(url.pathname.startsWith('/internal/blofy-content-hub/')){
         await ensureReady();
         return handlePrivateContentHubSource(req,res,url);
