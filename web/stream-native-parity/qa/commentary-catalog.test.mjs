@@ -25,3 +25,19 @@ test('same-origin audio stays authenticated and player restores original on fail
  assert.match(app,/if\(state.stopCommentary\)state.stopCommentary\(\)/);
  assert.match(app,/document.removeEventListener\('visibilitychange',commentaryVisibility\)/);
 });
+
+test('manual commentary adjustment is limited to a real seekable audio range',()=>{
+ const app=readFileSync('app.js','utf8');
+ const a=app.indexOf('function commentarySeekTarget('),b=app.indexOf('function simpleLiveStatus(',a);
+ const target=new Function(app.slice(a,b)+';return commentarySeekTarget')();
+ const audio={paused:false,seeking:false,currentTime:15,seekable:{length:1,start:()=>10,end:()=>20}};
+ assert.equal(target(audio,1),16);assert.equal(target(audio,-1),14);
+ assert.equal(target(audio,30),null);
+ assert.equal(target({...audio,paused:true},1),null);
+ assert.equal(target({...audio,seeking:true},1),null);
+ assert.equal(target({...audio,currentTime:10},-1),null);
+ assert.equal(target({...audio,currentTime:19.5},1),null);
+ assert.equal(target({...audio,seekable:{length:0}},1),null);
+ assert.match(app,/active\.audio\.currentTime=target/);
+ assert.match(app,/commentary&&commentary\.audible/);
+});
