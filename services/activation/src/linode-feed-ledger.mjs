@@ -42,7 +42,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
  }
  return {
   async reserve({sourceId,channelId,requestId}={}){
-   if(!enabled(sourceId)||!channel.test(channelId||'')||!uuid.test(requestId||'')||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
+   if(!enabled(sourceId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
     if(row&&row.state!=='released'){
      if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown')
@@ -97,7 +97,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
     const result=await c.query(`INSERT INTO blofy_linode_viewer_sessions
       (session_id,source_id,reservation_id,account_id,channel_id,generation,expires_at)
       VALUES($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT(session_id) DO UPDATE SET expires_at=EXCLUDED.expires_at
+      ON CONFLICT(session_id) DO UPDATE SET expires_at=GREATEST(blofy_linode_viewer_sessions.expires_at,EXCLUDED.expires_at)
       WHERE NOT blofy_linode_viewer_sessions.closed
         AND blofy_linode_viewer_sessions.account_id=EXCLUDED.account_id
         AND blofy_linode_viewer_sessions.source_id=EXCLUDED.source_id
