@@ -37,4 +37,5 @@ jobs:
           fi
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/audio-compat/anis-test)" = 403
           test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $KEY" http://127.0.0.1:18080/audio-compat/anis-test)" = 401
-          curl --fail -H "x-compat-secret: $KEY" http://127.0.0.1:18080/internal/metrics
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $KEY" http://127.0.0.1:18080/internal/synthetic-audio)" = 404
+          curl --fail -H "x-compat-secret: $KEY" http://127.0.0.1:18080/internal/metrics | jq -e '.active==0 and .limit==1'
