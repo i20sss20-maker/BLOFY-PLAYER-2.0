@@ -28,3 +28,27 @@ export async function readBoundedJson(req,maxBytes,timeoutMs=5000){
   return {ok:true,value};
  }catch{return {ok:false,status:400}}finally{clearTimeout(timer);try{reader.releaseLock()}catch{}}
 }
+
+ // Never translate an upstream outage into a revoked subscription.
+export function sessionFailure(status){
+ return status===401||status===403?{status,body:{active:false}}:
+  {status:503,body:{error:'session_unavailable'}};
+}
+export function createPlaybackMetrics({clock=Date.now,maxBuckets=32}={}){
+ const buckets=new Map();
+ const bounds=[1000,3000,5000,10000,20000,60000];
+ function record({kind,runtime,phase,firstPictureMs}){
+  if(!['live','movie','series'].includes(kind)||!['installed','browser','preview','unknown'].includes(runtime))return false;
+  const key=kind+':'+runtime;
+  if(!buckets.has(key)){if(buckets.size>=maxBuckets)return false;buckets.set(key,{kind,runtime,events:0,starts:0,firstPictures:0,failures:0,firstPictureHistogram:Array(bounds.length+1).fill(0)})}
+  const b=buckets.get(key);b.events++;
+  if(phase==='live_start'||phase==='vod_full_start')b.starts++;
+  if(['media_error','mpegts_error','startup_timeout','hls_error','play_rejected'].includes(phase))b.failures++;
+  if(phase==='first_picture'&&Number.isInteger(firstPictureMs)&&firstPictureMs>=0&&firstPictureMs<=120000){
+   b.firstPictures++;let i=bounds.findIndex(n=>firstPictureMs<=n);if(i<0)i=bounds.length;b.firstPictureHistogram[i]++;
+  }
+  return true
+ }
+ function drain(){const data={at:clock(),firstPictureBoundsMs:bounds.slice(),buckets:[...buckets.values()]};buckets.clear();return data}
+ return {record,drain};
+}
