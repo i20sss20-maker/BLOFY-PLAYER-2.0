@@ -188,3 +188,17 @@ test('live recovery cannot allocate another connection while paused, hidden, off
  assert.equal(f(false,false,false,false),true);
  for(let bit=0;bit<4;bit++){const flags=[false,false,false,false];flags[bit]=true;assert.equal(f(...flags),false)}
 });
+
+test('VOD upgrade retains old session on failure and admits only the latest request after confirmation',()=>{
+ const a=app.indexOf('function retireVodBeforeUpgrade('),b=app.indexOf('function playFullVod(',a);
+ const retire=new Function(app.slice(a,b)+';return retireVodBeforeUpgrade')();
+ const state={},calls=[],opened=[];let detached=0,errors=0;
+ const ops=name=>({detach:()=>detached++,current:()=>true,stop:(url,cb)=>calls.push({url,cb}),error:()=>errors++,start:()=>opened.push(name)});
+ assert.equal(retire(state,'/api/vod/test/stop',ops('first')),true);
+ assert.equal(retire(state,null,ops('second')),true);
+ assert.equal(calls.length,1);calls[0].cb(503);
+ assert.equal(errors,1);assert.deepEqual(opened,[]);
+ retire(state,null,ops('latest'));assert.equal(calls[1].url,calls[0].url);
+ calls[1].cb(404);assert.deepEqual(opened,['latest']);
+ assert.equal(detached,1);assert.equal(state.vodUpgradeStop,null);
+});
