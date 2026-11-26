@@ -57,7 +57,16 @@ const externalTickets=new Map(),externalActive=new Map();
 const externalIssueGate=createAdmission({limit:8,maxKeys:2048,maxInflight:24});
 const diagnosticGate=createAdmission({limit:60,maxKeys:4096,maxInflight:64,perKeyInflight:4});
 const playbackMetrics=createPlaybackMetrics();
-setInterval(()=>{const report=playbackMetrics.drain();if(report.buckets.length)console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify(report))},60000).unref?.();
+let previousCatalogCounters={hits:0,misses:0,joined:0,rejected:0,started:0};
+setInterval(()=>{
+ const report=playbackMetrics.drain(),cache=catalogPageCache.stats(),flights=catalogFlights.snapshot();
+ const counters={hits:cache.hits,misses:cache.misses,joined:flights.joined,rejected:flights.rejected,started:flights.started};
+ const delta=Object.fromEntries(Object.entries(counters).map(([k,v])=>[k,Math.max(0,v-previousCatalogCounters[k])]));
+ previousCatalogCounters=counters;
+ if(report.buckets.length||Object.values(delta).some(v=>v>0)||flights.active){
+  console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify({...report,catalog:{...delta,entries:cache.entries,inflight:flights.active},external:{pending:externalTickets.size,active:externalActive.size},control:{issuance:externalIssueGate.snapshot().inflight,diagnostics:diagnosticGate.snapshot().inflight}}))
+ }
+},60000).unref?.();
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
 function pruneExternalTickets(now=Date.now()){
  for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
