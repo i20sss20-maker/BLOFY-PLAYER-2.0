@@ -4,18 +4,24 @@ on:
     paths:
       - 'services/activation/tools/blofy-local-hls-load.py'
       - 'services/activation/tools/test_blofy_local_hls_load.py'
+      - 'services/activation/tools/blofy-synthetic-hls-origin.py'
       - '.github/workflows/blofy-local-hls-qa.yml'
 permissions:
   contents: read
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Compile and run mocked regressions
         run: |
-          python3 -m py_compile services/activation/tools/blofy-local-hls-load.py
+          python3 -m py_compile services/activation/tools/blofy-local-hls-load.py services/activation/tools/blofy-synthetic-hls-origin.py
           python3 -m unittest discover -s services/activation/tools -p test_blofy_local_hls_load.py -v
+
+      - name: Smoke-test real synthetic HLS on runner
+        run: |
+          command -v ffmpeg
+          python3 services/activation/tools/blofy-synthetic-hls-origin.py --confirm-synthetic --max-viewers 5 --seconds 15
