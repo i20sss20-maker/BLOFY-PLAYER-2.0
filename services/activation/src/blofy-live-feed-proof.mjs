@@ -3,7 +3,7 @@ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const hex=/^[a-f0-9]{32}$/;
 const fields=['version','engineId','sourceId','channelId','reservationId','generation','challenge','observedAt','status','lastSegment','localSourceConnections'];
 const encode=p=>Buffer.from(JSON.stringify(['BLOFY_LIVE_FEED_PROOF_V1',...fields.map(k=>p[k])]));
-const valid=(p,now)=>p&&Object.keys(p).sort().join(',')===fields.slice().sort().join(',')&&p.version===1&&['hostbrr','linode'].includes(p.engineId)&&uuid.test(p.sourceId)&&uuid.test(p.reservationId)&&/^[1-9][0-9]{0,14}$/.test(p.channelId)&&hex.test(p.generation)&&hex.test(p.challenge)&&Number.isSafeInteger(p.observedAt)&&p.observedAt>=now-10000&&p.observedAt<=now+2000&&(
+const valid=(p,now)=>p&&Object.keys(p).sort().join(',')===fields.slice().sort().join(',')&&p.version===1&&['hostbrr','linode'].includes(p.engineId)&&['sourceId','reservationId','channelId','generation','challenge'].every(k=>typeof p[k]==='string')&&uuid.test(p.sourceId)&&uuid.test(p.reservationId)&&/^[1-9][0-9]{0,14}$/.test(p.channelId)&&hex.test(p.generation)&&hex.test(p.challenge)&&Number.isSafeInteger(p.observedAt)&&p.observedAt>=now-10000&&p.observedAt<=now+2000&&(
  (p.status==='private_hls_ready'&&Number.isSafeInteger(p.lastSegment)&&p.lastSegment>=0&&p.localSourceConnections===1)||
  (p.status==='stopped_and_fenced'&&p.lastSegment===null&&p.localSourceConnections===0));
 export function signFeedProof(p,key,now=Date.now()){
