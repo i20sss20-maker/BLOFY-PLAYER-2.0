@@ -3,6 +3,7 @@ import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
+import {createCatalogFlights} from './catalog-flights.mjs';
 import {audioWorkerHost} from './audio-worker-policy.mjs';
 import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
@@ -48,6 +49,7 @@ function normalizeSearch(text){
   .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
 }
 const catalogPageCache=createCatalogPageCache();
+const catalogFlights=createCatalogFlights();
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
 // External players cannot reuse browser cookies. Issue an opaque, one-use
 // handoff scoped to one authorized live channel, never an Xtream credential.
@@ -266,25 +268,26 @@ if(p==='/api/page'&&method==='GET'){
   const pageHit=catalogPageCache.get(pageCacheKey);
   if(pageHit)return json(200,pageHit,{'X-Blofy-Catalog-Cache':'HIT'})
  }
- const target=new URL(ORIGIN+'/player_api.php');target.searchParams.set('action',action);
- if(cat)target.searchParams.set('category_id',cat);
- let upstream=null,reader=null;
- const controller=new AbortController();
- const timer=setTimeout(()=>controller.abort(),100000);
- const abort=()=>controller.abort();
- req.signal.addEventListener('abort',abort,{once:true});
- try{
-  upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal:controller.signal});
-  if(!upstream.ok||!upstream.body)return json(upstream.status>=400?upstream.status:502,{error:'catalog_unavailable'});
-  reader=upstream.body.getReader();
-  const page=await readCatalogPage(reader,{offset,limit,match:item=>
-   (!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))});
-  try{await reader.cancel()}catch{}
-  const result={...page,kind:k};
-  if(pageCacheKey&&!req.signal.aborted)catalogPageCache.put(pageCacheKey,result);
-  return json(200,result,{'X-Blofy-Catalog-Cache':'MISS'});
- }catch(e){try{await reader?.cancel()}catch{};return json(502,{error:'catalog_page_failed'})}
- finally{clearTimeout(timer);req.signal.removeEventListener('abort',abort)}
+ const flightKey=createHmac('sha256',KEY).update(JSON.stringify(['catalog-flight-v1',h.Authorization,k,cat,query,offset,limit])).digest('hex');
+ const result=await catalogFlights.run(flightKey,async signal=>{
+  const target=new URL(ORIGIN+'/player_api.php');target.searchParams.set('action',action);
+  if(cat)target.searchParams.set('category_id',cat);
+  let upstream=null,reader=null;
+  try{
+   upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal});
+   if(!upstream.ok||!upstream.body)return {status:upstream.status>=400?upstream.status:502,error:'catalog_unavailable'};
+   reader=upstream.body.getReader();
+   const page=await readCatalogPage(reader,{offset,limit,match:item=>
+    (!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))});
+   if(signal.aborted)return {status:499,error:'catalog_cancelled'};
+   const payload={...page,kind:k};
+   if(pageCacheKey)catalogPageCache.put(pageCacheKey,payload);
+   return {status:200,payload};
+  }catch{return {status:502,error:'catalog_page_failed'}}
+  finally{try{void (reader?reader.cancel():upstream?.body?.cancel())?.catch(()=>{})}catch{}}
+ },req.signal);
+ if(result.status!==200)return json(result.status,{error:result.error},result.status===429?{'Retry-After':'2'}:{});
+ return json(200,result.payload,{'X-Blofy-Catalog-Cache':'MISS'});
 }
 
 if(p==='/api/catalog'&&method==='GET'){
