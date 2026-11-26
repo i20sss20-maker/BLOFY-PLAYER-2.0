@@ -5,10 +5,12 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id=v=>typeof v==='string'&&UUID.test(v)?v.toLowerCase():null;
 const streamId=v=>typeof v==='string'&&/^[1-9][0-9]{0,14}$/.test(v)?v:null;
 const expiry=v=>typeof v==='string'||v instanceof Date?new Date(v).getTime():NaN;
-export function preflightLinodeLive({account,row,kind,method,distributorAllowed,rights,engine}={},env=process.env,now=Date.now()){
+export function preflightLinodeLive({account,row,kind,method,distributorAllowed,rights,engine,engineId='linode'}={},env=process.env,now=Date.now()){
   const deny=reason=>({eligible:false,reason});
   if(env.BLOFY_LINODE_MEDIA_CANARY!=='1')return deny('disabled');
   if(!Number.isFinite(now)||kind!=='live'||method!=='GET')return deny('unsupported_request');
+  const mediaHost=engineId==='linode'?'media.blofyplayer.com':engineId==='hostbrr'&&env.BLOFY_HOSTBRR_MEDIA_CANARY==='1'?'media2.blofyplayer.com':null;
+  if(!mediaHost)return deny('engine_not_enabled');
   const accountId=id(account?.id),sourceId=id(row?.server_id),channelId=streamId(row?.source_id);
   if(!accountId||accountId!==id(env.BLOFY_LINODE_MEDIA_TEST_ACCOUNT_ID)||
      account?.enabled!==true||!Number.isSafeInteger(account.max_connections)||account.max_connections<1||
@@ -21,13 +23,13 @@ export function preflightLinodeLive({account,row,kind,method,distributorAllowed,
   // Independent, documented grant for THIS source and new media host. The
   // old relay's manual approval or provider metadata alone is not evidence.
   if(rights?.verified!==true||id(rights.sourceId)!==sourceId||
-     rights.mediaHost!=='media.blofyplayer.com'||
+     rights.mediaHost!==mediaHost||
      !Number.isFinite(expiry(rights.expiresAt))||expiry(rights.expiresAt)<=now)
     return deny('rights_not_verified');
   const quota=row.source_reported_max_connections;
   if(!Number.isSafeInteger(quota)||quota<1||quota>64)return deny('quota_unknown');
   const checked=expiry(engine?.observedAt);
-  if(engine?.healthy!==true||engine?.customerTrafficEnabled!==false||
+  if((engineId==='hostbrr'?engine?.engineId!=='hostbrr':(engine?.engineId??'linode')!=='linode')||engine?.healthy!==true||engine?.customerTrafficEnabled!==false||
      engine?.realSourceVerified!==true||id(engine.sourceId)!==sourceId||
      engine.channelId!==channelId||!Number.isFinite(checked)||checked<now-90000||checked>now+5000)
     return deny('source_playback_not_verified');
