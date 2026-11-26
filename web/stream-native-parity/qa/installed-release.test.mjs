@@ -59,3 +59,18 @@ test('phone orientation and player chrome remain compact',()=>{
  assert.match(app,/data-blofy-input'\)==='touch'\?3200:3800/);
  assert.match(app,/enrichPosters\('movie',film.slice\(0,12\)\);enrichPosters\('series',show.slice\(0,12\)\)/);
 });
+
+test('live loading status remains stable while actionable errors remain visible',()=>{
+ const a=app.indexOf('function simpleLiveStatus('),b=app.indexOf('function playerStatus(',a);
+ const normalize=new Function(app.slice(a,b)+';return simpleLiveStatus')();
+ for(const phase of ['جار إعادة تهيئة اتصال القناة…','جار استعادة القناة تلقائيًا… (2/4)','جار تعبئة مخزن البث لتقليل التقطيع…','انتهت جلسة المصدر؛ جار استعادة البث خلال 5 ثوانٍ…'])
+  assert.equal(normalize(phase,false),'جار تشغيل القناة…');
+ assert.equal(normalize('اضغط تشغيل ▶',false),'اضغط تشغيل ▶');
+ assert.equal(normalize('تعذر تشغيل القناة',false),'تعذر تشغيل القناة');
+ assert.equal(normalize('جار استعادة الاتصال',true),'جار استعادة الاتصال');
+ assert.match(app,/old\.quietWaitTimer\)clearTimeout/);
+ assert.match(app,/record\.quietWaitTimer=null;if\(alive\(\)&&record\.bufferSince/);
+ assert.match(app,/cachedInfo\?Promise\.resolve\(cachedInfo\):fetch\(manifest/);
+ assert.match(app,/record\.admissionVideoInfo=\{mode:response\.headers/);
+ assert.match(app,/phoneLiveLayout\(\)&&\(!guide\|\|!guide\.classList\.contains\('phone-guide-open'\)\)\)return/);
+});
