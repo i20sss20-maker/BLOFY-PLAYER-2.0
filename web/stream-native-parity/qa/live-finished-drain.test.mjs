@@ -93,3 +93,20 @@ test('full VOD exit ignores warnings only with successful exit and expected medi
  assert.equal(reason(1,'','vod_chunk_deadline_exceeded',true,true),'vod_chunk_deadline_exceeded');
  assert.equal(reason(1,'other',null,true,true),'vod_chunk_processing_failed');
 });
+
+test('retiring a live source explicitly cancels a pending locked probe exactly once',async()=>{
+ const a=source.indexOf('async function selectSourcePreservingInput('),b=source.indexOf('function concatTsProbe(',a);
+ const select=new Function(source.slice(a,b)+';return selectSourcePreservingInput')();
+ const controller=new AbortController();let calls=0,finishRead;
+ const body={getReader:()=>({read:()=>new Promise(resolve=>{finishRead=resolve}),cancel:async()=>{calls++;finishRead?.({done:true})}})};
+ const pending=select(body,true,controller.signal);
+ controller.abort();
+ const result=await pending;
+ await result.input.cancel();
+ assert.equal(calls,1);
+ assert.equal(result.copyVideo,false);
+});
+test('live abandoned sessions expire sooner without changing VOD idle policy',()=>{
+ assert.match(source,/session\.fullVod\?25\*60\*1000:session\.kind==='live'\?60000:110000/);
+ assert.match(source,/selectSourcePreservingInput\(sourceBody,!forceCompat&&kind==='live'&&ext==='ts',controller\.signal\)/);
+});
