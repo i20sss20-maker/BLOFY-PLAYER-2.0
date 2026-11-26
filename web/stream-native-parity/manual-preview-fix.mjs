@@ -758,4 +758,6 @@ change("     if(response.ok){\n      if(response.body&&response.body.cancel)", "
 change("2026.11.26.3 • '+(installedWebApp()", "2026.11.26.4 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.26.3');","target.searchParams.set('shell','2026.11.26.4');");
 
+change("2026.11.26.4 • '+(installedWebApp()", "2026.11.26.5 • '+(installedWebApp()");
+change("target.searchParams.set('shell','2026.11.26.4');","target.searchParams.set('shell','2026.11.26.5');");
 new Function(app);writeFileSync('app.js',app);
