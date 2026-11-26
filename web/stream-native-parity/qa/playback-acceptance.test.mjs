@@ -103,7 +103,7 @@ test('UI and CI integration: real-player stats only, account-partitioned report,
  assert.match(app,/id="last-long-playback-test"/);
  assert.doesNotMatch(app,/api\('POST','\/api\/acceptance/);
  assert.match(server,/p==='\/playback-acceptance\.js'/);
- assert.match(html,/<script src="\/playback-acceptance\.js\?v=2026\.11\.26\.3"><\/script>/);
+ assert.match(html,/<script src="\/playback-acceptance\.js\?v=2026\.11\.26\.4"><\/script>/);
  assert.match(docker,/COPY .*playback-acceptance\.js/);
  assert.match(worker,/\/playback-acceptance\.js/);
 });
