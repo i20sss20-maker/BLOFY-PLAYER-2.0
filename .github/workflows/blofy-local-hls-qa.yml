@@ -11,7 +11,7 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +21,13 @@ jobs:
           python3 -m py_compile services/activation/tools/blofy-local-hls-load.py services/activation/tools/blofy-synthetic-hls-origin.py
           python3 -m unittest discover -s services/activation/tools -p test_blofy_local_hls_load.py -v
 
+      - name: Provision FFmpeg on disposable CI runner if missing
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version
       - name: Smoke-test real synthetic HLS on runner
         run: |
-          command -v ffmpeg
           python3 services/activation/tools/blofy-synthetic-hls-origin.py --confirm-synthetic --max-viewers 5 --seconds 15
