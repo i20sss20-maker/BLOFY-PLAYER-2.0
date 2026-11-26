@@ -1,0 +1,2 @@
+MEDIA RELEASE — 2026-11-26
+PR #940 merged after media QA 45882830070 passed. Private authenticated audio conversion, bounded by existing encoder slots. No source quota changes. Real commentary playback not yet verified. Android CI baseline failure unrelated to media worker.
