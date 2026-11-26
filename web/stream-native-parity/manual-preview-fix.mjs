@@ -766,5 +766,5 @@ change("      status('المصدر مشغول حاليًا. اضغط إعادة 
 change("target.searchParams.set('shell','2026.11.26.6');","target.searchParams.set('shell','2026.11.26.7');");
 
 change("target.searchParams.set('shell','2026.11.26.7');","target.searchParams.set('shell','2026.11.26.8');");
-change("target.searchParams.set('shell','2026.11.26.8');","target.searchParams.set('shell','2026.11.26.10');");
+change("target.searchParams.set('shell','2026.11.26.8');","target.searchParams.set('shell','2026.11.26.11');");
 new Function(app);writeFileSync('app.js',app);
