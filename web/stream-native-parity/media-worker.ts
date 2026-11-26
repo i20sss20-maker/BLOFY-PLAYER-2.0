@@ -402,7 +402,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    return {error:'hls_start_cancelled',status:409}
   }
   if(!upstream.ok||!upstream.body){
-   const status=upstream.status,denial=classifyWebMediaAdmission(status,upstream.headers.get('retry-after'));
+   const status=upstream.status,denial=classifyWebMediaAdmission(kind,status,upstream.headers.get('retry-after'));
    try{await upstream.body?.cancel()}catch{}
    stopHls(session,'upstream_'+status);return denial
   }
