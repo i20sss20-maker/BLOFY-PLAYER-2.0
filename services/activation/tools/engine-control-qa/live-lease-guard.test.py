@@ -25,4 +25,30 @@ class LeaseTests(unittest.TestCase):
             a=guard.LiveLeaseGuard(None,identity,Path(d)/"state",verify=lambda p,s:True,clock=lambda:now,reader=lambda p:raw)
             with self.assertRaises(guard.LeaseError):a.active()
             self.assertFalse((Path(d)/"state").exists())
+    def test_watchdog_revokes_without_runtime_progress(self):
+        import threading
+        invalid=threading.Event()
+        killed=threading.Event()
+        notified=threading.Event()
+        class Fixture:
+            def active(self):
+                if invalid.is_set():raise guard.LeaseError("LEASE_EXPIRED")
+                return True
+        watchdog=guard.LeaseWatchdog(Fixture(),terminate=killed.set,interval=0.01,notify=notified.set)
+        try:
+            watchdog.start()
+            self.assertTrue(notified.wait(1))
+            invalid.set()
+            self.assertTrue(killed.wait(1))
+        finally:watchdog.stop_after_source_closed()
+    def test_watchdog_does_not_kill_after_socket_closed(self):
+        import threading
+        killed=threading.Event()
+        class Fixture:
+            def active(self):return True
+        watchdog=guard.LeaseWatchdog(Fixture(),terminate=killed.set,interval=0.01,notify=lambda:None)
+        watchdog.start()
+        watchdog.stop_after_source_closed()
+        self.assertFalse(killed.is_set())
+        self.assertFalse(watchdog.thread.is_alive())
 if __name__=="__main__":unittest.main()
