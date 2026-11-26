@@ -4007,7 +4007,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -4015,6 +4015,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function stopCommentary(){
   commentaryEpoch++;
+  if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}
   var old=commentary;commentary=null;
   if(!old)return;
   clearTimeout(old.timer);
@@ -4030,7 +4031,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
  video.addEventListener('seeking',stopCommentary);
- video.addEventListener('waiting',function(){if(commentary&&video.readyState<3)stopCommentary()});
+ video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}});
+ video.addEventListener('waiting',function(){
+  if(!commentary||commentaryVideoWait||video.readyState>=3)return;
+  var active=commentary;
+  commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
+ });
  function startCommentary(track){
   stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
@@ -4048,7 +4054,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    // Repeated waiting/stalled events cannot shorten startup or extend a retry forever.
    if(!record.timer)record.timer=setTimeout(fail,8000)
   };
-  record.timer=setTimeout(fail,15000);
+  record.timer=setTimeout(fail,24000);
   audio.src='/api/commentary/'+enc(track.id);
   try{var request=audio.play();if(request&&request.catch)request.catch(fail)}catch(e){fail()}
  }
