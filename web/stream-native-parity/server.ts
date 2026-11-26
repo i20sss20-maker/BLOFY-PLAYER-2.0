@@ -1,6 +1,6 @@
 import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
-import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
+import { createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
 import {createCatalogFlights} from './catalog-flights.mjs';
@@ -57,6 +57,25 @@ const externalTickets=new Map(),externalActive=new Map();
 const externalIssueGate=createAdmission({limit:8,maxKeys:2048,maxInflight:24});
 const diagnosticGate=createAdmission({limit:60,maxKeys:4096,maxInflight:64,perKeyInflight:4});
 const playbackMetrics=createPlaybackMetrics();
+// Private, opt-in operator endpoint. Separate secret, never a customer token.
+const OPS_KEY=String(Bun.env.VIDAA_WEB_OPS_KEY||'');
+const opsEnabled=/^[a-f0-9]{64}$/i.test(OPS_KEY)&&OPS_KEY!==KEY_HEX;
+const opsWindows=[];
+function opsAuthorized(req){
+ if(!opsEnabled)return false;
+ const supplied=req.headers.get('X-Blofy-Ops-Key')||'';
+ return /^[a-f0-9]{64}$/i.test(supplied)&&timingSafeEqual(Buffer.from(supplied,'hex'),Buffer.from(OPS_KEY,'hex'))
+}
+function opsSnapshot(){
+ const cache=catalogPageCache.stats(),flights=catalogFlights.snapshot();
+ return {mode:Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'?'synthetic-only':'service',
+  uptimeSeconds:Math.floor(process.uptime()),
+  rssBytes:process.memoryUsage().rss,
+  catalog:{entries:cache.entries,inflight:flights.active,hits:cache.hits,misses:cache.misses,joined:flights.joined,rejected:flights.rejected},
+  external:{pending:externalTickets.size,active:externalActive.size},
+  control:{issuance:externalIssueGate.snapshot().inflight,diagnostics:diagnosticGate.snapshot().inflight},
+  windows:opsWindows.slice()}
+}
 let previousCatalogCounters={hits:0,misses:0,joined:0,rejected:0,started:0};
 setInterval(()=>{
  const report=playbackMetrics.drain(),cache=catalogPageCache.stats(),flights=catalogFlights.snapshot();
@@ -64,7 +83,9 @@ setInterval(()=>{
  const delta=Object.fromEntries(Object.entries(counters).map(([k,v])=>[k,Math.max(0,v-previousCatalogCounters[k])]));
  previousCatalogCounters=counters;
  if(report.buckets.length||Object.values(delta).some(v=>v>0)||flights.active){
-  console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify({...report,catalog:{...delta,entries:cache.entries,inflight:flights.active},external:{pending:externalTickets.size,active:externalActive.size},control:{issuance:externalIssueGate.snapshot().inflight,diagnostics:diagnosticGate.snapshot().inflight}}))
+  const window={...report,catalog:{...delta,entries:cache.entries,inflight:flights.active},external:{pending:externalTickets.size,active:externalActive.size},control:{issuance:externalIssueGate.snapshot().inflight,diagnostics:diagnosticGate.snapshot().inflight}};
+  if(opsEnabled){opsWindows.push(window);if(opsWindows.length>60)opsWindows.shift()}
+  console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify(window))
  }
 },60000).unref?.();
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
@@ -80,6 +101,11 @@ function revokeExternal(bearer){
 }
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
+if(p==='/internal/ops'){
+ if(method!=='GET'||!opsAuthorized(req))return json(404,{error:'not_found'});
+ return json(200,opsSnapshot(),{'Referrer-Policy':'no-referrer'})
+}
+
 // Staging may exercise packaging and private worker readiness, but must not
 // use production subscriptions, origins, catalog requests, or media sessions.
 if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'){
