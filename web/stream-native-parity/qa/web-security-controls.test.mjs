@@ -20,3 +20,9 @@ test('valid small JSON succeeds and arrays/malformed input are rejected',async()
  assert.deepEqual(await readBoundedJson(req('{"id":"123"}'),256),{ok:true,value:{id:'123'}});
  for(const s of ['[]','null','{bad'])assert.equal((await readBoundedJson(req(s),256)).status,400);
 });
+
+test('slow body cannot monopolize admission indefinitely',async()=>{
+ let cancelled=false;const body=new ReadableStream({pull(){return new Promise(()=>{})},cancel(){cancelled=true}});
+ const result=await readBoundedJson({headers:new Headers(),body},256,10);
+ assert.equal(result.status,408);assert.equal(cancelled,true);
+});
