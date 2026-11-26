@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createAdmission,readBoundedJson} from '../web-security-controls.mjs';
+import {readFileSync} from 'node:fs';
+import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from '../web-security-controls.mjs';
 test('same account cannot issue overlapping tickets; release is idempotent',()=>{
  const g=createAdmission({limit:3});const a=g.acquire('opaque');assert.equal(a.ok,true);assert.equal(g.acquire('opaque').ok,false);a.release();a.release();assert.equal(g.snapshot().inflight,0);assert.equal(g.acquire('opaque').ok,true);
 });
@@ -25,4 +26,27 @@ test('slow body cannot monopolize admission indefinitely',async()=>{
  let cancelled=false;const body=new ReadableStream({pull(){return new Promise(()=>{})},cancel(){cancelled=true}});
  const result=await readBoundedJson({headers:new Headers(),body},256,10);
  assert.equal(result.status,408);assert.equal(cancelled,true);
+});
+
+test('session outage is not mistaken for invalid subscription',()=>{
+ for(const code of [0,429,500,502,503,504])assert.deepEqual(sessionFailure(code),{status:503,body:{error:'session_unavailable'}});
+ for(const code of [401,403])assert.deepEqual(sessionFailure(code),{status:code,body:{active:false}});
+});
+test('aggregate playback metrics keep fixed buckets and never retain supplied IDs',()=>{
+ const q=createPlaybackMetrics({clock:()=>100});
+ q.record({kind:'live',runtime:'installed',phase:'live_start',itemId:'private'});
+ q.record({kind:'live',runtime:'installed',phase:'first_picture',firstPictureMs:2500,account:'private'});
+ q.record({kind:'live',runtime:'installed',phase:'hls_error'});
+ assert.equal(q.record({kind:'unknown',runtime:'installed',phase:'first_picture',firstPictureMs:3}),false);
+ const report=q.drain(),b=report.buckets[0];assert.equal(b.starts,1);assert.equal(b.firstPictures,1);assert.equal(b.failures,1);
+ assert.deepEqual(b.firstPictureHistogram,[0,1,0,0,0,0,0]);assert.ok(!JSON.stringify(report).includes('private'));
+ assert.equal(q.drain().buckets.length,0);
+});
+test('boot recovery retries temporary failures without activation or navigation',()=>{
+ const app=readFileSync('app.js','utf8');
+ const a=app.indexOf('function bootSession('),b=app.indexOf('bootSession(0);',a);
+ assert.ok(a>=0&&b>a);
+ assert.match(app,/if\(st===401\|\|st===403\|\|\(st===200&&data.active===false\)\)/);
+ assert.match(app,/if\(attempt<3\)/);
+ assert.match(app,/state\.stats\.firstFrameAt-Number\(state\.stats\.openedAt/);
 });
