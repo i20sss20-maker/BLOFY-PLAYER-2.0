@@ -923,3 +923,20 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
 .customer-settings .settings-inline-confirm{padding:12px;margin:0;border-top:1px solid #aacbd01a}
 
 .customer-setting-row[hidden]{display:none!important}
+
+/* Mobile cinema controls: restrained chrome, consistent SVG and accessible targets. */
+.player-audio-notice{position:absolute;z-index:8;top:max(56px,calc(env(safe-area-inset-top,0px) + 12px));left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 32px);padding:9px 14px;border-radius:10px;background:#18242eee;color:#f5fbff;font-size:13px;line-height:1.5;text-align:center;pointer-events:none}
+.player-audio-notice[hidden]{display:none!important}
+@media(max-width:730px){
+ html[data-blofy-device="touch"] .player-hud.native-stream-hud{padding:10px 12px max(12px,env(safe-area-inset-bottom,0px));gap:8px;background:linear-gradient(transparent,rgba(0,0,0,.94) 70%)}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-topline{justify-content:flex-start;gap:6px}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-topline button{min-height:44px;border-radius:10px;background:#18232d;border:1px solid #ffffff22;color:#f4f7fa}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-dock{box-sizing:border-box;width:100%;max-width:450px;margin-inline:auto;gap:3px;padding:3px;border:0;border-radius:16px;background:#101820e8;box-shadow:none;overflow-x:auto;justify-content:flex-start}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-control{flex:0 0 44px;width:44px;height:44px;min-height:44px;padding:10px;border:0;border-radius:11px;background:transparent;color:#f1f5f8;box-shadow:none}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-control.native-player-primary{flex:1 0 44px;max-width:none;background:#17676c;color:#fff}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-icon{width:23px;height:23px}
+ html[data-blofy-device="touch"] .native-stream-hud .player-title{font-size:15px;font-weight:600;line-height:1.4}
+ html[data-blofy-device="touch"] .native-stream-hud .player-live-guide.phone-guide-open{border:0;background:#101820e8;border-radius:10px;padding:8px 10px}
+ html[data-blofy-device="touch"] .player-loading{top:calc(50% + 42px);background:#101820d9;border-radius:9px;font-size:12px;padding:8px 12px;pointer-events:none}
+}
+@media(max-width:360px){html[data-blofy-device="touch"] .native-stream-hud .native-player-dock{justify-content:flex-start}}
