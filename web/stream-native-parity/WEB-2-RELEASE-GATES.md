@@ -13,3 +13,13 @@ These are known deployed builds, not certified long-play builds.
 4. Test expired/reused external ticket, logout race, slow/oversized body, rate budgets, account isolation and permission checks.
 5. Separate audio worker only after staging proof; preserve licensed source and account connection limits. Failover requires a configured authorized backup.
 6. Canary and rollback using prior build. No production load test, wider rollout, quota increase or source change without a bounded test plan.
+
+## Private staging checkpoint — 2026-11-26
+- Railway project BLOFY-WEB-2-STAGING (9501c37d-dd0c-44b5-90c6-5cb170d4e689), environment staging (6e3978de-c204-4dbc-8de6-6f7388b94ab1).
+- Both services successfully deployed from 64b0df9bdc3ae64e8766bd3faa1c96f1a78758f1.
+- Audio deployment 17483b0c-2187-49c7-940b-ad81d2854987: startup health passed, including synthetic AAC/TS to MP3 conversion.
+- Web deployment 365fc5c2-8247-4d50-ad79-b8ff68e541b2: health initially 503 while audio initialized, then passed through internal private DNS. Readiness is dependency-aware.
+- No public customer domain or production subscription secret was configured. Both services use synthetic-only mode and capped resources (1 vCPU, 0.5 GB each).
+- Added integrated container QA for isolation, denied production API access, and dependency failure/recovery. Await its result; do not mark approved until green.
+- The synthetic-only environment cannot demonstrate licensed-source playback, real iOS/Toshiba behavior, long-play QoE, or multi-source failover. Those remain required for production promotion.
+- Keep production pinned to the rollback anchors above; no automatic promotion.
