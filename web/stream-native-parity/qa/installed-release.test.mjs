@@ -137,3 +137,15 @@ test('explicit channel selection clears previous user pause and loading text is 
  assert.match(app,/isLive\?' style="display:none"':''/);
  assert.match(app,/S\.queuedLiveOpen=intent/);
 });
+
+test('handoff adapters call browser timers without an invalid native receiver',()=>{
+ const a=app.indexOf('timer:function(fn,ms){return setTimeout(fn,ms)},clear:function(id){clearTimeout(id)},retry:function(fn,ms){return setTimeout(fn,ms)},');
+ assert.ok(a>=0,'native timer callbacks must be wrapped for browser invocation');
+ const line=app.slice(a,app.indexOf('\n',a)).trim().replace(/,$/,'');
+ let scheduled=0,cleared=0;
+ const nativeSet=function(fn,ms){'use strict';assert.equal(this,undefined);scheduled++;return 7};
+ const nativeClear=function(id){'use strict';assert.equal(this,undefined);assert.equal(id,7);cleared++};
+ const ops=new Function('setTimeout','clearTimeout','return ({'+line+'})')(nativeSet,nativeClear);
+ assert.equal(ops.timer(()=>{},6500),7);ops.clear(7);assert.equal(ops.retry(()=>{},700),7);
+ assert.equal(scheduled,2);assert.equal(cleared,1);
+});
