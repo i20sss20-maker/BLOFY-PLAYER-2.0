@@ -25,7 +25,7 @@ const server=createServer((req,res)=>{
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 let browser;
 try{
- browser=await chromium.launch({headless:true,args:['--autoplay-policy=no-user-gesture-required']});
+ browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
  const page=await browser.newPage();
  page.on('console',m=>console.log('browser:',m.text()));
  page.on('pageerror',e=>console.error('browser error:',e.message));
@@ -51,7 +51,7 @@ try{
    throw Error('no decoded '+name+' frame '+JSON.stringify({ready:video.readyState,network:video.networkState,time:video.currentTime,width:video.videoWidth,paused:video.paused,mediaError:video.error?.code,codec:MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'),events}));
   }
   const ops={detach,current:()=>true,visible:()=>true,matches:r=>r.id===wanted,wait(){},error(){throw Error('handoff failed')},timer:setTimeout,clear:clearTimeout,retry:setTimeout,stop:(key,done)=>{stops.push(key);acks.push(done)},start:r=>play(r.id)};
-  if(!Hls.isSupported())throw Error('MSE HLS unsupported');
+  if(!Hls.isSupported()||!MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'))throw Error('Test browser does not support required H.264/AAC MSE');
   play('red');const first=await picture('red');
   wanted='blue';queueLiveHlsHandoff(state,{id:'blue'},'red-sid',ops);
   wanted='red';queueLiveHlsHandoff(state,{id:'red'},null,ops);
