@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Private single-feed HLS worker. Never starts on install; exclusive slot required."""
 import fcntl, json, os, pwd, re, select, signal, socket, stat, subprocess, sys, time, uuid
-from blofy_live_lease_guard import LiveLeaseGuard, LeaseError
+from blofy_live_lease_guard import LiveLeaseGuard, LeaseError, LeaseWatchdog, notify_watchdog
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -47,6 +47,7 @@ def state(status, **extra):
 
 def released(c, checks=7, delay=10, check=account, sleep=time.sleep):
     for i in range(checks):
+        if lease_guard is not None:notify_watchdog()
         try:
             if check(c)==0:return True
         except Exception:pass
@@ -120,6 +121,7 @@ def send(proc, data):
 
 def run():
     global lease_guard
+    watchdog=None
     if os.environ.get('BLOFY_EXCLUSIVE_SOURCE_WINDOW')!='1':raise Stop('EXCLUSIVE_WINDOW_REQUIRED')
     channel=verify_channel(os.environ.get('BLOFY_LIVE_CHANNEL_ID',''))
     mode=os.environ.get('BLOFY_LIVE_MODE','pilot')
@@ -132,6 +134,8 @@ def run():
         try:lease_guard=LiveLeaseGuard(Path('/run/blofy-live-lease/lease.json'),identity,BASE/'lease-reservations')
         except LeaseError as e:raise Stop(str(e)) from None
         check_lease()
+        watchdog=LeaseWatchdog(lease_guard)
+        watchdog.start()
     if not configured_origin():raise Stop('APPROVED_ORIGIN_REQUIRED')
     c=read_secret(); owner=pwd.getpwnam('blofylive')
     if account(c)!=0:raise Stop('SOURCE_BUSY_NO_MEDIA_REQUEST')
@@ -165,6 +169,7 @@ def run():
     finally:
         if r is not None:r.close()
         if conn is not None:conn.close()
+        if watchdog is not None:watchdog.stop_after_source_closed()
         if proc is not None:
             if proc.stdin is not None:
                 try:proc.stdin.close()
