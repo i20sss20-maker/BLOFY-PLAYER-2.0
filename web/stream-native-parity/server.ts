@@ -421,6 +421,7 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
    let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){}
    const retrySeconds=Number(response.headers.get('retry-after')||0);
    const headers=noCache({'Content-Type':'application/json'});
+   if(response.status===503&&error==='live_source_channel_limit')headers['X-Blofy-Live-Status']='source_channel_limit';
    // Forward only numeric 1–30 second wait hints, never upstream URLs,
    // subscription data, source headers or untrusted arbitrary retry values.
    if(Number.isInteger(retrySeconds)&&retrySeconds>=1&&retrySeconds<=30)
