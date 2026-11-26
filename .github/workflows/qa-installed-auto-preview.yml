@@ -1,0 +1,14 @@
+name: QA installed auto preview
+on:
+  pull_request:
+    branches: [fix/web-installed-release-on-hide-20261126]
+    paths: ['web/stream-native-parity/**', '.github/workflows/qa-installed-auto-preview.yml']
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f web/stream-native-parity/Dockerfile web/stream-native-parity
