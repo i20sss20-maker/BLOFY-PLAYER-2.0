@@ -142,7 +142,7 @@ function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
  // The old fixed 9-minute timer killed active live streams even as viewers
  // kept fetching HLS segments. Refresh the guard only for legacy HLS sessions;
- // idle timeout still releases abandoned sessions after 110 seconds.
+ // Idle timeout releases abandoned live sessions sooner; VOD is unchanged.
  if(session.legacyHls&&session.hardTimer){
   clearTimeout(session.hardTimer);
   session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
@@ -150,7 +150,7 @@ function touchHls(session){
  }
  // Full-duration VOD generates chunks only on demand. Pausing longer than
  // two minutes must not invalidate its segment URL when playback resumes.
- const idleMs=session.fullVod?25*60*1000:110000;
+ const idleMs=session.fullVod?25*60*1000:session.kind==='live'?60000:110000;
  session.idleTimer=setTimeout(()=>stopHls(session,'idle_timeout'),idleMs);
  session.idleTimer.unref?.();
 }
@@ -311,13 +311,24 @@ function staleLiveManifest(session,filename,now){
  * Non-TS/HEVC/unknown inputs still take the compatibility transcoder.
  * The input returned here replays every prefetched byte before continuing.
  */
-async function selectSourcePreservingInput(body,allowCopy){
+async function selectSourcePreservingInput(body,allowCopy,signal){
  if(!allowCopy||!body||typeof body.getReader!=='function')
   return {input:body,copyVideo:false,detected:'not_applicable'};
  const reader=body.getReader(),prefix=[];
+ // Abort the locked probe reader explicitly. Fetch abort alone may leave
+ // the wrapper/FFmpeg input waiting on an in-flight read during zapping.
+ let cancelled=false;
+ function cancelSource(){
+  if(cancelled)return;
+  cancelled=true;
+  if(signal)signal.removeEventListener('abort',cancelSource);
+  try{void reader.cancel().catch(()=>{})}catch{}
+ }
+ function detachAbort(){if(signal)signal.removeEventListener('abort',cancelSource)}
+ if(signal){if(signal.aborted)cancelSource();else signal.addEventListener('abort',cancelSource,{once:true})}
  let bytes=0,readCount=0,codec={video:false,audio:false},ended=false;
  try{
-  while(bytes<188*320&&readCount<24){
+  while(!cancelled&&bytes<188*320&&readCount<24){
    const part=await reader.read();readCount++;
    if(part.done){ended=true;break}
    if(part.value&&part.value.byteLength){
@@ -334,14 +345,14 @@ async function selectSourcePreservingInput(body,allowCopy){
  const input=new ReadableStream({
   async pull(controller){
    if(next<prefix.length){controller.enqueue(prefix[next++]);return}
-   if(ended){controller.close();return}
+   if(ended||cancelled){detachAbort();controller.close();return}
    try{
     const part=await reader.read();
-    if(part.done){ended=true;controller.close();return}
+    if(part.done){ended=true;detachAbort();controller.close();return}
     controller.enqueue(part.value)
-   }catch(e){controller.error(e)}
+   }catch(e){cancelSource();controller.error(e)}
   },
-  cancel(reason){return reader.cancel(reason).catch(()=>{})}
+  cancel(){cancelSource()}
  });
  return {input,copyVideo:!!codec.video,detected:codec.video?'h264_transport':'needs_transcode'}
 }
@@ -435,7 +446,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
   const probeTimer=setTimeout(()=>controller.abort(),probeMs);
   probeTimer.unref?.();
   let sourceInput;
-  try{sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts')}
+  try{sourceInput=await selectSourcePreservingInput(sourceBody,!forceCompat&&kind==='live'&&ext==='ts',controller.signal)}
   finally{clearTimeout(probeTimer)}
   if(controller.signal.aborted){
    try{await sourceInput.input.cancel()}catch{}
