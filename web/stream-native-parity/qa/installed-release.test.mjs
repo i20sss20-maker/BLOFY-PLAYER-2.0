@@ -64,7 +64,7 @@ test('live loading status remains stable while actionable errors remain visible'
  const a=app.indexOf('function simpleLiveStatus('),b=app.indexOf('function playerStatus(',a);
  const normalize=new Function(app.slice(a,b)+';return simpleLiveStatus')();
  for(const phase of ['جار إعادة تهيئة اتصال القناة…','جار استعادة القناة تلقائيًا… (2/4)','جار تعبئة مخزن البث لتقليل التقطيع…','انتهت جلسة المصدر؛ جار استعادة البث خلال 5 ثوانٍ…'])
-  assert.equal(normalize(phase,false),'جار تشغيل القناة…');
+  assert.equal(normalize(phase,false),'');
  assert.equal(normalize('اضغط تشغيل ▶',false),'اضغط تشغيل ▶');
  assert.equal(normalize('تعذر تشغيل القناة',false),'تعذر تشغيل القناة');
  assert.equal(normalize('جار استعادة الاتصال',true),'جار استعادة الاتصال');
@@ -121,4 +121,19 @@ test('hidden or exited player never starts a queued connection',()=>{
  const f=handoffFixture();f.request('2','old-sid');f.hide();f.calls[0].done(200);
  assert.deepEqual(f.starts,[]);f.show();f.request('3',null);assert.deepEqual(f.starts,['3']);assert.equal(f.calls.length,1);
  const g=handoffFixture();g.request('2','old-sid');g.exit();g.calls[0].done(200);assert.deepEqual(g.starts,[]);
+});
+
+
+test('transient stop failure retries same SID automatically, latest channel only',()=>{
+ const a=app.indexOf('function queueLiveHlsHandoff('),b=app.indexOf('function playHls(',a);
+ const queue=new Function(app.slice(a,b)+';return queueLiveHlsHandoff')();
+ const state={},stops=[],starts=[],retries=[];let wanted='2',errors=0;
+ const ops={detach(){},current:()=>true,visible:()=>true,matches:r=>r.id===wanted,wait(){},error:()=>errors++,timer:()=>1,clear(){},retry:fn=>retries.push(fn),stop:(key,done)=>stops.push({key,done}),start:r=>starts.push(r.id)};
+ queue(state,{id:'2'},'old',ops);stops[0].done(503);assert.equal(retries.length,1);assert.equal(errors,0);
+ wanted='3';state.liveHlsHandoff.request={id:'3'};retries[0]();assert.equal(stops[1].key,'old');stops[1].done(200);assert.deepEqual(starts,['3']);
+});
+test('explicit channel selection clears previous user pause and loading text is hidden',()=>{
+ assert.match(app,/state\.userPaused=false;\s*if\(newId===String\(id\)\)/);
+ assert.match(app,/isLive\?' style="display:none"':''/);
+ assert.match(app,/S\.queuedLiveOpen=intent/);
 });
