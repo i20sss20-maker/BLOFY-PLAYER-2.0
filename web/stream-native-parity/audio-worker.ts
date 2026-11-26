@@ -6,8 +6,10 @@ const BASE='https://blofyplayer.com/api/v1/stream/media/';
 const slots=createAudioSlots(1);
 function json(status,body,extra={}){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...extra}})}
 function secureEquals(a,b){const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return /^[a-f0-9]{64}$/i.test(b)&&x.length===y.length&&timingSafeEqual(x,y)}
-const selftest=Bun.spawnSync([FFMPEG,'-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:sample_rate=44100','-t','0.2','-c:a','libmp3lame','-f','mp3','pipe:1'],{stdout:'pipe',stderr:'ignore',timeout:5000});
-const ready=selftest.exitCode===0&&selftest.stdout.byteLength>100&&/^[a-f0-9]{64}$/i.test(SECRET);
+// Exercise the actual transport-container to MP3 conversion, not just encoder presence.
+const fixture=Bun.spawnSync([FFMPEG,'-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','0.8','-c:a','aac','-f','mpegts','pipe:1'],{stdout:'pipe',stderr:'ignore',timeout:5000});
+const selftest=fixture.exitCode===0?Bun.spawnSync([FFMPEG,'-hide_banner','-loglevel','error','-i','pipe:0','-map','0:a:0','-vn','-c:a','libmp3lame','-f','mp3','pipe:1'],{stdin:fixture.stdout,stdout:'pipe',stderr:'ignore',timeout:5000}):null;
+const ready=!!selftest&&selftest.exitCode===0&&selftest.stdout.byteLength>100&&/^[a-f0-9]{64}$/i.test(SECRET);
 Bun.serve({port:Number(Bun.env.PORT||8080),idleTimeout:60,async fetch(req){
  const path=new URL(req.url).pathname;
  if(path==='/health'&&req.method==='GET')return json(ready?200:503,{ok:ready,service:'blofy-stream-web-audio'});
@@ -20,6 +22,7 @@ Bun.serve({port:Number(Bun.env.PORT||8080),idleTimeout:60,async fetch(req){
   const bearer=req.headers.get('authorization')||'';
   if(!match)return json(404,{error:'invalid_audio_track'});
   if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return json(401,{error:'authorization_missing'});
+  if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1')return json(403,{error:'synthetic_staging_only'});
   const releaseSlot=slots.acquire(createHmac('sha256',SECRET).update(bearer).digest('hex'));
   if(!releaseSlot)return json(429,{error:'audio_capacity'},{'Retry-After':'3'});
   const controller=new AbortController();
