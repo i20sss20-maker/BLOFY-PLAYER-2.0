@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.8
+PR #937 merged at 5f44830196f7897b9505bf118c6749dd9fd5011b. Production Docker QA passed (45875775255). Android audit retains existing version baseline mismatch. Manual one-second audio timing adjustments only within verified seekable ranges. No automatic synchronization claim or source quota changes. Real device playback required. Rollback deployment 415c2626-a4ac-4ed5-bd26-c60cf974f488.
