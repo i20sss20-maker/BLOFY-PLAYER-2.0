@@ -27,15 +27,18 @@ let browser;
 try{
  browser=await chromium.launch({headless:true,args:['--autoplay-policy=no-user-gesture-required']});
  const page=await browser.newPage();
+ page.on('console',m=>console.log('browser:',m.text()));
+ page.on('pageerror',e=>console.error('browser error:',e.message));
+ page.on('requestfailed',r=>console.error('fixture request failed:',new URL(r.url()).pathname,r.failure()?.errorText));
  const origin='http://127.0.0.1:'+server.address().port;
  await page.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.abort());
  await page.goto(origin);
  const result=await page.evaluate(async()=>{
   const video=document.getElementById('v'),state={},starts=[],stops=[],acks=[];
-  let engine=null,wanted='red';
+  let engine=null,wanted='red',events=[];
   const pause=ms=>new Promise(r=>setTimeout(r,ms));
   function detach(){if(engine){engine.destroy();engine=null}video.pause();video.removeAttribute('src');video.load()}
-  function play(name){starts.push(name);engine=new Hls({enableWorker:false});engine.loadSource('/'+name+'/index.m3u8');engine.attachMedia(video);engine.on(Hls.Events.MANIFEST_PARSED,()=>video.play().catch(()=>{}))}
+  function play(name){starts.push(name);events=[];engine=new Hls({enableWorker:false});engine.on(Hls.Events.ERROR,(_,e)=>{events.push({type:e.type,details:e.details,fatal:e.fatal});if(events.length>20)events.shift()});engine.on(Hls.Events.MANIFEST_PARSED,()=>{video.muted=true;video.play().catch(e=>events.push({play:e.name}))});engine.on(Hls.Events.MEDIA_ATTACHED,()=>engine.loadSource('/'+name+'/index.m3u8'));engine.attachMedia(video)}
   async function picture(name){
    const began=performance.now(),until=began+15000;
    while(performance.now()<until){
@@ -45,7 +48,7 @@ try{
     }
     await pause(100);
    }
-   throw Error('no decoded '+name+' frame');
+   throw Error('no decoded '+name+' frame '+JSON.stringify({ready:video.readyState,network:video.networkState,time:video.currentTime,width:video.videoWidth,paused:video.paused,mediaError:video.error?.code,codec:MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'),events}));
   }
   const ops={detach,current:()=>true,visible:()=>true,matches:r=>r.id===wanted,wait(){},error(){throw Error('handoff failed')},timer:setTimeout,clear:clearTimeout,retry:setTimeout,stop:(key,done)=>{stops.push(key);acks.push(done)},start:r=>play(r.id)};
   if(!Hls.isSupported())throw Error('MSE HLS unsupported');
