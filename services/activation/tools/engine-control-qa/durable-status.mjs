@@ -31,6 +31,10 @@ const logged=new Map();
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
  try{
+  if(req.method==='GET'&&req.url==='/install/bounded-pilot-worker.py'){
+   const body=readFileSync(new URL('../blofy-bounded-pilot-worker.py',import.meta.url));
+   res.writeHead(200,{'content-type':'text/plain; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-length':body.length});return res.end(body);
+  }
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
   if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll'].includes(req.url))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
