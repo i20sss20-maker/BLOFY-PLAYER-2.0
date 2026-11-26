@@ -904,4 +904,23 @@ function resumeLiveHlsNetwork(engine,manifest,record){`);
 change("  if(!preview)recordLiveIncident('buffering');", "  if(!preview)recordLiveIncident('buffering');\n  if(!document.hidden&&navigator.onLine!==false)adaptLiveBuffer(record,record.engine,Date.now(),true,preview);");
 change("   if(progress.advanced){clearRecoveredLiveLoading();return}\n   if(progress.idleMs>=16000)", "   if(progress.advanced){adaptLiveBuffer(record,record.engine,now,false,preview);clearRecoveredLiveLoading();return}\n   if(progress.idleMs>=16000)");
 
+
+change("function resumeLiveHlsNetwork(engine,manifest,record){",`function liveRecoveryAllowed(paused,hidden,offline,external){
+ return !paused&&!hidden&&!offline&&!external
+}
+function resumeLiveHlsNetwork(engine,manifest,record){`);
+change(" function recoverConnection(){\n  if(!alive()||record.reconnecting)return;\n  if(preview){",` function recoverConnection(){
+  if(!alive()||record.reconnecting)return;
+  var owner=!preview&&S.playerView;
+  if(!liveRecoveryAllowed(owner&&owner.userPaused,document.hidden,navigator.onLine===false,owner&&owner.externalMode)){
+   // Keep the current SID. A hidden/offline/paused viewer must not
+   // allocate a fresh encoder or trigger codec fallback.
+   if(!record.retryTimer&&!(owner&&(owner.userPaused||owner.externalMode))){
+    record.retryTimer=setTimeout(function(){record.retryTimer=null;if(alive())recoverConnection()},3000)
+   }
+   return
+  }
+  if(preview){`);
+change("   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;", "   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;\n   if(navigator.onLine===false){record.lastProgressAt=Date.now();record.lastVisualSampleAt=record.lastProgressAt;record.visualProgressSeen=false;return}");
+
 new Function(app);writeFileSync('app.js',app);
