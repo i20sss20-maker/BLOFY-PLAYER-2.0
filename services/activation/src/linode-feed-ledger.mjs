@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {signLiveLease} from './blofy-live-worker-lease.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const channel=/^[1-9][0-9]{0,14}$/;
 const blocked=reason=>({ok:false,reason});
@@ -16,6 +17,7 @@ export async function ensureLinodeFeedLedger(db){
  updated_at timestamptz NOT NULL DEFAULT now()
  )`);
  await db.query("ALTER TABLE blofy_linode_feed_ledger ADD COLUMN IF NOT EXISTS engine_id text NOT NULL DEFAULT 'linode' CHECK (engine_id IN ('linode','hostbrr'))");
+ await db.query('ALTER TABLE blofy_linode_feed_ledger ADD COLUMN IF NOT EXISTS worker_lease_sequence bigint NOT NULL DEFAULT 0');
  await db.query(`CREATE TABLE IF NOT EXISTS blofy_linode_feed_requests (
  request_id uuid PRIMARY KEY, source_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
  )`);
@@ -56,6 +58,29 @@ export function createLinodeFeedLedger(pool,env=process.env){
      releaseConfirmed:row.state==='released'};
    });
   },
+  // Issue only while holding the SAME source lock as reserve and transition.
+  // A caller must supply a separately enforced source-wide ingress fence;
+  // a maintenance flag, heartbeat, or provider zero alone is not that proof.
+  async issueWorkerLease({sourceId,reservationId,engineId,channelId,fence,signingKey}={}){
+   if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||
+      !uuid.test(reservationId??'')||!channel.test(channelId??''))return blocked('lease_disabled_or_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||!['pending','ready'].includes(row.state)||row.reservation_id!==reservationId||
+       row.engine_id!==engineId||row.channel_id!==channelId)return blocked('lease_reservation_mismatch');
+    const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(clock.now).getTime();
+    if(fence?.authoritative!==true||fence?.scope!=='all_paths'||fence.sourceId!==sourceId||
+       fence.reservationId!==reservationId||fence.engineId!==engineId||
+       !Number.isSafeInteger(fence.observedAt)||fence.observedAt<now-10000||fence.observedAt>now+2000||
+       !Number.isSafeInteger(fence.expiresAt)||fence.expiresAt<=now+15000)return blocked('lease_ingress_fence_unconfirmed');
+    const sequence=Number(row.worker_lease_sequence)+1;
+    if(!Number.isSafeInteger(sequence)||sequence<1)return blocked('lease_sequence_invalid');
+    const lease=signLiveLease({version:1,sourceId,reservationId,channelId,engineId,sequence,
+      issuedAt:now,expiresAt:Math.min(now+60000,fence.expiresAt)},signingKey,now);
+    await c.query('UPDATE blofy_linode_feed_ledger SET worker_lease_sequence=$2 WHERE source_id=$1',[sourceId,sequence]);
+    return {ok:true,...lease};
+   });
+  },
   // Trusted internal lookup only. This cannot authorize playback or open a
   // source socket. attachViewer must recheck this identity under the same
   // source lock before any signed grant is returned.
@@ -88,7 +113,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
      VALUES($1,$2,$3,$4,'pending',$5)
      ON CONFLICT(source_id) DO UPDATE SET channel_id=EXCLUDED.channel_id,
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
-     state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
+     state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,worker_lease_sequence=0,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
     return {ok:true,action:'start_once',reservationId,state:'pending'};
    });
   },
