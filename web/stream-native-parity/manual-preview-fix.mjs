@@ -835,4 +835,5 @@ change("  function selectFullscreenChannel(requestedId){\n   if(S.route!=='playe
 
 change("   state.externalPending=true;state.externalMode=true;state.userPaused=true;", "   state.externalPending=true;state.externalMode=true;state.userPaused=true;state.externalRetiringStop=stop||null;");
 change("    if(st===200||st===404)issue();", "    if(st===200||st===404){state.externalRetiringStop=null;issue()}");
+change("timer:setTimeout,clear:clearTimeout,retry:setTimeout,", "timer:function(fn,ms){return setTimeout(fn,ms)},clear:function(id){clearTimeout(id)},retry:function(fn,ms){return setTimeout(fn,ms)},");
 new Function(app);writeFileSync('app.js',app);
