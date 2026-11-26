@@ -73,12 +73,18 @@ def main():
                     ready_by = time.monotonic() + 35
                     while time.monotonic() < ready_by:
                         if worker.poll() is not None:
-                            raise RuntimeError('synthetic encoder exited before readiness')
+                            raise RuntimeError('synthetic encoder exited before readiness: ' +
+                                               (root / 'ffmpeg.log').read_text(errors='replace')[-3000:])
                         if len(list(root.glob('segment-*.ts'))) >= 3 and (root / 'index.m3u8').is_file():
                             break
                         time.sleep(.25)
                     else:
                         raise RuntimeError('synthetic encoder readiness timeout')
+                    # Decode one closed synthetic segment; HTTP bytes alone are not media validation.
+                    segment = sorted(root.glob('segment-*.ts'))[-2]
+                    subprocess.run([ffmpeg, '-nostdin', '-v', 'error', '-xerror',
+                                    '-i', str(segment), '-map', '0:v:0', '-map', '0:a:0',
+                                    '-f', 'null', '-'], check=True, timeout=15)
                     thread = threading.Thread(target=server.serve_forever, daemon=True)
                     thread.start()
                     for count in qa.STAGES:
