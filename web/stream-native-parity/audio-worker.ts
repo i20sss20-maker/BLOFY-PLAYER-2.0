@@ -31,9 +31,10 @@ Bun.serve({port:Number(Bun.env.PORT||8080),idleTimeout:60,async fetch(req){
    if(req.signal.aborted){stop();return json(410,{error:'audio_cancelled'})}
    timer=setTimeout(stop,12000);
    const source=await fetch(BASE+'audio/'+match[1],{headers:{Authorization:bearer,Accept:'audio/*,video/mp2t'},redirect:'manual',signal:controller.signal});
-   if(!source.ok||!source.body){try{await source.body?.cancel()}catch{};stop();return json([401,403,429].includes(source.status)?source.status:502,{error:'audio_source_unavailable'})}
+   if(!source.ok||!source.body){try{void source.body?.cancel().catch(()=>{})}catch{};stop();return json([401,403,429].includes(source.status)?source.status:502,{error:'audio_source_unavailable'})}
+   if(controller.signal.aborted){try{void source.body.cancel().catch(()=>{})}catch{};stop();return json(410,{error:'audio_cancelled'})}
    const mime=audioContainer(source.headers.get('content-type'));
-   if(!mime){await source.body.cancel();stop();return json(415,{error:'unsupported_audio_container'})}
+   if(!mime){try{void source.body.cancel().catch(()=>{})}catch{};stop();return json(415,{error:'unsupported_audio_container'})}
    proc=Bun.spawn([FFMPEG,'-hide_banner','-loglevel','error','-nostdin','-probesize','1000000','-analyzeduration','1500000','-i','pipe:0','-map','0:a:0','-vn','-sn','-dn','-threads','1','-c:a','libmp3lame','-b:a','128k','-ac','2','-ar','44100','-f','mp3','pipe:1'],{stdin:source.body,stdout:'pipe',stderr:'ignore',signal:controller.signal});
    proc.exited.then(()=>{release();controller.abort()},()=>{release();controller.abort()});
    reader=proc.stdout.getReader();
