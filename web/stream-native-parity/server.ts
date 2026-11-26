@@ -47,6 +47,19 @@ function normalizeSearch(text){
 }
 const catalogPageCache=createCatalogPageCache();
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
+// External players cannot reuse browser cookies. Issue an opaque, one-use
+// handoff scoped to one authorized live channel, never an Xtream credential.
+const externalTickets=new Map(),externalActive=new Map();
+function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
+function pruneExternalTickets(now=Date.now()){
+ for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
+}
+function revokeExternal(bearer){
+ if(!bearer)return;
+ const account=externalAccountKey(bearer);
+ for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
+ const active=externalActive.get(account);if(active)active.abort()
+}
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
 
@@ -80,7 +93,54 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 }
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
-if(p==='/api/logout'&&method==='POST')return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});
+if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/external/live'&&method==='POST'){
+ const h=auth(req);if(!h)return json(401,{error:'activation_required'});
+ let body;try{if(Number(req.headers.get('content-length')||0)>256)return json(413,{error:'invalid_payload'});body=await req.json()}catch{return json(400,{error:'invalid_payload'})}
+ const id=String(body?.id||'');if(!/^[1-9][0-9]{0,14}$/.test(id))return json(400,{error:'invalid_channel'});
+ try{
+  const checked=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(5000)});
+  if(!checked.ok){try{await checked.body?.cancel()}catch{};return json(checked.status===401?401:503,{error:'session_unavailable'})}
+  const session=await checked.json();if(!session.active)return json(401,{error:'activation_required'});
+  pruneExternalTickets();
+  const account=externalAccountKey(h.Authorization);
+  if(externalActive.has(account))return json(409,{error:'external_stream_active'});
+  for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
+  if(externalTickets.size>=256)return json(429,{error:'external_capacity'});
+  const now=Date.now(),accountExpiry=session.expiresAt?Date.parse(session.expiresAt):Infinity;
+  if(!(accountExpiry>now))return json(401,{error:'subscription_expired'});
+  const ticket=randomBytes(32).toString('base64url'),key=externalAccountKey(ticket);
+  externalTickets.set(key,{id,account,bearer:h.Authorization,until:Math.min(now+120000,accountExpiry),accountExpiry});
+  return json(200,{path:'/external/live/'+ticket+'.ts',expiresIn:120})
+ }catch{return json(503,{error:'external_unavailable'})}
+}
+if(p.startsWith('/external/live/')){
+ if(method!=='GET'&&method!=='HEAD')return json(405,{error:'method_not_allowed'});
+ const match=p.match(/^\/external\/live\/([A-Za-z0-9_-]{43})\.ts$/);
+ if(!match)return json(404,{error:'external_invalid'});
+ pruneExternalTickets();const key=externalAccountKey(match[1]),ticket=externalTickets.get(key);
+ if(!ticket)return json(410,{error:'external_expired'});
+ if(method==='HEAD')return new Response(null,{headers:noCache({'Content-Type':'video/mp2t','Accept-Ranges':'none'})});
+ if(externalActive.has(ticket.account)||externalActive.size>=32)return json(429,{error:'external_capacity'});
+ externalTickets.delete(key);
+ const controller=new AbortController();externalActive.set(ticket.account,controller);
+ const expiry=setTimeout(()=>controller.abort(),Math.min(2*60*60*1000,Math.max(0,ticket.accountExpiry-Date.now())));
+ let headerTimer=setTimeout(()=>controller.abort(),15000),reader=null,closed=false;
+ const cleanup=()=>{if(closed)return;closed=true;clearTimeout(expiry);clearTimeout(headerTimer);controller.abort();if(externalActive.get(ticket.account)===controller)externalActive.delete(ticket.account)};
+ req.signal.addEventListener('abort',cleanup,{once:true});controller.signal.addEventListener('abort',cleanup,{once:true});
+ try{
+  if(req.signal.aborted){cleanup();return json(410,{error:'external_cancelled'})}
+  const upstream=await fetch(ORIGIN+'/api/v1/stream/media/live/'+ticket.id+'.ts',{headers:{Authorization:ticket.bearer,Accept:'video/mp2t,application/octet-stream','accept-encoding':'identity'},redirect:'manual',signal:controller.signal});
+  clearTimeout(headerTimer);
+  const mime=(upstream.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+  if(upstream.status!==200||!upstream.body||!['video/mp2t','application/octet-stream'].includes(mime)){try{await upstream.body?.cancel()}catch{};cleanup();return json([401,403,429].includes(upstream.status)?upstream.status:502,{error:'external_media_unavailable'})}
+  reader=upstream.body.getReader();
+  return new Response(new ReadableStream({
+   async pull(c){try{const n=await reader.read();if(n.done){c.close();cleanup()}else c.enqueue(n.value)}catch(e){c.error(e);cleanup()}},
+   cancel(){cleanup();try{return reader.cancel()}catch{}}
+  }),{headers:noCache({'Content-Type':'video/mp2t','Accept-Ranges':'none'})});
+ }catch{cleanup();return json(502,{error:'external_connection_failed'})}
+}
 if(p==='/api/redeem'&&method==='POST'){
  let input={};try{if(Number(req.headers.get('content-length')||0)>2048)return json(413,{error:'invalid_payload'});input=await req.json()}catch{return json(400,{error:'invalid_payload'})}
  const code=String(input.code||'').toUpperCase().trim();const key=String(input.deviceKey||'');
@@ -366,8 +426,18 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
   // unknown binary body as audio and never relax the authenticated origin.
   const aliases:Record<string,string>={'audio/mp3':'audio/mpeg','audio/x-mpeg':'audio/mpeg','audio/x-mp3':'audio/mpeg','audio/x-aac':'audio/aac','audio/aacp':'audio/aac'};
   const mime=Object.hasOwn(aliases,rawMime)?aliases[rawMime]:rawMime;
+  // The authenticated origin has already verified the input bytes. Convert
+  // only known containers, without accepting generic binary/HTML/JSON.
+  if(r.ok&&r.body&&['video/mp2t','audio/ogg','audio/flac'].includes(mime)){
+   try{await r.body.cancel()}catch{}
+   const host=String(Bun.env.VIDAA_COMPAT_URL||''),secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
+   if(!/^http:\/\/blofy-stream-web-media\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
+   const converted=await fetch(host+'/audio-compat/'+id,{headers:{Authorization:h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
+   if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:'audio_conversion_unavailable'})}
+   return new Response(converted.body,{headers:noCache({'Content-Type':'audio/mpeg','Accept-Ranges':'none'})});
+  }
   if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/mp4'].includes(mime)){
-   console.warn('commentary_upstream_rejected',{status:r.status,hasBody:!!r.body,mimeClass:rawMime.startsWith('audio/')?'audio_other':rawMime==='application/octet-stream'?'binary':rawMime==='application/json'?'json':'other'});
+   console.warn('commentary_upstream_rejected',{status:r.status,hasBody:!!r.body,mimeClass:rawMime.startsWith('audio/')?'audio_other':rawMime==='application/octet-stream'?'binary':rawMime==='application/json'?'json':rawMime==='video/mp2t'?'transport_stream':'other'});
    await r.body?.cancel();return json(r.status===401||r.status===403?r.status:r.status===429?429:503,{error:'commentary_unavailable'})
   }
   return new Response(r.body,{headers:noCache({'Content-Type':mime,'Accept-Ranges':'none'})});

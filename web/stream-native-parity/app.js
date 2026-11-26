@@ -1345,7 +1345,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.11</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.12</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -2933,7 +2933,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -3047,6 +3047,51 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var panel=document.getElementById('player-more-panel');
   if(!panel)return;
   panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
+ };
+ var externalButton=document.getElementById('player-external');
+ if(externalButton)externalButton.onclick=function(){
+  if(S.route!=='player'||S.playerView!==state||state.externalPending||state.liveHlsHandoff)return;
+  var opts=[];
+  if(typeof video.webkitShowPlaybackTargetPicker==='function')opts.push({name:'AirPlay',select:function(){video.webkitShowPlaybackTargetPicker()}});
+  if(document.pictureInPictureEnabled&&video.requestPictureInPicture)opts.push({name:'صورة داخل صورة',select:function(){var p=video.requestPictureInPicture();if(p&&p.catch)p.catch(function(){playerStatus('الصورة داخل صورة غير متاحة الآن.')})}});
+  else if(video.webkitSetPresentationMode&&video.webkitSupportsPresentationMode&&video.webkitSupportsPresentationMode('picture-in-picture'))
+   opts.push({name:'صورة داخل صورة',select:function(){video.webkitSetPresentationMode('picture-in-picture')}});
+  opts.push({name:'VLC / مشغل خارجي',select:function(){
+   // Leave current playback before issuing a different stream; never open
+   // two connections intentionally or expose subscriber credentials.
+   if(state.externalPending)return;
+   var record=S.play,selected=String(state.id),stop=record&&(record.stopUrl||(record.hlsKey&&'/api/hls/'+record.hlsKey+'/stop'));
+   state.externalPending=true;state.userPaused=true;
+   if(state.stopCommentary)state.stopCommentary();
+   stopPlayback(false);
+   function issue(){
+    if(S.playerView!==state||S.route!=='player'||String(state.id)!==selected){state.externalPending=false;return}
+    api('POST','/api/external/live',{id:selected},function(st,data){
+     state.externalPending=false;
+     if(S.playerView!==state||S.route!=='player'||String(state.id)!==selected)return;
+     if(st!==200||!data||!/^\/external\/live\/[A-Za-z0-9_-]{43}\.ts$/.test(data.path)){playerStatus('تعذر تجهيز المشغل الخارجي. أعد فتح القناة.',true);return}
+     var url=window.location.protocol+'//'+window.location.host+data.path;
+     playerStatus('تم إيقاف المشغل الداخلي. الرابط صالح لمدة دقيقتين.');
+     showPlayerChoices('التشغيل الخارجي — استخدام واحد',[
+      {name:'فتح في VLC',select:function(){
+       var ua=navigator.userAgent||'';
+       if(/iPhone|iPad|iPod/i.test(ua)||appleTouchBrowser(ua,navigator.maxTouchPoints))window.location.href='vlc://'+url;
+       else if(/Android/i.test(ua))window.location.href='intent://'+url.replace(/^https:\/\//,'')+'#Intent;scheme=https;package=org.videolan.vlc;type=video/mp2t;end';
+       else window.prompt('انسخ الرابط وافتحه في VLC عبر فتح تدفق شبكة',url)
+      }},
+      {name:'نسخ الرابط لمشغل خارجي',select:function(){
+       if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).catch(function(){window.prompt('انسخ الرابط',url)});
+       else window.prompt('انسخ الرابط',url)
+      }}
+     ],externalButton)
+    })
+   }
+   if(stop)api('POST',stop,{},function(st){
+    if(st===200||st===404)issue();
+    else{state.externalPending=false;if(S.playerView===state)playerStatus('تعذر إغلاق جلسة البث السابقة. أعد فتح القناة.',true)}
+   });else issue()
+  }});
+  showPlayerChoices('التشغيل الخارجي',opts,externalButton)
  };
  var guideToggle=document.getElementById('player-guide-toggle');
  if(guideToggle)guideToggle.onclick=function(){var guide=document.querySelector('.player-live-guide');if(guide){var show=guide.classList.toggle('phone-guide-open');this.setAttribute('aria-expanded',String(show));if(show){if(state.refreshLiveGuide)state.refreshLiveGuide();if(moreToggle)moreToggle.click()}revealControls()}};
@@ -3962,7 +4007,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -3970,6 +4015,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function stopCommentary(){
   commentaryEpoch++;
+  if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}
   var old=commentary;commentary=null;
   if(!old)return;
   clearTimeout(old.timer);
@@ -3985,7 +4031,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
  video.addEventListener('seeking',stopCommentary);
- video.addEventListener('waiting',function(){if(commentary&&video.readyState<3)stopCommentary()});
+ video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}});
+ video.addEventListener('waiting',function(){
+  if(!commentary||commentaryVideoWait||video.readyState>=3)return;
+  var active=commentary;
+  commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
+ });
  function startCommentary(track){
   stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
@@ -4003,7 +4054,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    // Repeated waiting/stalled events cannot shorten startup or extend a retry forever.
    if(!record.timer)record.timer=setTimeout(fail,8000)
   };
-  record.timer=setTimeout(fail,15000);
+  record.timer=setTimeout(fail,24000);
   audio.src='/api/commentary/'+enc(track.id);
   try{var request=audio.play();if(request&&request.catch)request.catch(fail)}catch(e){fail()}
  }

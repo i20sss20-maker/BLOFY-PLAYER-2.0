@@ -766,5 +766,45 @@ change("      status('المصدر مشغول حاليًا. اضغط إعادة 
 change("target.searchParams.set('shell','2026.11.26.6');","target.searchParams.set('shell','2026.11.26.7');");
 
 change("target.searchParams.set('shell','2026.11.26.7');","target.searchParams.set('shell','2026.11.26.8');");
-change("target.searchParams.set('shell','2026.11.26.8');","target.searchParams.set('shell','2026.11.26.11');");
+change("target.searchParams.set('shell','2026.11.26.8');","target.searchParams.set('shell','2026.11.26.12');");
+
+// Final customer playback policy: selection is explicit play intent;
+// keep progress text silent and retry the same retiring SID, never overlap.
+change("return 'جار تشغيل القناة…';","return '';");
+change("if(!preview&&kind==='live')text=simpleLiveStatus(text,false);","if(kind==='live')text=simpleLiveStatus(text,false);");
+change("if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'","if(!preview)statusElement.style.display=text&&text.slice(0,1)!=='●'?'block':'none'");
+change("if(statusElement){statusElement.textContent=msg;statusElement.style.display='block'}","if(statusElement){msg=simpleLiveStatus(msg,false);statusElement.textContent=msg;statusElement.style.display=msg?'block':'none'}");
+change("(isLive?'جار تشغيل القناة…':'جار تجهيز المشغّل…')","(isLive?'':'جار تجهيز المشغّل…')");
+change("id=\"player-status\" role=\"status\">","id=\"player-status\" role=\"status\"'+(isLive?' style=\"display:none\"':'')+'>");
+change("if(box)box.textContent='جار تبديل المعاينة للقناة المحددة…';","if(box)box.textContent='';");
+change("if(box)box.textContent='جار تبديل القناة…';","if(box)box.textContent='';");
+change("if(box)box.textContent='جار تشغيل معاينة '+title(item)+' تلقائيًا…';","if(box)box.textContent='';");
+change("if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق وتشغيل القناة…';","if(waitBox)waitBox.textContent='';");
+change("if(previewStatus)previewStatus.textContent='جار نقل القناة إلى المشغّل الكامل…';","if(previewStatus)previewStatus.textContent='';");
+change("جار تشغيل معاينة القناة…</div>","</div>");
+change("if(!newId||newId===String(id))return;","if(!newId)return;\n   state.userPaused=false;\n   if(newId===String(id)){if(!S.play||state.liveHlsHandoff)resumeSelectedLiveTransport(state,video,document.getElementById('player-status'));else if(video.paused&&state.toggle)state.toggle();return}");
+change("if(status!==200&&status!==404){ops.error();return}","if(status!==200&&status!==404){\n   pending.failures=(pending.failures||0)+1;\n   if(ops.retry&&pending.failures<=2){ops.retry(function(){if(state.liveHlsHandoff===pending&&ops.current()&&ops.visible()&&!pending.inflight&&!pending.ack)queueLiveHlsHandoff(state,pending.request,null,ops)},pending.failures*700);return}\n   ops.error();return\n  }");
+change("timer:setTimeout,clear:clearTimeout,","timer:setTimeout,clear:clearTimeout,retry:setTimeout,");
+change("if(!ops.visible()){ops.error();return}","if(!ops.visible())return;");
+change("   },260)\n  }\n  function switchChannel","   },120)\n  }\n  function switchChannel");
+change("  },800)\n }\n}\nfunction decodeEpgField","  },350)\n }\n}\nfunction decodeEpgField");
+// Explicit open while the preview is retiring: remember only latest request.
+change(" if(isLive&&installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElementById('live-status');if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق؛ أعد الضغط بعد لحظات.';return}\n if(isLive&&(S.previewStopPending||S.previewRecoveryStop)){var pendingStatus=document.getElementById('live-status');if(pendingStatus)pendingStatus.textContent='جار إنهاء اتصال المعاينة؛ أعد الضغط بعد اكتماله.';return}",` if(isLive&&((installedWebApp()&&pendingMediaStops>0)||S.previewStopPending||S.previewRecoveryStop||S.previewToFullPending)){
+  var intent={id:String(id),route:S.route,epoch:S.accountEpoch,attempt:0};S.queuedLiveOpen=intent;
+  function resumeOpen(){
+   if(S.queuedLiveOpen!==intent||S.route!==intent.route||S.accountEpoch!==intent.epoch||String(S.selected)!==intent.id||!S.userVerified)return;
+   if((installedWebApp()&&pendingMediaStops>0)||S.previewStopPending||S.previewRecoveryStop||S.previewToFullPending){
+    if(++intent.attempt<100)setTimeout(resumeOpen,150);
+    else{S.queuedLiveOpen=null;var box=document.getElementById('live-status');if(box)box.textContent='تعذر إنهاء الاتصال السابق. أعد المحاولة.'}
+    return
+   }
+   S.queuedLiveOpen=null;openPlayer(kind,id,extension,name,from,replacePlayerHistory)
+  }
+  setTimeout(resumeOpen,150);return
+ }`);
+// Preserve the retiring preview SID across transient STOP failures.
+change("  var previousKey=previous.hlsKey,settled=false,guard=null;","  var previousKey=previous.hlsKey,settled=false,guard=null,stopAttempts=0;");
+change("   settled=true;if(guard)clearTimeout(guard);\n   S.previewStopPending=false;","   if(guard)clearTimeout(guard);\n   if(st!==200&&st!==404&&++stopAttempts<=2&&S.route==='live'&&video.isConnected){setTimeout(sendPreviewStop,stopAttempts*700);return}\n   settled=true;S.previewStopPending=false;");
+change("  guard=setTimeout(function(){finished(0)},6500);\n  api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)});","  function sendPreviewStop(){\n   if(settled)return;\n   api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)})\n  }\n  sendPreviewStop();");
+
 new Function(app);writeFileSync('app.js',app);
