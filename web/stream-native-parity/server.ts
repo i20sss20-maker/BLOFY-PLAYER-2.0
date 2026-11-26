@@ -101,6 +101,12 @@ function revokeExternal(bearer){
 }
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
+if(p==='/internal/ops/view'||p==='/internal/ops/view.js'){
+ if(method!=='GET'||!opsEnabled)return json(404,{error:'not_found'});
+ const isJs=p.endsWith('.js'),file=Bun.file(new URL(isJs?'./ops-dashboard.js':'./ops-dashboard.html',import.meta.url));
+ if(!await file.exists())return json(404,{error:'not_found'});
+ return new Response(file,{headers:noCache({'Content-Type':isJs?'application/javascript; charset=utf-8':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",'X-Robots-Tag':'noindex, nofollow'})});
+}
 if(p==='/internal/ops'){
  if(method!=='GET'||!opsAuthorized(req))return json(404,{error:'not_found'});
  return json(200,opsSnapshot(),{'Referrer-Policy':'no-referrer'})
