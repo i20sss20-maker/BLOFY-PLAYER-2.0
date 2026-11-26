@@ -44,6 +44,7 @@ import {queryXtreamCatalogPageNoParallel} from './xtream-catalog-low-memory-quer
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
 import {inspectLinodeGatewayMapping} from './linode-gateway-mapping-qa.mjs';
 import {linodeMaintenanceActive,blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
+import {createLegacyIngress} from './blofy-engine-legacy-ingress.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
@@ -141,6 +142,7 @@ const pool = new pg.Pool({
   statement_timeout: 30000
 });
 pool.on('error', error => console.error('xtream gateway database error:', safeErrorSummary(error)));
+const enterLegacyIngress=createLegacyIngress(pool);
 const distributorCatalog=createDistributorCustomerCatalog({
   pool,enabled:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY==='1',
   distributorAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_IDS||'',
@@ -1359,6 +1361,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       kind,phase:'failed',itemId:gatewayId,reason:'merchant_catalog_hidden'});
     return text(res,404,'Stream not found');
   }
+  const ingress=await enterLegacyIngress(row.server_id);
+  if(!ingress.ok)return text(res,503,'Source temporarily unavailable','text/plain; charset=utf-8',{'retry-after':'5','cache-control':'no-store'});
+  try {
   // A media client's requested filename extension might be guessed. Movies and
   // episodes use the authoritative extension stored at import time, not a guess.
   // Live streams may choose TS or HLS when the source supports those formats.
@@ -1978,6 +1983,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     req.off('aborted',abort);
     res.off('close',onClose);
   }
+  } finally { await ingress.close(); }
 }
 
 // Per-request ACL on every HLS segment/key/variant. Expiring tickets hide
@@ -2004,6 +2010,9 @@ async function handleAuthorizedXtreamHls(req,res,match){
   const distributorScope=await distributorCatalog.forAccount(account);
   if(await distributorCatalog.isHidden(distributorScope,'live',row.source_id))
     return text(res,404,'Stream not found');
+  const ingress=await enterLegacyIngress(row.server_id);
+  if(!ingress.ok)return text(res,503,'Source temporarily unavailable','text/plain; charset=utf-8',{'retry-after':'5','cache-control':'no-store'});
+  try {
   if(renewed){
     // Never return expired provider URLs; a 307 keeps playlist/segment URI
     // semantics and is issued only to an already authorized, active viewer.
@@ -2074,6 +2083,7 @@ async function handleAuthorizedXtreamHls(req,res,match){
     if(response?.body&&!response.body.locked)await response.body.cancel().catch(()=>{});
     client.abort();
   }
+  } finally { await ingress.close(); }
 }
 
 
