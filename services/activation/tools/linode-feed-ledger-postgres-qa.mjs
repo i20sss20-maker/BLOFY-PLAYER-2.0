@@ -16,7 +16,7 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   pool=new pg.Pool({...options,options:'-c search_path='+schema,max:12});
   await ensureLinodeFeedLedger(pool);
   const sourceId=randomUUID(),requestId=randomUUID();
-  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId};
+  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_LINODE_VIEWER_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId};
   const ledger=createLinodeFeedLedger(pool,env);
   const args={sourceId,channelId:'123',requestId};
   const all=await Promise.all(Array.from({length:30},()=>ledger.reserve(args)));
@@ -31,6 +31,22 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   const restored=createLinodeFeedLedger(pool,env);
   assert.equal((await restored.reserve(args)).action,'existing');
   const t={sourceId,reservationId};
+  const generation=randomUUID().replaceAll('-','');
+  assert.equal((await restored.transition({...t,next:'ready',generation})).ok,true);
+  const viewer={...t,channelId:'123',generation,sessionId:randomUUID(),accountId:randomUUID(),
+    accountQuota:1,authorizedUntil:new Date(Date.now()+120000).toISOString()};
+  assert.equal((await restored.attachViewer(viewer)).ok,true);
+  assert.equal((await restored.attachViewer(viewer)).ok,true);
+  assert.equal((await restored.attachViewer({...viewer,sessionId:randomUUID()})).reason,'viewer_quota');
+  const other={...viewer,sessionId:randomUUID(),accountId:randomUUID()};
+  assert.equal((await restored.attachViewer(other)).ok,true);
+  assert.equal((await restored.attachViewer({...other,generation:'0'.repeat(32)})).ok,false);
+  assert.equal((await restored.closeViewer(viewer)).ok,true);
+  assert.equal((await restored.attachViewer(viewer)).ok,false);
+  assert.equal((await restored.attachViewer({...viewer,sessionId:randomUUID()})).reason,'viewer_quota');
+  const more=await Promise.all(Array.from({length:155},()=>restored.attachViewer({...viewer,accountId:randomUUID(),sessionId:randomUUID()})));
+  assert.equal(more.filter(x=>x.ok).length,148);
+  assert.equal(more.filter(x=>x.reason==='viewer_quota').length,7);
   assert.equal((await restored.transition({...t,next:'unknown'})).ok,true);
   assert.equal((await restored.transition({...t,next:'released'})).ok,false);
   assert.equal((await restored.reserve({...args,requestId:randomUUID()})).ok,false);
