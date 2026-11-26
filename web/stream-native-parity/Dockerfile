@@ -16,6 +16,8 @@ COPY qa/pwa-shell-assets.test.mjs qa/installed-release.test.mjs /app/qa/
 RUN bun test ./qa/pwa-shell-assets.test.mjs ./qa/installed-release.test.mjs
 COPY qa/commentary-catalog.test.mjs qa/web-security-controls.test.mjs qa/audio-worker-policy.test.mjs /app/qa/
 RUN bun test ./qa/commentary-catalog.test.mjs ./qa/web-security-controls.test.mjs ./qa/audio-worker-policy.test.mjs
+COPY audio-worker.ts /app/
+RUN bun build audio-worker.ts --target=bun --outfile=/tmp/audio-worker-check.js && rm /tmp/audio-worker-check.js
 ENV PORT=8080
 EXPOSE 8080
 USER bun
