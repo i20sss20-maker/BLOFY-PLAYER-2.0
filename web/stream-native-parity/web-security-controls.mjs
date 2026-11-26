@@ -13,16 +13,18 @@ export function createAdmission({limit=6,windowMs=60000,maxKeys=2048,maxInflight
  }
  return {acquire,revoke(key){const e=entries.get(key);if(e)e.generation++},snapshot(){return {keys:entries.size,inflight}}};
 }
-export async function readBoundedJson(req,maxBytes){
+export async function readBoundedJson(req,maxBytes,timeoutMs=5000){
  const declared=req.headers.get('content-length');
  if(declared!==null&&(!/^\d+$/.test(declared)||Number(declared)>maxBytes))return {ok:false,status:413};
  if(!req.body)return {ok:false,status:400};
  const reader=req.body.getReader();let size=0;const chunks=[];
+ let timer;const deadline=new Promise(resolve=>{timer=setTimeout(()=>resolve({timeout:true}),timeoutMs)});
+ const cancel=()=>{try{void reader.cancel().catch(()=>{})}catch{}};
  try{
-  while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){try{await reader.cancel()}catch{};return {ok:false,status:413}}chunks.push(value)}
+  while(true){const part=await Promise.race([reader.read(),deadline]);if(part.timeout){cancel();return {ok:false,status:408}}const {done,value}=part;if(done)break;size+=value.byteLength;if(size>maxBytes){cancel();return {ok:false,status:413}}chunks.push(value)}
   const data=new Uint8Array(size);let offset=0;for(const chunk of chunks){data.set(chunk,offset);offset+=chunk.byteLength}
   const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data));
   if(!value||typeof value!=='object'||Array.isArray(value))return {ok:false,status:400};
   return {ok:true,value};
- }catch{return {ok:false,status:400}}finally{try{reader.releaseLock()}catch{}}
+ }catch{return {ok:false,status:400}}finally{clearTimeout(timer);try{reader.releaseLock()}catch{}}
 }
