@@ -671,4 +671,37 @@ change("   playerStatus('تعذر تأكيد إغلاق جلسة البث الس
  }else api('POST',stopUrl,{},finished)
 }`);
 
+// Explicit channel selection starts the muted preview immediately; passive
+// focus on installed WebKit must not start a provider connection.
+change("function selectChannel(id,activate){","function selectChannel(id,activate,explicit){");
+change("if(selected)selectChannel(itemId(selected,'live'),true);","if(selected)selectChannel(itemId(selected,'live'),true,true);");
+change("selectChannel(S.selected,true)\n","selectChannel(S.selected,true,true)\n");
+change("if(ch){selectChannel(ch,true);return}","if(ch){selectChannel(ch,true,true);return}");
+change(" if(installedWebApp()){\n  if(desc)desc.textContent='اضغط المعاينة أو تشغيل القناة • لتوفير اتصال البث';\n  if(S.play&&S.play.preview&&String(S.play.id)!==String(id))stopPlayback(true);\n  return\n }",` if(installedWebApp()&&!explicit){
+  if(desc)desc.textContent='اختر القناة لتشغيلها مباشرة';
+  return
+ }
+ if(activate&&explicit&&!S.previewToFullPending){
+  beginPreview(item);return
+ }`);
+change(" if(installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElementById('live-status');if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق؛ أعد الضغط بعد لحظات.';return}",` if(installedWebApp()&&pendingMediaStops>0){
+  var waitBox=document.getElementById('live-status');
+  if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق وتشغيل القناة…';
+  var selectedId=itemId(item,'live'),attempt=0;
+  function resumePreview(){
+   S.autoPreviewTimer=null;
+   if(S.route!=='live'||String(S.selected)!==String(selectedId)||document.hidden)return;
+   if(pendingMediaStops>0){
+    if(++attempt<40)S.autoPreviewTimer=setTimeout(resumePreview,150);
+    else if(waitBox)waitBox.textContent='تعذر إنهاء الاتصال السابق؛ أعد اختيار القناة.';
+    return
+   }
+   beginPreview(item)
+  }
+  S.autoPreviewTimer=setTimeout(resumePreview,150);return
+ }`);
+change("if(video.paused&&S.play.ready){","if(video.paused&&(S.play.ready||S.play.autoplayBlocked)){");
+change("2026.11.26.1 • '+(installedWebApp()", "2026.11.26.2 • '+(installedWebApp()");
+change("target.searchParams.set('shell','2026.11.25.8');","target.searchParams.set('shell','2026.11.26.2');");
+
 new Function(app);writeFileSync('app.js',app);
