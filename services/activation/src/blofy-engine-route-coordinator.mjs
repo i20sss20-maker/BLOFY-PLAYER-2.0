@@ -2,12 +2,12 @@
 // An authenticated, durable operation claim is required before any side effect.
 // Adapters must enforce idempotency and transactional source reservation.
 import {planEngineRoute} from './blofy-engine-route-plan.mjs';
-export function createEngineRouteCoordinator({claims,readSnapshot,start,release,attach,enabled=false,clock=Date.now}={}){
+export function createEngineRouteCoordinator({claims,ledger,readSnapshot,start,release,attach,enabled=false,clock=Date.now}={}){
  return async function route(request){
   const hold=reason=>({ok:false,action:'hold',reason});
   if(!enabled)return hold('disabled');
   if(typeof request?.requestId!=='string'||!request.requestId||typeof request?.sourceId!=='string'||!request.sourceId)return hold('invalid_request');
-  if(!claims?.claim||!claims?.finish||!readSnapshot)return hold('adapters_unavailable');
+  if(!claims?.claim||!claims?.finish||typeof ledger?.readRoutingState!=='function'||typeof readSnapshot!=='function')return hold('adapters_unavailable');
   let claim;
   try{claim=await claims.claim({requestId:request.requestId,sourceId:request.sourceId});}catch{return hold('claim_unknown')}
   if(claim?.acquired!==true||typeof claim.token!=='string'||!claim.token)return hold('already_claimed');
@@ -17,7 +17,11 @@ export function createEngineRouteCoordinator({claims,readSnapshot,start,release,
    return result;
   };
   try{
-   const plan=planEngineRoute({...await readSnapshot(request),request,enabled:true,now:clock()});
+   const evidence=await readSnapshot(request);
+   // Always obtain reservation state from the authoritative ledger, never
+   // from the telemetry snapshot or a public request.
+   const feed=await ledger.readRoutingState({sourceId:request.sourceId});
+   const plan=planEngineRoute({...evidence,feed,request,enabled:true,now:clock()});
    if(plan.action==='hold')return finish(hold(plan.reason));
    if(plan.action==='request_fenced_release'){
     if(typeof release!=='function')return finish(hold('release_unavailable'));
