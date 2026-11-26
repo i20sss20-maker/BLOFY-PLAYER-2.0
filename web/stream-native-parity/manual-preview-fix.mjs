@@ -987,4 +987,12 @@ change("if(!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,vi
 change("if(record.nativeHls&&installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&", "if(record.nativeHls&&(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&");
 change("target.searchParams.set('shell','2026.11.26.12');", "target.searchParams.set('shell','2026.11.27.1');");
 
+
+change("return preview?{sync:4,maxLatency:10,buffer:35}:{sync:5,maxLatency:12,buffer:45}", "return preview?{sync:3,maxLatency:8,buffer:18}:{sync:3,maxLatency:10,buffer:25}");
+change("var profile=[{buffer:45,sync:5,maxLatency:12},{buffer:52,sync:6,maxLatency:14},{buffer:60,sync:7,maxLatency:16}][next];", "var profile=[{buffer:25,sync:3,maxLatency:10},{buffer:35,sync:4,maxLatency:12},{buffer:45,sync:5,maxLatency:14}][next];");
+change("maxMaxBufferLength:preview?45:60,backBufferLength:preview?12:30", "maxMaxBufferLength:preview?25:45,backBufferLength:preview?8:15");
+change("if(state.mode==='mpegts')playDirectMpegts(video,String(state.id),statusElement);", "if(state.mode==='mpegts'&&!state.liveHlsHandoff)playDirectMpegts(video,String(state.id),statusElement);");
+change("xhr.timeout=40000;", "xhr.timeout=mediaStop?6500:40000;");
+
+
 new Function(app);writeFileSync('app.js',app);
