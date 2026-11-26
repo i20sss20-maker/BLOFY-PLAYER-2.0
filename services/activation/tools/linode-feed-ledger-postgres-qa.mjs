@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
+import {ensureEngineRouteClaims,createEngineRouteClaims} from '../src/blofy-engine-route-claims.mjs';
+import {createEngineRouteCoordinator} from '../src/blofy-engine-route-coordinator.mjs';
 import {ensureLinodeFeedLedger,createLinodeFeedLedger} from '../src/linode-feed-ledger.mjs';
 
 // Only the disposable CI database, never DATABASE_URL or production.
@@ -77,6 +79,41 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.reserve(args)).ok,false);
  }finally{
   if(pool)await pool.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
+
+test('durable route claim across pools and restart; dispatch once against PostgreSQL',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();
+  await ensureEngineRouteClaims(a);
+  const sourceId=randomUUID(),requestId=randomUUID(),now=Date.now();
+  const claims=p=>createEngineRouteClaims(p,{enabled:true,sourceId});
+  const request={sourceId,requestId,channelId:'123',authorized:true,expiresAt:now+60000};
+  const snapshot={entitlement:{sourceId,redistributionAllowed:true,expiresAt:now+60000},
+    feed:{sourceId,state:'empty'},capacity:{sourceId,authoritative:true,scope:'dedicated_licensed_pool',activeConnections:0,maxConnections:1,observedAt:now},
+    workers:{hostbrr:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:0,viewerLimit:150}}};
+  let starts=0;
+  const route=p=>createEngineRouteCoordinator({claims:claims(p),enabled:true,clock:()=>now,readSnapshot:async()=>snapshot,
+   start:async()=>{starts++;return {ok:true,action:'feed_ready',sourceId,channelId:'123',engineId:'hostbrr',reservationId:randomUUID()}}});
+  const ra=route(a),rb=route(b);
+  const results=await Promise.all(Array.from({length:40},(_,i)=>(i%2?ra:rb)(request)));
+  assert.equal(starts,1);assert.equal(results.filter(r=>r.ok).length,1);
+  assert.equal(results.filter(r=>r.reason==='already_claimed').length,39);
+  const {rows:[stored]}=await a.query('SELECT state,action FROM blofy_engine_route_claims WHERE request_id=$1',[requestId]);
+  assert.deepEqual(stored,{state:'finished',action:'feed_ready'});
+  const unresolved={sourceId,requestId:randomUUID()};
+  assert.equal((await claims(a).claim(unresolved)).acquired,true);
+  await a.end();a=null;await b.end();b=null;a=open();
+  assert.equal((await route(a)(request)).reason,'already_claimed');
+  assert.equal((await claims(a).claim(unresolved)).acquired,false);
+  assert.equal(starts,1);
+ }finally{
+  if(a)await a.end();if(b)await b.end();
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
  }
 });
