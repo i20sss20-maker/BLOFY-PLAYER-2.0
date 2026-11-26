@@ -101,8 +101,8 @@ function updateInstallGuide(){
  var button=document.getElementById('install-blofy-web'),feedback=document.getElementById('install-blofy-help');
  if(!button||!feedback)return;
  var state=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
- button.textContent=state.action;button.disabled=state.mode==='installed';
- feedback.textContent=state.message
+ button.textContent=state.action;button.disabled=state.mode==='installed';button.hidden=state.mode==='installed';
+ feedback.textContent=state.mode==='installed'?'':state.message
 }
 
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
@@ -1364,10 +1364,6 @@ function settingsScreen(){
  var installButton=document.getElementById('install-blofy-web');
  if(installButton){
   updateInstallGuide();
-  if(installedWebApp()){
-   installButton.hidden=true;
-   var installFeedback=document.getElementById('install-blofy-help');if(installFeedback)installFeedback.textContent=''
-  }
   installButton.onclick=function(){
    var guide=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
    if(guide.mode!=='prompt'||!pendingInstallPrompt){updateInstallGuide();return}
