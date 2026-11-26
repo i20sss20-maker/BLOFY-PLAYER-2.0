@@ -1,0 +1,2 @@
+WEB 2026.11.27.1
+Apple touch native HLS selection and cache revision. Candidate c6b2d55a2c04c8dd667059b606bc4b4b76f538b0. Docker QA and healthcheck required for deployment. Actual Apple devices still need verification. Rollback aae76f78c3dcadaabe77e299ec9891971f829638.
