@@ -97,3 +97,28 @@ test('installed native recovery has a terminal retry control instead of endless 
  assert.match(app,/playerStatus\('القناة غير متاحة حاليًا\. أعد المحاولة\.',true\)/);
  assert.match(app,/retry\.style\.display=error\?'inline-flex':'none'/);
 });
+
+function handoffFixture(){
+ const a=app.indexOf('function queueLiveHlsHandoff('),b=app.indexOf('function playHls(',a);
+ const queue=new Function(app.slice(a,b)+';return queueLiveHlsHandoff')();
+ const state={},calls=[],starts=[];let current=true,visible=true,wanted='2',errors=0,detached=0;
+ const ops={detach:()=>detached++,current:()=>current,visible:()=>visible,matches:r=>r.id===wanted,
+ wait:()=>{},error:()=>errors++,timer:()=>1,clear:()=>{},stop:(key,done)=>calls.push({key,done}),start:r=>starts.push(r.id)};
+ return {state,calls,starts,request:(id,key)=>{wanted=id;return queue(state,{id},key,ops)},exit:()=>{current=false;state.liveHlsHandoff=null},hide:()=>visible=false,show:()=>visible=true,errors:()=>errors,detached:()=>detached};
+}
+test('rapid channel choices wait for one confirmed STOP and start only latest choice',()=>{
+ const f=handoffFixture();f.request('2','old-sid');f.request('3',null);f.request('4',null);
+ assert.equal(f.calls.length,1);assert.equal(f.detached(),1);assert.deepEqual(f.starts,[]);
+ f.calls[0].done(200);assert.deepEqual(f.starts,['4']);assert.equal(f.state.liveHlsHandoff,null);
+});
+test('failed STOP retains original SID and retries before new connection',()=>{
+ const f=handoffFixture();f.request('2','old-sid');f.calls[0].done(503);
+ assert.equal(f.errors(),1);assert.deepEqual(f.starts,[]);
+ f.request('3',null);assert.equal(f.calls[1].key,'old-sid');f.calls[1].done(404);
+ assert.deepEqual(f.starts,['3']);
+});
+test('hidden or exited player never starts a queued connection',()=>{
+ const f=handoffFixture();f.request('2','old-sid');f.hide();f.calls[0].done(200);
+ assert.deepEqual(f.starts,[]);f.show();f.request('3',null);assert.deepEqual(f.starts,['3']);assert.equal(f.calls.length,1);
+ const g=handoffFixture();g.request('2','old-sid');g.exit();g.calls[0].done(200);assert.deepEqual(g.starts,[]);
+});

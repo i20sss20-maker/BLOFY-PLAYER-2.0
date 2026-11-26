@@ -5,6 +5,10 @@
  */
 (function(){
 'use strict';
+// SRAF/older TV engines predate Node.isConnected. Keep media guards working.
+if(typeof Node!=='undefined'&& !('isConnected' in Node.prototype)){
+ try{Object.defineProperty(Node.prototype,'isConnected',{configurable:true,get:function(){return !!(this.ownerDocument&&this.ownerDocument.documentElement&&this.ownerDocument.documentElement.contains(this))}})}catch(e){}
+}
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
@@ -15,7 +19,7 @@ var lastRemoteKeyAt=0;
 /* Adapt controls based on device/browser, not width alone. */
 function deviceExperience(ua,touchPoints,coarse){
  var agent=String(ua||''),touch=Number(touchPoints)||0;
- if(/VIDAA|Hisense|Toshiba|SmartTV|SMART-TV|Tizen|webOS|Web0S|HbbTV|Android TV|Google TV|AFT[A-Z0-9]{2,}/i.test(agent))return 'tv';
+ if(/VIDAA|Hisense|Toshiba|SRAF\/|SmartTV|SMART-TV|Tizen|webOS|Web0S|HbbTV|Android TV|Google TV|AFT[A-Z0-9]{2,}/i.test(agent))return 'tv';
  if(/iPhone|iPad|iPod|Android|Mobile/i.test(agent)||/Macintosh/i.test(agent)&&touch>1||coarse||touch>0)return 'touch';
  return 'desktop'
 }
@@ -85,7 +89,7 @@ function webAppInstallGuide(ua,installed,canPrompt,touchPoints){
  if(installed)return {mode:'installed',action:'تمت الإضافة',message:'BLOFY يعمل الآن كتطبيق مستقل على هذا الجهاز. المحتوى يحتاج اتصالاً بالإنترنت واشتراكاً فعالاً.'};
  if(/iPhone|iPad|iPod/i.test(String(ua||''))||/Macintosh/i.test(String(ua||''))&&Number(touchPoints)>1)
   return {mode:'ios',action:'طريقة الإضافة للآيفون',message:'افتح tv.blofyplayer.com من Safari ثم مشاركة ← إضافة إلى الشاشة الرئيسية، وفَعِّل «فتح كتطبيق» إن ظهر. لا يُمكن للموقع تثبيت نفسه تلقائياً على iPhone.'};
- if(/VIDAA|Hisense|Toshiba/i.test(String(ua||'')))
+ if(/VIDAA|Hisense|Toshiba|SRAF\//i.test(String(ua||'')))
   return {mode:'tv',action:'طريقة الإضافة للتلفزيون',message:'افتح tv.blofyplayer.com في متصفح التلفزيون. استخدم المفضلة أو «إضافة للرئيسية» إذا ظهرت في خيارات المتصفح؛ تثبيت تطبيق VIDAA رسمي يحتاج نشره عبر المنصة. اختبر التنقل بالريموت وتشغيل قناة فعلية.'};
  if(canPrompt)return {mode:'prompt',action:'تثبيت BLOFY على الجهاز',message:'تثبيت التطبيق من المتصفح لا يحمّل القنوات ولا يضيف اشتراكاً جديداً.'};
  if(/Android/i.test(String(ua||'')))
@@ -313,7 +317,7 @@ function navigate(route,opts,replace){
  if(route!==S.route)rememberView();
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
  // Release any live preview session before leaving its page (not just full-screen player).
- if(S.play&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
+ if((S.play||S.playerView)&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
  if(S.route==='player'&&route!=='player'&&S.playerView&&S.playerView.video){
   try{S.playerView.video.pause();S.playerView.video.removeAttribute('src');S.playerView.video.load()}catch(e){}
   S.playerView=null;
@@ -1341,7 +1345,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.8</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.11</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -1423,7 +1427,7 @@ function shouldUseNativeHls(video){
  // with MEDIA_ERR_SRC_NOT_SUPPORTED (4). Use Hls.js/MSE on these browsers.
  var ua=(navigator.userAgent||'');
  var apple=/Safari/i.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);
- var tv=/VIDAA|Hisense/i.test(ua);
+ var tv=/VIDAA|Hisense|Toshiba|SRAF\//i.test(ua);
  var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
  return apple||tv||!mse
 }
@@ -1458,7 +1462,7 @@ function warmDesktopHlsAfterAuth(){
     S.hlsState==='ready'||S.hlsState==='loading')return;
  var ua=String(navigator.userAgent||'');
  if(!/Chrome|Chromium|Edg|Firefox|OPR/i.test(ua)||
-    /VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android|iPhone|iPad/i.test(ua))return;
+    /VIDAA|Hisense|SRAF\/|SmartTV|Tizen|WebOS|Web0S|Android|iPhone|iPad/i.test(ua))return;
  var account=S.accountEpoch;
  var prepare=function(){
   if(!S.userVerified||account!==S.accountEpoch||document.hidden||
@@ -1514,6 +1518,8 @@ function stopPlayback(sendStop){
 }
 function cleanupPlayer(){
  if(S.playerView){
+  S.playerView.liveHlsHandoff=null;
+  clearVodBufferNotice(S.playerView);
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
@@ -1563,6 +1569,27 @@ function simpleLiveStatus(message,error){
  // Collapse internal progress phases, never actionable errors or play prompts.
  if(/^جار |^انتهت جلسة المصدر؛ جار |^تغيّر تسلسل البث؛ جار |^مصدر البث مشغول أو غير متاح مؤقتًا؛ جار |^توقف مشغّل الفيديو دون طلب؛ جار |^تعليق في صورة البث؛ جار |^وصل الصوت أو توقيت البث لكن الصورة لم تظهر؛ جار /.test(message))return 'جار تشغيل القناة…';
  return message
+}
+// Keep normal rebuffering quiet; show a notice only for sustained waits.
+function queueVodBufferNotice(video){
+ var state=S.playerView,record=S.play,mode=state&&state.mode;
+ if(!state||state.kind==='live'||state.video!==video||state.bufferNoticeTimer||video.paused)return;
+ var at=Number(video.currentTime)||0;
+ state.bufferNoticeTimer=setTimeout(function(){
+  state.bufferNoticeTimer=null;
+  if(S.route!=='player'||S.playerView!==state||S.play!==record||state.mode!==mode||
+     video.paused||document.hidden||Math.abs((Number(video.currentTime)||0)-at)>0.15)return;
+  var el=document.getElementById('player-status');
+  if(el&&el.classList.contains('player-error'))return;
+  playerStatus('جار التحميل…')
+ },2500)
+}
+function clearVodBufferNotice(state){
+ if(state.bufferNoticeTimer){clearTimeout(state.bufferNoticeTimer);state.bufferNoticeTimer=null}
+ if(S.playerView!==state)return;
+ var el=document.getElementById('player-status');
+ if(el&&el.classList.contains('player-loading')&&el.textContent==='جار التحميل…')
+  el.style.display='none'
 }
 function playerStatus(message,error){
  if(S.playerView&&S.playerView.kind==='live')message=simpleLiveStatus(message,error);
@@ -1725,7 +1752,7 @@ function hlsRemuxWorkerSupported(){
  // Keep legacy VIDAA/Android TV on the known main-thread compatibility path.
  var ua=String(navigator.userAgent||'');
  return !!window.Worker&&!!window.Blob&&!!window.MediaSource&&
-  !/VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android 9|iPad|iPhone/i.test(ua)
+  !/VIDAA|Hisense|SRAF\/|SmartTV|Tizen|WebOS|Web0S|Android 9|iPad|iPhone/i.test(ua)
 }
 function liveOriginRetryMs(attempt){
  // A temporary origin failure should not trigger a tight re-open loop.
@@ -1949,7 +1976,51 @@ function playDirectMpegts(video,id,statusElement){
   }catch(e){fallback('تعذر تهيئة المشغّل المباشر؛ جار الرجوع إلى HLS.')}
  })
 }
+// Keep one in-flight STOP for this player. Every subsequent request replaces
+// the desired channel, not the retiring source. Retry must confirm the same
+// old SID after a failed STOP rather than opening a second connection.
+function queueLiveHlsHandoff(state,request,oldKey,ops){
+ var pending=state.liveHlsHandoff;
+ if(!pending){
+  if(!oldKey)return false;
+  pending=state.liveHlsHandoff={key:oldKey,request:request,inflight:false,ack:false};
+  ops.detach()
+ }else pending.request=request;
+ function complete(){
+  if(state.liveHlsHandoff!==pending||!ops.current())return;
+  if(!ops.visible()){ops.error();return}
+  var latest=pending.request;
+  if(!ops.matches(latest))return;
+  state.liveHlsHandoff=null;ops.start(latest)
+ }
+ if(pending.ack){complete();return true}
+ if(pending.inflight)return true;
+ pending.inflight=true;ops.wait();
+ var slow=ops.timer(function(){if(state.liveHlsHandoff===pending&&ops.current()&&pending.inflight)ops.error()},6500);
+ ops.stop(pending.key,function(status){
+  ops.clear(slow);pending.inflight=false;
+  if(state.liveHlsHandoff!==pending||!ops.current())return;
+  if(status!==200&&status!==404){ops.error();return}
+  pending.ack=true;complete()
+ });
+ return true
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
+ var player=S.playerView;
+ if(!preview&&kind==='live'&&S.route==='player'&&player&&player.video===video){
+  var oldKey=S.play&&S.play.video===video&&S.play.hlsKey;
+  if(queueLiveHlsHandoff(player,{id:id,ext:extension,track:track,attempt:recoveryAttempt},oldKey,{
+   detach:function(){stopPlayback(false)},
+   current:function(){return S.route==='player'&&S.playerView===player&&video.isConnected&&S.userVerified},
+   visible:function(){return !document.hidden&&navigator.onLine!==false&&!player.userPaused},
+   matches:function(next){return String(player.id)===String(next.id)},
+   wait:function(){playerStatus('جار تشغيل القناة…')},
+   error:function(){playerStatus('تعذر إنهاء الاتصال السابق. أعد المحاولة.',true)},
+   timer:setTimeout,clear:clearTimeout,
+   stop:function(key,done){api('POST','/api/hls/'+key+'/stop',{},done)},
+   start:function(next){playerStatus('جار تشغيل القناة…');playHls(video,'live',next.id,next.ext,next.track,statusElement,false,next.attempt)}
+  }))return
+ }
  var modeKey=kind+':'+id+':'+extension+':'+track;
  // Thumbnail previews must never start an expensive UHD software encoder.
  var ultra=!preview&&!!(S.hlsForceUltra&&S.hlsForceUltra[modeKey]);
@@ -2151,6 +2222,15 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(statusElement){if(statusElement.textContent!==text)statusElement.textContent=text;if(!preview&&text.slice(0,1)!=='●')statusElement.style.display='block'}
   else playerStatus(text)
  }
+ // WebKit can resume presenting frames without a new playing event.
+ function clearRecoveredLiveLoading(){
+  if(!alive()||preview||kind!=='live'||!record.ready||record.reconnecting||
+     video.paused||video.seeking||document.hidden)return;
+  if(record.quietWaitTimer){clearTimeout(record.quietWaitTimer);record.quietWaitTimer=null}
+  if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+  if(statusElement&&statusElement.classList.contains('player-loading')&&
+     statusElement.textContent==='جار تشغيل القناة…')statusElement.style.display='none'
+ }
  video.onerror=function(){if(alive()){
   var unsupported=video.error&&(video.error.code===4||video.error.code===3);
   // Some VIDAA browsers advertise native HLS but cannot actually decode it.
@@ -2197,14 +2277,14 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if(preview||!record.ready)status(preview?'جار تحميل المعاينة…':'جار تشغيل القناة…');
   else if(!record.quietWaitTimer)record.quietWaitTimer=setTimeout(function(){
    record.quietWaitTimer=null;if(alive()&&record.bufferSince&&!video.paused)status('جار تشغيل القناة…')
-  },900);
+  },2500);
   if(record.stallTimer)clearTimeout(record.stallTimer);
   record.stallTimer=setTimeout(function(){
    record.stallTimer=null;
    if(!alive()||video.paused)return;
    // Buffering can freeze with readyState=4: inspect actual progress.
    var progress=livePlaybackProgress(record,video,Date.now());
-   if(progress.advanced)return;
+   if(progress.advanced){clearRecoveredLiveLoading();return}
    record.stallChecks++;
    if(record.stallChecks>=3){recoverConnection();return}
    if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
@@ -2237,7 +2317,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
     return
    }
-   if(progress.advanced)return;
+   if(progress.advanced){clearRecoveredLiveLoading();return}
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
     if(!preview)recordLiveIncident(Number(video.videoWidth)>0&&Number(video.videoHeight)>0?
@@ -2508,7 +2588,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  };
  video.onwaiting=video.onstalled=function(){
   if(!alive()||video.paused)return;
-  playerStatus('جار تحميل الجزء المطلوب من الفيلم…');
+  queueVodBufferNotice(video);
   checkStall()
  };
  video.onended=function(){
@@ -2684,7 +2764,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
   if(state.completed&&video.currentTime<5)state.completed=false;
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready()
  };
- video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ video.onwaiting=function(){if(alive()&&rec.ready)queueVodBufferNotice(video)};
  video.onended=function(){
   if(!alive())return;
   var absolute=at+Math.max(0,Number(video.currentTime)||0),
@@ -2812,6 +2892,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  S.route='player';
  showWebShellUpdateHint();
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
+ '<div class="player-audio-notice" id="player-audio-notice" role="status" aria-live="polite" hidden></div>'+
  '<div class="player-loading" id="player-status" role="status">'+(isLive?'جار تشغيل القناة…':'جار تجهيز المشغّل…')+'</div>'+
  '<div class="mobile-seek-feedback" id="mobile-seek-feedback" hidden role="status" aria-live="polite"></div>'+
  '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
@@ -2842,9 +2923,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  playerControl('player-audio','audio','المسارات الصوتية')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
- (isLive?playerControl('player-channel-prev','rewind','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
+ (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
  playerControl('player-toggle','pause','إيقاف مؤقت',true)+
- (isLive?playerControl('player-channel-next','forward','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
+ (isLive?playerControl('player-channel-next','next','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
  (nextEpisode?playerControl('player-next-episode','next','الحلقة التالية'):'')+
  playerControl('player-quality','quality','جودة الفيديو')+
  (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
@@ -3295,6 +3376,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   },30000)
  }
  function onPlayingEvent(){
+  clearVodBufferNotice(state);
   var stats=state.stats,now=Date.now();
   state.pictureObservationAllowed=true;
   if(!stats.firstFrameAt)observeFirstPicture();
@@ -3312,6 +3394,13 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('canplay',confirmSeek);
  video.addEventListener('loadeddata',confirmSeek);
  video.addEventListener('timeupdate',confirmSeek);
+ video.addEventListener('timeupdate',function(){
+  if(isLive||S.playerView!==state)return;
+  var at=Number(video.currentTime)||0,prev=state.lastBufferNoticeTime;
+  state.lastBufferNoticeTime=at;
+  if(Number.isFinite(prev)&&at-prev>0.15&&!video.paused&&!video.seeking)
+   clearVodBufferNotice(state)
+ });
  video.addEventListener('pause',onPauseEvent);
  video.addEventListener('error',function(){state.stats.errors++});
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
@@ -3776,7 +3865,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  };
  video.onwaiting=video.onstalled=function(){
   if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
-  playerStatus('جار تعبئة مخزن الفيديو…');
+  queueVodBufferNotice(video);
   if(state.directTimer)clearTimeout(state.directTimer);
   state.directTimer=setTimeout(function(){
    state.directTimer=null;
@@ -3873,7 +3962,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null;
+ function commentaryNotice(message){
+  var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
+  clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
+  commentaryNoticeTimer=setTimeout(function(){el.hidden=true;el.textContent=''},3500)
+ }
  function stopCommentary(){
   commentaryEpoch++;
   var old=commentary;commentary=null;
@@ -3886,27 +3980,30 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  function commentaryVisibility(){if(document.hidden)stopCommentary()}
  document.addEventListener('visibilitychange',commentaryVisibility);
  state.stopCommentary=stopCommentary;
- state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);stopCommentary()};
+ state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);clearTimeout(commentaryNoticeTimer);stopCommentary()};
  video.addEventListener('pause',stopCommentary);
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
  video.addEventListener('seeking',stopCommentary);
- video.addEventListener('waiting',function(){if(commentary)stopCommentary()});
+ video.addEventListener('waiting',function(){if(commentary&&video.readyState<3)stopCommentary()});
  function startCommentary(track){
   stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
-  function fail(){if(commentary!==record)return;stopCommentary();playerStatus('تعذر تشغيل الصوت البديل؛ تم الرجوع للصوت الأصلي.')}
+  function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.audible=true;video.muted=true
+   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true
   };
   audio.onerror=audio.onended=fail;
   audio.onwaiting=audio.onstalled=function(){
-   if(commentary!==record)return;record.audible=false;video.muted=record.originalMuted;clearTimeout(record.timer);record.timer=setTimeout(fail,5000)
+   if(commentary!==record||audio.readyState>=3)return;
+   record.audible=false;video.muted=record.originalMuted;
+   // Repeated waiting/stalled events cannot shorten startup or extend a retry forever.
+   if(!record.timer)record.timer=setTimeout(fail,8000)
   };
-  record.timer=setTimeout(fail,10000);
+  record.timer=setTimeout(fail,15000);
   audio.src='/api/commentary/'+enc(track.id);
   try{var request=audio.play();if(request&&request.catch)request.catch(fail)}catch(e){fail()}
  }
@@ -3946,7 +4043,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
      if(track&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
     });
-    if(list.length===1){playerStatus('لا تتوفر أصوات إضافية حاليًا.');return}
+    if(list.length===1){commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');return}
     showPlayerChoices('المعلقون',list,audioButton)
    })
   }});
