@@ -23,3 +23,10 @@ These are known deployed builds, not certified long-play builds.
 - Added integrated container QA for isolation, denied production API access, and dependency failure/recovery. Await its result; do not mark approved until green.
 - The synthetic-only environment cannot demonstrate licensed-source playback, real iOS/Toshiba behavior, long-play QoE, or multi-source failover. Those remain required for production promotion.
 - Keep production pinned to the rollback anchors above; no automatic promotion.
+
+## Browser playback milestone
+- Commit 3c1e56a9ef9fd1147b2c4f52dc36b7491089584d: all four web QA workflows passed (installed preview, isolated audio, staging integration, Chrome synthetic decoding).
+- Actual Chrome test confirmed six decoded starts and five sequential switches, including transient STOP failure and retry. This is local synthetic HLS, not subscriber traffic.
+- Web staging source updated to this verified commit. Audio staging remains on 64b0df9bdc3ae64e8766bd3faa1c96f1a78758f1 (same audio worker).
+- Added 20-minute real-time generated live HLS soak, requiring decoded frame progress, advancing media clock and zero fatal errors. It is a separate QA gate, not yet a recorded pass.
+- Android CI is independently red; do not promote Android or claim all repository checks are green.
