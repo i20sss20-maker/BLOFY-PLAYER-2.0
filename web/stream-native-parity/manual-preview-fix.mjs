@@ -968,4 +968,11 @@ change(` if(previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===
   start:function(){playFullVod(video,kind,id,ext,track,duration,state,ready)}
  }))return`);
 
+
+change(" if(requestedState.directStopPending)return;\n var old=S.play,oldKey=old&&old.hlsKey;", " if(requestedState.directStopPending||requestedState.liveHlsHandoff||requestedState.externalMode)return;\n var old=S.play,oldKey=requestedState.directStopKey||(old&&old.hlsKey);");
+change("  requestedState.directStopPending=true;\n  stopPlayback(false);", "  requestedState.directStopPending=true;requestedState.directStopKey=oldKey;\n  stopPlayback(false);");
+change("   playDirectMpegts(video,String(requestedState.id),statusElement)\n  }\n  api('POST','/api/hls/'+oldKey+'/stop'", "   requestedState.directStopKey=null;\n   if(!document.hidden&&navigator.onLine!==false&&!requestedState.userPaused)playDirectMpegts(video,String(requestedState.id),statusElement)\n  }\n  api('POST','/api/hls/'+oldKey+'/stop'");
+change("  var oldKey=S.play&&S.play.video===video&&S.play.hlsKey;\n  if(queueLiveHlsHandoff", "  if(player.directStopPending||player.externalMode)return;\n  var oldKey=player.directStopKey||(S.play&&S.play.video===video&&S.play.hlsKey);\n  if(queueLiveHlsHandoff");
+change("   start:function(next){playerStatus('جار تشغيل القناة…');playHls(", "   start:function(next){player.directStopKey=null;playerStatus('جار تشغيل القناة…');playHls(");
+
 new Function(app);writeFileSync('app.js',app);
