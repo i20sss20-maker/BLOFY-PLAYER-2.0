@@ -3,7 +3,7 @@ const id=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const channel=/^[1-9][0-9]{0,14}$/;
 const fields=['version','engineId','sourceId','channelId','reservationId','sequence','issuedAt','expiresAt'];
 const encode=p=>Buffer.from(JSON.stringify(['BLOFY_LIVE_LEASE_V1',...fields.map(k=>p[k])]));
-const valid=(p,now)=>p&&Object.keys(p).sort().join(',')===fields.slice().sort().join(',')&&p.version===1&&['hostbrr','linode'].includes(p.engineId)&&id.test(p.sourceId)&&channel.test(p.channelId)&&id.test(p.reservationId)&&Number.isSafeInteger(p.sequence)&&p.sequence>=1&&Number.isSafeInteger(p.issuedAt)&&Number.isSafeInteger(p.expiresAt)&&p.issuedAt<=now+2000&&p.issuedAt>=now-90000&&p.expiresAt>now&&p.expiresAt-p.issuedAt<=90000;
+const valid=(p,now)=>p&&Object.keys(p).sort().join(',')===fields.slice().sort().join(',')&&p.version===1&&['hostbrr','linode'].includes(p.engineId)&&['sourceId','channelId','reservationId'].every(k=>typeof p[k]==='string')&&id.test(p.sourceId)&&channel.test(p.channelId)&&id.test(p.reservationId)&&Number.isSafeInteger(p.sequence)&&p.sequence>=1&&Number.isSafeInteger(p.issuedAt)&&Number.isSafeInteger(p.expiresAt)&&p.issuedAt<=now+2000&&p.issuedAt>=now-90000&&p.expiresAt>now&&p.expiresAt-p.issuedAt<=90000;
 // Internal lease signing only. A caller must hold the committed source-wide
 // reservation. Expiration stops a worker; it never proves source release.
 export function signLiveLease(p,key,now=Date.now()){
