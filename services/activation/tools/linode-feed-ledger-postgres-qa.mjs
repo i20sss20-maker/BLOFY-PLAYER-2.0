@@ -99,13 +99,15 @@ test('durable route claim across pools and restart; dispatch once against Postgr
   await ensureEngineRouteClaims(a);
   const sourceId=randomUUID(),requestId=randomUUID(),now=Date.now();
   const claims=p=>createEngineRouteClaims(p,{enabled:true,sourceId});
+  await ensureLinodeFeedLedger(a);
+  const ledger=p=>createLinodeFeedLedger(p,{BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId});
   const request={sourceId,requestId,channelId:'123',authorized:true,expiresAt:now+60000};
   const snapshot={entitlement:{sourceId,redistributionAllowed:true,expiresAt:now+60000},
     feed:{sourceId,state:'empty'},capacity:{sourceId,authoritative:true,scope:'dedicated_licensed_pool',activeConnections:0,maxConnections:1,observedAt:now},
     workers:{hostbrr:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:0,viewerLimit:150}}};
   let starts=0;
-  const route=p=>createEngineRouteCoordinator({claims:claims(p),enabled:true,clock:()=>now,readSnapshot:async()=>snapshot,
-   start:async()=>{starts++;return {ok:true,action:'feed_ready',sourceId,channelId:'123',engineId:'hostbrr',reservationId:randomUUID()}}});
+  const route=p=>createEngineRouteCoordinator({claims:claims(p),ledger:ledger(p),enabled:true,clock:()=>now,readSnapshot:async()=>snapshot,
+   start:async()=>{starts++;const r=await ledger(p).reserve({sourceId,requestId,channelId:'123',engineId:'hostbrr'});assert.equal(r.action,'start_once');assert.equal((await ledger(p).transition({sourceId,reservationId:r.reservationId,engineId:'hostbrr',next:'ready',generation:randomUUID().replaceAll('-','')})).ok,true);return {ok:true,action:'feed_ready',sourceId,channelId:'123',engineId:'hostbrr',reservationId:r.reservationId}}});
   const ra=route(a),rb=route(b);
   const results=await Promise.all(Array.from({length:40},(_,i)=>(i%2?ra:rb)(request)));
   assert.equal(starts,1);assert.equal(results.filter(r=>r.ok).length,1);
@@ -118,6 +120,7 @@ test('durable route claim across pools and restart; dispatch once against Postgr
   assert.equal((await route(a)(request)).reason,'already_claimed');
   assert.equal((await claims(a).claim(unresolved)).acquired,false);
   assert.equal(starts,1);
+  assert.equal((await ledger(a).readRoutingState({sourceId})).state,'ready');
  }finally{
   if(a)await a.end();if(b)await b.end();
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
