@@ -21,3 +21,30 @@ test('stop confirmation does not restart an installed player while hidden or bef
  status=200;confirm(pending);await Promise.resolve();await Promise.resolve();
  assert.equal(pending.stopKey,null);assert.equal(resumed,1);
 });
+
+test('native phone list never starts preview; wide explicit selection still works',()=>{
+ const a=app.indexOf('function selectChannel('),b=app.indexOf('function decodeEpgField(',a);
+ const S={selected:null,library:{}},calls=[],desc={};
+ let phone=true;
+ const document={querySelectorAll:()=>[],getElementById:id=>id==='live-desc'?desc:null};
+ const select=new Function('S','document','findItem','title','loadShortEpg','installedWebApp','beginPreview','phoneLiveLayout',app.slice(a,b)+';return selectChannel')(
+ S,document,(kind,id)=>({id}),item=>item.id,()=>{},()=>true,item=>calls.push(item.id),()=>phone);
+ select('1',true,true);assert.deepEqual(calls,[]);
+ phone=false;
+ select('1',true,false);assert.deepEqual(calls,[]);
+ select('2',true,true);assert.deepEqual(calls,['2']);
+ assert.match(app,/if\(phoneLiveLayout\(\)\)\{[\s\S]*?S\.selected=ch;openPlayer\('live',ch,'ts',title\(chosen\),0\)/);
+ assert.ok(app.includes("if(phoneLiveLayout())return;"));
+ assert.ok(readFileSync('styles.css','utf8').includes('.live-catalog .preview{display:none}'));
+});
+
+test('phone navigation keeps content tabs and four primary destinations',()=>{
+ const a=app.indexOf('function phoneHomeNavigation('),b=app.indexOf('function navHtml(',a);
+ const result=new Function('S',app.slice(a,b)+';return {bottom:phoneHomeNavigation(),tabs:phoneHomeTabs()}')({route:'home'});
+ assert.equal((result.bottom.match(/data-go=/g)||[]).length,4);
+ assert.equal((result.tabs.match(/data-go=/g)||[]).length,3);
+ assert.match(result.bottom,/data-go="favorites"/);
+ assert.match(result.tabs,/data-go="movie"/);
+ assert.match(result.tabs,/data-go="series"/);
+ assert.match(app,/phoneLiveLayout\(\)\?document.getElementById\('workspace'\)/);
+});

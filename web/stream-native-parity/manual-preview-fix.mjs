@@ -671,4 +671,80 @@ change("   playerStatus('تعذر تأكيد إغلاق جلسة البث الس
  }else api('POST',stopUrl,{},finished)
 }`);
 
+// Explicit channel selection starts the muted preview immediately; passive
+// focus on installed WebKit must not start a provider connection.
+change("function selectChannel(id,activate){","function selectChannel(id,activate,explicit){");
+change("if(selected)selectChannel(itemId(selected,'live'),true);","if(selected)selectChannel(itemId(selected,'live'),true,true);");
+change("selectChannel(S.selected,true)\n","selectChannel(S.selected,true,true)\n");
+change("if(ch){selectChannel(ch,true);return}","if(ch){selectChannel(ch,true,true);return}");
+change(" if(installedWebApp()){\n  if(desc)desc.textContent='اضغط المعاينة أو تشغيل القناة • لتوفير اتصال البث';\n  if(S.play&&S.play.preview&&String(S.play.id)!==String(id))stopPlayback(true);\n  return\n }",` if(installedWebApp()&&!explicit){
+  if(desc)desc.textContent='اختر القناة لتشغيلها مباشرة';
+  return
+ }
+ if(activate&&explicit&&!S.previewToFullPending){
+  beginPreview(item);return
+ }`);
+change(" if(installedWebApp()&&pendingMediaStops>0){var waitBox=document.getElementById('live-status');if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق؛ أعد الضغط بعد لحظات.';return}",` if(installedWebApp()&&pendingMediaStops>0){
+  var waitBox=document.getElementById('live-status');
+  if(waitBox)waitBox.textContent='جار إغلاق الاتصال السابق وتشغيل القناة…';
+  var selectedId=itemId(item,'live'),attempt=0;
+  function resumePreview(){
+   S.autoPreviewTimer=null;
+   if(S.route!=='live'||String(S.selected)!==String(selectedId)||document.hidden)return;
+   if(pendingMediaStops>0){
+    if(++attempt<40)S.autoPreviewTimer=setTimeout(resumePreview,150);
+    else if(waitBox)waitBox.textContent='تعذر إنهاء الاتصال السابق؛ أعد اختيار القناة.';
+    return
+   }
+   beginPreview(item)
+  }
+  S.autoPreviewTimer=setTimeout(resumePreview,150);return
+ }`);
+change("if(video.paused&&S.play.ready){","if(video.paused&&(S.play.ready||S.play.autoplayBlocked)){");
+change("2026.11.26.1 • '+(installedWebApp()", "2026.11.26.2 • '+(installedWebApp()");
+change("target.searchParams.set('shell','2026.11.25.8');","target.searchParams.set('shell','2026.11.26.2');");
+
+
+// Match native STREAM's phone browser: no preview panel or decoder before
+// explicit channel choice. Wide desktop/TV keeps the existing preview.
+change("function selectChannel(id,activate,explicit){",`function phoneLiveLayout(){
+ return document.documentElement.getAttribute('data-blofy-device')==='touch'&&
+  !!(window.matchMedia&&window.matchMedia('(max-width: 730px), (max-height: 540px) and (orientation: landscape)').matches)
+}
+function selectChannel(id,activate,explicit){`);
+change(" if(installedWebApp()&&!explicit){"," if(phoneLiveLayout())return;\n if(installedWebApp()&&!explicit){");
+change("if(ch){selectChannel(ch,true,true);return}",`if(ch){
+  if(phoneLiveLayout()){
+   var chosen=findItem('live',ch);
+   if(chosen){
+    if(S.play&&S.play.preview){selectChannel(ch,false,true)}
+    S.selected=ch;openPlayer('live',ch,'ts',title(chosen),0)
+   }
+  }else selectChannel(ch,true,true);
+  return
+ }`);
+change("function beginPreview(item){\n if(S.autoPreviewTimer)", "function beginPreview(item){\n if(phoneLiveLayout())return;\n if(S.autoPreviewTimer)");
+change("'<div class=\"catalog\">'+categoryRail(kind)+","'<div class=\"catalog live-catalog\">'+categoryRail(kind)+");
+
+
+ // Native phone home: three content tabs at top, four essential bottom
+ // destinations. Use the existing favorite library, not a fake download UI.
+change("function navHtml(){",`function phoneHomeNavigation(){
+ var entries=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['favorites','♡','المفضلة'],['collections','▦','التصنيفات']];
+ return '<aside class="rail phone-bottom-nav" aria-label="التنقل">'+entries.map(function(v){
+  return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol" aria-hidden="true">'+v[1]+'</span><span>'+v[2]+'</span></button>'
+ }).join('')+'</aside>'
+}
+function phoneHomeTabs(){
+ return '<nav class="phone-content-tabs" aria-label="أقسام المحتوى"><button class="btn secondary" data-go="live">البث المباشر</button><button class="btn secondary" data-go="movie">الأفلام</button><button class="btn secondary" data-go="series">المسلسلات</button></nav>'
+}
+function navHtml(){
+ if(phoneLiveLayout())return phoneHomeNavigation();`);
+change("'<div class=\"toolbar\"><h1>'+esc(pageTitle)+'</h1><div class=\"row\">'+",`'<div class="toolbar"><h1>'+esc(phoneLiveLayout()&&S.route==='home'?'BLOFY STREAM':pageTitle)+'</h1><div class="row">'+
+ (phoneLiveLayout()&&S.route==='home'?'<button class="btn secondary phone-header-action" data-go="ai" aria-label="الذكاء الاصطناعي">✧</button><button class="btn secondary phone-header-action" data-go="settings" aria-label="الإعدادات">⚙</button>':'')+`);
+change("'<div id=\"screen\">'+markup+'</div></main></div>';","(phoneLiveLayout()&&S.route==='home'?phoneHomeTabs():'')+'<div id=\"screen\">'+markup+'</div></main></div>';");
+change("target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;","target.innerHTML=hero+(phoneLiveLayout()?'':shortcuts)+watch+shelfMovies+shelfSeries;");
+change("var hadScreen=!!target.querySelector('.story-row');","var hadScreen=!!target.querySelector('.home-hero');");
+change("var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-panel');","var panel=phoneLiveLayout()?document.getElementById('workspace'):document.querySelector(kind==='live'?'#channel-list':'.poster-panel');");
+
 new Function(app);writeFileSync('app.js',app);
