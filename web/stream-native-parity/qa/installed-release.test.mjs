@@ -236,3 +236,14 @@ test('Apple touch devices prefer native HLS even after prior MSE fallback',()=>{
  }
  assert.match(app,/if\(!appleMobileNativeHls\(navigator.userAgent,navigator.maxTouchPoints,video\)&&!installedNativeHlsPreferred/);
 });
+
+test('source quota denial is distinguished from transient network failure',()=>{
+ const i=app.indexOf('function liveSourceQuotaRejected('),j=app.indexOf('function liveRetryHint(',i);
+ const denied=new Function(app.slice(i,j)+';return liveSourceQuotaRejected')();
+ assert.equal(denied({networkDetails:{getResponseHeader:()=> 'source_channel_limit'}}),true);
+ assert.equal(denied({networkDetails:{headers:{get:()=> 'source_channel_limit'}}}),true);
+ assert.equal(denied({networkDetails:{getResponseHeader:()=> 'other'}}),false);
+ assert.equal(denied(null),false);
+ assert.match(app,/failure\.error==='live_source_channel_limit'\)\{showSourceQuota\(\);return\}/);
+ assert.match(app,/code===503&&liveSourceQuotaRejected\(detail\)/);
+});
