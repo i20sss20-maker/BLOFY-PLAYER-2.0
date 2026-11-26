@@ -3,6 +3,7 @@ import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
+import {audioWorkerHost} from './audio-worker-policy.mjs';
 import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
@@ -445,8 +446,10 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
   // only known containers, without accepting generic binary/HTML/JSON.
   if(r.ok&&r.body&&['video/mp2t','audio/ogg','audio/flac'].includes(mime)){
    try{await r.body.cancel()}catch{}
-   const host=String(Bun.env.VIDAA_COMPAT_URL||''),secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
-   if(!/^http:\/\/blofy-stream-web-media\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
+   const mode=String(Bun.env.VIDAA_AUDIO_WORKER_MODE||''),host=audioWorkerHost(mode);
+   const secret=String(mode==='isolated'?Bun.env.VIDAA_AUDIO_KEY||'':Bun.env.VIDAA_COMPAT_KEY||'');
+   if(!host||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
+   // Default remains the deployed shared worker. Isolation is an explicit staging opt-in; no fallback opens a second source.
    const converted=await fetch(host+'/audio-compat/'+id,{headers:{Authorization:h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
    if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:'audio_conversion_unavailable'})}
    return new Response(converted.body,{headers:noCache({'Content-Type':'audio/mpeg','Accept-Ranges':'none'})});
