@@ -1,0 +1,21 @@
+name: BLOFY Local HLS QA
+on:
+  pull_request:
+    paths:
+      - 'services/activation/tools/blofy-local-hls-load.py'
+      - 'services/activation/tools/test_blofy_local_hls_load.py'
+      - '.github/workflows/blofy-local-hls-qa.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run mocked regressions
+        run: |
+          python3 -m py_compile services/activation/tools/blofy-local-hls-load.py
+          python3 -m unittest discover -s services/activation/tools -p test_blofy_local_hls_load.py -v
