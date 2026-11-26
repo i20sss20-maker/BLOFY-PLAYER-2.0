@@ -765,4 +765,5 @@ change("      if((record.recoveryAttempt||0)>=4){status('انتهت جلسة ا�
 change("      status('المصدر مشغول حاليًا. اضغط إعادة المحاولة أو اختر قناة متاحة.');return", "      if(preview)status('القناة غير متاحة حاليًا.');else playerStatus('القناة غير متاحة حاليًا. أعد المحاولة.',true);return");
 change("target.searchParams.set('shell','2026.11.26.6');","target.searchParams.set('shell','2026.11.26.7');");
 
+change("target.searchParams.set('shell','2026.11.26.7');","target.searchParams.set('shell','2026.11.26.8');");
 new Function(app);writeFileSync('app.js',app);

@@ -1341,7 +1341,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.7</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.8</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -1543,6 +1543,20 @@ function cleanupPlayer(){
   if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen()
  }
  stopPlayback(true)
+}
+// Audio time is independent of video time. Only move within an actual
+// seekable audio range; never promise automatic synchronization.
+function commentarySeekTarget(audio,delta){
+ if(delta!==1&&delta!==-1||!audio||audio.paused||audio.seeking)return null;
+ var at=Number(audio.currentTime),ranges=audio.seekable;
+ if(!Number.isFinite(at)||at<0||!ranges)return null;
+ try{
+  for(var i=0;i<Math.min(ranges.length,32);i++){
+   var start=ranges.start(i),end=ranges.end(i),target=at+delta;
+   if(Number.isFinite(start)&&Number.isFinite(end)&&at>=start&&at<=end&&target>=start&&target<=end-0.1)return target
+  }
+ }catch(e){}
+ return null
 }
 function simpleLiveStatus(message,error){
  if(error||!message)return message;
@@ -3881,16 +3895,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  function startCommentary(track){
   stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
-  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null};
+  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
   function fail(){if(commentary!==record)return;stopCommentary();playerStatus('تعذر تشغيل الصوت البديل؛ تم الرجوع للصوت الأصلي.')}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);video.muted=true
+   clearTimeout(record.timer);record.audible=true;video.muted=true
   };
   audio.onerror=audio.onended=fail;
   audio.onwaiting=audio.onstalled=function(){
-   if(commentary!==record)return;video.muted=record.originalMuted;clearTimeout(record.timer);record.timer=setTimeout(fail,5000)
+   if(commentary!==record)return;record.audible=false;video.muted=record.originalMuted;clearTimeout(record.timer);record.timer=setTimeout(fail,5000)
   };
   record.timer=setTimeout(fail,10000);
   audio.src='/api/commentary/'+enc(track.id);
@@ -3913,6 +3927,17 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    })(list[j],j)
   }
   if(!isLive){showPlayerChoices('المسارات الصوتية',options,this);return}
+  if(commentary&&commentary.audible){
+   var active=commentary;
+   function adjustCommentary(delta){
+    if(commentary!==active||!active.audible)return;
+    var target=commentarySeekTarget(active.audio,delta);
+    if(target===null){playerStatus('ضبط التزامن غير متاح لهذا الصوت.');return}
+    try{active.audio.currentTime=target}catch(e){playerStatus('تعذر ضبط توقيت الصوت.')}
+   }
+   if(commentarySeekTarget(active.audio,-1)!==null)options.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjustCommentary(-1)}});
+   if(commentarySeekTarget(active.audio,1)!==null)options.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjustCommentary(1)}});
+  }
   var epoch=++commentaryEpoch,channel=String(state.id);
   options.push({name:'المعلقون • BLOFY',selected:false,select:function(){
    api('GET','/api/commentary?channel='+enc(channel),null,function(st,data){
