@@ -16,7 +16,7 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   pool=new pg.Pool({...options,options:'-c search_path='+schema,max:12});
   await ensureLinodeFeedLedger(pool);
   const sourceId=randomUUID(),requestId=randomUUID();
-  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_LINODE_VIEWER_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId};
+  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_VIEWER_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId};
   const ledger=createLinodeFeedLedger(pool,env);
   const args={sourceId,channelId:'123',requestId};
   const all=await Promise.all(Array.from({length:30},()=>ledger.reserve(args)));
@@ -26,6 +26,8 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.ok(all.every(x=>x.reservationId===reservationId));
   const conflict=await Promise.all(Array.from({length:20},()=>ledger.reserve({...args,channelId:'124',requestId:randomUUID()})));
   assert.ok(conflict.every(x=>!x.ok));
+  const hostConflicts=await Promise.all(Array.from({length:20},()=>ledger.reserve({...args,engineId:'hostbrr'})));
+  assert.ok(hostConflicts.every(x=>!x.ok));
   await pool.end();
   pool=new pg.Pool({...options,options:'-c search_path='+schema,max:12});
   const restored=createLinodeFeedLedger(pool,env);
@@ -35,6 +37,8 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.transition({...t,next:'ready',generation})).ok,true);
   const viewer={...t,channelId:'123',generation,sessionId:randomUUID(),accountId:randomUUID(),
     accountQuota:1,authorizedUntil:new Date(Date.now()+120000).toISOString()};
+  assert.equal((await restored.attachViewer({...viewer,engineId:'hostbrr'})).ok,false);
+  assert.equal((await restored.transition({...t,engineId:'hostbrr',next:'released',releaseConfirmed:true})).ok,false);
   const firstGrant=await restored.attachViewer(viewer);
   assert.equal(firstGrant.ok,true);
   const shortGrant=await restored.attachViewer({...viewer,authorizedUntil:new Date(Date.now()+20000).toISOString()});
@@ -57,10 +61,11 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.reserve({...args,requestId:randomUUID()})).ok,false);
   assert.equal((await restored.transition({...t,next:'released',releaseConfirmed:true})).ok,true);
   const newId=randomUUID();
-  const next=await restored.reserve({...args,requestId:newId});
+  const next=await restored.reserve({...args,requestId:newId,engineId:'hostbrr'});
   assert.equal(next.action,'start_once');
   assert.equal((await restored.transition({...t,next:'released',releaseConfirmed:true})).ok,false);
-  assert.equal((await restored.transition({sourceId,reservationId:next.reservationId,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await restored.transition({sourceId,reservationId:next.reservationId,next:'released',releaseConfirmed:true})).ok,false);
+  assert.equal((await restored.transition({sourceId,reservationId:next.reservationId,engineId:'hostbrr',next:'released',releaseConfirmed:true})).ok,true);
   assert.equal((await restored.reserve(args)).ok,false);
  }finally{
   if(pool)await pool.end();
