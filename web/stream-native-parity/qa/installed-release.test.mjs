@@ -37,3 +37,14 @@ test('native phone list never starts preview; wide explicit selection still work
  assert.ok(app.includes("if(phoneLiveLayout())return;"));
  assert.ok(readFileSync('styles.css','utf8').includes('.live-catalog .preview{display:none}'));
 });
+
+test('phone navigation keeps content tabs and four primary destinations',()=>{
+ const a=app.indexOf('function phoneHomeNavigation('),b=app.indexOf('function navHtml(',a);
+ const result=new Function('S',app.slice(a,b)+';return {bottom:phoneHomeNavigation(),tabs:phoneHomeTabs()}')({route:'home'});
+ assert.equal((result.bottom.match(/data-go=/g)||[]).length,4);
+ assert.equal((result.tabs.match(/data-go=/g)||[]).length,3);
+ assert.match(result.bottom,/data-go="favorites"/);
+ assert.match(result.tabs,/data-go="movie"/);
+ assert.match(result.tabs,/data-go="series"/);
+ assert.match(app,/phoneLiveLayout\(\)\?document.getElementById\('workspace'\)/);
+});
