@@ -3,7 +3,7 @@ import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
-import {createAdmission,readBoundedJson} from './web-security-controls.mjs';
+import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
@@ -53,6 +53,8 @@ const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categor
 const externalTickets=new Map(),externalActive=new Map();
 const externalIssueGate=createAdmission({limit:8,maxKeys:2048,maxInflight:24});
 const diagnosticGate=createAdmission({limit:60,maxKeys:4096,maxInflight:64,perKeyInflight:4});
+const playbackMetrics=createPlaybackMetrics();
+setInterval(()=>{const report=playbackMetrics.drain();if(report.buckets.length)console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify(report))},60000).unref?.();
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
 function pruneExternalTickets(now=Date.now()){
  for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
@@ -224,7 +226,7 @@ if(p==='/api/player-diagnostic'&&method==='POST'){
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
  if(!['live','movie','series'].includes(kind)||
   !['direct','audio','video','fullvod','vodhls','hls','mpegts'].includes(mode)||
-  !['live_start','media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout'].includes(phase)||
+  !['live_start','media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout','first_picture'].includes(phase)||
   !Number.isInteger(errorCode)||errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
  const rawId=String(data?.itemId||'');
  const itemRef=/^[1-9][0-9]{0,14}$/.test(rawId)&&KEY?
@@ -232,14 +234,17 @@ if(p==='/api/player-diagnostic'&&method==='POST'){
  const pos=Math.max(0,Math.min(21600,Math.round(Number(data?.position)||0)));
  const duration=Math.max(0,Math.min(21600,Math.round(Number(data?.duration)||0)));
  const runtime=['installed','browser','preview'].includes(data?.runtime)?data.runtime:'unknown';
+ const firstPictureMs=phase==='first_picture'?Number(data.firstPictureMs):null;
+ if(phase==='first_picture'&&(!Number.isInteger(firstPictureMs)||firstPictureMs<0||firstPictureMs>120000||!['decoded','presented'].includes(data.pictureBasis)))return json(400,{error:'invalid_picture_metric'});
+ playbackMetrics.record({kind,runtime,phase,firstPictureMs});
  console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,runtime,errorCode,itemRef,position:pos,duration});
  return json(200,{ok:true});
  }finally{lease.release()}
 }
 if(p==='/api/session'&&method==='GET'){
- try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok)return json(r.status===403?403:401,{active:false});const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null,
+ try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok){const failure=sessionFailure(r.status);try{await r.body?.cancel()}catch{};return json(failure.status,failure.body)}const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null,
    profileKey:v.active?stableAccountProfileKey(token(req),KEY):null,
-   legacyProfileKey:v.active?legacyTokenProfileKey(token(req),KEY):null})}catch{return json(502,{active:false,error:'session_unavailable'})}
+   legacyProfileKey:v.active?legacyTokenProfileKey(token(req),KEY):null})}catch{return json(503,{error:'session_unavailable'})}
 }
 
 if(p==='/api/page'&&method==='GET'){
@@ -340,7 +345,7 @@ if(p.startsWith('/api/hls/')&&method==='POST'){
  if(!/^http:\/\/(?:blofy-vidaa-(?:media-compat-pilot|hls-dynamic)|blofy-stream-web-media)\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/.test(secret))return json(503,{error:'hls_worker_not_configured'});
  try{
   const r=await fetch(host+'/hls/'+m[1]+'/'+m[2]+'/'+m[3]+'/'+m[4]+'/'+(m[5]?'sid-'+m[5]+'/':'')+(m[6]?m[6]+'/':'')+'stop',{method:'POST',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:AbortSignal.timeout(3000)});
-  return json(r.ok?200:502,{ok:r.ok});
+  return json(r.ok||r.status===404?200:502,{ok:r.ok||r.status===404});
  }catch{return json(502,{error:'hls_stop_failed'})}
 }
 if(p.startsWith('/api/hls/')&&method==='GET'){
