@@ -876,4 +876,32 @@ change("  promotionTimer=setTimeout(function(){promotionComplete(0)},6500);\n", 
 change("  if(preview)S.previewRecoveryStop=token;", "  var retireEpoch=S.accountEpoch;\n  if(preview){S.previewRecoveryStop=token;markPreviewRetiring(oldHlsKey)}");
 change("   if(preview&&S.previewRecoveryStop===token){", "   if(preview&&(status===200||status===404))confirmPreviewRetired(oldHlsKey,retireEpoch);\n   if(preview&&S.previewRecoveryStop===token){");
 
+
+change("function resumeLiveHlsNetwork(engine,manifest,record){",`// Adapt only existing HLS.js sessions. Native HLS owns its buffer; a
+// preview uses a fixed small profile. No new connections or quality changes.
+function adaptLiveBuffer(record,engine,now,waiting,preview){
+ if(preview||!engine||!engine.config||!record.ready||record.reconnecting)return null;
+ var a=record.adaptiveBuffer||(record.adaptiveBuffer={level:0,waits:[],lastWait:0,lastChange:now,lastPressure:now});
+ if(waiting){
+  if(a.lastWait&&now-a.lastWait<3000)return null;
+  a.lastWait=now;a.lastPressure=now;a.waits.push(now);
+ }
+ a.waits=a.waits.filter(function(t){return now-t<=60000});
+ var next=a.level;
+ if(waiting&&a.waits.length>=3&&now-a.lastChange>=15000)next=Math.min(2,a.level+1);
+ else if(!waiting&&a.level>0&&now-a.lastPressure>=180000&&now-a.lastChange>=180000)next=a.level-1;
+ if(next===a.level)return null;
+ a.level=next;a.lastChange=now;a.waits=[];
+ var profile=[{buffer:45,sync:5,maxLatency:12},{buffer:52,sync:6,maxLatency:14},{buffer:60,sync:7,maxLatency:16}][next];
+ // Update the existing engine's buffer and latency policy; do not seek or
+ // mutate the source. HLS.js may apply some settings on later reloads.
+ engine.config.maxBufferLength=profile.buffer;
+ engine.config.liveMaxLatencyDurationCount=profile.maxLatency;
+ engine.config.liveSyncDurationCount=profile.sync;
+ return next
+}
+function resumeLiveHlsNetwork(engine,manifest,record){`);
+change("  if(!preview)recordLiveIncident('buffering');", "  if(!preview)recordLiveIncident('buffering');\n  if(!document.hidden&&navigator.onLine!==false)adaptLiveBuffer(record,record.engine,Date.now(),true,preview);");
+change("   if(progress.advanced){clearRecoveredLiveLoading();return}\n   if(progress.idleMs>=16000)", "   if(progress.advanced){adaptLiveBuffer(record,record.engine,now,false,preview);clearRecoveredLiveLoading();return}\n   if(progress.idleMs>=16000)");
+
 new Function(app);writeFileSync('app.js',app);
