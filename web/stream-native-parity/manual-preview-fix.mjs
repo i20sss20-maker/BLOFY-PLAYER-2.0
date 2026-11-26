@@ -811,13 +811,18 @@ change("  guard=setTimeout(function(){finished(0)},6500);\n  api('POST','/api/hl
 change(" var externalButton=document.getElementById('player-external');",` function returnFromExternal(next){
   if(state.externalPending)return;
   state.externalPending=true;
-  api('POST','/api/external/stop',{},function(st){
+  function finish(st){
    state.externalPending=false;
    if(S.playerView!==state||S.route!=='player')return;
    if(st!==200){playerStatus('تعذر إغلاق المشغل الخارجي. أعد المحاولة.',true);return}
    state.externalMode=false;state.userPaused=false;playerStatus('');
    if(next)next();else resumeSelectedLiveTransport(state,video,document.getElementById('player-status'))
-  })
+  }
+  function stopExternal(){api('POST','/api/external/stop',{},finish)}
+  if(state.externalRetiringStop)api('POST',state.externalRetiringStop,{},function(st){
+   if(st!==200&&st!==404){finish(st);return}
+   state.externalRetiringStop=null;stopExternal()
+  });else stopExternal()
  }
  state.returnFromExternal=returnFromExternal;
  var externalButton=document.getElementById('player-external');`);
@@ -828,4 +833,6 @@ change(" state.toggle=function(){\n  if(video.paused){"," state.toggle=function(
 change(" document.getElementById('player-retry').onclick=function(){\n  diagnose", " document.getElementById('player-retry').onclick=function(){\n  if(state.externalMode){returnFromExternal();return}\n  diagnose");
 change("  function selectFullscreenChannel(requestedId){\n   if(S.route!=='player'||S.playerView!==state)return;", "  function selectFullscreenChannel(requestedId){\n   if(S.route!=='player'||S.playerView!==state)return;\n   if(state.externalMode){returnFromExternal(function(){selectFullscreenChannel(requestedId)});return}");
 
+change("   state.externalPending=true;state.externalMode=true;state.userPaused=true;", "   state.externalPending=true;state.externalMode=true;state.userPaused=true;state.externalRetiringStop=stop||null;");
+change("    if(st===200||st===404)issue();", "    if(st===200||st===404){state.externalRetiringStop=null;issue()}");
 new Function(app);writeFileSync('app.js',app);
