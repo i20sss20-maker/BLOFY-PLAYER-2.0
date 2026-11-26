@@ -921,6 +921,17 @@ function scheduleFullVodPrefetch(session,finishedChunk){
  },0);
  return true
 }
+// FFmpeg warning-level stderr is not a failure on a successful exit.
+function fullVodExitReason(code,stderr,existing,hasFirst,hasLast){
+ if(existing)return existing;
+ if(code===0){
+  if(!hasFirst)return 'vod_source_position_unavailable';
+  if(!hasLast)return 'vod_chunk_incomplete';
+  return null
+ }
+ return /Connection reset|ECONNRESET|end of file|timed out/i.test(stderr)?'vod_source_connection_lost':
+  /\b416\b|range not satisfiable|source_range_unavailable/i.test(stderr)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
+}
 function fullVodChunk(session,first){
  if(session.proc&&!session.finished&&session.chunkStart===first)return {ok:true};
  // Never "release" a slot on kill() before FFmpeg has actually exited.
@@ -962,12 +973,14 @@ function fullVodChunk(session,first){
    try{proc.kill()}catch{}
   },75000);
   session.chunkTimer.unref?.();
-  (async()=>{try{let buf='';const reader=proc.stderr.getReader();
-   while(true){const next=await reader.read();if(next.done)break;buf=(buf+new TextDecoder().decode(next.value)).slice(-2800)}
-   if(buf&&session.proc===proc&&!session.error)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
-    /\b416\b|range not satisfiable|source_range_unavailable/i.test(buf)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
+  let stderrTail='';
+  const stderrDone=(async()=>{try{const reader=proc.stderr.getReader();
+   while(true){const next=await reader.read();if(next.done)break;stderrTail=(stderrTail+new TextDecoder().decode(next.value)).slice(-2800)}
   }catch{}})();
-  proc.exited.then(code=>{
+  proc.exited.then(async code=>{
+   // Exit is authoritative. Wait briefly for error diagnostics, not for a
+   // warning stream to decide success or block the next encoder.
+   if(code!==0)await Promise.race([stderrDone,nap(250)]);
    if(session.proc!==proc)return;
    if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
    const retiredOnSeek=session.retiringProc===proc;
@@ -983,7 +996,9 @@ function fullVodChunk(session,first){
    // Source metadata can overstate runtime. A seek producing no TS segment
    // after a successful exit is not a recoverable HTTP buffering condition.
    const firstSegment=join(session.dir,'seg-'+String(first).padStart(6,'0')+'.ts');
-   if(code===0&&!existsSync(firstSegment)&&!session.error)session.error='vod_source_position_unavailable';
+   const lastIndex=first+Math.ceil(seconds/FULL_SEGMENT_SECONDS)-1;
+   const lastSegment=join(session.dir,'seg-'+String(lastIndex).padStart(6,'0')+'.ts');
+   session.error=fullVodExitReason(code,stderrTail,session.error,existsSync(firstSegment),existsSync(lastSegment));
    releaseHls(session);
    if((code!==0||session.error)&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
    else if(!session.stopped){
