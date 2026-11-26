@@ -921,3 +921,5 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
 .customer-setting-feedback:empty{display:none}
 .customer-version{font-size:11px;color:#aacbd0;opacity:.65;text-align:center;margin:0}
 .customer-settings .settings-inline-confirm{padding:12px;margin:0;border-top:1px solid #aacbd01a}
+
+.customer-setting-row[hidden]{display:none!important}
