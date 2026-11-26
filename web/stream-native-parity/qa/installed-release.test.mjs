@@ -164,3 +164,20 @@ test('failed preview stop retains its original SID until confirmed, with latest 
  f.markPreviewRetiring('live/2/ts/0/sid-test');f.retryRetiredPreview(()=>resumes.push('stale'));
  S.accountEpoch++;calls[2].cb(200);assert.deepEqual(resumes,['retry']);assert.equal(f.retryRetiredPreview(()=>{}),false);
 });
+
+test('adaptive live buffer increases on sustained waiting, caps growth and cools down after stability',()=>{
+ const a=app.indexOf('function adaptLiveBuffer('),b=app.indexOf('function resumeLiveHlsNetwork(',a);
+ const adapt=new Function(app.slice(a,b)+';return adaptLiveBuffer')();
+ const record={ready:true},engine={config:{maxBufferLength:45,liveSyncDurationCount:5}};
+ for(const now of [1000,10000,20000])adapt(record,engine,now,true,false);
+ assert.equal(engine.config.maxBufferLength,52);assert.equal(engine.config.liveSyncDurationCount,6);
+ for(const now of [30000,40000,50000])adapt(record,engine,now,true,false);
+ assert.equal(engine.config.maxBufferLength,60);
+ for(const now of [60000,70000,80000])adapt(record,engine,now,true,false);
+ assert.equal(engine.config.maxBufferLength,60);
+ adapt(record,engine,259999,false,false);assert.equal(engine.config.maxBufferLength,60);
+ adapt(record,engine,260000,false,false);assert.equal(engine.config.maxBufferLength,52);
+ adapt(record,engine,440000,false,false);assert.equal(engine.config.maxBufferLength,45);
+ assert.equal(adapt({ready:true},engine,450000,true,true),null);
+ assert.equal(adapt({ready:true,reconnecting:true},engine,450000,true,false),null);
+});
