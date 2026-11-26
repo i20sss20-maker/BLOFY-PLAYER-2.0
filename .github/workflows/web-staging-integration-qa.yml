@@ -22,10 +22,11 @@ jobs:
           set -euo pipefail
           AUDIO_KEY="$(openssl rand -hex 32)"
           SESSION_KEY="$(openssl rand -hex 32)"
+          OPS_KEY="$(openssl rand -hex 32)"
           trap 'docker rm -f blofy-stage-web blofy-stage-audio >/dev/null 2>&1 || true; docker network rm blofy-stage-net >/dev/null 2>&1 || true' EXIT
           docker network create blofy-stage-net
           docker run -d --name blofy-stage-audio --network blofy-stage-net --network-alias blofy-stream-web-audio.railway.internal -p 127.0.0.1:18081:8080 -e VIDAA_AUDIO_KEY="$AUDIO_KEY" -e BLOFY_WEB_SYNTHETIC_ONLY=1 blofy-stage-audio
-          docker run -d --name blofy-stage-web --network blofy-stage-net -p 127.0.0.1:18082:8080 -e VIDAA_SESSION_KEY="$SESSION_KEY" -e VIDAA_AUDIO_KEY="$AUDIO_KEY" -e VIDAA_AUDIO_WORKER_MODE=isolated -e BLOFY_WEB_SYNTHETIC_ONLY=1 blofy-stage-web
+          docker run -d --name blofy-stage-web --network blofy-stage-net -p 127.0.0.1:18082:8080 -e VIDAA_SESSION_KEY="$SESSION_KEY" -e VIDAA_WEB_OPS_KEY="$OPS_KEY" -e VIDAA_AUDIO_KEY="$AUDIO_KEY" -e VIDAA_AUDIO_WORKER_MODE=isolated -e BLOFY_WEB_SYNTHETIC_ONLY=1 blofy-stage-web
           wait_status(){
             local url="$1" expected="$2" actual
             for attempt in $(seq 1 25); do
@@ -49,6 +50,10 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' "$AUDIO/audio-compat/anis-test")" = 403
           SYNTHETIC_BEARER="Bearer v1.00000000-0000-4000-8000-000000000000.$(printf 'A%.0s' {1..43})"
           test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $AUDIO_KEY" -H "Authorization: $SYNTHETIC_BEARER" "$AUDIO/audio-compat/anis-test")" = 403
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$WEB/internal/ops")" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-Blofy-Ops-Key: $SESSION_KEY" "$WEB/internal/ops")" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-Blofy-Ops-Key: $OPS_KEY" "$WEB/internal/ops")" = 404
+          curl -fsS -H "X-Blofy-Ops-Key: $OPS_KEY" "$WEB/internal/ops" | jq -e '.mode=="synthetic-only" and (.rssBytes>0) and (.catalog.inflight==0) and (.windows|type=="array")'
           docker stop blofy-stage-audio
           wait_status "$WEB/health" 503
           docker start blofy-stage-audio
