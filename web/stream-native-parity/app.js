@@ -1992,7 +1992,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    error:function(){playerStatus('تعذر إنهاء الاتصال السابق. أعد المحاولة.',true)},
    timer:setTimeout,clear:clearTimeout,
    stop:function(key,done){api('POST','/api/hls/'+key+'/stop',{},done)},
-   start:function(next){playHls(video,'live',next.id,next.ext,next.track,statusElement,false,next.attempt)}
+   start:function(next){playerStatus('جار تشغيل القناة…');playHls(video,'live',next.id,next.ext,next.track,statusElement,false,next.attempt)}
   }))return
  }
  var modeKey=kind+':'+id+':'+extension+':'+track;
