@@ -1,0 +1,2 @@
+MEDIA RELEASE — 2026-11-26
+PR #939 merged at 4799383472618c8b81917d61f9d693e40dd150fe. Media QA shared relay admission passed (45881795302). Seven regression cases cover exit status, warnings and segment output. Android CI unrelated baseline failure. No change to source quotas or authentication. Real device validation pending. Rollback deployment 71431e73-7795-4085-8ae7-902d3b83b6e9.
