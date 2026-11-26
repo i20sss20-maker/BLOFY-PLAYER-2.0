@@ -166,3 +166,10 @@ CREATE TABLE IF NOT EXISTS blofy_linode_heartbeat (
  observed_at timestamptz NOT NULL,
  report jsonb NOT NULL
 );
+
+-- Independent HostBrr monitoring record; never a capacity reservation.
+CREATE TABLE IF NOT EXISTS blofy_hostbrr_worker_heartbeat (
+ singleton boolean PRIMARY KEY CHECK(singleton),
+ observed_at timestamptz NOT NULL,
+ report jsonb NOT NULL
+);
