@@ -30,3 +30,16 @@ These are known deployed builds, not certified long-play builds.
 - Web staging source updated to this verified commit. Audio staging remains on 64b0df9bdc3ae64e8766bd3faa1c96f1a78758f1 (same audio worker).
 - Added 20-minute real-time generated live HLS soak, requiring decoded frame progress, advancing media clock and zero fatal errors. It is a separate QA gate, not yet a recorded pass.
 - Android CI is independently red; do not promote Android or claim all repository checks are green.
+
+## Latest integration milestone — 2026-11-26
+- Candidate 7cb9e85667b6c78990e61b4d6231f7983e4fef79 deployed successfully to private staging (4a744a43-68e4-49c1-a43e-6750168cefa5).
+- 48d63e43793e9e18e0a89730b271b645dfafc176: all four short web checks green; browser decoded five switches and sought forward/backward across three points. HTTP readiness burst: 100 requests, concurrency 10. Neither test demonstrates 100 simultaneous media viewers.
+- Operator dashboard is opt-in with independent 256-bit key, absent by default; access via private network only during trial. Do not put the key in URLs or customer sessions.
+- Long soak is a deliberate gate; use explicit PR label web-soak-approved or manual dispatch where supported. Existing running checks remain valid only for the tested commit and fixture.
+## Physical acceptance checklist (unverified)
+On authorized test accounts only, one stream per subscription unless its licensed capacity explicitly permits more:
+1. Desktop Chrome/Edge, iOS Safari and installed PWA, Android Chrome and installed PWA, Toshiba/VIDAA TV: confirm code login, catalog, first picture and audible sound, 5 channel switches, 20–30 minutes live, 20–30 minutes VOD and forward/backward seeks. Record model/browser and candidate revision, elapsed viewing and observed freezes. Never attach credentials or stream URLs.
+2. Test airplane mode/connection restore, background/foreground, deliberate pause and return. Check that no new session is allocated while offline/paused and no silent invalid subscription on 503.
+3. Test commentator selection and listen for audio alignment; verify switching back to original audio and cleanup. No pass inferred from MP3 health check alone.
+4. For fallback, require authorized independent backup and verified channel correspondence, provider quota and explicit test scope. Until then use same-source bounded recovery only.
+5. Canary requires a separately authorized test entry, healthy worker, rollback anchor and real media evidence. If any physical gate fails, leave customer deployment pinned. No automated production promotion based on synthetic results.
