@@ -795,3 +795,37 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
 @media(prefers-reduced-motion:reduce){
  .mobile-seek-feedback{transition:none!important}
 }
+
+/* Native STREAM phone browser: one category strip, one channel list.
+   Never apply the phone layout to TV remotes or desktop. */
+@media (max-width:730px), (max-height:540px) and (orientation:landscape){
+ html[data-blofy-device="touch"] .catalog-app .live-catalog{
+  display:flex;flex-direction:column;flex-wrap:nowrap;gap:10px;height:auto;min-height:0
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .preview{display:none}
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .cat-rail{
+  display:block;width:100%;min-width:0;height:auto;flex:none;background:transparent;border:0
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .cat-rail .pane-head{display:none}
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .cat-rail .pane-scroll{
+  display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;padding:4px 0 8px;max-height:76px
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .cat-item{
+  flex:0 0 auto;white-space:nowrap;min-height:44px;border-radius:12px
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .channels{
+  width:100%;min-width:0;height:auto;flex:1 1 auto;max-height:none;border-radius:14px
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .channels .pane-scroll{
+  overflow:visible;flex:none;max-height:none
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .channel-item{
+  min-height:60px;padding:8px 12px;gap:10px
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .channel-name strong{
+  font-size:14px;line-height:1.4
+ }
+ html[data-blofy-device="touch"] .catalog-app .live-catalog .channel-image{
+  width:46px;height:46px;flex-shrink:0
+ }
+}
