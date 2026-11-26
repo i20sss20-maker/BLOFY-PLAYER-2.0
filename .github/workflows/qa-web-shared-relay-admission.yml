@@ -1,0 +1,19 @@
+name: QA web shared relay admission
+on:
+  pull_request:
+    branches: [fix/web-media-standard-retry-20261125]
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/qa-web-shared-relay-admission.yml'
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test web/stream-native-parity/qa/web-media-admission.test.mjs
