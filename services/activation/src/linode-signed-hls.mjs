@@ -10,6 +10,8 @@ export function signedLinodePlayback({context,requestId,capacity,attempt,worker,
  if(env.BLOFY_LINODE_SIGNED_HLS!=='1')return denied('disabled');
  const decision=decideLinodeAdmission({context,requestId,capacity,attempt},env,now);
  if(decision.action!=='linode')return denied('admission_not_committed');
+ const engineId=context?.engineId??'linode';
+ if((worker?.engineId??'linode')!==engineId)return denied('engine_mismatch');
  const a=context?.account?.id;
  const observed=Date.parse(worker?.observedAt);
  if(!uuid.test(a||'')||!gen.test(worker?.generation||'')||
@@ -18,6 +20,7 @@ export function signedLinodePlayback({context,requestId,capacity,attempt,worker,
     worker?.reservationId!==decision.reservationId||
     !Number.isFinite(observed)||observed<now-10000||observed>now+2000)
    return denied('worker_not_verified');
+ if(engineId==='hostbrr'&&env.BLOFY_HOSTBRR_SIGNED_HLS!=='1')return denied('engine_signing_disabled');
  if(!Buffer.isBuffer(signingKey)||signingKey.length!==32)return denied('key_unavailable');
  const account=a.replaceAll('-','').toLowerCase();
  const expiry=Math.floor(Math.min(Date.parse(decision.expiresAt),now+60000)/1000);
@@ -26,5 +29,5 @@ export function signedLinodePlayback({context,requestId,capacity,attempt,worker,
  const mac=createHmac('sha256',signingKey).update(['BLOFY-LIVE-V1',generation,account,String(expiry)].join('\n')).digest('hex');
  // Path only. Never expose the source URL, signing key, or reservation ID.
  // The caller still has to prove the HTTPS delivery ingress is enabled.
- return {ok:true,path:'/v1/'+generation+'/'+account+'/'+expiry+'/'+mac+'/index.m3u8',expiresAt:new Date(expiry*1000).toISOString()};
+ return {ok:true,mediaHost:engineId==='hostbrr'?'media2.blofyplayer.com':'media.blofyplayer.com',path:'/v1/'+generation+'/'+account+'/'+expiry+'/'+mac+'/index.m3u8',expiresAt:new Date(expiry*1000).toISOString()};
 }
