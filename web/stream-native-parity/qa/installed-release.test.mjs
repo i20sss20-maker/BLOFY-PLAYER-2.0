@@ -149,3 +149,18 @@ test('handoff adapters call browser timers without an invalid native receiver',(
  assert.equal(ops.timer(()=>{},6500),7);ops.clear(7);assert.equal(ops.retry(()=>{},700),7);
  assert.equal(scheduled,2);assert.equal(cleared,1);
 });
+
+test('failed preview stop retains its original SID until confirmed, with latest intent only',()=>{
+ const a=app.indexOf('function markPreviewRetiring('),b=app.indexOf('function beginPreview(',a);
+ const S={accountEpoch:7},calls=[],messages=[],resumes=[];
+ const f=new Function('S','api','document',app.slice(a,b)+';return {markPreviewRetiring,confirmPreviewRetired,retryRetiredPreview}')(S,(m,p,b,cb)=>calls.push({p,cb}),{getElementById:()=>({set textContent(v){messages.push(v)}})});
+ f.markPreviewRetiring('live/1/ts/0/sid-test');
+ assert.equal(f.retryRetiredPreview(()=>resumes.push('first')),true);
+ assert.equal(f.retryRetiredPreview(()=>resumes.push('latest')),true);
+ assert.equal(calls.length,1);calls[0].cb(503);
+ assert.equal(resumes.length,0);assert.equal(S.retiredPreview.key,'live/1/ts/0/sid-test');
+ f.retryRetiredPreview(()=>resumes.push('retry'));assert.equal(calls[1].p,calls[0].p);
+ calls[1].cb(404);assert.deepEqual(resumes,['retry']);assert.equal(S.retiredPreview,null);
+ f.markPreviewRetiring('live/2/ts/0/sid-test');f.retryRetiredPreview(()=>resumes.push('stale'));
+ S.accountEpoch++;calls[2].cb(200);assert.deepEqual(resumes,['retry']);assert.equal(f.retryRetiredPreview(()=>{}),false);
+});
