@@ -88,3 +88,12 @@ test('customer settings exposes essential actions only, not engineering reports'
  assert.match(source,/cleanupPlayer\(\);/);
  assert.match(app,/button.hidden=state.mode==='installed'/);
 });
+
+test('installed native recovery has a terminal retry control instead of endless restart',()=>{
+ assert.match(app,/var attempt=record.recoveryAttempt\|\|0;\s*if\(attempt>=4\)\{/);
+ assert.match(app,/playerStatus\('تعذر الاتصال بالقناة\. أعد المحاولة\.',true\)/);
+ assert.match(app,/playerStatus\('تعذر التحقق من صلاحية تشغيل القناة\.',true\)/);
+ assert.match(app,/playerStatus\('انتهت جلسة البث\. أعد المحاولة\.',true\)/);
+ assert.match(app,/playerStatus\('القناة غير متاحة حاليًا\. أعد المحاولة\.',true\)/);
+ assert.match(app,/retry\.style\.display=error\?'inline-flex':'none'/);
+});
