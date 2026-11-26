@@ -36,8 +36,8 @@ test('source restart backoff is bounded and respects a valid Retry-After',()=>{
 test('full-screen adds a modest bounded buffer reserve while preview remains unchanged',()=>{
  const start=app.indexOf('function liveBufferProfile('),end=app.indexOf('function resumeLiveHlsNetwork(',start);
  const profile=new Function(app.slice(start,end)+';return liveBufferProfile')();
- assert.deepEqual(profile(true),{sync:4,maxLatency:10,buffer:35});
- assert.deepEqual(profile(false),{sync:5,maxLatency:12,buffer:45});
+ assert.deepEqual(profile(true),{sync:3,maxLatency:8,buffer:18});
+ assert.deepEqual(profile(false),{sync:3,maxLatency:10,buffer:25});
  assert.match(app,/record\.ready\|\|record\.reconnecting\|\|context\.userPaused\|\|record\.autoplayBlocked/);
  assert.match(app,/!record\.ready\|\|record\.reconnecting\|\|!video\.isConnected/);
 });
@@ -68,7 +68,7 @@ test('provider retry hint accepts only bounded integer seconds from XHR or Fetch
 });
 
 test('live HLS has explicit forward and back buffer caps',()=>{
- assert.match(app,/maxBufferLength:bufferProfile\.buffer,maxMaxBufferLength:preview\?45:60,backBufferLength:preview\?12:30/);
+ assert.match(app,/maxBufferLength:bufferProfile\.buffer,maxMaxBufferLength:preview\?25:45,backBufferLength:preview\?8:15/);
 });
 
 test('startup recovers when decoder stays paused but no user gesture is required',()=>{
@@ -207,7 +207,7 @@ test('runtime diagnostic identifies installed, browser and preview modes without
  assert.equal(mode(false,false),'browser');
  assert.equal(mode(true,true),'preview');
  assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
- assert.match(app,/2026\.11\.26\.12/);
+ assert.match(app,/2026\.11\.27\.1/);
 });
 
 test('installed Apple HLS policy is restricted to supported standalone WebKit',()=>{

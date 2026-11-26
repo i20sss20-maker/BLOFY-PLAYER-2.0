@@ -1345,7 +1345,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.12</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.27.1</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -3302,6 +3302,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
      !video.isConnected||!video.videoWidth||!video.videoHeight)return;
   state.stats.firstFrameAt=Date.now();
   state.stats.firstFrameBasis=basis;
+  var elapsed=Math.round(state.stats.firstFrameAt-Number(state.stats.openedAt||0));
+  if(elapsed>=0&&elapsed<=120000&&S.userVerified){
+   api('POST','/api/player-diagnostic',{kind:state.kind,mode:state.mode||'direct',phase:'first_picture',runtime:installedWebApp()?'installed':'browser',errorCode:0,firstPictureMs:elapsed,pictureBasis:basis},function(){})
+  }
   if(state.firstPictureWatchTimer){clearInterval(state.firstPictureWatchTimer);state.firstPictureWatchTimer=null}
   if(state.firstPictureFrameId!==null&&state.firstPictureFrameId!==undefined&&
      typeof video.cancelVideoFrameCallback==='function'){
@@ -4693,10 +4697,17 @@ document.addEventListener('visibilitychange',function(){
  }else if(S.playerView&&S.playerView.acquireWakeLock)S.playerView.acquireWakeLock()
 });
 try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
-api('GET','/api/session',null,function(st,json){
- if(st===200&&json.active&&useProfile(json.profileKey,json.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000)}
- else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
-});
+function bootSession(attempt){
+ api('GET','/api/session',null,function(st,data){
+  if(S.route!=='boot'||S.userVerified)return;
+  if(st===200&&data.active&&useProfile(data.profileKey,data.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000);return}
+  if(st===401||st===403||(st===200&&data.active===false)){login('أدخل كود اشتراك BLOFY STREAM للتفعيل');return}
+  if(attempt<3){setTimeout(function(){if(S.route==='boot'&&!S.userVerified)bootSession(attempt+1)},[1000,2500,5000][attempt]);return}
+  app.innerHTML='<div class="login-screen"><div class="login-panel"><div class="login-brand">BLOFY<small>STREAM</small></div><p>تعذر الاتصال مؤقتًا. لم يتم إلغاء اشتراكك.</p><button class="btn" id="retry-session">إعادة المحاولة</button></div></div>';
+  document.getElementById('retry-session').onclick=function(){this.disabled=true;bootSession(0)}
+ })
+}
+bootSession(0);
 setInterval(checkCatalogVersion,10*60*1000);
 // Install prompts are optional browser capabilities: never fake a native
 // install on iOS or VIDAA. Only prompt after an explicit user gesture.

@@ -52,11 +52,23 @@ test('external live handoff uses a single-use ticket and stops internal playback
  assert.match(server,/if\(t\)revokeExternal\('Bearer '\+t\)/);
  assert.match(app,/stopPlayback\(false\);\s*function issue\(\)/);
  assert.match(app,/api\('POST','\/api\/external\/live'/);
- assert.match(app,/if\(st===200\|\|st===404\)issue\(\)/);
+ assert.match(app,/if\(st===200\|\|st===404\)\{state.externalRetiringStop=null;state.directStopKey=null;issue\(\)\}/);
 });
 test('recognized incompatible commentary is converted without forwarding unknown content',()=>{
  const server=readFileSync('server.ts','utf8');
  assert.match(server,/\['video\/mp2t','audio\/ogg','audio\/flac'\]\.includes\(mime\)/);
  assert.match(server,/fetch\(host\+'\/audio-compat\/'\+id/);
  assert.match(server,/converted\.headers\.get\('content-type'\)!=='audio\/mpeg'/);
+});
+
+test('return from external playback waits for both retirements before reopening internal channel',()=>{
+ const app=readFileSync('app.js','utf8'),server=readFileSync('server.ts','utf8');
+ const a=app.indexOf('function returnFromExternal('),b=app.indexOf('state.returnFromExternal=',a);
+ const state={externalMode:true,userPaused:true,externalRetiringStop:'/api/hls/test/stop',directStopKey:'test'},S={route:'player',playerView:state},calls=[],errors=[];let opened=0;
+ const restore=new Function('state','S','api','playerStatus','resumeSelectedLiveTransport','video','document',app.slice(a,b)+';return returnFromExternal')(
+  state,S,(method,path,body,cb)=>calls.push({path,cb}),(msg,error)=>{if(error)errors.push(msg)},()=>opened++,{}, {getElementById:()=>null});
+ restore();assert.equal(calls[0].path,'/api/hls/test/stop');calls[0].cb(503);assert.equal(opened,0);assert.equal(state.externalMode,true);assert.equal(state.directStopKey,'test');
+ restore();calls[1].cb(404);assert.equal(state.directStopKey,null);assert.equal(calls[2].path,'/api/external/stop');assert.equal(opened,0);
+ calls[2].cb(200);assert.equal(opened,1);assert.equal(state.userPaused,false);assert.equal(state.externalMode,false);
+ assert.match(server,/if\(p==='\/api\/external\/stop'&&method==='POST'\)\{[\s\S]*?revokeExternal\(h.Authorization\)/);
 });

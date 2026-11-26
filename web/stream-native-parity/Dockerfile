@@ -2,7 +2,7 @@ FROM oven/bun:1-debian
 WORKDIR /app
 COPY package.json /app/package.json
 RUN bun install --production --no-save
-COPY server.ts commentary-catalog.mjs web-profile-key.mjs catalog-page-cache.mjs catalog-array-reader.mjs index.html app.js profile-transfer.js playback-acceptance.js styles.css manifest.webmanifest stream-icon.svg apple-touch-icon.png icon-192.png icon-512.png sw.js /app/
+COPY server.ts ops-dashboard.html ops-dashboard.js catalog-flights.mjs audio-worker-policy.mjs web-security-controls.mjs commentary-catalog.mjs web-profile-key.mjs catalog-page-cache.mjs catalog-array-reader.mjs index.html app.js profile-transfer.js playback-acceptance.js styles.css manifest.webmanifest stream-icon.svg apple-touch-icon.png icon-192.png icon-512.png sw.js /app/
 COPY manual-preview-fix.mjs /app/
 RUN bun run ./manual-preview-fix.mjs
 COPY poster-recovery.test.mjs catalog-refresh.test.mjs catalog-array-reader.test.mjs search-memory.test.mjs category-cache.test.mjs pagination-progress.test.mjs live-manifest-retry.test.mjs /app/
@@ -14,8 +14,10 @@ COPY qa/playback-acceptance.test.mjs /app/qa/
 RUN bun test ./qa/playback-acceptance.test.mjs
 COPY qa/pwa-shell-assets.test.mjs qa/installed-release.test.mjs /app/qa/
 RUN bun test ./qa/pwa-shell-assets.test.mjs ./qa/installed-release.test.mjs
-COPY qa/commentary-catalog.test.mjs /app/qa/
-RUN bun test ./qa/commentary-catalog.test.mjs
+COPY qa/commentary-catalog.test.mjs qa/web-security-controls.test.mjs qa/audio-worker-policy.test.mjs qa/catalog-flights.test.mjs qa/control-plane-burst.test.mjs /app/qa/
+RUN bun test ./qa/commentary-catalog.test.mjs ./qa/web-security-controls.test.mjs ./qa/audio-worker-policy.test.mjs ./qa/catalog-flights.test.mjs ./qa/control-plane-burst.test.mjs
+COPY audio-worker.ts /app/
+RUN bun build audio-worker.ts --target=bun --outfile=/tmp/audio-worker-check.js && rm /tmp/audio-worker-check.js
 ENV PORT=8080
 EXPOSE 8080
 USER bun

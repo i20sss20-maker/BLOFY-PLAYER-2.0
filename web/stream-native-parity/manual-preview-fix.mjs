@@ -807,4 +807,199 @@ change("  var previousKey=previous.hlsKey,settled=false,guard=null;","  var prev
 change("   settled=true;if(guard)clearTimeout(guard);\n   S.previewStopPending=false;","   if(guard)clearTimeout(guard);\n   if(st!==200&&st!==404&&++stopAttempts<=2&&S.route==='live'&&video.isConnected){setTimeout(sendPreviewStop,stopAttempts*700);return}\n   settled=true;S.previewStopPending=false;");
 change("  guard=setTimeout(function(){finished(0)},6500);\n  api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)});","  function sendPreviewStop(){\n   if(settled)return;\n   api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)})\n  }\n  sendPreviewStop();");
 
+
+change(" var externalButton=document.getElementById('player-external');",` function returnFromExternal(next){
+  if(state.externalPending)return;
+  state.externalPending=true;
+  function finish(st){
+   state.externalPending=false;
+   if(S.playerView!==state||S.route!=='player')return;
+   if(st!==200){playerStatus('تعذر إغلاق المشغل الخارجي. أعد المحاولة.',true);return}
+   state.externalMode=false;state.userPaused=false;playerStatus('');
+   if(next)next();else resumeSelectedLiveTransport(state,video,document.getElementById('player-status'))
+  }
+  function stopExternal(){api('POST','/api/external/stop',{},finish)}
+  if(state.externalRetiringStop)api('POST',state.externalRetiringStop,{},function(st){
+   if(st!==200&&st!==404){finish(st);return}
+   state.externalRetiringStop=null;stopExternal()
+  });else stopExternal()
+ }
+ state.returnFromExternal=returnFromExternal;
+ var externalButton=document.getElementById('player-external');`);
+change("  var opts=[];\n  if(typeof video.webkitShowPlaybackTargetPicker", "  if(state.externalMode){showPlayerChoices('التشغيل الخارجي',[{name:'العودة للتشغيل الداخلي',select:function(){returnFromExternal()}}],externalButton);return}\n  var opts=[];\n  if(typeof video.webkitShowPlaybackTargetPicker");
+change("   state.externalPending=true;state.userPaused=true;", "   state.externalPending=true;state.externalMode=true;state.userPaused=true;");
+change("     ],externalButton)\n    })", "      ,{name:'العودة للتشغيل الداخلي',select:function(){returnFromExternal()}}\n     ],externalButton)\n    })");
+change(" state.toggle=function(){\n  if(video.paused){"," state.toggle=function(){\n  if(state.externalMode){returnFromExternal();return}\n  if(video.paused){");
+change(" document.getElementById('player-retry').onclick=function(){\n  diagnose", " document.getElementById('player-retry').onclick=function(){\n  if(state.externalMode){returnFromExternal();return}\n  diagnose");
+change("  function selectFullscreenChannel(requestedId){\n   if(S.route!=='player'||S.playerView!==state)return;", "  function selectFullscreenChannel(requestedId){\n   if(S.route!=='player'||S.playerView!==state)return;\n   if(state.externalMode){returnFromExternal(function(){selectFullscreenChannel(requestedId)});return}");
+
+change("   state.externalPending=true;state.externalMode=true;state.userPaused=true;", "   state.externalPending=true;state.externalMode=true;state.userPaused=true;state.externalRetiringStop=stop||null;");
+change("    if(st===200||st===404)issue();", "    if(st===200||st===404){state.externalRetiringStop=null;issue()}");
+change("timer:setTimeout,clear:clearTimeout,retry:setTimeout,", "timer:function(fn,ms){return setTimeout(fn,ms)},clear:function(id){clearTimeout(id)},retry:function(fn,ms){return setTimeout(fn,ms)},");
+
+change("function beginPreview(item){",`// A failed preview STOP is not permission to open another source session.
+function markPreviewRetiring(key){
+ if(key)S.retiredPreview={key:key,epoch:S.accountEpoch,inflight:false,next:null}
+}
+function confirmPreviewRetired(key,epoch){
+ var p=S.retiredPreview;
+ if(p&&p.key===key&&p.epoch===epoch)S.retiredPreview=null
+}
+function retryRetiredPreview(next){
+ var p=S.retiredPreview;
+ if(!p)return false;
+ if(p.epoch!==S.accountEpoch){S.retiredPreview=null;return false}
+ p.next=next;
+ if(p.inflight)return true;
+ p.inflight=true;
+ api('POST','/api/hls/'+p.key+'/stop',{},function(st){
+  if(S.retiredPreview!==p||S.accountEpoch!==p.epoch)return;
+  p.inflight=false;
+  if(st===200||st===404){
+   var resume=p.next;S.retiredPreview=null;
+   if(resume)resume()
+  }else{
+   var box=document.getElementById('live-status');
+   if(box)box.textContent='تعذر إغلاق الاتصال السابق. أعد المحاولة.'
+  }
+ });
+ return true
+}
+function beginPreview(item){`);
+change(" var previous=S.play;\n if(previous&&previous.preview&&previous.hlsKey){", " var chosenEpoch=S.accountEpoch;\n if(retryRetiredPreview(function(){if(S.accountEpoch===chosenEpoch&&S.route==='live'&&!document.hidden&&String(S.selected)===String(id))beginPreview(item)}))return;\n var previous=S.play;\n if(previous&&previous.preview&&previous.hlsKey){");
+change("var previousKey=previous.hlsKey,settled=false,guard=null,stopAttempts=0;\n  stopPlayback(false);", "var previousKey=previous.hlsKey,settled=false,guard=null,stopAttempts=0,retireEpoch=S.accountEpoch;\n  markPreviewRetiring(previousKey);stopPlayback(false);");
+change("   settled=true;S.previewStopPending=false;", "   settled=true;S.previewStopPending=false;\n   if(st===200||st===404)confirmPreviewRetired(previousKey,retireEpoch);");
+change(" if(isLive&&oldPreview&&oldPreview.preview&&oldPreview.hlsKey){", " var openEpoch=S.accountEpoch,openRoute=S.route;\n if(isLive&&retryRetiredPreview(function(){if(S.accountEpoch===openEpoch&&S.route===openRoute&&S.userVerified&&String(S.selected)===String(id))openPlayer(kind,id,extension,name,from,replacePlayerHistory)}))return;\n if(isLive&&oldPreview&&oldPreview.preview&&oldPreview.hlsKey){");
+change("  var previewStopKey=oldPreview.hlsKey;", "  var previewStopKey=oldPreview.hlsKey,retireEpoch=S.accountEpoch;\n  markPreviewRetiring(previewStopKey);");
+change("   S.previewToFullPending=false;\n   if(S.route!==expectedRoute", "   S.previewToFullPending=false;\n   if(status===200||status===404)confirmPreviewRetired(previewStopKey,retireEpoch);\n   if(S.accountEpoch!==retireEpoch||S.route!==expectedRoute");
+change("  promotionTimer=setTimeout(function(){promotionComplete(0)},6500);\n", "");
+change("  if(preview)S.previewRecoveryStop=token;", "  var retireEpoch=S.accountEpoch;\n  if(preview){S.previewRecoveryStop=token;markPreviewRetiring(oldHlsKey)}");
+change("   if(preview&&S.previewRecoveryStop===token){", "   if(preview&&(status===200||status===404))confirmPreviewRetired(oldHlsKey,retireEpoch);\n   if(preview&&S.previewRecoveryStop===token){");
+
+
+change("function resumeLiveHlsNetwork(engine,manifest,record){",`// Adapt only existing HLS.js sessions. Native HLS owns its buffer; a
+// preview uses a fixed small profile. No new connections or quality changes.
+function adaptLiveBuffer(record,engine,now,waiting,preview){
+ if(preview||!engine||!engine.config||!record.ready||record.reconnecting)return null;
+ var a=record.adaptiveBuffer||(record.adaptiveBuffer={level:0,waits:[],lastWait:0,lastChange:now,lastPressure:now});
+ if(waiting){
+  if(a.lastWait&&now-a.lastWait<3000)return null;
+  a.lastWait=now;a.lastPressure=now;a.waits.push(now);
+ }
+ a.waits=a.waits.filter(function(t){return now-t<=60000});
+ var next=a.level;
+ if(waiting&&a.waits.length>=3&&now-a.lastChange>=15000)next=Math.min(2,a.level+1);
+ else if(!waiting&&a.level>0&&now-a.lastPressure>=180000&&now-a.lastChange>=180000)next=a.level-1;
+ if(next===a.level)return null;
+ a.level=next;a.lastChange=now;a.waits=[];
+ var profile=[{buffer:45,sync:5,maxLatency:12},{buffer:52,sync:6,maxLatency:14},{buffer:60,sync:7,maxLatency:16}][next];
+ // Update the existing engine's buffer and latency policy; do not seek or
+ // mutate the source. HLS.js may apply some settings on later reloads.
+ engine.config.maxBufferLength=profile.buffer;
+ engine.config.liveMaxLatencyDurationCount=profile.maxLatency;
+ engine.config.liveSyncDurationCount=profile.sync;
+ return next
+}
+function resumeLiveHlsNetwork(engine,manifest,record){`);
+change("  if(!preview)recordLiveIncident('buffering');", "  if(!preview)recordLiveIncident('buffering');\n  if(!document.hidden&&navigator.onLine!==false)adaptLiveBuffer(record,record.engine,Date.now(),true,preview);");
+change("   if(progress.advanced){clearRecoveredLiveLoading();return}\n   if(progress.idleMs>=16000)", "   if(progress.advanced){adaptLiveBuffer(record,record.engine,now,false,preview);clearRecoveredLiveLoading();return}\n   if(progress.idleMs>=16000)");
+
+
+change("function resumeLiveHlsNetwork(engine,manifest,record){",`function liveRecoveryAllowed(paused,hidden,offline,external){
+ return !paused&&!hidden&&!offline&&!external
+}
+function resumeLiveHlsNetwork(engine,manifest,record){`);
+change(" function recoverConnection(){\n  if(!alive()||record.reconnecting)return;\n  if(preview){",` function recoverConnection(){
+  if(!alive()||record.reconnecting)return;
+  var owner=!preview&&S.playerView;
+  if(!liveRecoveryAllowed(owner&&owner.userPaused,document.hidden,navigator.onLine===false,owner&&owner.externalMode)){
+   // Keep the current SID. A hidden/offline/paused viewer must not
+   // allocate a fresh encoder or trigger codec fallback.
+   if(!record.retryTimer&&!(owner&&(owner.userPaused||owner.externalMode))){
+    record.retryTimer=setTimeout(function(){record.retryTimer=null;if(alive())recoverConnection()},3000)
+   }
+   return
+  }
+  if(preview){`);
+change("   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;", "   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;\n   if(navigator.onLine===false){record.lastProgressAt=Date.now();record.lastVisualSampleAt=record.lastProgressAt;record.visualProgressSeen=false;return}");
+
+
+change("function playFullVod(video,kind,id,ext,track,duration,state,ready){",`function retireVodBeforeUpgrade(state,stopUrl,ops){
+ var pending=state.vodUpgradeStop;
+ if(!pending){
+  if(!stopUrl)return false;
+  pending=state.vodUpgradeStop={url:stopUrl,inflight:false,next:null};
+  ops.detach()
+ }
+ pending.next=ops;
+ if(pending.inflight)return true;
+ pending.inflight=true;
+ ops.stop(pending.url,function(st){
+  if(state.vodUpgradeStop!==pending)return;
+  pending.inflight=false;
+  var latest=pending.next;
+  if(!latest.current())return;
+  if(st!==200&&st!==404){latest.error();return}
+  state.vodUpgradeStop=null;latest.start()
+ });
+ return true
+}
+function playFullVod(video,kind,id,ext,track,duration,state,ready){`);
+change(` if(previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===0){
+  var oldStop=previous.stopUrl;
+  stopPlayback(false);
+  state.ready=false;
+  playerStatus('جار إغلاق اتصال الفيلم المؤقت قبل تفعيل التقديم…');
+  var completed=false;
+  function proceed(){
+   if(completed)return;
+   completed=true;clearTimeout(timeout);
+   if(S.route!=='player'||S.playerView!==state)return;
+   playFullVod(video,kind,id,ext,track,duration,state,ready)
+  }
+  var timeout=setTimeout(proceed,4000);
+  api('POST',oldStop,{},function(){proceed()});
+  return
+ }`, ` if(retireVodBeforeUpgrade(state,previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===0?previous.stopUrl:null,{
+  detach:function(){stopPlayback(false);state.ready=false},
+  current:function(){return S.route==='player'&&S.playerView===state&&video.isConnected&&S.userVerified},
+  stop:function(url,done){playerStatus('');api('POST',url,{},done)},
+  error:function(){playerStatus('تعذر إغلاق اتصال الفيلم السابق. أعد المحاولة.',true)},
+  start:function(){playFullVod(video,kind,id,ext,track,duration,state,ready)}
+ }))return`);
+
+
+change(" if(requestedState.directStopPending)return;\n var old=S.play,oldKey=old&&old.hlsKey;", " if(requestedState.directStopPending||requestedState.liveHlsHandoff||requestedState.externalMode)return;\n var old=S.play,oldKey=requestedState.directStopKey||(old&&old.hlsKey);");
+change("  requestedState.directStopPending=true;\n  stopPlayback(false);", "  requestedState.directStopPending=true;requestedState.directStopKey=oldKey;\n  stopPlayback(false);");
+change("   playDirectMpegts(video,String(requestedState.id),statusElement)\n  }\n  api('POST','/api/hls/'+oldKey+'/stop'", "   requestedState.directStopKey=null;\n   if(!document.hidden&&navigator.onLine!==false&&!requestedState.userPaused)playDirectMpegts(video,String(requestedState.id),statusElement)\n  }\n  api('POST','/api/hls/'+oldKey+'/stop'");
+change("  var oldKey=S.play&&S.play.video===video&&S.play.hlsKey;\n  if(queueLiveHlsHandoff", "  if(player.directStopPending||player.externalMode)return;\n  var oldKey=player.directStopKey||(S.play&&S.play.video===video&&S.play.hlsKey);\n  if(queueLiveHlsHandoff");
+change("   start:function(next){playerStatus('جار تشغيل القناة…');playHls(", "   start:function(next){player.directStopKey=null;playerStatus('جار تشغيل القناة…');playHls(");
+
+
+change("  if(S.route!=='player'||S.playerView!==state||state.externalPending||state.liveHlsHandoff)return;", "  if(S.route!=='player'||S.playerView!==state||state.externalPending||state.liveHlsHandoff||state.directStopPending)return;");
+change("   if(state.externalPending)return;\n   var record=S.play,selected=String(state.id),stop=record&&(record.stopUrl||(record.hlsKey&&'/api/hls/'+record.hlsKey+'/stop'));", "   if(state.externalPending||state.directStopPending||state.liveHlsHandoff||state.externalMode)return;\n   var record=S.play,selected=String(state.id),stop=state.directStopKey?'/api/hls/'+state.directStopKey+'/stop':record&&(record.stopUrl||(record.hlsKey&&'/api/hls/'+record.hlsKey+'/stop'));");
+change("    if(st===200||st===404){state.externalRetiringStop=null;issue()}", "    if(st===200||st===404){state.externalRetiringStop=null;state.directStopKey=null;issue()}");
+change("   state.externalRetiringStop=null;stopExternal()", "   state.externalRetiringStop=null;state.directStopKey=null;stopExternal()");
+
+
+change("function shouldUseNativeHls(video){\n if(S.preferMseHls", "function appleMobileNativeHls(ua,touchPoints,video){return !!(appleTouchBrowser(ua,touchPoints)&&video&&video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl'))}\nfunction shouldUseNativeHls(video){\n if(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video))return true;\n if(S.preferMseHls");
+change("if(!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice", "if(!appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)&&!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice");
+change("if(record.nativeHls&&installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&", "if(record.nativeHls&&(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&");
+change("target.searchParams.set('shell','2026.11.26.12');", "target.searchParams.set('shell','2026.11.27.1');");
+
+
+change("return preview?{sync:4,maxLatency:10,buffer:35}:{sync:5,maxLatency:12,buffer:45}", "return preview?{sync:3,maxLatency:8,buffer:18}:{sync:3,maxLatency:10,buffer:25}");
+change("var profile=[{buffer:45,sync:5,maxLatency:12},{buffer:52,sync:6,maxLatency:14},{buffer:60,sync:7,maxLatency:16}][next];", "var profile=[{buffer:25,sync:3,maxLatency:10},{buffer:35,sync:4,maxLatency:12},{buffer:45,sync:5,maxLatency:14}][next];");
+change("maxMaxBufferLength:preview?45:60,backBufferLength:preview?12:30", "maxMaxBufferLength:preview?25:45,backBufferLength:preview?8:15");
+change("if(state.mode==='mpegts')playDirectMpegts(video,String(state.id),statusElement);", "if(state.mode==='mpegts'&&!state.liveHlsHandoff)playDirectMpegts(video,String(state.id),statusElement);");
+change("xhr.timeout=40000;", "xhr.timeout=mediaStop?6500:40000;");
+
+
+
+change("function liveRetryHint(detail){", "function liveSourceQuotaRejected(detail){\n try{\n  var n=detail&&detail.networkDetails;\n  return (n&&typeof n.getResponseHeader==='function'?n.getResponseHeader('X-Blofy-Live-Status'):n&&n.headers&&n.headers.get?n.headers.get('X-Blofy-Live-Status'):null)==='source_channel_limit'\n }catch(e){return false}\n}\nfunction liveRetryHint(detail){");
+change(" if(shouldUseNativeHls(video)){\n  record.nativeHls=true;", " function showSourceQuota(){\n  if(!alive())return;\n  record.reconnecting=true;\n  for(var i=0,timers=['startupTimer','stallTimer','stableTimer','retryTimer','capacityTimer','originTimer','progressWatchdog'];i<timers.length;i++){\n   if(record[timers[i]]){clearTimeout(record[timers[i]]);clearInterval(record[timers[i]]);record[timers[i]]=null}\n  }\n  try{if(record.engine)record.engine.stopLoad()}catch(e){}\n  var message='مصدر البث ممتلئ حاليًا. اختر قناة متاحة أو أعد المحاولة لاحقًا.';\n  if(preview)status(message);else playerStatus(message,true)\n }\n if(shouldUseNativeHls(video)){\n  record.nativeHls=true;");
+change("if(installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&typeof fetch==='function'){", "if((appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&typeof fetch==='function'){");
+change("     if(response.status===401||response.status===403||response.status===400){", "     if(response.status===503&&failure&&failure.error==='live_source_channel_limit'){showSourceQuota();return}\n     if(response.status===401||response.status===403||response.status===400){");
+change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);", "    if(code===503&&liveSourceQuotaRejected(detail)){showSourceQuota();return}\n    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);");
+
 new Function(app);writeFileSync('app.js',app);

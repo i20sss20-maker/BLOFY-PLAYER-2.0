@@ -137,3 +137,113 @@ test('explicit channel selection clears previous user pause and loading text is 
  assert.match(app,/isLive\?' style="display:none"':''/);
  assert.match(app,/S\.queuedLiveOpen=intent/);
 });
+
+test('handoff adapters call browser timers without an invalid native receiver',()=>{
+ const a=app.indexOf('timer:function(fn,ms){return setTimeout(fn,ms)},clear:function(id){clearTimeout(id)},retry:function(fn,ms){return setTimeout(fn,ms)},');
+ assert.ok(a>=0,'native timer callbacks must be wrapped for browser invocation');
+ const line=app.slice(a,app.indexOf('\n',a)).trim().replace(/,$/,'');
+ let scheduled=0,cleared=0;
+ const nativeSet=function(fn,ms){'use strict';assert.equal(this,undefined);scheduled++;return 7};
+ const nativeClear=function(id){'use strict';assert.equal(this,undefined);assert.equal(id,7);cleared++};
+ const ops=new Function('setTimeout','clearTimeout','return ({'+line+'})')(nativeSet,nativeClear);
+ assert.equal(ops.timer(()=>{},6500),7);ops.clear(7);assert.equal(ops.retry(()=>{},700),7);
+ assert.equal(scheduled,2);assert.equal(cleared,1);
+});
+
+test('failed preview stop retains its original SID until confirmed, with latest intent only',()=>{
+ const a=app.indexOf('function markPreviewRetiring('),b=app.indexOf('function beginPreview(',a);
+ const S={accountEpoch:7},calls=[],messages=[],resumes=[];
+ const f=new Function('S','api','document',app.slice(a,b)+';return {markPreviewRetiring,confirmPreviewRetired,retryRetiredPreview}')(S,(m,p,b,cb)=>calls.push({p,cb}),{getElementById:()=>({set textContent(v){messages.push(v)}})});
+ f.markPreviewRetiring('live/1/ts/0/sid-test');
+ assert.equal(f.retryRetiredPreview(()=>resumes.push('first')),true);
+ assert.equal(f.retryRetiredPreview(()=>resumes.push('latest')),true);
+ assert.equal(calls.length,1);calls[0].cb(503);
+ assert.equal(resumes.length,0);assert.equal(S.retiredPreview.key,'live/1/ts/0/sid-test');
+ f.retryRetiredPreview(()=>resumes.push('retry'));assert.equal(calls[1].p,calls[0].p);
+ calls[1].cb(404);assert.deepEqual(resumes,['retry']);assert.equal(S.retiredPreview,null);
+ f.markPreviewRetiring('live/2/ts/0/sid-test');f.retryRetiredPreview(()=>resumes.push('stale'));
+ S.accountEpoch++;calls[2].cb(200);assert.deepEqual(resumes,['retry']);assert.equal(f.retryRetiredPreview(()=>{}),false);
+});
+
+test('adaptive live buffer increases on sustained waiting, caps growth and cools down after stability',()=>{
+ const a=app.indexOf('function adaptLiveBuffer('),b=app.indexOf('function resumeLiveHlsNetwork(',a);
+ const adapt=new Function(app.slice(a,b)+';return adaptLiveBuffer')();
+ const record={ready:true},engine={config:{maxBufferLength:25,liveSyncDurationCount:3}};
+ for(const now of [1000,10000,20000])adapt(record,engine,now,true,false);
+ assert.equal(engine.config.maxBufferLength,35);assert.equal(engine.config.liveSyncDurationCount,4);
+ for(const now of [30000,40000,50000])adapt(record,engine,now,true,false);
+ assert.equal(engine.config.maxBufferLength,45);
+ for(const now of [60000,70000,80000])adapt(record,engine,now,true,false);
+ assert.equal(engine.config.maxBufferLength,45);
+ adapt(record,engine,259999,false,false);assert.equal(engine.config.maxBufferLength,45);
+ adapt(record,engine,260000,false,false);assert.equal(engine.config.maxBufferLength,35);
+ adapt(record,engine,440000,false,false);assert.equal(engine.config.maxBufferLength,25);
+ assert.equal(adapt({ready:true},engine,450000,true,true),null);
+ assert.equal(adapt({ready:true,reconnecting:true},engine,450000,true,false),null);
+});
+
+test('live recovery cannot allocate another connection while paused, hidden, offline or external',()=>{
+ const i=app.indexOf('function liveRecoveryAllowed('),j=app.indexOf('function resumeLiveHlsNetwork(',i);
+ const f=new Function(app.slice(i,j)+';return liveRecoveryAllowed')();
+ assert.equal(f(false,false,false,false),true);
+ for(let bit=0;bit<4;bit++){const flags=[false,false,false,false];flags[bit]=true;assert.equal(f(...flags),false)}
+});
+
+test('VOD upgrade retains old session on failure and admits only the latest request after confirmation',()=>{
+ const a=app.indexOf('function retireVodBeforeUpgrade('),b=app.indexOf('function playFullVod(',a);
+ const retire=new Function(app.slice(a,b)+';return retireVodBeforeUpgrade')();
+ const state={},calls=[],opened=[];let detached=0,errors=0;
+ const ops=name=>({detach:()=>detached++,current:()=>true,stop:(url,cb)=>calls.push({url,cb}),error:()=>errors++,start:()=>opened.push(name)});
+ assert.equal(retire(state,'/api/vod/test/stop',ops('first')),true);
+ assert.equal(retire(state,null,ops('second')),true);
+ assert.equal(calls.length,1);calls[0].cb(503);
+ assert.equal(errors,1);assert.deepEqual(opened,[]);
+ retire(state,null,ops('latest'));assert.equal(calls[1].url,calls[0].url);
+ calls[1].cb(404);assert.deepEqual(opened,['latest']);
+ assert.equal(detached,1);assert.equal(state.vodUpgradeStop,null);
+});
+
+test('direct MPEG-TS handoff preserves unconfirmed HLS key and blocks overlapping engines',()=>{
+ assert.match(app,/oldKey=requestedState\.directStopKey\|\|\(old&&old\.hlsKey\)/);
+ assert.match(app,/requestedState\.directStopPending=true;requestedState\.directStopKey=oldKey/);
+ assert.match(app,/if\(player\.directStopPending\|\|player\.externalMode\)return/);
+ assert.match(app,/oldKey=player\.directStopKey\|\|\(S\.play&&S\.play\.video===video&&S\.play\.hlsKey\)/);
+ const a=app.indexOf('function playDirectMpegts('),b=app.indexOf(' stopPlayback(true);',a);
+ const video={isConnected:true},state={kind:'live',id:'1',video},S={route:'player',userVerified:true,accountEpoch:1,playerView:state,play:{hlsKey:'old-sid'}},calls=[];
+ let opened=0;
+ const play=new Function('S','stopPlayback','api','playerStatus','setTimeout','clearTimeout','document','navigator','opened',app.slice(a,b)+' opened(); } ;return playDirectMpegts')(
+  S,()=>{S.play=null},(method,path,body,cb)=>calls.push({path,cb}),()=>{},()=>1,()=>{},{hidden:false},{onLine:true},()=>opened++);
+ play(video,'1',null);calls[0].cb(503);assert.equal(state.directStopKey,'old-sid');assert.equal(opened,0);
+ play(video,'1',null);assert.equal(calls[1].path,calls[0].path);calls[1].cb(200);
+ assert.equal(state.directStopKey,null);assert.equal(opened,1);
+});
+
+test('external player waits for retained internal transport retirement',()=>{
+ assert.match(app,/state\.externalPending\|\|state\.directStopPending\|\|state\.liveHlsHandoff\|\|state\.externalMode/);
+ assert.match(app,/stop=state\.directStopKey\?'\/api\/hls\/'\+state\.directStopKey\+'\/stop'/);
+ assert.match(app,/if\(st===200\|\|st===404\)\{state\.externalRetiringStop=null;state\.directStopKey=null;issue\(\)\}/);
+ assert.match(app,/state\.externalRetiringStop=null;state\.directStopKey=null;stopExternal\(\)/);
+});
+
+test('Apple touch devices prefer native HLS even after prior MSE fallback',()=>{
+ const i=app.indexOf('function appleMobileNativeHls('),j=app.indexOf('function loadHls(',i);
+ const policy=new Function('appleTouchBrowser','navigator','S','window','installedWebApp',app.slice(i,j)+';return shouldUseNativeHls');
+ const isTouch=(ua,t)=>/iPhone|iPad|iPod/i.test(ua)||/Macintosh/i.test(ua)&&t>1;
+ const video={canPlayType:()=> 'maybe'};
+ for(const ua of ['iPhone Safari','iPad Safari','Macintosh AppleWebKit Safari','iPhone CriOS']){
+  const fn=policy(isTouch,{userAgent:ua,maxTouchPoints:5},{preferMseHls:true},{MediaSource:{isTypeSupported:()=>true}},()=>false);
+  assert.equal(fn(video),true);
+ }
+ assert.match(app,/if\(!appleMobileNativeHls\(navigator.userAgent,navigator.maxTouchPoints,video\)&&!installedNativeHlsPreferred/);
+});
+
+test('source quota denial is distinguished from transient network failure',()=>{
+ const i=app.indexOf('function liveSourceQuotaRejected('),j=app.indexOf('function liveRetryHint(',i);
+ const denied=new Function(app.slice(i,j)+';return liveSourceQuotaRejected')();
+ assert.equal(denied({networkDetails:{getResponseHeader:()=> 'source_channel_limit'}}),true);
+ assert.equal(denied({networkDetails:{headers:{get:()=> 'source_channel_limit'}}}),true);
+ assert.equal(denied({networkDetails:{getResponseHeader:()=> 'other'}}),false);
+ assert.equal(denied(null),false);
+ assert.match(app,/failure\.error==='live_source_channel_limit'\)\{showSourceQuota\(\);return\}/);
+ assert.match(app,/code===503&&liveSourceQuotaRejected\(detail\)/);
+});

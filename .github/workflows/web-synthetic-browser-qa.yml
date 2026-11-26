@@ -1,0 +1,36 @@
+name: QA web synthetic browser playback
+on:
+  pull_request:
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/web-synthetic-browser-qa.yml'
+permissions:
+  contents: read
+jobs:
+  browser-playback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: web/stream-native-parity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser and engine packages
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chrome
+      - name: Generate local test channels
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg; fi
+          for color in red blue; do
+            mkdir -p "qa-fixtures/$color"
+            ffmpeg -hide_banner -loglevel error -f lavfi -i "color=c=$color:s=640x360:r=25" -f lavfi -i 'sine=frequency=440:sample_rate=48000' -t 12 -c:v libx264 -pix_fmt yuv420p -g 50 -sc_threshold 0 -c:a aac -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename "qa-fixtures/$color/seg-%03d.ts" "qa-fixtures/$color/index.m3u8"
+          done
+      - name: Apply release transforms and verify actual decoded pixels
+        run: |
+          node manual-preview-fix.mjs
+          node qa/synthetic-browser-playback.mjs qa-fixtures

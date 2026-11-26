@@ -1,0 +1,41 @@
+name: QA web audio isolation
+on:
+  pull_request:
+    paths:
+      - 'web/stream-native-parity/audio-worker*'
+      - 'web/stream-native-parity/Dockerfile.audio'
+      - 'web/stream-native-parity/qa/audio-worker-policy.test.mjs'
+      - '.github/workflows/web-audio-isolation-qa.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated audio image
+        run: docker build -f web/stream-native-parity/Dockerfile.audio -t blofy-audio-qa web/stream-native-parity
+      - name: Verify synthetic codec health and private endpoint protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$(openssl rand -hex 32)"
+          trap 'docker rm -f blofy-audio-qa >/dev/null 2>&1 || true' EXIT
+          docker run -d --name blofy-audio-qa -p 127.0.0.1:18080:8080 -e VIDAA_AUDIO_KEY="$KEY" blofy-audio-qa
+          ready=0
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --fail --max-time 3 http://127.0.0.1:18080/health; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            docker logs --tail 50 blofy-audio-qa
+            exit 1
+          fi
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/audio-compat/anis-test)" = 403
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $KEY" http://127.0.0.1:18080/audio-compat/anis-test)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $KEY" http://127.0.0.1:18080/internal/synthetic-audio)" = 404
+          curl --fail -H "x-compat-secret: $KEY" http://127.0.0.1:18080/internal/metrics | jq -e '.active==0 and .limit==1'

@@ -1,8 +1,11 @@
 import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
-import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
+import { createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
 import {createCatalogPageCache} from './catalog-page-cache.mjs';
+import {createCatalogFlights} from './catalog-flights.mjs';
+import {audioWorkerHost} from './audio-worker-policy.mjs';
+import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
@@ -46,10 +49,45 @@ function normalizeSearch(text){
   .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
 }
 const catalogPageCache=createCatalogPageCache();
+const catalogFlights=createCatalogFlights();
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
 // External players cannot reuse browser cookies. Issue an opaque, one-use
 // handoff scoped to one authorized live channel, never an Xtream credential.
 const externalTickets=new Map(),externalActive=new Map();
+const externalIssueGate=createAdmission({limit:8,maxKeys:2048,maxInflight:24});
+const diagnosticGate=createAdmission({limit:60,maxKeys:4096,maxInflight:64,perKeyInflight:4});
+const playbackMetrics=createPlaybackMetrics();
+// Private, opt-in operator endpoint. Separate secret, never a customer token.
+const OPS_KEY=String(Bun.env.VIDAA_WEB_OPS_KEY||'');
+const opsEnabled=/^[a-f0-9]{64}$/i.test(OPS_KEY)&&OPS_KEY.toLowerCase()!==KEY_HEX.toLowerCase();
+const opsWindows=[];
+function opsAuthorized(req){
+ if(!opsEnabled)return false;
+ const supplied=req.headers.get('X-Blofy-Ops-Key')||'';
+ return /^[a-f0-9]{64}$/i.test(supplied)&&timingSafeEqual(Buffer.from(supplied,'hex'),Buffer.from(OPS_KEY,'hex'))
+}
+function opsSnapshot(){
+ const cache=catalogPageCache.stats(),flights=catalogFlights.snapshot();
+ return {mode:Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'?'synthetic-only':'service',
+  uptimeSeconds:Math.floor(process.uptime()),
+  rssBytes:process.memoryUsage().rss,
+  catalog:{entries:cache.entries,inflight:flights.active,hits:cache.hits,misses:cache.misses,joined:flights.joined,rejected:flights.rejected},
+  external:{pending:externalTickets.size,active:externalActive.size},
+  control:{issuance:externalIssueGate.snapshot().inflight,diagnostics:diagnosticGate.snapshot().inflight},
+  windows:opsWindows.slice()}
+}
+let previousCatalogCounters={hits:0,misses:0,joined:0,rejected:0,started:0};
+setInterval(()=>{
+ const report=playbackMetrics.drain(),cache=catalogPageCache.stats(),flights=catalogFlights.snapshot();
+ const counters={hits:cache.hits,misses:cache.misses,joined:flights.joined,rejected:flights.rejected,started:flights.started};
+ const delta=Object.fromEntries(Object.entries(counters).map(([k,v])=>[k,Math.max(0,v-previousCatalogCounters[k])]));
+ previousCatalogCounters=counters;
+ if(report.buckets.length||Object.values(delta).some(v=>v>0)||flights.active){
+  const window={...report,catalog:{...delta,entries:cache.entries,inflight:flights.active},external:{pending:externalTickets.size,active:externalActive.size},control:{issuance:externalIssueGate.snapshot().inflight,diagnostics:diagnosticGate.snapshot().inflight}};
+  if(opsEnabled){opsWindows.push(window);if(opsWindows.length>60)opsWindows.shift()}
+  console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify(window))
+ }
+},60000).unref?.();
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
 function pruneExternalTickets(now=Date.now()){
  for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
@@ -57,11 +95,34 @@ function pruneExternalTickets(now=Date.now()){
 function revokeExternal(bearer){
  if(!bearer)return;
  const account=externalAccountKey(bearer);
+ externalIssueGate.revoke(account);
  for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
  const active=externalActive.get(account);if(active)active.abort()
 }
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
+if(p==='/internal/ops/view'||p==='/internal/ops/view.js'){
+ if(method!=='GET'||!opsEnabled)return json(404,{error:'not_found'});
+ const isJs=p.endsWith('.js'),file=Bun.file(new URL(isJs?'./ops-dashboard.js':'./ops-dashboard.html',import.meta.url));
+ if(!await file.exists())return json(404,{error:'not_found'});
+ return new Response(file,{headers:noCache({'Content-Type':isJs?'application/javascript; charset=utf-8':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",'X-Robots-Tag':'noindex, nofollow'})});
+}
+if(p==='/internal/ops'){
+ if(method!=='GET'||!opsAuthorized(req))return json(404,{error:'not_found'});
+ return json(200,opsSnapshot(),{'Referrer-Policy':'no-referrer'})
+}
+
+// Staging may exercise packaging and private worker readiness, but must not
+// use production subscriptions, origins, catalog requests, or media sessions.
+if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'){
+ if(p==='/health'&&method==='GET'){
+  const host=audioWorkerHost('isolated');let audioReady=false;
+  try{const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(3000)});const v=await r.json();audioReady=r.ok&&v.ok===true&&v.service==='blofy-stream-web-audio'}catch{}
+  return json(KEY&&audioReady?200:503,{ok:Boolean(KEY&&audioReady),mode:'synthetic-only',audioReady});
+ }
+ if(p.startsWith('/api/')||p.startsWith('/external/'))return json(403,{error:'synthetic_staging_only'});
+}
+
 
 if(method==='GET'&&(p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
  const file=p.slice(1);
@@ -94,16 +155,23 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
 if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/external/stop'&&method==='POST'){
+ const h=auth(req);if(!h)return json(401,{error:'activation_required'});
+ revokeExternal(h.Authorization);
+ return json(200,{ok:true});
+}
 if(p==='/api/external/live'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
- let body;try{if(Number(req.headers.get('content-length')||0)>256)return json(413,{error:'invalid_payload'});body=await req.json()}catch{return json(400,{error:'invalid_payload'})}
- const id=String(body?.id||'');if(!/^[1-9][0-9]{0,14}$/.test(id))return json(400,{error:'invalid_channel'});
+ const account=externalAccountKey(h.Authorization),lease=externalIssueGate.acquire(account);
+ if(!lease.ok)return json(429,{error:'external_rate_limit'},{'Retry-After':String(lease.retryAfter)});
  try{
+  const input=await readBoundedJson(req,256);if(!input.ok)return json(input.status,{error:'invalid_payload'});
+  const id=String(input.value.id||'');if(!/^[1-9][0-9]{0,14}$/.test(id))return json(400,{error:'invalid_channel'});
   const checked=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(5000)});
   if(!checked.ok){try{await checked.body?.cancel()}catch{};return json(checked.status===401?401:503,{error:'session_unavailable'})}
   const session=await checked.json();if(!session.active)return json(401,{error:'activation_required'});
   pruneExternalTickets();
-  const account=externalAccountKey(h.Authorization);
+  if(!lease.current()||req.signal.aborted)return json(401,{error:'session_cancelled'});
   if(externalActive.has(account))return json(409,{error:'external_stream_active'});
   for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
   if(externalTickets.size>=256)return json(429,{error:'external_capacity'});
@@ -112,7 +180,7 @@ if(p==='/api/external/live'&&method==='POST'){
   const ticket=randomBytes(32).toString('base64url'),key=externalAccountKey(ticket);
   externalTickets.set(key,{id,account,bearer:h.Authorization,until:Math.min(now+120000,accountExpiry),accountExpiry});
   return json(200,{path:'/external/live/'+ticket+'.ts',expiresIn:120})
- }catch{return json(503,{error:'external_unavailable'})}
+ }catch{return json(503,{error:'external_unavailable'})}finally{lease.release()}
 }
 if(p.startsWith('/external/live/')){
  if(method!=='GET'&&method!=='HEAD')return json(405,{error:'method_not_allowed'});
@@ -142,7 +210,8 @@ if(p.startsWith('/external/live/')){
  }catch{cleanup();return json(502,{error:'external_connection_failed'})}
 }
 if(p==='/api/redeem'&&method==='POST'){
- let input={};try{if(Number(req.headers.get('content-length')||0)>2048)return json(413,{error:'invalid_payload'});input=await req.json()}catch{return json(400,{error:'invalid_payload'})}
+ const inputResult=await readBoundedJson(req,2048);if(!inputResult.ok)return json(inputResult.status,{error:'invalid_payload'});
+ const input=inputResult.value;
  const code=String(input.code||'').toUpperCase().trim();const key=String(input.deviceKey||'');
  if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)||!/^[a-f0-9]{64}$/.test(key))return json(400,{error:'كود أو جهاز غير صالح'});
  try{const r=await fetch(ORIGIN+'/api/v1/stream/app/redeem',{method:'POST',headers:{'Content-Type':CT,'Accept':'application/json'},body:JSON.stringify({code,deviceKey:key}),redirect:'manual',signal:AbortSignal.timeout(20000)});
@@ -166,11 +235,8 @@ if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
  if(!h)return json(401,{ok:false,error:'activation_required'});
- let payload={};
- try{
-  if(Number(req.headers.get('content-length')||0)>2048)return json(413,{ok:false,error:'request_too_large'});
-  payload=await req.json()
- }catch{return json(400,{ok:false,error:'invalid_request'})}
+ const aiInput=await readBoundedJson(req,2048);if(!aiInput.ok)return json(aiInput.status,{ok:false,error:'invalid_request'});
+ const payload=aiInput.value;
  const text=String(payload.text||'').trim().slice(0,160),locale=payload.locale==='en'?'en':'ar';
  if(text.length<3||text.length>160)return json(400,{ok:false,error:'invalid_ai_query'});
  try{
@@ -211,25 +277,32 @@ if(p==='/api/health/media'&&method==='GET'){
  }catch{return json(503,{ok:false,player:'unreachable'})}
 }
 if(p==='/api/player-diagnostic'&&method==='POST'){
- let data;try{if(Number(req.headers.get('content-length')||0)>700)return json(413,{error:'too_large'});data=await req.json()}catch{return json(400,{error:'invalid_diagnostic'})}
+ const lease=diagnosticGate.acquire(externalAccountKey(h.Authorization));
+ if(!lease.ok)return json(429,{error:'diagnostic_rate_limit'},{'Retry-After':String(lease.retryAfter)});
+ try{
+ const input=await readBoundedJson(req,700);if(!input.ok)return json(input.status,{error:'invalid_diagnostic'});const data=input.value;
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
  if(!['live','movie','series'].includes(kind)||
   !['direct','audio','video','fullvod','vodhls','hls','mpegts'].includes(mode)||
-  !['live_start','media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout'].includes(phase)||
-  errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
+  !['live_start','media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry','vod_seek_request','vod_seek_ready','vod_seek_timeout','first_picture'].includes(phase)||
+  !Number.isInteger(errorCode)||errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
  const rawId=String(data?.itemId||'');
  const itemRef=/^[1-9][0-9]{0,14}$/.test(rawId)&&KEY?
   createHmac('sha256',KEY).update(kind+':'+rawId).digest('hex').slice(0,12):null;
  const pos=Math.max(0,Math.min(21600,Math.round(Number(data?.position)||0)));
  const duration=Math.max(0,Math.min(21600,Math.round(Number(data?.duration)||0)));
  const runtime=['installed','browser','preview'].includes(data?.runtime)?data.runtime:'unknown';
+ const firstPictureMs=phase==='first_picture'?Number(data.firstPictureMs):null;
+ if(phase==='first_picture'&&(!Number.isInteger(firstPictureMs)||firstPictureMs<0||firstPictureMs>120000||!['decoded','presented'].includes(data.pictureBasis)))return json(400,{error:'invalid_picture_metric'});
+ playbackMetrics.record({kind,runtime,phase,firstPictureMs});
  console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,runtime,errorCode,itemRef,position:pos,duration});
  return json(200,{ok:true});
+ }finally{lease.release()}
 }
 if(p==='/api/session'&&method==='GET'){
- try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok)return json(r.status===403?403:401,{active:false});const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null,
+ try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok){const failure=sessionFailure(r.status);try{await r.body?.cancel()}catch{};return json(failure.status,failure.body)}const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null,
    profileKey:v.active?stableAccountProfileKey(token(req),KEY):null,
-   legacyProfileKey:v.active?legacyTokenProfileKey(token(req),KEY):null})}catch{return json(502,{active:false,error:'session_unavailable'})}
+   legacyProfileKey:v.active?legacyTokenProfileKey(token(req),KEY):null})}catch{return json(503,{error:'session_unavailable'})}
 }
 
 if(p==='/api/page'&&method==='GET'){
@@ -250,25 +323,26 @@ if(p==='/api/page'&&method==='GET'){
   const pageHit=catalogPageCache.get(pageCacheKey);
   if(pageHit)return json(200,pageHit,{'X-Blofy-Catalog-Cache':'HIT'})
  }
- const target=new URL(ORIGIN+'/player_api.php');target.searchParams.set('action',action);
- if(cat)target.searchParams.set('category_id',cat);
- let upstream=null,reader=null;
- const controller=new AbortController();
- const timer=setTimeout(()=>controller.abort(),100000);
- const abort=()=>controller.abort();
- req.signal.addEventListener('abort',abort,{once:true});
- try{
-  upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal:controller.signal});
-  if(!upstream.ok||!upstream.body)return json(upstream.status>=400?upstream.status:502,{error:'catalog_unavailable'});
-  reader=upstream.body.getReader();
-  const page=await readCatalogPage(reader,{offset,limit,match:item=>
-   (!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))});
-  try{await reader.cancel()}catch{}
-  const result={...page,kind:k};
-  if(pageCacheKey&&!req.signal.aborted)catalogPageCache.put(pageCacheKey,result);
-  return json(200,result,{'X-Blofy-Catalog-Cache':'MISS'});
- }catch(e){try{await reader?.cancel()}catch{};return json(502,{error:'catalog_page_failed'})}
- finally{clearTimeout(timer);req.signal.removeEventListener('abort',abort)}
+ const flightKey=createHmac('sha256',KEY).update(JSON.stringify(['catalog-flight-v1',h.Authorization,k,cat,query,offset,limit])).digest('hex');
+ const result=await catalogFlights.run(flightKey,async signal=>{
+  const target=new URL(ORIGIN+'/player_api.php');target.searchParams.set('action',action);
+  if(cat)target.searchParams.set('category_id',cat);
+  let upstream=null,reader=null;
+  try{
+   upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal});
+   if(!upstream.ok||!upstream.body)return {status:upstream.status>=400?upstream.status:502,error:'catalog_unavailable'};
+   reader=upstream.body.getReader();
+   const page=await readCatalogPage(reader,{offset,limit,match:item=>
+    (!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))});
+   if(signal.aborted)return {status:499,error:'catalog_cancelled'};
+   const payload={...page,kind:k};
+   if(pageCacheKey)catalogPageCache.put(pageCacheKey,payload);
+   return {status:200,payload};
+  }catch{return {status:502,error:'catalog_page_failed'}}
+  finally{try{void (reader?reader.cancel():upstream?.body?.cancel())?.catch(()=>{})}catch{}}
+ },req.signal);
+ if(result.status!==200)return json(result.status,{error:result.error},result.status===429?{'Retry-After':'2'}:{});
+ return json(200,result.payload,{'X-Blofy-Catalog-Cache':'MISS'});
 }
 
 if(p==='/api/catalog'&&method==='GET'){
@@ -330,7 +404,7 @@ if(p.startsWith('/api/hls/')&&method==='POST'){
  if(!/^http:\/\/(?:blofy-vidaa-(?:media-compat-pilot|hls-dynamic)|blofy-stream-web-media)\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/.test(secret))return json(503,{error:'hls_worker_not_configured'});
  try{
   const r=await fetch(host+'/hls/'+m[1]+'/'+m[2]+'/'+m[3]+'/'+m[4]+'/'+(m[5]?'sid-'+m[5]+'/':'')+(m[6]?m[6]+'/':'')+'stop',{method:'POST',headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:AbortSignal.timeout(3000)});
-  return json(r.ok?200:502,{ok:r.ok});
+  return json(r.ok||r.status===404?200:502,{ok:r.ok||r.status===404});
  }catch{return json(502,{error:'hls_stop_failed'})}
 }
 if(p.startsWith('/api/hls/')&&method==='GET'){
@@ -347,6 +421,7 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
    let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){}
    const retrySeconds=Number(response.headers.get('retry-after')||0);
    const headers=noCache({'Content-Type':'application/json'});
+   if(response.status===503&&error==='live_source_channel_limit')headers['X-Blofy-Live-Status']='source_channel_limit';
    // Forward only numeric 1–30 second wait hints, never upstream URLs,
    // subscription data, source headers or untrusted arbitrary retry values.
    if(Number.isInteger(retrySeconds)&&retrySeconds>=1&&retrySeconds<=30)
@@ -430,8 +505,10 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
   // only known containers, without accepting generic binary/HTML/JSON.
   if(r.ok&&r.body&&['video/mp2t','audio/ogg','audio/flac'].includes(mime)){
    try{await r.body.cancel()}catch{}
-   const host=String(Bun.env.VIDAA_COMPAT_URL||''),secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
-   if(!/^http:\/\/blofy-stream-web-media\.railway\.internal:8080$/.test(host)||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
+   const mode=String(Bun.env.VIDAA_AUDIO_WORKER_MODE||''),host=audioWorkerHost(mode);
+   const secret=String(mode==='isolated'?Bun.env.VIDAA_AUDIO_KEY||'':Bun.env.VIDAA_COMPAT_KEY||'');
+   if(!host||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
+   // Default remains the deployed shared worker. Isolation is an explicit staging opt-in; no fallback opens a second source.
    const converted=await fetch(host+'/audio-compat/'+id,{headers:{Authorization:h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
    if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:'audio_conversion_unavailable'})}
    return new Response(converted.body,{headers:noCache({'Content-Type':'audio/mpeg','Accept-Ranges':'none'})});

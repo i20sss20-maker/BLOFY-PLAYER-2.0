@@ -1,0 +1,1 @@
+Bounded explicit source quota message, no retry loop on confirmed capacity denial. Native Apple admission. Docker QA required; real device tests pending.

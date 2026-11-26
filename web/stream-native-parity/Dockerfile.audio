@@ -1,0 +1,11 @@
+FROM oven/bun:1-debian
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY audio-worker.ts audio-worker-policy.mjs /app/
+COPY qa/audio-worker-policy.test.mjs /app/qa/
+RUN bun test qa/audio-worker-policy.test.mjs && bun build audio-worker.ts --target=bun --outfile=/tmp/audio-check.js && rm /tmp/audio-check.js
+ENV PORT=8080
+EXPOSE 8080
+USER bun
+CMD ["bun","run","/app/audio-worker.ts"]

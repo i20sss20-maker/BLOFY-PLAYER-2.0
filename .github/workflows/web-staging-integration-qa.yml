@@ -1,0 +1,80 @@
+name: QA web staging integration
+on:
+  pull_request:
+    paths:
+      - 'web/stream-native-parity/**'
+      - '.github/workflows/web-staging-integration-qa.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web and isolated audio images
+        run: |
+          docker build -f web/stream-native-parity/Dockerfile.audio -t blofy-stage-audio web/stream-native-parity
+          docker build -f web/stream-native-parity/Dockerfile -t blofy-stage-web web/stream-native-parity
+      - name: Verify isolated networking, denial and recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUDIO_KEY="$(openssl rand -hex 32)"
+          SESSION_KEY="$(openssl rand -hex 32)"
+          OPS_KEY="$(openssl rand -hex 32)"
+          trap 'docker rm -f blofy-stage-web blofy-stage-audio >/dev/null 2>&1 || true; docker network rm blofy-stage-net >/dev/null 2>&1 || true' EXIT
+          docker network create blofy-stage-net
+          docker run -d --name blofy-stage-audio --network blofy-stage-net --network-alias blofy-stream-web-audio.railway.internal -p 127.0.0.1:18081:8080 -e VIDAA_AUDIO_KEY="$AUDIO_KEY" -e BLOFY_WEB_SYNTHETIC_ONLY=1 blofy-stage-audio
+          docker run -d --name blofy-stage-web --network blofy-stage-net -p 127.0.0.1:18082:8080 -e VIDAA_SESSION_KEY="$SESSION_KEY" -e VIDAA_WEB_OPS_KEY="$OPS_KEY" -e VIDAA_AUDIO_KEY="$AUDIO_KEY" -e VIDAA_AUDIO_WORKER_MODE=isolated -e BLOFY_WEB_SYNTHETIC_ONLY=1 blofy-stage-web
+          wait_status(){
+            local url="$1" expected="$2" actual
+            for attempt in $(seq 1 25); do
+              actual="$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$url" || true)"
+              if [ "$actual" = "$expected" ]; then return 0; fi
+              sleep 1
+            done
+            docker logs --tail 30 blofy-stage-web
+            docker logs --tail 30 blofy-stage-audio
+            return 1
+          }
+          WEB=http://127.0.0.1:18082
+          AUDIO=http://127.0.0.1:18081
+          wait_status "$WEB/health" 200
+          curl -fsS "$WEB/health" | jq -e '.ok and .audioReady and .mode=="synthetic-only"'
+          curl -fsS "$WEB/" | grep -q 'BLOFY STREAM'
+          for route in /api/session /api/page /api/commentary/anis-test /api/hls/live/1/ts/0/index.m3u8 /external/live/test.ts; do
+            test "$(curl -s -o /dev/null -w '%{http_code}' "$WEB$route")" = 403
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$WEB/api/redeem" -d '{}')" = 403
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$AUDIO/audio-compat/anis-test")" = 403
+          SYNTHETIC_BEARER="Bearer v1.00000000-0000-4000-8000-000000000000.$(printf 'A%.0s' {1..43})"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "x-compat-secret: $AUDIO_KEY" -H "Authorization: $SYNTHETIC_BEARER" "$AUDIO/audio-compat/anis-test")" = 403
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$WEB/internal/ops")" = 404
+          curl -fsS "$WEB/internal/ops/view" | grep -q 'PRIVATE OPERATIONS'
+          curl -fsS "$WEB/internal/ops/view.js" | grep -q 'X-Blofy-Ops-Key'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-Blofy-Ops-Key: $SESSION_KEY" "$WEB/internal/ops")" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-Blofy-Ops-Key: $OPS_KEY" "$WEB/internal/ops")" = 404
+          curl -fsS -H "X-Blofy-Ops-Key: $OPS_KEY" "$WEB/internal/ops" | jq -e '.mode=="synthetic-only" and (.rssBytes>0) and (.catalog.inflight==0) and (.windows|type=="array")'
+          # Real loopback HTTP burst, no media or external origin.
+          export WEB
+          seq 1 100 | xargs -P 10 -I '{}' sh -c 'curl --max-time 10 -fsS "$WEB/health" >/dev/null'
+          curl -fsS -H "X-Blofy-Ops-Key: $OPS_KEY" "$WEB/internal/ops" | jq -e '.catalog.inflight==0 and .external.active==0'
+          # Decode the runtime conversion output, not just its health flag.
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$AUDIO/internal/synthetic-audio")" = 403
+          curl --max-time 20 -fsS -H "x-compat-secret: $AUDIO_KEY" "$AUDIO/internal/synthetic-audio" -o /tmp/blofy-fixture.mp3
+          test "$(wc -c </tmp/blofy-fixture.mp3)" -gt 2000
+          docker cp /tmp/blofy-fixture.mp3 blofy-stage-audio:/tmp/blofy-fixture.mp3
+          docker exec blofy-stage-audio ffmpeg -hide_banner -v error -i /tmp/blofy-fixture.mp3 -f null -
+          released=0
+          for attempt in $(seq 1 15); do
+            if curl -fsS -H "x-compat-secret: $AUDIO_KEY" "$AUDIO/internal/metrics" | jq -e '.active==0 and .limit==1'; then released=1; break; fi
+            sleep 1
+          done
+          test "$released" = 1
+          curl --max-time 20 -fsS -H "x-compat-secret: $AUDIO_KEY" "$AUDIO/internal/synthetic-audio" -o /tmp/blofy-fixture-second.mp3
+          test "$(wc -c </tmp/blofy-fixture-second.mp3)" -gt 2000
+          docker stop blofy-stage-audio
+          wait_status "$WEB/health" 503
+          docker start blofy-stage-audio
+          wait_status "$WEB/health" 200
