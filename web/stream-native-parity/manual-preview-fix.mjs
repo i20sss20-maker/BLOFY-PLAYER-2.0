@@ -923,4 +923,49 @@ change(" function recoverConnection(){\n  if(!alive()||record.reconnecting)retur
   if(preview){`);
 change("   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;", "   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;\n   if(navigator.onLine===false){record.lastProgressAt=Date.now();record.lastVisualSampleAt=record.lastProgressAt;record.visualProgressSeen=false;return}");
 
+
+change("function playFullVod(video,kind,id,ext,track,duration,state,ready){",`function retireVodBeforeUpgrade(state,stopUrl,ops){
+ var pending=state.vodUpgradeStop;
+ if(!pending){
+  if(!stopUrl)return false;
+  pending=state.vodUpgradeStop={url:stopUrl,inflight:false,next:null};
+  ops.detach()
+ }
+ pending.next=ops;
+ if(pending.inflight)return true;
+ pending.inflight=true;
+ ops.stop(pending.url,function(st){
+  if(state.vodUpgradeStop!==pending)return;
+  pending.inflight=false;
+  var latest=pending.next;
+  if(!latest.current())return;
+  if(st!==200&&st!==404){latest.error();return}
+  state.vodUpgradeStop=null;latest.start()
+ });
+ return true
+}
+function playFullVod(video,kind,id,ext,track,duration,state,ready){`);
+change(` if(previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===0){
+  var oldStop=previous.stopUrl;
+  stopPlayback(false);
+  state.ready=false;
+  playerStatus('جار إغلاق اتصال الفيلم المؤقت قبل تفعيل التقديم…');
+  var completed=false;
+  function proceed(){
+   if(completed)return;
+   completed=true;clearTimeout(timeout);
+   if(S.route!=='player'||S.playerView!==state)return;
+   playFullVod(video,kind,id,ext,track,duration,state,ready)
+  }
+  var timeout=setTimeout(proceed,4000);
+  api('POST',oldStop,{},function(){proceed()});
+  return
+ }`, ` if(retireVodBeforeUpgrade(state,previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===0?previous.stopUrl:null,{
+  detach:function(){stopPlayback(false);state.ready=false},
+  current:function(){return S.route==='player'&&S.playerView===state&&video.isConnected&&S.userVerified},
+  stop:function(url,done){playerStatus('');api('POST',url,{},done)},
+  error:function(){playerStatus('تعذر إغلاق اتصال الفيلم السابق. أعد المحاولة.',true)},
+  start:function(){playFullVod(video,kind,id,ext,track,duration,state,ready)}
+ }))return`);
+
 new Function(app);writeFileSync('app.js',app);
