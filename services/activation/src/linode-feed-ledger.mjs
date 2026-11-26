@@ -43,6 +43,20 @@ export function createLinodeFeedLedger(pool,env=process.env){
   finally{c.release();}
  }
  return {
+  // Trusted internal lookup only. This cannot authorize playback or open a
+  // source socket. attachViewer must recheck this identity under the same
+  // source lock before any signed grant is returned.
+  async findReady({sourceId,channelId,engineId='linode'}={}){
+   if(!enabled(sourceId)||!engineAllowed(engineId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
+      typeof channelId!=='string'||!channel.test(channelId))return blocked('disabled_or_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||row.state!=='ready'||row.engine_id!==engineId||row.channel_id!==channelId||
+       !/^[a-f0-9]{32}$/.test(row.generation||'')||!uuid.test(row.reservation_id||''))
+      return blocked('feed_not_ready');
+    return {ok:true,engineId,sourceId,channelId,reservationId:row.reservation_id,generation:row.generation,
+      requestId:row.request_id};
+   });
+  },
   async reserve({sourceId,channelId,requestId,engineId='linode'}={}){
    if(!enabled(sourceId)||!engineAllowed(engineId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
