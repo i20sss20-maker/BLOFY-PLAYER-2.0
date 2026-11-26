@@ -17,3 +17,5 @@ jobs:
         with:
           node-version: '22'
       - run: node --test web/stream-native-parity/qa/web-media-admission.test.mjs
+      - name: Build the actual production media container
+        run: docker build -f web/stream-native-parity/Dockerfile.media web/stream-native-parity
