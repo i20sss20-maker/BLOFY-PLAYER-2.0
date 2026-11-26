@@ -1038,3 +1038,12 @@ html[data-blofy-device="tv"] .live-catalog .preview-controls .chip{color:#071c20
  .poster-grid .poster-art img,.search-result-grid .poster-art img{position:absolute;top:0;left:0;width:100%;height:100%}
  @media(max-width:730px){.poster-grid .poster,.search-result-grid .poster{width:48%}}
 }
+
+html[data-blofy-device="tv"] .poster-grid .poster-art .no-poster,
+html[data-blofy-device="tv"] .search-result-grid .poster-art .no-poster{position:absolute;left:8px;right:8px;top:35%;color:#d8e4e9;font-size:15px;max-height:60%;overflow:hidden}
+html[data-blofy-device="tv"] .poster-grid .poster-art img,
+html[data-blofy-device="tv"] .search-result-grid .poster-art img{z-index:1}
+@supports not (display:grid){
+ .poster-grid .poster-art .no-poster,.search-result-grid .poster-art .no-poster{position:absolute;left:8px;right:8px;top:35%;max-height:60%;overflow:hidden}
+ .poster-grid .poster-art img,.search-result-grid .poster-art img{z-index:1}
+}
