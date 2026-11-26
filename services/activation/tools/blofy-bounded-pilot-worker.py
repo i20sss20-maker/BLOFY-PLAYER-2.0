@@ -43,7 +43,7 @@ def main():
   subprocess.run(["/usr/bin/openssl","pkeyutl","-verify","-pubin","-keyform","DER","-inkey",str(q/"key"),"-rawin","-in",str(q/"msg"),"-sigfile",str(q/"sig")],check=True,timeout=5,stdout=subprocess.DEVNULL)
  # Only a pre-existing fixed pilot with a hard local service deadline.
  # Never accept command strings, source URLs, channels or environment remotely.
- if systemctl("show","-p","LoadState","--value")!="loaded" or systemctl("show","-p","Restart","--value")!="no" or systemctl("show","-p","Type","--value") not in ("simple","exec") or systemctl("show","-p","RuntimeMaxUSec","--value") not in ("5min","4min","3min") or EXPECTED not in systemctl("show","-p","ExecStart","--value") or systemctl("show","-p","ActiveState","--value")!="inactive":raise RuntimeError("pilot_unit_not_bounded_or_idle")
+ if systemctl("show","-p","LoadState","--value")!="loaded" or systemctl("show","-p","Restart","--value")!="no" or systemctl("show","-p","Type","--value") not in ("simple","exec") or systemctl("show","-p","RuntimeMaxUSec","--value") not in ("6min","5min","4min","3min") or EXPECTED not in systemctl("show","-p","ExecStart","--value") or systemctl("show","-p","ActiveState","--value")!="inactive":raise RuntimeError("pilot_unit_not_bounded_or_idle")
  # Local root must independently arm the exact permit after the maintenance
  # barriers and provider exclusivity are verified. Installation alone cannot
  # start a feed. Consume the local arm and persist a tombstone before launch.
