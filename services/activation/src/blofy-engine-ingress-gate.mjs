@@ -47,6 +47,11 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    await c.query("UPDATE blofy_engine_ingress_gate SET mode='draining',updated_at=now() WHERE source_id=$1",[sourceId]);
    return {ok:true,mode:'draining'};
   })},
+  async readMode(){return tx(async(c,row)=>{
+   if(!row)return denied('gate_missing');
+   const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
+   return {ok:true,mode:row.mode,observedAt:new Date(time.now).getTime()};
+  })},
   async readDrain(){return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
    const {rows:[r]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
