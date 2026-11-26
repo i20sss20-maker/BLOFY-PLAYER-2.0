@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.11
+PR #938 merged at 00f1141aadf380a13ee1887986a432e87a9668c8. Production Docker QA passed (45880669875). Android CI retains pre-existing version baseline mismatch. TV SRAF recognition and legacy poster layout, bounded playback notices, audio MIME aliases and channel handoff. Real-device playback not yet verified. Rollback deployment 0f834c6c-d66a-448c-b13e-f5629df96036.
