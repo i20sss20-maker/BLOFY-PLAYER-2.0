@@ -23,7 +23,7 @@ export async function ensureLinodeFeedLedger(db){
  account_id uuid NOT NULL, channel_id text NOT NULL, generation text NOT NULL,
  expires_at timestamptz NOT NULL, closed boolean NOT NULL DEFAULT false
  )`);
- await db.query('CREATE INDEX IF NOT EXISTS blofy_linode_viewers_reservation_idx ON blofy_linode_viewer_sessions(reservation_id, expires_at) WHERE NOT closed');
+ await db.query('CREATE INDEX IF NOT EXISTS blofy_linode_viewers_reservation_expiry_idx ON blofy_linode_viewer_sessions(reservation_id, expires_at)');
 }
 export function createLinodeFeedLedger(pool,env=process.env){
  const enabled=sourceId=>env.BLOFY_LINODE_FEED_LEDGER==='1'&&
@@ -85,10 +85,12 @@ export function createLinodeFeedLedger(pool,env=process.env){
     if(old&&(old.closed||new Date(old.expires_at).getTime()<=now||
        old.account_id!==accountId||old.source_id!==sourceId||old.reservation_id!==reservationId||
        old.channel_id!==channelId||old.generation!==generation))return blocked('viewer_session_closed_or_mismatch');
+    // Closed sessions can still have an outstanding signed URL. Count them
+    // until its bounded lease expires; close only denies further renewal.
     const {rows:[counts]}=await c.query(`SELECT count(*)::int AS total,
       count(*) FILTER(WHERE account_id=$2)::int AS account
       FROM blofy_linode_viewer_sessions
-      WHERE reservation_id=$1 AND NOT closed AND expires_at>$3 AND session_id<>$4`,
+      WHERE reservation_id=$1 AND expires_at>$3 AND session_id<>$4`,
       [reservationId,accountId,new Date(now),sessionId]);
     if(counts.total>=150||counts.account>=accountQuota)return blocked('viewer_quota');
     const expiresAt=new Date(until).toISOString();
