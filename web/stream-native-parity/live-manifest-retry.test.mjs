@@ -207,7 +207,7 @@ test('runtime diagnostic identifies installed, browser and preview modes without
  assert.equal(mode(false,false),'browser');
  assert.equal(mode(true,true),'preview');
  assert.match(app,/runtime:webRuntimeMode\(installedWebApp\(\)/);
- assert.match(app,/2026\.11\.26\.9/);
+ assert.match(app,/2026\.11\.26\.11/);
 });
 
 test('installed Apple HLS policy is restricted to supported standalone WebKit',()=>{
@@ -247,3 +247,13 @@ test('refreshing installed shell is explicit, online-only and preserves account 
 });
 
 test('installed admission gates native playback and bounds retries',()=>{assert.match(app,/admissionAttempt>=5/);assert.match(app,/liveSessionRetryDelay\(admissionAttempt\+\+,hint\)/);assert.match(app,/old.admissionAbort.abort\(\)/);assert.match(app,/installedWebApp\(\)&&pendingMediaStops>0/);});
+
+
+test('legacy SRAF television browser receives TV mode rather than desktop',()=>{
+ const start=app.indexOf('function deviceExperience('),end=app.indexOf('/* Tap only',start);
+ const detect=new Function(app.slice(start,end)+';return deviceExperience')();
+ assert.equal(detect('Mozilla/5.0 (Linux;) AppleWebKit/537.36 Chrome/47.0.2526.106 Safari/537.36 SRAF/4.0',0,false),'tv');
+ assert.equal(detect('Toshiba VIDAA',0,false),'tv');
+ assert.equal(detect('iPhone',5,true),'touch');
+ assert.equal(detect('Chrome desktop',0,false),'desktop');
+});
