@@ -468,7 +468,8 @@ function home(){
     (document.activeElement.id?['id',document.activeElement.id]:focusIdentity(document.activeElement)):null;
    if(hadScreen)rememberView();
    target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;
-   restoreView('home',focus)
+   restoreView('home',focus);
+   enrichPosters('movie',film.slice(0,12));enrichPosters('series',show.slice(0,12))
   }
  }
  // Render navigation and recent watched items instantly. Movie and series
@@ -659,7 +660,7 @@ function changeCatalogCategory(kind,category){
 }
 
 var posterRecovery=null;
-function enrichPosters(kind,source){
+function enrichPosters(kind,source,force){
  if(kind!=='movie'&&kind!=='series')return;
  // Share a small recovery queue across category renders and page loads.
  // Account changes invalidate every queued item and all remembered covers.
@@ -674,7 +675,7 @@ function enrichPosters(kind,source){
   for(var j=0;j<buttons.length;j++){
    if(buttons[j].getAttribute('data-details')!==key)continue;
    var holder=buttons[j].querySelector('.poster-art');
-   if(holder&&!holder.querySelector('img')){
+   if(holder&&!holder.querySelector('img')&&holder.getAttribute('data-art-failed')!==cover){
     var image=document.createElement('img');
     image.loading='lazy';image.decoding='async';image.referrerPolicy='no-referrer';
     image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
@@ -688,7 +689,7 @@ function enrichPosters(kind,source){
  }
  function pump(){
   if(!current())return;
-  while(state.queue.length&&state.active<2){
+  while(state.queue.length&&state.active<2&&S.route!=='player'&&S.route!=='live'){
    var job=state.queue.shift();state.active++;
    (function(task){
     var action=task.kind==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
@@ -698,7 +699,10 @@ function enrichPosters(kind,source){
      var cover='';
      if(st===200&&res){
       var data=res.info||res.movie_data||res;
-      cover=urlPic(data.movie_image||data.cover_big||data.cover||data.poster||data.poster_path||data.backdrop_path||'');
+      var candidates=[data,res.movie_data||{},res.info||{},res];
+      for(var k=0;k<candidates.length&&!cover;k++){
+       var d=candidates[k];cover=urlPic(d.movie_image||d.cover_big||d.cover||d.poster||d.poster_path||d.stream_icon||d.backdrop_path||'')
+      }
      }
      // Failed metadata reads are retryable instead of permanently hiding
      // artwork. Successful covers are reused only inside this account.
@@ -709,7 +713,7 @@ function enrichPosters(kind,source){
    })(job)
   }
  }
- var candidates=source.filter(function(x){return !art(x)}).slice(0,16);
+ var candidates=source.filter(function(x){return force||!art(x)}).slice(0,16);
  for(var i=0;i<candidates.length;i++){
   var item=candidates[i],id=itemId(item,kind);
   if(!id||id.length>128)continue;
@@ -3057,6 +3061,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
+ (isLive?'<button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
  (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button><button class="btn secondary" id="player-direct-ts" type="button" title="تشغيل نفس مصدر القناة مباشرة على الأجهزة التي تدعم H.264/AAC؛ العودة تلقائيًا إلى HLS عند عدم الدعم">⚡ تشغيل MPEG-TS المباشر (بديل)</button>':'')+
  '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
@@ -3175,6 +3180,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(!panel)return;
   panel.hidden=!panel.hidden;this.setAttribute('aria-expanded',String(!panel.hidden))
  };
+ var guideToggle=document.getElementById('player-guide-toggle');
+ if(guideToggle)guideToggle.onclick=function(){var guide=document.querySelector('.player-live-guide');if(guide){var show=guide.classList.toggle('phone-guide-open');this.setAttribute('aria-expanded',String(show));if(show&&moreToggle)moreToggle.click();revealControls()}};
  var controlHint=document.getElementById('player-control-hint'),dock=document.querySelector('.native-player-dock');
  if(dock&&controlHint){
   dock.addEventListener('focusin',function(e){
@@ -3566,7 +3573,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var focused=document.activeElement;
    if(focused&&hud.contains(focused)&&typeof focused.blur==='function')focused.blur();
    root.classList.add('controls-hidden')
-  },document.documentElement.getAttribute('data-blofy-input')==='touch'?6200:3800)
+  },document.documentElement.getAttribute('data-blofy-input')==='touch'?3200:3800)
  }
  state.revealControls=revealControls;
  function touchVideoPointer(e){
@@ -4436,6 +4443,12 @@ window.addEventListener('error',function(e){
   if(Array.isArray(fallbacks)&&fallbacks.length){
    var next=fallbacks.shift();target.setAttribute('data-art-fallback',JSON.stringify(fallbacks));
    target.src=next;return
+  }
+  var card=target.closest&&target.closest('[data-details]'),holder=target.parentNode;
+  if(card&&holder&&holder.classList.contains('poster-art')){
+   var key=card.getAttribute('data-details')||'',split=key.indexOf(':'),kind=key.slice(0,split),id=key.slice(split+1);
+   var item=findItem(kind,id);holder.setAttribute('data-art-failed',target.getAttribute('src')||'');
+   target.remove();if(item&&split>0)enrichPosters(kind,[item],true);return
   }
   target.style.display='none';return
  }
