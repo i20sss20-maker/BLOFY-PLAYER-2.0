@@ -181,3 +181,10 @@ test('adaptive live buffer increases on sustained waiting, caps growth and cools
  assert.equal(adapt({ready:true},engine,450000,true,true),null);
  assert.equal(adapt({ready:true,reconnecting:true},engine,450000,true,false),null);
 });
+
+test('live recovery cannot allocate another connection while paused, hidden, offline or external',()=>{
+ const i=app.indexOf('function liveRecoveryAllowed('),j=app.indexOf('function resumeLiveHlsNetwork(',i);
+ const f=new Function(app.slice(i,j)+';return liveRecoveryAllowed')();
+ assert.equal(f(false,false,false,false),true);
+ for(let bit=0;bit<4;bit++){const flags=[false,false,false,false];flags[bit]=true;assert.equal(f(...flags),false)}
+});
