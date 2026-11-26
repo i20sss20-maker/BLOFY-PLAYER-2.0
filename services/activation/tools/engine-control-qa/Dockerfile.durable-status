@@ -1,8 +1,9 @@
 FROM python:3.12-slim AS lease-test
 WORKDIR /test
-COPY services/activation/tools/blofy-live-lease-guard.py services/activation/tools/live_runtime_leased_candidate.py ./
+COPY services/activation/tools/blofy-live-lease-guard.py ./blofy_live_lease_guard.py
+COPY services/activation/tools/live_runtime_leased_candidate.py ./
 COPY services/activation/tools/engine-control-qa/live-lease-guard.test.py ./engine-control-qa/
-RUN python -m py_compile blofy-live-lease-guard.py live_runtime_leased_candidate.py && python engine-control-qa/live-lease-guard.test.py && touch /test/lease-test-pass
+RUN python -m py_compile blofy_live_lease_guard.py live_runtime_leased_candidate.py && ln -s blofy_live_lease_guard.py blofy-live-lease-guard.py && python engine-control-qa/live-lease-guard.test.py && touch /test/lease-test-pass
 FROM node:22-bookworm-slim
 COPY --from=lease-test /test/lease-test-pass /tmp/lease-test-pass
 WORKDIR /app
