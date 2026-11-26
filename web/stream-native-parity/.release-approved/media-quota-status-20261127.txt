@@ -1,0 +1,1 @@
+Preserve licensed capacity denial; do not misclassify as source outage. No quota expansion. Docker QA required.
