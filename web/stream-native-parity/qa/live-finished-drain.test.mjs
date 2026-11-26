@@ -80,3 +80,16 @@ test('live admission failure preserves 429/503 and bounded Retry-After while VOD
  assert.equal(classify('movie',503,'12').status,502);
  assert.match(source,/start\.retryAfterSeconds\?\?\(start\.status===429\?5:0\)/);
 });
+
+
+test('full VOD exit ignores warnings only with successful exit and expected media',()=>{
+ const a=source.indexOf('function fullVodExitReason('),b=source.indexOf('function fullVodChunk(',a);
+ const reason=new Function(source.slice(a,b)+';return fullVodExitReason')();
+ assert.equal(reason(0,'Non-monotonous DTS warning',null,true,true),null);
+ assert.equal(reason(0,'',null,false,false),'vod_source_position_unavailable');
+ assert.equal(reason(0,'',null,true,false),'vod_chunk_incomplete');
+ assert.equal(reason(1,'Connection reset',null,true,false),'vod_source_connection_lost');
+ assert.equal(reason(1,'HTTP 416',null,false,false),'vod_source_seek_unsupported');
+ assert.equal(reason(1,'','vod_chunk_deadline_exceeded',true,true),'vod_chunk_deadline_exceeded');
+ assert.equal(reason(1,'other',null,true,true),'vod_chunk_processing_failed');
+});
