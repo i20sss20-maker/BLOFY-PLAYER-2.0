@@ -752,4 +752,17 @@ change("target.searchParams.set('shell','2026.11.26.3');","target.searchParams.s
 
 change("target.searchParams.set('shell','2026.11.26.4');","target.searchParams.set('shell','2026.11.26.5');");
 change("target.searchParams.set('shell','2026.11.26.5');","target.searchParams.set('shell','2026.11.26.6');");
+
+change("   var attempt=record.recoveryAttempt||0;\n   status('جار استعادة اتصال البث في تطبيق الشاشة الرئيسية…');",`   var attempt=record.recoveryAttempt||0;
+   if(attempt>=4){
+    if(preview)status('تعذر تشغيل المعاينة؛ اختر القناة مجددًا.');
+    else playerStatus('تعذر الاتصال بالقناة. أعد المحاولة.',true);
+    return
+   }
+   status('جار استعادة اتصال البث في تطبيق الشاشة الرئيسية…');`);
+change("      status('تعذر التحقق من صلاحية تشغيل القناة. أعد فتحها.');return", "      if(preview)status('تعذر التحقق من صلاحية تشغيل القناة.');else playerStatus('تعذر التحقق من صلاحية تشغيل القناة.',true);return");
+change("      if((record.recoveryAttempt||0)>=4){status('انتهت جلسة البث. اضغط إعادة المحاولة.');return}", "      if((record.recoveryAttempt||0)>=4){if(preview)status('انتهت جلسة المعاينة.');else playerStatus('انتهت جلسة البث. أعد المحاولة.',true);return}");
+change("      status('المصدر مشغول حاليًا. اضغط إعادة المحاولة أو اختر قناة متاحة.');return", "      if(preview)status('القناة غير متاحة حاليًا.');else playerStatus('القناة غير متاحة حاليًا. أعد المحاولة.',true);return");
+change("target.searchParams.set('shell','2026.11.26.6');","target.searchParams.set('shell','2026.11.26.7');");
+
 new Function(app);writeFileSync('app.js',app);
