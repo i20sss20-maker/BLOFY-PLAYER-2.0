@@ -15,10 +15,13 @@ export async function ensureLinodeFeedLedger(db){
  generation text,
  updated_at timestamptz NOT NULL DEFAULT now()
  )`);
+ await db.query(`CREATE TABLE IF NOT EXISTS blofy_linode_feed_requests (
+ request_id uuid PRIMARY KEY, source_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+ )`);
 }
 export function createLinodeFeedLedger(pool,env=process.env){
  const enabled=sourceId=>env.BLOFY_LINODE_FEED_LEDGER==='1'&&
-   uuid.test(sourceId||'')&&sourceId===env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID;
+   typeof sourceId==='string'&&uuid.test(sourceId)&&sourceId===sourceId.toLowerCase()&&sourceId===env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID;
  async function tx(sourceId,fn){
   const c=await pool.connect();
   try{
@@ -33,7 +36,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
  }
  return {
   async reserve({sourceId,channelId,requestId}={}){
-   if(!enabled(sourceId)||!channel.test(channelId||'')||!uuid.test(requestId||''))return blocked('disabled_or_invalid');
+   if(!enabled(sourceId)||!channel.test(channelId||'')||!uuid.test(requestId||'')||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
     if(row&&row.state!=='released'){
      if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown')
@@ -42,6 +45,8 @@ export function createLinodeFeedLedger(pool,env=process.env){
     }
     // A replay of the last released request must not reopen its feed.
     if(row?.request_id===requestId)return blocked('request_closed');
+    const claimed=await c.query('INSERT INTO blofy_linode_feed_requests(request_id,source_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING request_id',[requestId,sourceId]);
+    if(claimed.rowCount!==1)return blocked('request_closed');
     const reservationId=randomUUID();
     await c.query(`INSERT INTO blofy_linode_feed_ledger
      (source_id,channel_id,request_id,reservation_id,state)
