@@ -59,7 +59,7 @@ const diagnosticGate=createAdmission({limit:60,maxKeys:4096,maxInflight:64,perKe
 const playbackMetrics=createPlaybackMetrics();
 // Private, opt-in operator endpoint. Separate secret, never a customer token.
 const OPS_KEY=String(Bun.env.VIDAA_WEB_OPS_KEY||'');
-const opsEnabled=/^[a-f0-9]{64}$/i.test(OPS_KEY)&&OPS_KEY!==KEY_HEX;
+const opsEnabled=/^[a-f0-9]{64}$/i.test(OPS_KEY)&&OPS_KEY.toLowerCase()!==KEY_HEX.toLowerCase();
 const opsWindows=[];
 function opsAuthorized(req){
  if(!opsEnabled)return false;
@@ -210,7 +210,8 @@ if(p.startsWith('/external/live/')){
  }catch{cleanup();return json(502,{error:'external_connection_failed'})}
 }
 if(p==='/api/redeem'&&method==='POST'){
- let input={};try{if(Number(req.headers.get('content-length')||0)>2048)return json(413,{error:'invalid_payload'});input=await req.json()}catch{return json(400,{error:'invalid_payload'})}
+ const inputResult=await readBoundedJson(req,2048);if(!inputResult.ok)return json(inputResult.status,{error:'invalid_payload'});
+ const input=inputResult.value;
  const code=String(input.code||'').toUpperCase().trim();const key=String(input.deviceKey||'');
  if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)||!/^[a-f0-9]{64}$/.test(key))return json(400,{error:'كود أو جهاز غير صالح'});
  try{const r=await fetch(ORIGIN+'/api/v1/stream/app/redeem',{method:'POST',headers:{'Content-Type':CT,'Accept':'application/json'},body:JSON.stringify({code,deviceKey:key}),redirect:'manual',signal:AbortSignal.timeout(20000)});
@@ -234,11 +235,8 @@ if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
  if(!h)return json(401,{ok:false,error:'activation_required'});
- let payload={};
- try{
-  if(Number(req.headers.get('content-length')||0)>2048)return json(413,{ok:false,error:'request_too_large'});
-  payload=await req.json()
- }catch{return json(400,{ok:false,error:'invalid_request'})}
+ const aiInput=await readBoundedJson(req,2048);if(!aiInput.ok)return json(aiInput.status,{ok:false,error:'invalid_request'});
+ const payload=aiInput.value;
  const text=String(payload.text||'').trim().slice(0,160),locale=payload.locale==='en'?'en':'ar';
  if(text.length<3||text.length>160)return json(400,{ok:false,error:'invalid_ai_query'});
  try{
