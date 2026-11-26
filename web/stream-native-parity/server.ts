@@ -80,6 +80,17 @@ function revokeExternal(bearer){
 }
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
+// Staging may exercise packaging and private worker readiness, but must not
+// use production subscriptions, origins, catalog requests, or media sessions.
+if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'){
+ if(p==='/health'&&method==='GET'){
+  const host=audioWorkerHost('isolated');let audioReady=false;
+  try{const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(3000)});const v=await r.json();audioReady=r.ok&&v.ok===true&&v.service==='blofy-stream-web-audio'}catch{}
+  return json(KEY&&audioReady?200:503,{ok:Boolean(KEY&&audioReady),mode:'synthetic-only',audioReady});
+ }
+ if(p.startsWith('/api/')||p.startsWith('/external/'))return json(403,{error:'synthetic_staging_only'});
+}
+
 
 if(method==='GET'&&(p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
  const file=p.slice(1);
