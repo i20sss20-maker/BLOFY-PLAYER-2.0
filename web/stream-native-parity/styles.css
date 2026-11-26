@@ -980,9 +980,14 @@ html[data-blofy-device="tv"] .poster-art .poster-badge{display:none}
 html[data-blofy-device="tv"] .poster-caption{display:block;min-height:50px;padding:10px;color:#fff}
 html[data-blofy-device="tv"] .poster-caption strong{color:#fff;font-size:16px}
 html[data-blofy-device="tv"] .poster-caption span{color:#b9ccd4;font-size:12px}
-html[data-blofy-device="tv"] .poster-grid,html[data-blofy-device="tv"] .search-result-grid{display:flex;flex-wrap:wrap;gap:0}
-html[data-blofy-device="tv"] .poster-grid .poster,html[data-blofy-device="tv"] .search-result-grid .poster{flex:0 0 18%;width:18%;margin:0 0 14px 2%}
-html[data-blofy-device="tv"] .poster-grid .poster-art,html[data-blofy-device="tv"] .search-result-grid .poster-art{height:210px;height:auto;padding-top:140%;aspect-ratio:auto}
+/* Inline-block is intentionally independent of Grid and flex sizing on SRAF. */
+html[data-blofy-device="tv"] .poster-grid,html[data-blofy-device="tv"] .search-result-grid{display:block;font-size:0;text-align:right;white-space:normal}
+html[data-blofy-device="tv"] .poster-grid .poster,html[data-blofy-device="tv"] .search-result-grid .poster{display:inline-block;vertical-align:top;width:18%;margin:0 0 14px 2%;font-size:16px}
+html[data-blofy-device="tv"] .poster-grid .poster-art,html[data-blofy-device="tv"] .search-result-grid .poster-art{display:block;height:0;padding-top:150%;aspect-ratio:auto}
+html[data-blofy-device="tv"] .poster-grid .poster-caption,html[data-blofy-device="tv"] .search-result-grid .poster-caption{display:block;min-height:54px;height:54px;overflow:hidden}
+html[data-blofy-device="tv"] .poster-grid .poster-art img,html[data-blofy-device="tv"] .search-result-grid .poster-art img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+@media(max-width:1050px){html[data-blofy-device="tv"] .poster-grid .poster,html[data-blofy-device="tv"] .search-result-grid .poster{width:23%}}
+@media(min-width:1600px){html[data-blofy-device="tv"] .poster-grid .poster,html[data-blofy-device="tv"] .search-result-grid .poster{width:14.6%}}
 html[data-blofy-device="tv"] .cat-rail,html[data-blofy-device="tv"] .channels,html[data-blofy-device="tv"] .preview,html[data-blofy-device="tv"] .poster-panel{background:#111e29;color:#f5f7fa;border:1px solid #2b414f}
 html[data-blofy-device="tv"] .cat-rail,html[data-blofy-device="tv"] .channels{margin-left:12px}
 html[data-blofy-device="tv"] .pane-head,html[data-blofy-device="tv"] .preview-controls{background:#182b36;color:#f5f7fa}
@@ -1024,3 +1029,12 @@ html[data-blofy-device="tv"] .live-catalog .preview-video-wrap{min-height:145px}
 html[data-blofy-device="tv"] .live-catalog .preview-controls{padding:12px 14px}
 html[data-blofy-device="tv"] .live-catalog .preview-controls .chip{color:#071c20;background:#54ded0}
 @media(max-height:800px){html[data-blofy-device="tv"] .live-catalog .preview-controls p{margin:5px 0;min-height:0}html[data-blofy-device="tv"] .live-catalog .pane-head{padding:10px 12px}html[data-blofy-device="tv"] .live-catalog .channel-item{min-height:54px}}
+
+/* A generic legacy browser which fails Grid support must never show full-width movie strips, even if its UA is unrecognized. */
+@supports not (display:grid){
+ .poster-grid,.search-result-grid{display:block;font-size:0;text-align:right}
+ .poster-grid .poster,.search-result-grid .poster{display:inline-block;vertical-align:top;width:18%;margin:0 0 12px 2%;font-size:16px}
+ .poster-grid .poster-art,.search-result-grid .poster-art{display:block;height:0;padding-top:150%}
+ .poster-grid .poster-art img,.search-result-grid .poster-art img{position:absolute;top:0;left:0;width:100%;height:100%}
+ @media(max-width:730px){.poster-grid .poster,.search-result-grid .poster{width:48%}}
+}
