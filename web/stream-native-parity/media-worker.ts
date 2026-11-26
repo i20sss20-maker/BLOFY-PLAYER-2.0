@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {allowedSingleViewerLiveTsContinuity,liveTsSameSourceContinuity}
  from './live-source-continuity.mjs';
 import {streamMediaFile} from './stream-media-file.mjs';
+import {classifyWebMediaAdmission} from './web-media-admission.mjs';
 const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
@@ -400,7 +401,11 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    try{await upstream.body?.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
-  if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
+  if(!upstream.ok||!upstream.body){
+   const status=upstream.status,denial=classifyWebMediaAdmission(kind,status,upstream.headers.get('retry-after'));
+   try{await upstream.body?.cancel()}catch{}
+   stopHls(session,'upstream_'+status);return denial
+  }
   // Experimental continuity for ONE preapproved channel + bearer access ID.
   // All subsequent requests use the exact same first-party authorized URL.
   // Disabled in normal previews; strict guard prevents a single env flag
@@ -629,7 +634,7 @@ async function hlsRequest(req,url){
    if(wait>0)return hlsError(503,'hls_origin_backoff',Math.ceil(wait/1000))
   }
   const start=liveShareAllowed(kind,viewerSid)?await startSharedLiveViewer(args):await startHls(args);
-  if(start.error)return hlsError(start.status,start.error,start.status===429?5:0);
+  if(start.error)return hlsError(start.status,start.error,start.retryAfterSeconds??(start.status===429?5:0));
   sess=start.session
  }
  // Aliases have their own auth/SID and idle timer; only the producer owns

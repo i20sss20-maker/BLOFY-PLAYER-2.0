@@ -5,6 +5,7 @@ WORKDIR /app
 COPY media-worker.ts /app/media-worker.ts
 COPY live-source-continuity.mjs /app/live-source-continuity.mjs
 COPY stream-media-file.mjs /app/stream-media-file.mjs
+COPY web-media-admission.mjs /app/web-media-admission.mjs
 COPY media-ended-drain-fix.mjs /app/
 COPY qa/live-finished-drain.test.mjs /app/qa/
 RUN bun run media-ended-drain-fix.mjs && bun test qa/live-finished-drain.test.mjs
