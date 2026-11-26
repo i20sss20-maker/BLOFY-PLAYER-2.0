@@ -2,13 +2,15 @@ name: QA web live soak
 on:
   workflow_dispatch:
   pull_request:
+    types: [labeled]
     paths:
-      - 'web/stream-native-parity/qa/synthetic-live-soak.mjs'
+      - 'web/stream-native-parity/**'
       - '.github/workflows/web-live-soak-qa.yml'
 permissions:
   contents: read
 jobs:
   live-soak:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'web-soak-approved'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     defaults:
