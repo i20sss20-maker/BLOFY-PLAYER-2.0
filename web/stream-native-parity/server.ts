@@ -1,3 +1,4 @@
+import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 import {stableAccountProfileKey,legacyTokenProfileKey} from './web-profile-key.mjs';
@@ -345,6 +346,27 @@ if(p.indexOf('/api/compatible/')===0&&method==='GET'){
   const contentType=response.headers.get('content-type')||'application/octet-stream';
   return new Response(response.body,{status:200,headers:noCache({'Content-Type':contentType,'X-Blofy-Media-Mode':'compatible-'+mode,'Accept-Ranges':'none'})});
  }catch(e){return json(502,{error:'compat_proxy_unavailable'})}
+}
+if(p==='/api/commentary'&&method==='GET'){
+ const h=auth(req);if(!h)return json(401,{error:'invalid_session'});
+ const channel=u.searchParams.get('channel')||'';if(!/^[A-Za-z0-9_-]{1,80}$/.test(channel))return json(400,{error:'invalid_channel'});
+ try{
+  const r=await fetch(ORIGIN+'/api/v1/stream/audio/catalog',{headers:h,redirect:'manual',signal:AbortSignal.any([req.signal,AbortSignal.timeout(10000)])});
+  if(!r.ok){await r.body?.cancel();return json(r.status===401||r.status===403?r.status:r.status===429?429:503,{error:'commentary_unavailable'})}
+  return json(200,{tracks:safeCommentaryTracks(await boundedCommentaryJson(r),channel)});
+ }catch{return json(503,{error:'commentary_unavailable'})}
+}
+if(p.startsWith('/api/commentary/')&&method==='GET'){
+ const h=auth(req);if(!h)return json(401,{error:'invalid_session'});
+ const id=p.slice('/api/commentary/'.length);if(!validCommentaryId(id))return json(404,{error:'unknown_track'});
+ try{
+  const r=await fetch(ORIGIN+'/api/v1/stream/media/audio/'+id,{headers:{Authorization:h.Authorization,Accept:'audio/*'},redirect:'manual',signal:req.signal});
+  const mime=(r.headers.get('content-type')||'').split(';')[0].toLowerCase();
+  if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/aacp','audio/mp4'].includes(mime)){
+   await r.body?.cancel();return json(r.status===401||r.status===403?r.status:r.status===429?429:503,{error:'commentary_unavailable'})
+  }
+  return new Response(r.body,{headers:noCache({'Content-Type':mime,'Accept-Ranges':'none'})});
+ }catch{return json(503,{error:'commentary_unavailable'})}
 }
 if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
  const m=p.match(/^\/api\/media\/(live|movie|series)\/([0-9]{1,15})\.(ts|m3u8|mp4|mkv|avi|mov)$/i);if(!m)return json(400,{error:'invalid_media_path'});

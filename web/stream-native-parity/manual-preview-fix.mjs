@@ -751,4 +751,5 @@ change("     if(response.ok){\n      if(response.body&&response.body.cancel)", "
 change("target.searchParams.set('shell','2026.11.26.3');","target.searchParams.set('shell','2026.11.26.4');");
 
 change("target.searchParams.set('shell','2026.11.26.4');","target.searchParams.set('shell','2026.11.26.5');");
+change("target.searchParams.set('shell','2026.11.26.5');","target.searchParams.set('shell','2026.11.26.6');");
 new Function(app);writeFileSync('app.js',app);

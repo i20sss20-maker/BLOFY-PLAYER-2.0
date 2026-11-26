@@ -1341,7 +1341,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.5</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.6</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -1514,6 +1514,7 @@ function stopPlayback(sendStop){
 }
 function cleanupPlayer(){
  if(S.playerView){
+  if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
@@ -3857,21 +3858,74 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var chosen=choicePanel.querySelector('.native-player-choice-item.selected')||choicePanel.querySelector('.native-player-choice-item');
   if(chosen)chosen.focus()
  }
- document.getElementById('player-audio').onclick=function(){
+ // Independent, first-party audio; never restart or replace the channel video.
+ var commentary=null,commentaryEpoch=0;
+ function stopCommentary(){
+  commentaryEpoch++;
+  var old=commentary;commentary=null;
+  if(!old)return;
+  clearTimeout(old.timer);
+  old.audio.onplaying=old.audio.onerror=old.audio.onended=old.audio.onwaiting=old.audio.onstalled=null;
+  try{old.audio.pause();old.audio.removeAttribute('src');old.audio.load();old.audio.remove()}catch(e){}
+  video.muted=old.originalMuted
+ }
+ function commentaryVisibility(){if(document.hidden)stopCommentary()}
+ document.addEventListener('visibilitychange',commentaryVisibility);
+ state.stopCommentary=stopCommentary;
+ state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);stopCommentary()};
+ video.addEventListener('pause',stopCommentary);
+ video.addEventListener('emptied',stopCommentary);
+ // Independent live audio cannot safely keep running through a frozen picture.
+ video.addEventListener('seeking',stopCommentary);
+ video.addEventListener('waiting',function(){if(commentary)stopCommentary()});
+ function startCommentary(track){
+  stopCommentary();
+  if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
+  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null};
+  commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
+  function fail(){if(commentary!==record)return;stopCommentary();playerStatus('تعذر تشغيل الصوت البديل؛ تم الرجوع للصوت الأصلي.')}
+  audio.onplaying=function(){
+   if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
+   clearTimeout(record.timer);video.muted=true
+  };
+  audio.onerror=audio.onended=fail;
+  audio.onwaiting=audio.onstalled=function(){
+   if(commentary!==record)return;video.muted=record.originalMuted;clearTimeout(record.timer);record.timer=setTimeout(fail,5000)
+  };
+  record.timer=setTimeout(fail,10000);
+  audio.src='/api/commentary/'+enc(track.id);
+  try{var request=audio.play();if(request&&request.catch)request.catch(fail)}catch(e){fail()}
+ }
+ var audioButton=document.getElementById('player-audio');
+ audioButton.onclick=function(){
   var engine=S.play&&S.play.engine,tracks=video.audioTracks,options=[];
+  if(isLive)options.push({name:'الصوت الأصلي',selected:!commentary,select:stopCommentary});
   if(tracks&&tracks.length>1){
    for(var i=0;i<tracks.length;i++)(function(track,index){
-    options.push({name:track.label||track.language||('المسار الصوتي '+(index+1)),selected:!!track.enabled,
-     select:function(){for(var n=0;n<tracks.length;n++)tracks[n].enabled=n===index;playerStatus('تم اختيار المسار الصوتي '+(index+1))}})
+    options.push({name:track.label||track.language||('المسار الصوتي '+(index+1)),selected:!commentary&&!!track.enabled,
+     select:function(){stopCommentary();for(var n=0;n<tracks.length;n++)tracks[n].enabled=n===index}})
    })(tracks[i],i)
   }else if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
    var list=engine.audioTracks;
    for(var j=0;j<list.length;j++)(function(track,index){
-    options.push({name:track.name||track.lang||('المسار الصوتي '+(index+1)),selected:engine.audioTrack===index,
-     select:function(){engine.audioTrack=index;playerStatus('تم اختيار المسار الصوتي '+(index+1))}})
+    options.push({name:track.name||track.lang||('المسار الصوتي '+(index+1)),selected:!commentary&&engine.audioTrack===index,
+     select:function(){stopCommentary();engine.audioTrack=index}})
    })(list[j],j)
   }
-  showPlayerChoices('المسارات الصوتية',options,this)
+  if(!isLive){showPlayerChoices('المسارات الصوتية',options,this);return}
+  var epoch=++commentaryEpoch,channel=String(state.id);
+  options.push({name:'المعلقون • BLOFY',selected:false,select:function(){
+   api('GET','/api/commentary?channel='+enc(channel),null,function(st,data){
+    if(S.route!=='player'||S.playerView!==state||String(state.id)!==channel||epoch!==commentaryEpoch||document.hidden)return;
+    var list=[{name:'الصوت الأصلي',selected:!commentary,select:stopCommentary}];
+    if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
+     if(track&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
+    });
+    if(list.length===1){playerStatus('لا تتوفر أصوات إضافية حاليًا.');return}
+    showPlayerChoices('المعلقون',list,audioButton)
+   })
+  }});
+  showPlayerChoices('الصوت والمعلقون',options,this)
  };
  var subtitleButton=document.getElementById('player-subtitles');
  if(subtitleButton)subtitleButton.onclick=function(){
@@ -4093,6 +4147,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(!next){playerStatus('هذه القناة ليست في القائمة المحمّلة؛ ارجع للقائمة لعرض المزيد.');return}
    var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
+   if(state.stopCommentary)state.stopCommentary();
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
    if(state.stats){state.pictureObservationAllowed=false;state.stats.liveEvents=[];state.stats.firstFrameAt=0;state.stats.firstFrameBasis=null;state.stats.openedAt=Date.now();
     // Do not report the previous channel's frozen frames as this channel's QoE.
