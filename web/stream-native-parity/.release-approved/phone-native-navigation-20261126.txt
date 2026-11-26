@@ -1,0 +1,2 @@
+WEB RELEASE — 2026-11-26.2
+PR #931 merged at f6429c4bee9d2869b21f47006156fbc850948143. Actual web Docker build and regression suite passed (45867808546). Native phone navigation, direct channel player, simplified catalog and shell cache revision. No account, Android or provider quota changes. Android audit retains pre-existing version baseline mismatch. Real iPhone playback and visual parity require device verification. Rollback: web deployment 67b10a53-8bf1-474e-a53a-a9a606f0352e, revision b7733185f10b62996eb967d0f6ef999b54bd7b8e.
