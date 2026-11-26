@@ -981,4 +981,10 @@ change("   if(state.externalPending)return;\n   var record=S.play,selected=Strin
 change("    if(st===200||st===404){state.externalRetiringStop=null;issue()}", "    if(st===200||st===404){state.externalRetiringStop=null;state.directStopKey=null;issue()}");
 change("   state.externalRetiringStop=null;stopExternal()", "   state.externalRetiringStop=null;state.directStopKey=null;stopExternal()");
 
+
+change("function shouldUseNativeHls(video){\n if(S.preferMseHls", "function appleMobileNativeHls(ua,touchPoints,video){return !!(appleTouchBrowser(ua,touchPoints)&&video&&video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl'))}\nfunction shouldUseNativeHls(video){\n if(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video))return true;\n if(S.preferMseHls");
+change("if(!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice", "if(!appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)&&!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice");
+change("if(record.nativeHls&&installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&", "if(record.nativeHls&&(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&");
+change("target.searchParams.set('shell','2026.11.26.12');", "target.searchParams.set('shell','2026.11.27.1');");
+
 new Function(app);writeFileSync('app.js',app);
