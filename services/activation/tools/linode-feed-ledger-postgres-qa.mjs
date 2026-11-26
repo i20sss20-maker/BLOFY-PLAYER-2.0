@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,generateKeyPairSync} from 'node:crypto';
+import {verifyLiveLease} from '../src/blofy-live-worker-lease.mjs';
 import pg from 'pg';
 import {ensureEngineRouteClaims,createEngineRouteClaims} from '../src/blofy-engine-route-claims.mjs';
 import {createEngineRouteCoordinator} from '../src/blofy-engine-route-coordinator.mjs';
@@ -121,6 +122,38 @@ test('durable route claim across pools and restart; dispatch once against Postgr
   assert.equal((await claims(a).claim(unresolved)).acquired,false);
   assert.equal(starts,1);
   assert.equal((await ledger(a).readRoutingState({sourceId})).state,'ready');
+ }finally{
+  if(a)await a.end();if(b)await b.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
+
+test('worker lease sequence is serialized by source lock; fencing blocks renewal',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();await ensureLinodeFeedLedger(a);
+  const sourceId=randomUUID(),engineId='hostbrr',channelId='123';
+  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId,BLOFY_ENGINE_RENEWABLE_LEASE:'1'};
+  const one=createLinodeFeedLedger(a,env),two=createLinodeFeedLedger(b,env);
+  const {reservationId}=await one.reserve({sourceId,engineId,channelId,requestId:randomUUID()});
+  const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+  const identity={sourceId,engineId,channelId,reservationId};
+  const request=()=>({...identity,signingKey:privateKey,fence:{...identity,authoritative:true,scope:'all_paths',observedAt:Date.now(),expiresAt:Date.now()+90000}});
+  assert.equal((await one.issueWorkerLease({...request(),fence:null})).ok,false);
+  assert.equal((await one.issueWorkerLease({...request(),engineId:'linode'})).ok,false);
+  const results=await Promise.all(Array.from({length:24},(_,i)=>(i%2?one:two).issueWorkerLease(request())));
+  assert.ok(results.every(r=>r.ok&&verifyLiveLease({lease:r.lease,signature:r.signature},{key:publicKey,identity})));
+  assert.deepEqual(results.map(r=>r.lease.sequence).sort((x,y)=>x-y),Array.from({length:24},(_,i)=>i+1));
+  await a.end();a=open();
+  const restored=createLinodeFeedLedger(a,env);
+  assert.equal((await restored.issueWorkerLease(request())).lease.sequence,25);
+  assert.equal((await restored.transition({...identity,next:'unknown'})).ok,true);
+  assert.equal((await two.issueWorkerLease(request())).ok,false);
+  assert.equal((await restored.transition({...identity,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await two.issueWorkerLease(request())).ok,false);
  }finally{
   if(a)await a.end();if(b)await b.end();
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
