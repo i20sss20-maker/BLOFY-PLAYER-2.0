@@ -71,9 +71,27 @@ try{
    acks[acks.length-1](200);
    repeated.push(await picture(next));
   }
+  // The fixture is a finite 12-second HLS playlist. Verify real decoded
+  // frames after forward/backward seeks crossing segment boundaries.
+  const seeks=[];
+  for(const target of [8,2,6]){
+   const before=video.getVideoPlaybackQuality().totalVideoFrames;
+   video.currentTime=target;
+   const began=performance.now();
+   while(performance.now()-began<12000){
+    const frames=video.getVideoPlaybackQuality().totalVideoFrames;
+    if(!video.seeking&&video.readyState>=2&&video.currentTime>=target&&video.currentTime<target+2&&frames>before+1)break;
+    if(video.error||events.some(e=>e.fatal))throw Error('seek failed:'+JSON.stringify(events));
+    await pause(50)
+   }
+   const observed=video.currentTime,decoded=video.getVideoPlaybackQuality().totalVideoFrames-before;
+   if(video.seeking||observed<target||observed>=target+2||decoded<2)throw Error('seek not confirmed:'+JSON.stringify({target,observed,decoded}));
+   seeks.push({target,observed,decoded,observedMs:Math.round(performance.now()-began)})
+  }
   detach();
-  return {first,second,repeated,starts,stops};
+  return {first,second,repeated,starts,stops,seeks};
  });
  assert.deepEqual(result.starts,['red','blue','red','blue','red','blue']);assert.deepEqual(result.stops,['red-sid','red-sid','blue-sid','red-sid','blue-sid','red-sid']);
+ assert.equal(result.seeks.length,3);
  console.log('BLOFY_SYNTHETIC_BROWSER_PLAYBACK',JSON.stringify(result));
 }finally{await browser?.close();await new Promise(r=>server.close(r))}
