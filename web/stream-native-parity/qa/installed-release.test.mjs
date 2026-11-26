@@ -21,3 +21,15 @@ test('stop confirmation does not restart an installed player while hidden or bef
  status=200;confirm(pending);await Promise.resolve();await Promise.resolve();
  assert.equal(pending.stopKey,null);assert.equal(resumed,1);
 });
+
+test('installed web explicit selection starts immediately, passive focus does not',()=>{
+ const a=app.indexOf('function selectChannel('),b=app.indexOf('function decodeEpgField(',a);
+ const S={selected:null,library:{}},calls=[],desc={};
+ const document={querySelectorAll:()=>[],getElementById:id=>id==='live-desc'?desc:null};
+ const select=new Function('S','document','findItem','title','loadShortEpg','installedWebApp','beginPreview',app.slice(a,b)+';return selectChannel')(
+ S,document,(kind,id)=>({id}),item=>item.id,()=>{},()=>true,item=>calls.push(item.id));
+ select('1',true,false);assert.deepEqual(calls,[]);
+ select('2',true,true);assert.deepEqual(calls,['2']);
+ assert.ok(app.includes("if(ch){selectChannel(ch,true,true);return}"));
+ assert.ok(app.includes("if(selected)selectChannel(itemId(selected,'live'),true,true);"));
+});
