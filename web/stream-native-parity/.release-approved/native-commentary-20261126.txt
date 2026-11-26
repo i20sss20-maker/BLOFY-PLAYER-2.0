@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.6
+PR #935 merged at 6af2d56a9ac02e657b1245eabd6dd71446c5ffa6. Production Docker QA passed (45874855695). Android audit retains existing version baseline mismatch. Protected commentary catalog and progressive audio; original audio restored upon failure/exit. No video source or quota changes. Real iPhone commentary availability, audibility and synchronization remain unverified. Rollback deployment 5fa47bb2-6f28-4536-ae04-9df7deae07cd.
