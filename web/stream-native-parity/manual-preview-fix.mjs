@@ -749,4 +749,13 @@ change("var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-
 
 change("2026.11.26.2 • '+(installedWebApp()", "2026.11.26.3 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.26.2');","target.searchParams.set('shell','2026.11.26.3');");
+
+ // Retain the already received native admission response metadata. It is
+ // the very same authorized HLS SID, so no duplicate metadata fetch is needed.
+change("  record.videoModeProbed=true;\n  fetch(manifest,", "  record.videoModeProbed=true;\n  var cachedInfo=record.admissionVideoInfo;\n  (cachedInfo?Promise.resolve(cachedInfo):fetch(manifest,");
+change("  }).then(function(info){\n   if(!info||!alive())return;\n   record.videoMode=info.mode;", "  })).then(function(info){\n   if(!info||!alive())return;\n   record.videoMode=info.mode;");
+change("     if(response.ok){\n      if(response.body&&response.body.cancel)", "     if(response.ok){\n      record.admissionVideoInfo={mode:response.headers.get('x-blofy-video-mode')||'',source:response.headers.get('x-blofy-source-resolution')||''};\n      if(response.body&&response.body.cancel)");
+change("2026.11.26.3 • '+(installedWebApp()", "2026.11.26.4 • '+(installedWebApp()");
+change("target.searchParams.set('shell','2026.11.26.3');","target.searchParams.set('shell','2026.11.26.4');");
+
 new Function(app);writeFileSync('app.js',app);
