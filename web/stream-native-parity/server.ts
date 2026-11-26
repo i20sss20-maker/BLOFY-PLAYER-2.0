@@ -107,8 +107,10 @@ if(p==='/api/external/live'&&method==='POST'){
   if(externalActive.has(account))return json(409,{error:'external_stream_active'});
   for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
   if(externalTickets.size>=256)return json(429,{error:'external_capacity'});
+  const now=Date.now(),accountExpiry=session.expiresAt?Date.parse(session.expiresAt):Infinity;
+  if(!(accountExpiry>now))return json(401,{error:'subscription_expired'});
   const ticket=randomBytes(32).toString('base64url'),key=externalAccountKey(ticket);
-  externalTickets.set(key,{id,account,bearer:h.Authorization,until:Date.now()+120000});
+  externalTickets.set(key,{id,account,bearer:h.Authorization,until:Math.min(now+120000,accountExpiry),accountExpiry});
   return json(200,{path:'/external/live/'+ticket+'.ts',expiresIn:120})
  }catch{return json(503,{error:'external_unavailable'})}
 }
@@ -122,7 +124,7 @@ if(p.startsWith('/external/live/')){
  if(externalActive.has(ticket.account)||externalActive.size>=32)return json(429,{error:'external_capacity'});
  externalTickets.delete(key);
  const controller=new AbortController();externalActive.set(ticket.account,controller);
- const expiry=setTimeout(()=>controller.abort(),2*60*60*1000);
+ const expiry=setTimeout(()=>controller.abort(),Math.min(2*60*60*1000,Math.max(0,ticket.accountExpiry-Date.now())));
  let headerTimer=setTimeout(()=>controller.abort(),15000),reader=null,closed=false;
  const cleanup=()=>{if(closed)return;closed=true;clearTimeout(expiry);clearTimeout(headerTimer);controller.abort();if(externalActive.get(ticket.account)===controller)externalActive.delete(ticket.account)};
  req.signal.addEventListener('abort',cleanup,{once:true});controller.signal.addEventListener('abort',cleanup,{once:true});
