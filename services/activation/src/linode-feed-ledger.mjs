@@ -15,6 +15,7 @@ export async function ensureLinodeFeedLedger(db){
  generation text,
  updated_at timestamptz NOT NULL DEFAULT now()
  )`);
+ await db.query("ALTER TABLE blofy_linode_feed_ledger ADD COLUMN IF NOT EXISTS engine_id text NOT NULL DEFAULT 'linode' CHECK (engine_id IN ('linode','hostbrr'))");
  await db.query(`CREATE TABLE IF NOT EXISTS blofy_linode_feed_requests (
  request_id uuid PRIMARY KEY, source_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
  )`);
@@ -28,6 +29,7 @@ export async function ensureLinodeFeedLedger(db){
 export function createLinodeFeedLedger(pool,env=process.env){
  const enabled=sourceId=>env.BLOFY_LINODE_FEED_LEDGER==='1'&&
    typeof sourceId==='string'&&uuid.test(sourceId)&&sourceId===sourceId.toLowerCase()&&sourceId===env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID;
+ const engineAllowed=id=>id==='linode'||(id==='hostbrr'&&env.BLOFY_HOSTBRR_FEED_LEDGER==='1');
  async function tx(sourceId,fn){
   const c=await pool.connect();
   try{
@@ -41,11 +43,11 @@ export function createLinodeFeedLedger(pool,env=process.env){
   finally{c.release();}
  }
  return {
-  async reserve({sourceId,channelId,requestId}={}){
-   if(!enabled(sourceId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
+  async reserve({sourceId,channelId,requestId,engineId='linode'}={}){
+   if(!enabled(sourceId)||!engineAllowed(engineId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
     if(row&&row.state!=='released'){
-     if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown')
+     if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown'&&row.engine_id===engineId)
       return {ok:true,action:'existing',reservationId:row.reservation_id,state:row.state};
      return blocked('feed_occupied_or_uncertain');
     }
@@ -55,27 +57,27 @@ export function createLinodeFeedLedger(pool,env=process.env){
     if(claimed.rowCount!==1)return blocked('request_closed');
     const reservationId=randomUUID();
     await c.query(`INSERT INTO blofy_linode_feed_ledger
-     (source_id,channel_id,request_id,reservation_id,state)
-     VALUES($1,$2,$3,$4,'pending')
+     (source_id,channel_id,request_id,reservation_id,state,engine_id)
+     VALUES($1,$2,$3,$4,'pending',$5)
      ON CONFLICT(source_id) DO UPDATE SET channel_id=EXCLUDED.channel_id,
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
-     state='pending',generation=NULL,updated_at=now()`,[sourceId,channelId,requestId,reservationId]);
+     state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
     return {ok:true,action:'start_once',reservationId,state:'pending'};
    });
   },
   // Only authenticated server-owned input, not public request bodies.
   // Same-source lock serializes viewer quotas and feed transitions.
   async attachViewer({sourceId,reservationId,channelId,generation,sessionId,accountId,
-    accountQuota,authorizedUntil}={}){
+    accountQuota,authorizedUntil,engineId='linode'}={}){
    const valid=x=>typeof x==='string'&&uuid.test(x)&&x===x.toLowerCase();
-   if(!enabled(sourceId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
+   if(!enabled(sourceId)||!engineAllowed(engineId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
       ![reservationId,sessionId,accountId].every(valid)||typeof channelId!=='string'||
       !channel.test(channelId)||typeof generation!=='string'||!/^[0-9a-f]{32}$/.test(generation)||
       !Number.isSafeInteger(accountQuota)||accountQuota<1||accountQuota>150||
       typeof authorizedUntil!=='string'||!Number.isFinite(Date.parse(authorizedUntil)))
      return blocked('viewer_invalid');
    return tx(sourceId,async(c,row)=>{
-    if(!row||row.state!=='ready'||row.reservation_id!==reservationId||
+    if(!row||row.engine_id!==engineId||row.state!=='ready'||row.reservation_id!==reservationId||
        row.channel_id!==channelId||row.generation!==generation)return blocked('feed_not_ready');
     const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
     const now=new Date(clock.now).getTime();
@@ -110,20 +112,21 @@ export function createLinodeFeedLedger(pool,env=process.env){
     return {ok:true,sessionId,reservationId,expiresAt};
    });
   },
-  async closeViewer({sourceId,reservationId,sessionId,accountId}={}){
+  async closeViewer({sourceId,reservationId,sessionId,accountId,engineId='linode'}={}){
    if(!enabled(sourceId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
      ![reservationId,sessionId,accountId].every(x=>typeof x==='string'&&uuid.test(x)))return blocked('viewer_invalid');
-   return tx(sourceId,async(c)=>{
+   return tx(sourceId,async(c,row)=>{
+    if(!row||row.engine_id!==engineId||row.reservation_id!==reservationId)return blocked('reservation_mismatch');
     const r=await c.query(`UPDATE blofy_linode_viewer_sessions SET closed=true
       WHERE session_id=$1 AND source_id=$2 AND reservation_id=$3 AND account_id=$4`,
       [sessionId,sourceId,reservationId,accountId]);
     return r.rowCount===1?{ok:true}:blocked('viewer_session_mismatch');
    });
   },
-  async transition({sourceId,reservationId,next,generation,releaseConfirmed}={}){
-   if(!enabled(sourceId)||!uuid.test(reservationId||''))return blocked('disabled_or_invalid');
+  async transition({sourceId,reservationId,next,generation,releaseConfirmed,engineId='linode'}={}){
+   if(!enabled(sourceId)||!engineAllowed(engineId)||!uuid.test(reservationId||''))return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
-    if(!row||row.reservation_id!==reservationId||row.state==='released')return blocked('reservation_mismatch');
+    if(!row||row.engine_id!==engineId||row.reservation_id!==reservationId||row.state==='released')return blocked('reservation_mismatch');
     if(next==='ready'&&row.state==='pending'&&/^[0-9a-f]{32}$/.test(generation||'')){
      await c.query("UPDATE blofy_linode_feed_ledger SET state='ready',generation=$2,updated_at=now() WHERE source_id=$1",[sourceId,generation]);
     }else if(next==='unknown'&&['pending','ready'].includes(row.state)){
