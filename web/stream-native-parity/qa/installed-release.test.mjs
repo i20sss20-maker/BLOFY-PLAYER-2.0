@@ -48,3 +48,14 @@ test('phone navigation keeps content tabs and four primary destinations',()=>{
  assert.match(result.tabs,/data-go="series"/);
  assert.match(app,/phoneLiveLayout\(\)\?document.getElementById\('workspace'\)/);
 });
+
+test('phone orientation and player chrome remain compact',()=>{
+ const css=readFileSync('styles.css','utf8');
+ assert.match(css,/html\[data-blofy-device="touch"\] \.app\{\s*display:flex;flex-direction:column;height:100vh/);
+ assert.match(css,/\.app \.workspace\{\s*order:0;flex:1 1 0;width:100%;min-height:0/);
+ assert.match(css,/\.native-stream-hud \.mobile-player-actions,[\s\S]*?\.player-mode-badge\{display:none\}/);
+ assert.match(css,/\.player-live-guide\.phone-guide-open\{display:block/);
+ assert.match(app,/id="player-guide-toggle"/);
+ assert.match(app,/data-blofy-input'\)==='touch'\?3200:3800/);
+ assert.match(app,/enrichPosters\('movie',film.slice\(0,12\)\);enrichPosters\('series',show.slice\(0,12\)\)/);
+});
