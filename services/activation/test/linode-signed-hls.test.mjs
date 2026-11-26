@@ -21,3 +21,23 @@ test('fails closed for disabled, unknown reservation, stale worker, wrong channe
   const i=input();change(i);assert.equal(signedLinodePlayback(i,env,now).ok,false);
  }
 });
+
+test('HostBrr grants require independent authorization, reservation, fresh worker and key',()=>{
+ const hostEnv={...env,BLOFY_HOSTBRR_MEDIA_CANARY:'1',BLOFY_HOSTBRR_SIGNED_HLS:'1'};
+ function hostInput(){
+  const i=input();
+  i.context.engineId='hostbrr';i.context.engine.engineId='hostbrr';
+  i.context.rights.mediaHost='media2.blofyplayer.com';
+  i.capacity.engineId=i.attempt.engineId=i.worker.engineId='hostbrr';
+  i.hostbrrSigningKey=Buffer.alloc(32,2);
+  return i;
+ }
+ const i=hostInput(),result=signedLinodePlayback(i,hostEnv,now);
+ assert.equal(result.ok,true);assert.equal(result.mediaHost,'media2.blofyplayer.com');
+ const p=result.path.split('/');
+ assert.equal(p[5],createHmac('sha256',i.hostbrrSigningKey).update('BLOFY-LIVE-V1\n'+p.slice(2,5).join('\n')).digest('hex'));
+ assert.equal(signedLinodePlayback(i,env,now).ok,false);
+ for(const change of [x=>delete x.hostbrrSigningKey,x=>delete x.worker.engineId,x=>delete x.capacity.engineId,x=>delete x.attempt.engineId,x=>delete x.context.engine.engineId,x=>x.context.rights.mediaHost='media.blofyplayer.com']){
+  const j=hostInput();change(j);assert.equal(signedLinodePlayback(j,hostEnv,now).ok,false);
+ }
+});

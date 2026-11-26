@@ -15,6 +15,9 @@ export function decideLinodeAdmission({context,requestId,capacity,attempt}={},en
     !['not_started','pending','denied','reserved','released','unknown'].includes(attempt.state))
     return blocked('attempt_unknown');
   const pre=preflightLinodeLive(context,env,now);
+  const engineId=context?.engineId??'linode';
+  if(!['linode','hostbrr'].includes(engineId)||(attempt.engineId??'linode')!==engineId)
+    return blocked('engine_mismatch');
   if(attempt.state==='pending'||attempt.state==='unknown')
     return blocked('reservation_outcome_unknown');
   if(attempt.state==='released'||attempt.state==='denied'){
@@ -32,7 +35,7 @@ export function decideLinodeAdmission({context,requestId,capacity,attempt}={},en
   const observed=timestamp(capacity?.observedAt);
   const authoritative=capacity?.authoritative===true&&
     ['all_paths','dedicated_licensed_pool'].includes(capacity?.scope)&&
-    capacity.sourceId===pre.sourceId&&capacity.providerQuota===pre.providerQuota&&
+    (capacity.engineId??'linode')===engineId&&capacity.sourceId===pre.sourceId&&capacity.providerQuota===pre.providerQuota&&
     Number.isFinite(observed)&&observed>=now-15000&&observed<=now+5000;
   if(!authoritative)
     return attempt.state==='not_started'?legacy('capacity_authority_unavailable'):blocked('capacity_authority_unavailable');
