@@ -34,7 +34,14 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.reserve(args)).action,'existing');
   const t={sourceId,reservationId};
   const generation=randomUUID().replaceAll('-','');
+  assert.equal((await restored.findReady(args)).ok,false);
   assert.equal((await restored.transition({...t,next:'ready',generation})).ok,true);
+  const join=await Promise.all(Array.from({length:30},()=>restored.findReady(args)));
+  assert.ok(join.every(x=>x.ok&&x.reservationId===reservationId&&x.generation===generation&&x.requestId===requestId));
+  assert.equal((await restored.findReady({...args,channelId:'124'})).ok,false);
+  assert.equal((await restored.findReady({...args,engineId:'hostbrr'})).ok,false);
+  const {rows:[feedCount]}=await pool.query('SELECT count(*)::int AS n FROM blofy_linode_feed_ledger');
+  assert.equal(feedCount.n,1);
   const viewer={...t,channelId:'123',generation,sessionId:randomUUID(),accountId:randomUUID(),
     accountQuota:1,authorizedUntil:new Date(Date.now()+120000).toISOString()};
   assert.equal((await restored.attachViewer({...viewer,engineId:'hostbrr'})).ok,false);
@@ -57,6 +64,7 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal(more.filter(x=>x.ok).length,148);
   assert.equal(more.filter(x=>x.reason==='viewer_quota').length,7);
   assert.equal((await restored.transition({...t,next:'unknown'})).ok,true);
+  assert.equal((await restored.findReady(args)).ok,false);
   assert.equal((await restored.transition({...t,next:'released'})).ok,false);
   assert.equal((await restored.reserve({...args,requestId:randomUUID()})).ok,false);
   assert.equal((await restored.transition({...t,next:'released',releaseConfirmed:true})).ok,true);
