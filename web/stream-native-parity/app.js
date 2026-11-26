@@ -2888,6 +2888,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  S.route='player';
  showWebShellUpdateHint();
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" autoplay playsinline webkit-playsinline tabindex="0" aria-label="مشغّل الفيديو"></video>'+
+ '<div class="player-audio-notice" id="player-audio-notice" role="status" aria-live="polite" hidden></div>'+
  '<div class="player-loading" id="player-status" role="status">'+(isLive?'جار تشغيل القناة…':'جار تجهيز المشغّل…')+'</div>'+
  '<div class="mobile-seek-feedback" id="mobile-seek-feedback" hidden role="status" aria-live="polite"></div>'+
  '<button class="btn secondary player-retry" id="player-retry" style="display:none">⟳ إعادة المحاولة</button>'+
@@ -2918,9 +2919,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  playerControl('player-audio','audio','المسارات الصوتية')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
- (isLive?playerControl('player-channel-prev','rewind','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
+ (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
  playerControl('player-toggle','pause','إيقاف مؤقت',true)+
- (isLive?playerControl('player-channel-next','forward','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
+ (isLive?playerControl('player-channel-next','next','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
  (nextEpisode?playerControl('player-next-episode','next','الحلقة التالية'):'')+
  playerControl('player-quality','quality','جودة الفيديو')+
  (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
@@ -3957,7 +3958,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null;
+ function commentaryNotice(message){
+  var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
+  clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
+  commentaryNoticeTimer=setTimeout(function(){el.hidden=true;el.textContent=''},3500)
+ }
  function stopCommentary(){
   commentaryEpoch++;
   var old=commentary;commentary=null;
@@ -3970,27 +3976,30 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  function commentaryVisibility(){if(document.hidden)stopCommentary()}
  document.addEventListener('visibilitychange',commentaryVisibility);
  state.stopCommentary=stopCommentary;
- state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);stopCommentary()};
+ state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);clearTimeout(commentaryNoticeTimer);stopCommentary()};
  video.addEventListener('pause',stopCommentary);
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
  video.addEventListener('seeking',stopCommentary);
- video.addEventListener('waiting',function(){if(commentary)stopCommentary()});
+ video.addEventListener('waiting',function(){if(commentary&&video.readyState<3)stopCommentary()});
  function startCommentary(track){
   stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
-  function fail(){if(commentary!==record)return;stopCommentary();playerStatus('تعذر تشغيل الصوت البديل؛ تم الرجوع للصوت الأصلي.')}
+  function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.audible=true;video.muted=true
+   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true
   };
   audio.onerror=audio.onended=fail;
   audio.onwaiting=audio.onstalled=function(){
-   if(commentary!==record)return;record.audible=false;video.muted=record.originalMuted;clearTimeout(record.timer);record.timer=setTimeout(fail,5000)
+   if(commentary!==record||audio.readyState>=3)return;
+   record.audible=false;video.muted=record.originalMuted;
+   // Repeated waiting/stalled events cannot shorten startup or extend a retry forever.
+   if(!record.timer)record.timer=setTimeout(fail,8000)
   };
-  record.timer=setTimeout(fail,10000);
+  record.timer=setTimeout(fail,15000);
   audio.src='/api/commentary/'+enc(track.id);
   try{var request=audio.play();if(request&&request.catch)request.catch(fail)}catch(e){fail()}
  }
@@ -4030,7 +4039,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
      if(track&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
     });
-    if(list.length===1){playerStatus('لا تتوفر أصوات إضافية حاليًا.');return}
+    if(list.length===1){commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');return}
     showPlayerChoices('المعلقون',list,audioButton)
    })
   }});
