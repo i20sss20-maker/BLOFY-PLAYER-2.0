@@ -73,6 +73,12 @@ export function createLinodeFeedLedger(pool,env=process.env){
        fence.reservationId!==reservationId||fence.engineId!==engineId||
        !Number.isSafeInteger(fence.observedAt)||fence.observedAt<now-10000||fence.observedAt>now+2000||
        !Number.isSafeInteger(fence.expiresAt)||fence.expiresAt<=now+15000)return blocked('lease_ingress_fence_unconfirmed');
+    // Read the actual ingress gate under the same source transaction.
+    // External evidence alone cannot permit renewal after a gate changes.
+    const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(gate?.mode!=='engine'||gate.reservation_id!==reservationId||gate.engine_id!==engineId)return blocked('lease_ingress_gate_closed');
+    const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(holds.n!==0)return blocked('lease_legacy_holds_open');
     const sequence=Number(row.worker_lease_sequence)+1;
     if(!Number.isSafeInteger(sequence)||sequence<1)return blocked('lease_sequence_invalid');
     const lease=signLiveLease({version:1,sourceId,reservationId,channelId,engineId,sequence,
