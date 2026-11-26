@@ -807,4 +807,25 @@ change("  var previousKey=previous.hlsKey,settled=false,guard=null;","  var prev
 change("   settled=true;if(guard)clearTimeout(guard);\n   S.previewStopPending=false;","   if(guard)clearTimeout(guard);\n   if(st!==200&&st!==404&&++stopAttempts<=2&&S.route==='live'&&video.isConnected){setTimeout(sendPreviewStop,stopAttempts*700);return}\n   settled=true;S.previewStopPending=false;");
 change("  guard=setTimeout(function(){finished(0)},6500);\n  api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)});","  function sendPreviewStop(){\n   if(settled)return;\n   api('POST','/api/hls/'+previousKey+'/stop',{},function(st){finished(st)})\n  }\n  sendPreviewStop();");
 
+
+change(" var externalButton=document.getElementById('player-external');",` function returnFromExternal(next){
+  if(state.externalPending)return;
+  state.externalPending=true;
+  api('POST','/api/external/stop',{},function(st){
+   state.externalPending=false;
+   if(S.playerView!==state||S.route!=='player')return;
+   if(st!==200){playerStatus('تعذر إغلاق المشغل الخارجي. أعد المحاولة.',true);return}
+   state.externalMode=false;state.userPaused=false;playerStatus('');
+   if(next)next();else resumeSelectedLiveTransport(state,video,document.getElementById('player-status'))
+  })
+ }
+ state.returnFromExternal=returnFromExternal;
+ var externalButton=document.getElementById('player-external');`);
+change("  var opts=[];\n  if(typeof video.webkitShowPlaybackTargetPicker", "  if(state.externalMode){showPlayerChoices('التشغيل الخارجي',[{name:'العودة للتشغيل الداخلي',select:function(){returnFromExternal()}}],externalButton);return}\n  var opts=[];\n  if(typeof video.webkitShowPlaybackTargetPicker");
+change("   state.externalPending=true;state.userPaused=true;", "   state.externalPending=true;state.externalMode=true;state.userPaused=true;");
+change("     ],externalButton)\n    })", "      ,{name:'العودة للتشغيل الداخلي',select:function(){returnFromExternal()}}\n     ],externalButton)\n    })");
+change(" state.toggle=function(){\n  if(video.paused){"," state.toggle=function(){\n  if(state.externalMode){returnFromExternal();return}\n  if(video.paused){");
+change(" document.getElementById('player-retry').onclick=function(){\n  diagnose", " document.getElementById('player-retry').onclick=function(){\n  if(state.externalMode){returnFromExternal();return}\n  diagnose");
+change("  function selectFullscreenChannel(requestedId){\n   if(S.route!=='player'||S.playerView!==state)return;", "  function selectFullscreenChannel(requestedId){\n   if(S.route!=='player'||S.playerView!==state)return;\n   if(state.externalMode){returnFromExternal(function(){selectFullscreenChannel(requestedId)});return}");
+
 new Function(app);writeFileSync('app.js',app);
