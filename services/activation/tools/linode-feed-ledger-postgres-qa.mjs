@@ -21,6 +21,8 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_VIEWER_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId};
   const ledger=createLinodeFeedLedger(pool,env);
   const args={sourceId,channelId:'123',requestId};
+  assert.deepEqual(await ledger.readRoutingState({sourceId}),{sourceId,state:'empty'});
+  assert.equal(await ledger.readRoutingState({sourceId:randomUUID()}),null);
   const all=await Promise.all(Array.from({length:30},()=>ledger.reserve(args)));
   assert.equal(all.filter(x=>x.action==='start_once').length,1);
   assert.equal(all.filter(x=>x.action==='existing').length,29);
@@ -38,6 +40,7 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   const generation=randomUUID().replaceAll('-','');
   assert.equal((await restored.findReady(args)).ok,false);
   assert.equal((await restored.transition({...t,next:'ready',generation})).ok,true);
+  assert.deepEqual(await restored.readRoutingState({sourceId}),{sourceId,state:'ready',engineId:'linode',channelId:'123',reservationId,generation,releaseConfirmed:false});
   const join=await Promise.all(Array.from({length:30},()=>restored.findReady(args)));
   assert.ok(join.every(x=>x.ok&&x.reservationId===reservationId&&x.generation===generation&&x.requestId===requestId));
   assert.equal((await restored.findReady({...args,channelId:'124'})).ok,false);
@@ -66,10 +69,13 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal(more.filter(x=>x.ok).length,148);
   assert.equal(more.filter(x=>x.reason==='viewer_quota').length,7);
   assert.equal((await restored.transition({...t,next:'unknown'})).ok,true);
+  assert.equal((await restored.readRoutingState({sourceId})).state,'unknown');
+  assert.equal((await restored.readRoutingState({sourceId})).releaseConfirmed,false);
   assert.equal((await restored.findReady(args)).ok,false);
   assert.equal((await restored.transition({...t,next:'released'})).ok,false);
   assert.equal((await restored.reserve({...args,requestId:randomUUID()})).ok,false);
   assert.equal((await restored.transition({...t,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await restored.readRoutingState({sourceId})).releaseConfirmed,true);
   const newId=randomUUID();
   const next=await restored.reserve({...args,requestId:newId,engineId:'hostbrr'});
   assert.equal(next.action,'start_once');
