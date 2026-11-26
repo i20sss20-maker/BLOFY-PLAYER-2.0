@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.5
+PR #934 merged at f38d093fa0074b80ade44b83339ce151c741b0d5. Web production Docker QA passed (45874229659). Android audit retains pre-existing version baseline mismatch. Simplified settings and player menus; remove customer-facing engineering tests and local transfer UI. No account or source changes. Rollback: 03552a6e-cb8e-4114-9954-e769da2b3d27.
