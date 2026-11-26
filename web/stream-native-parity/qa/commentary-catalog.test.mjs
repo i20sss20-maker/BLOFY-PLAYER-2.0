@@ -41,3 +41,22 @@ test('manual commentary adjustment is limited to a real seekable audio range',()
  assert.match(app,/active\.audio\.currentTime=target/);
  assert.match(app,/commentary&&commentary\.audible/);
 });
+
+
+test('external live handoff uses a single-use ticket and stops internal playback first',()=>{
+ const server=readFileSync('server.ts','utf8'),app=readFileSync('app.js','utf8');
+ assert.match(server,/externalTickets\.delete\(key\);\s*const controller=new AbortController/);
+ assert.match(server,/Math\.min\(now\+120000,accountExpiry\)/);
+ assert.match(server,/if\(externalActive\.has\(ticket\.account\)/);
+ assert.match(server,/randomBytes\(32\)\.toString\('base64url'\)/);
+ assert.match(server,/if\(t\)revokeExternal\('Bearer '\+t\)/);
+ assert.match(app,/stopPlayback\(false\);\s*function issue\(\)/);
+ assert.match(app,/api\('POST','\/api\/external\/live'/);
+ assert.match(app,/if\(st===200\|\|st===404\)issue\(\)/);
+});
+test('recognized incompatible commentary is converted without forwarding unknown content',()=>{
+ const server=readFileSync('server.ts','utf8');
+ assert.match(server,/\['video\/mp2t','audio\/ogg','audio\/flac'\]\.includes\(mime\)/);
+ assert.match(server,/fetch\(host\+'\/audio-compat\/'\+id/);
+ assert.match(server,/converted\.headers\.get\('content-type'\)!=='audio\/mpeg'/);
+});
