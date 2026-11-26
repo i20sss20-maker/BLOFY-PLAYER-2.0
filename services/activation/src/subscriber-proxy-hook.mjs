@@ -1,4 +1,5 @@
 import { databaseOptions } from './database-options.mjs';
+import {blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
 import http from 'node:http';
 import { subscriberSessionValid } from './subscriber-session-validity.mjs';
 import crypto from 'node:crypto';
@@ -460,6 +461,7 @@ async function proxyRaw(req, res, requestUrl) {
 
 async function handleSubscriberRequest(req, res) {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
+  if(blocksDuringLinodeMaintenance(requestUrl.pathname))return sendJson(res,503,{error:'subscriber_media_maintenance'},{'retry-after':'60','cache-control':'no-store'});
   if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
     const restoredHost = await restoreSubscriberHost();
     const ready = Boolean(baseReady() && (restoredHost || bootstrapReady()));
