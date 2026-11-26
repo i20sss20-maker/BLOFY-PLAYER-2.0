@@ -836,4 +836,44 @@ change("  function selectFullscreenChannel(requestedId){\n   if(S.route!=='playe
 change("   state.externalPending=true;state.externalMode=true;state.userPaused=true;", "   state.externalPending=true;state.externalMode=true;state.userPaused=true;state.externalRetiringStop=stop||null;");
 change("    if(st===200||st===404)issue();", "    if(st===200||st===404){state.externalRetiringStop=null;issue()}");
 change("timer:setTimeout,clear:clearTimeout,retry:setTimeout,", "timer:function(fn,ms){return setTimeout(fn,ms)},clear:function(id){clearTimeout(id)},retry:function(fn,ms){return setTimeout(fn,ms)},");
+
+change("function beginPreview(item){",`// A failed preview STOP is not permission to open another source session.
+function markPreviewRetiring(key){
+ if(key)S.retiredPreview={key:key,epoch:S.accountEpoch,inflight:false,next:null}
+}
+function confirmPreviewRetired(key,epoch){
+ var p=S.retiredPreview;
+ if(p&&p.key===key&&p.epoch===epoch)S.retiredPreview=null
+}
+function retryRetiredPreview(next){
+ var p=S.retiredPreview;
+ if(!p)return false;
+ if(p.epoch!==S.accountEpoch){S.retiredPreview=null;return false}
+ p.next=next;
+ if(p.inflight)return true;
+ p.inflight=true;
+ api('POST','/api/hls/'+p.key+'/stop',{},function(st){
+  if(S.retiredPreview!==p||S.accountEpoch!==p.epoch)return;
+  p.inflight=false;
+  if(st===200||st===404){
+   var resume=p.next;S.retiredPreview=null;
+   if(resume)resume()
+  }else{
+   var box=document.getElementById('live-status');
+   if(box)box.textContent='تعذر إغلاق الاتصال السابق. أعد المحاولة.'
+  }
+ });
+ return true
+}
+function beginPreview(item){`);
+change(" var previous=S.play;\n if(previous&&previous.preview&&previous.hlsKey){", " var chosenEpoch=S.accountEpoch;\n if(retryRetiredPreview(function(){if(S.accountEpoch===chosenEpoch&&S.route==='live'&&!document.hidden&&String(S.selected)===String(id))beginPreview(item)}))return;\n var previous=S.play;\n if(previous&&previous.preview&&previous.hlsKey){");
+change("var previousKey=previous.hlsKey,settled=false,guard=null,stopAttempts=0;\n  stopPlayback(false);", "var previousKey=previous.hlsKey,settled=false,guard=null,stopAttempts=0,retireEpoch=S.accountEpoch;\n  markPreviewRetiring(previousKey);stopPlayback(false);");
+change("   settled=true;S.previewStopPending=false;", "   settled=true;S.previewStopPending=false;\n   if(st===200||st===404)confirmPreviewRetired(previousKey,retireEpoch);");
+change(" if(isLive&&oldPreview&&oldPreview.preview&&oldPreview.hlsKey){", " var openEpoch=S.accountEpoch,openRoute=S.route;\n if(isLive&&retryRetiredPreview(function(){if(S.accountEpoch===openEpoch&&S.route===openRoute&&S.userVerified&&String(S.selected)===String(id))openPlayer(kind,id,extension,name,from,replacePlayerHistory)}))return;\n if(isLive&&oldPreview&&oldPreview.preview&&oldPreview.hlsKey){");
+change("  var previewStopKey=oldPreview.hlsKey;", "  var previewStopKey=oldPreview.hlsKey,retireEpoch=S.accountEpoch;\n  markPreviewRetiring(previewStopKey);");
+change("   S.previewToFullPending=false;\n   if(S.route!==expectedRoute", "   S.previewToFullPending=false;\n   if(status===200||status===404)confirmPreviewRetired(previewStopKey,retireEpoch);\n   if(S.accountEpoch!==retireEpoch||S.route!==expectedRoute");
+change("  promotionTimer=setTimeout(function(){promotionComplete(0)},6500);\n", "");
+change("  if(preview)S.previewRecoveryStop=token;", "  var retireEpoch=S.accountEpoch;\n  if(preview){S.previewRecoveryStop=token;markPreviewRetiring(oldHlsKey)}");
+change("   if(preview&&S.previewRecoveryStop===token){", "   if(preview&&(status===200||status===404))confirmPreviewRetired(oldHlsKey,retireEpoch);\n   if(preview&&S.previewRecoveryStop===token){");
+
 new Function(app);writeFileSync('app.js',app);
