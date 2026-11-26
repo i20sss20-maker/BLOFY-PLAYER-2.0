@@ -704,4 +704,26 @@ change("if(video.paused&&S.play.ready){","if(video.paused&&(S.play.ready||S.play
 change("2026.11.26.1 • '+(installedWebApp()", "2026.11.26.2 • '+(installedWebApp()");
 change("target.searchParams.set('shell','2026.11.25.8');","target.searchParams.set('shell','2026.11.26.2');");
 
+
+// Match native STREAM's phone browser: no preview panel or decoder before
+// explicit channel choice. Wide desktop/TV keeps the existing preview.
+change("function selectChannel(id,activate,explicit){",`function phoneLiveLayout(){
+ return document.documentElement.getAttribute('data-blofy-device')==='touch'&&
+  !!(window.matchMedia&&window.matchMedia('(max-width: 730px), (max-height: 540px) and (orientation: landscape)').matches)
+}
+function selectChannel(id,activate,explicit){`);
+change(" if(installedWebApp()&&!explicit){"," if(phoneLiveLayout())return;\n if(installedWebApp()&&!explicit){");
+change("if(ch){selectChannel(ch,true,true);return}",`if(ch){
+  if(phoneLiveLayout()){
+   var chosen=findItem('live',ch);
+   if(chosen){
+    if(S.play&&S.play.preview){selectChannel(ch,false,true)}
+    S.selected=ch;openPlayer('live',ch,'ts',title(chosen),0)
+   }
+  }else selectChannel(ch,true,true);
+  return
+ }`);
+change("function beginPreview(item){\n if(S.autoPreviewTimer)", "function beginPreview(item){\n if(phoneLiveLayout())return;\n if(S.autoPreviewTimer)");
+change("'<div class=\"catalog\">'+categoryRail(kind)+","'<div class=\"catalog live-catalog\">'+categoryRail(kind)+");
+
 new Function(app);writeFileSync('app.js',app);
