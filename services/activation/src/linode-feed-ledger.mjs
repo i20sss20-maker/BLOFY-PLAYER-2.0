@@ -43,6 +43,19 @@ export function createLinodeFeedLedger(pool,env=process.env){
   finally{c.release();}
  }
  return {
+  // Internal locked snapshot, not an admission decision. reserve/attach/transition
+  // must recheck state under the same source lock after the planner returns.
+  async readRoutingState({sourceId}={}){
+   if(!enabled(sourceId))return null;
+   return tx(sourceId,async(c,row)=>{
+    if(!row)return {sourceId,state:'empty'};
+    if(!engineAllowed(row.engine_id))return null;
+    return {sourceId,state:row.state,engineId:row.engine_id,
+     channelId:row.channel_id,reservationId:row.reservation_id,generation:row.generation,
+     // Only the trusted transition writes released; timestamps alone never do.
+     releaseConfirmed:row.state==='released'};
+   });
+  },
   // Trusted internal lookup only. This cannot authorize playback or open a
   // source socket. attachViewer must recheck this identity under the same
   // source lock before any signed grant is returned.
