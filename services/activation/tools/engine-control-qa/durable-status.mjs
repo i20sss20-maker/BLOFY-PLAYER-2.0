@@ -3,6 +3,7 @@ import {createPrivateKey,createPublicKey,generateKeyPairSync} from 'node:crypto'
 import {mkdirSync,chmodSync,chownSync,readFileSync,writeFileSync,existsSync,statSync,renameSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {createDurableStatusTransport} from '../../src/blofy-engine-durable-status.mjs';
+import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
 if(!existsSync('/data')||!statSync('/data').isDirectory())throw Error('persistent_volume_required');
@@ -25,15 +26,17 @@ const workerKeys=Object.fromEntries(Object.entries(pins).map(([id,k])=>[id,creat
 const db=new DatabaseSync(root+'/status.sqlite');
 db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=3000;');
 const transport=createDurableStatusTransport(db,{controllerKey,workerKeys});
+const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
 const logged=new Map();
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
  try{
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
-  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete'].includes(req.url))return reply(res,404,{ok:false});
+  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll'].includes(req.url))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>4096){req.destroy();return;}chunks.push(c);}
   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(req.url==='/control/pilot/poll'){const r=pilot(e);return reply(res,r.code,r.body);}
   const poll=req.url.endsWith('/poll');
   const r=poll?transport.poll(e):transport.complete(e);
   if(!poll&&r.code===200){const {engineId,deliveryActive,heartbeatActive}=r.body,now=Date.now(),previous=logged.get(engineId);
