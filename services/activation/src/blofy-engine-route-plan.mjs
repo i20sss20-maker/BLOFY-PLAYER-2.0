@@ -3,7 +3,7 @@
 // establishes source entitlement, reservation ownership or provider release.
 const engines=['hostbrr','linode'];
 const hold=reason=>({action:'hold',reason});
-export function planEngineRoute({feed,workers,capacity,entitlement,request,now=Date.now(),enabled=false}={}){
+export function planEngineRoute({feed,workers,feedProof,capacity,entitlement,request,now=Date.now(),enabled=false}={}){
  if(!enabled)return hold('disabled');
  if(!request?.sourceId||!request?.channelId||request.authorized!==true||
     !Number.isFinite(request.expiresAt)||request.expiresAt<=now)return hold('request_unauthorized');
@@ -15,7 +15,12 @@ export function planEngineRoute({feed,workers,capacity,entitlement,request,now=D
  if(feed.state==='ready'){
   if(!engines.includes(feed.engineId)||!feed.reservationId||!feed.generation)return hold('invalid_feed_identity');
   if(feed.channelId!==request.channelId)return hold('source_busy');
-  if(healthy(feed.engineId))return {action:'reuse',engineId:feed.engineId,reservationId:feed.reservationId,generation:feed.generation};
+  const verified=feedProof?.authenticated===true&&feedProof.status==='private_hls_ready'&&
+    ['sourceId','engineId','channelId','reservationId','generation'].every(k=>feedProof[k]===feed[k])&&
+    feedProof.localSourceConnections===1&&Number.isSafeInteger(feedProof.lastSegment)&&feedProof.lastSegment>=0&&
+    Number.isFinite(feedProof.observedAt)&&feedProof.observedAt>=now-10000&&feedProof.observedAt<=now+2000;
+  if(healthy(feed.engineId)&&verified)return {action:'reuse',engineId:feed.engineId,reservationId:feed.reservationId,generation:feed.generation};
+  if(healthy(feed.engineId)&&!verified)return hold('feed_progress_unconfirmed');
   // Health loss requests reconciliation, never a new source connection.
   return {action:'request_fenced_release',engineId:feed.engineId,reservationId:feed.reservationId};
  }
