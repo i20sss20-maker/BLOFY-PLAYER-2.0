@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.7
+PR #936 merged at 0091b399763be2772d12aa8fb358f5efe1330de6. Production Docker QA passed (45875338500). Android audit retains existing version baseline mismatch; no Android changes. Bound native HLS recovery and show actionable errors. No changes to source, quota or buffer. Real device verification required. Rollback deployment c39e9509-9a0b-4b2d-a0e1-abb3b31e50af.
