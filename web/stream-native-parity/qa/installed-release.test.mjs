@@ -224,3 +224,15 @@ test('external player waits for retained internal transport retirement',()=>{
  assert.match(app,/if\(st===200\|\|st===404\)\{state\.externalRetiringStop=null;state\.directStopKey=null;issue\(\)\}/);
  assert.match(app,/state\.externalRetiringStop=null;state\.directStopKey=null;stopExternal\(\)/);
 });
+
+test('Apple touch devices prefer native HLS even after prior MSE fallback',()=>{
+ const i=app.indexOf('function appleMobileNativeHls('),j=app.indexOf('function loadHls(',i);
+ const policy=new Function('appleTouchBrowser','navigator','S','window','installedWebApp',app.slice(i,j)+';return shouldUseNativeHls');
+ const isTouch=(ua,t)=>/iPhone|iPad|iPod/i.test(ua)||/Macintosh/i.test(ua)&&t>1;
+ const video={canPlayType:()=> 'maybe'};
+ for(const ua of ['iPhone Safari','iPad Safari','Macintosh AppleWebKit Safari','iPhone CriOS']){
+  const fn=policy(isTouch,{userAgent:ua,maxTouchPoints:5},{preferMseHls:true},{MediaSource:{isTypeSupported:()=>true}},()=>false);
+  assert.equal(fn(video),true);
+ }
+ assert.match(app,/if\(!appleMobileNativeHls\(navigator.userAgent,navigator.maxTouchPoints,video\)&&!installedNativeHlsPreferred/);
+});
