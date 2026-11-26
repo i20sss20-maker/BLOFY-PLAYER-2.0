@@ -1,0 +1,3 @@
+MEDIA RELEASE — 2026-11-26
+PR #929 merged at 983ad560ef2118bffa6e73a60308c46e8c1574ea. Dedicated admission checks and actual production Docker build passed (workflow 45859444635). Android audit remains red due to pre-existing version mismatch 2000119 vs 2000088; no Android files changed. Preserve existing retry behavior, drain and retired SID protection. No source quota or account changes. Web playback may briefly interrupt during replacement. Long-play and cross-account HLS capacity not verified.
+Rollback deployment c650ef04-6aa9-4d8c-b10e-25af0dae3d82 revision bb94f6a4b8a8287454dac176c97dc4aa2e81ec84.
