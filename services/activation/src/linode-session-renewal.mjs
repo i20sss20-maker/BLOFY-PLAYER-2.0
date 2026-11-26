@@ -14,7 +14,7 @@ export function renewLinodeSession({session, ...input}={},env=process.env,now=Da
   const accountId=input.context?.account?.id;
   const sourceId=input.context?.row?.server_id;
   const channelId=input.context?.row?.source_id;
-  if(!accountId||!sourceId||!channelId||
+  if((session?.engineId??'linode')!==(input.context?.engineId??'linode')||!accountId||!sourceId||!channelId||
      session.accountId!==accountId||session.sourceId!==sourceId||
      session.channelId!==channelId||!session.requestId||
      session.requestId!==input.requestId||
