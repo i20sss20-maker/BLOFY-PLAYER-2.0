@@ -3,6 +3,7 @@ import {createPrivateKey,createPublicKey,generateKeyPairSync} from 'node:crypto'
 import {mkdirSync,chmodSync,chownSync,readFileSync,writeFileSync,existsSync,statSync,renameSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {createDurableStatusTransport} from '../../src/blofy-engine-durable-status.mjs';
+import {createLiveLeasePoll} from '../../src/blofy-live-lease-poll.mjs';
 import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
@@ -27,19 +28,24 @@ const db=new DatabaseSync(root+'/status.sqlite');
 db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=3000;');
 const transport=createDurableStatusTransport(db,{controllerKey,workerKeys});
 const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
+// Inert transport until the authoritative source fence and ledger are connected.
+const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
 const logged=new Map();
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
  try{
-  if(req.method==='GET'&&req.url==='/install/bounded-pilot-worker.py'){
-   const body=readFileSync(new URL('../blofy-bounded-pilot-worker.py',import.meta.url));
+  const installers=new Set(['bounded-pilot-worker.py','blofy_live_lease_guard.py','live_runtime_leased_candidate.py','blofy-live-lease-agent.py']);
+  const installer=req.url?.startsWith('/install/')?req.url.slice(9):'';
+  if(req.method==='GET'&&installers.has(installer)){
+   const body=readFileSync(new URL('../'+(installer==='bounded-pilot-worker.py'?'blofy-bounded-pilot-worker.py':installer),import.meta.url));
    res.writeHead(200,{'content-type':'text/plain; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-length':body.length});return res.end(body);
   }
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
-  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll'].includes(req.url))return reply(res,404,{ok:false});
+  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll'].includes(req.url))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>4096){req.destroy();return;}chunks.push(c);}
   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(req.url==='/control/lease/poll'){const r=await liveLeasePoll(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/pilot/poll'){const r=pilot(e);return reply(res,r.code,r.body);}
   const poll=req.url.endsWith('/poll');
   const r=poll?transport.poll(e):transport.complete(e);
