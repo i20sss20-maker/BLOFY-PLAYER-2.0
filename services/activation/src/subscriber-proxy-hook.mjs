@@ -461,7 +461,10 @@ async function proxyRaw(req, res, requestUrl) {
 
 async function handleSubscriberRequest(req, res) {
   const requestUrl = new URL(req.url || '/', 'http://localhost');
-  if(blocksDuringLinodeMaintenance(requestUrl.pathname))return sendJson(res,503,{error:'subscriber_media_maintenance'},{'retry-after':'60','cache-control':'no-store'});
+  if(blocksDuringLinodeMaintenance(requestUrl.pathname)){
+    sendJson(res,503,{error:'subscriber_media_maintenance'},{'retry-after':'60','cache-control':'no-store'});
+    return true;
+  }
   if (req.method === 'GET' && requestUrl.pathname === `${SUBSCRIBER_PREFIX}/health`) {
     const restoredHost = await restoreSubscriberHost();
     const ready = Boolean(baseReady() && (restoredHost || bootstrapReady()));
