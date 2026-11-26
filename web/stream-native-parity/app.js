@@ -210,7 +210,7 @@ function login(message){
  app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
  '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
  '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
- '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'تفعيل بالكود فقط • نسخة ويب تحت التطوير')+'</div>'+
+ '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
  '</div></div>';
  var button=document.getElementById('redeem');
  button.onclick=redeem;
@@ -1341,7 +1341,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.5</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -1364,7 +1364,10 @@ function settingsScreen(){
  var installButton=document.getElementById('install-blofy-web');
  if(installButton){
   updateInstallGuide();
-  updateDeviceExperienceStatus();
+  if(installedWebApp()){
+   installButton.hidden=true;
+   var installFeedback=document.getElementById('install-blofy-help');if(installFeedback)installFeedback.textContent=''
+  }
   installButton.onclick=function(){
    var guide=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
    if(guide.mode!=='prompt'||!pendingInstallPrompt){updateInstallGuide();return}
