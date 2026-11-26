@@ -995,4 +995,11 @@ change("if(state.mode==='mpegts')playDirectMpegts(video,String(state.id),statusE
 change("xhr.timeout=40000;", "xhr.timeout=mediaStop?6500:40000;");
 
 
+
+change("function liveRetryHint(detail){", "function liveSourceQuotaRejected(detail){\n try{\n  var n=detail&&detail.networkDetails;\n  return (n&&typeof n.getResponseHeader==='function'?n.getResponseHeader('X-Blofy-Live-Status'):n&&n.headers&&n.headers.get?n.headers.get('X-Blofy-Live-Status'):null)==='source_channel_limit'\n }catch(e){return false}\n}\nfunction liveRetryHint(detail){");
+change(" if(shouldUseNativeHls(video)){\n  record.nativeHls=true;", " function showSourceQuota(){\n  if(!alive())return;\n  record.reconnecting=true;\n  for(var i=0,timers=['startupTimer','stallTimer','stableTimer','retryTimer','capacityTimer','originTimer','progressWatchdog'];i<timers.length;i++){\n   if(record[timers[i]]){clearTimeout(record[timers[i]]);clearInterval(record[timers[i]]);record[timers[i]]=null}\n  }\n  try{if(record.engine)record.engine.stopLoad()}catch(e){}\n  var message='مصدر البث ممتلئ حاليًا. اختر قناة متاحة أو أعد المحاولة لاحقًا.';\n  if(preview)status(message);else playerStatus(message,true)\n }\n if(shouldUseNativeHls(video)){\n  record.nativeHls=true;");
+change("if(installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&typeof fetch==='function'){", "if((appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&typeof fetch==='function'){");
+change("     if(response.status===401||response.status===403||response.status===400){", "     if(response.status===503&&failure&&failure.error==='live_source_channel_limit'){showSourceQuota();return}\n     if(response.status===401||response.status===403||response.status===400){");
+change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);", "    if(code===503&&liveSourceQuotaRejected(detail)){showSourceQuota();return}\n    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);");
+
 new Function(app);writeFileSync('app.js',app);
