@@ -1,0 +1,11 @@
+[Unit]
+Description=BLOFY HostBrr monitoring interval
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=3s
+Unit=hostbrr-heartbeat.service
+
+[Install]
+WantedBy=timers.target
