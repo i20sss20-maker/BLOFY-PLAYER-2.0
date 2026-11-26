@@ -5,6 +5,10 @@
  */
 (function(){
 'use strict';
+// SRAF/older TV engines predate Node.isConnected. Keep media guards working.
+if(typeof Node!=='undefined'&& !('isConnected' in Node.prototype)){
+ try{Object.defineProperty(Node.prototype,'isConnected',{configurable:true,get:function(){return !!(this.ownerDocument&&this.ownerDocument.documentElement&&this.ownerDocument.documentElement.contains(this))}})}catch(e){}
+}
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
@@ -15,7 +19,7 @@ var lastRemoteKeyAt=0;
 /* Adapt controls based on device/browser, not width alone. */
 function deviceExperience(ua,touchPoints,coarse){
  var agent=String(ua||''),touch=Number(touchPoints)||0;
- if(/VIDAA|Hisense|Toshiba|SmartTV|SMART-TV|Tizen|webOS|Web0S|HbbTV|Android TV|Google TV|AFT[A-Z0-9]{2,}/i.test(agent))return 'tv';
+ if(/VIDAA|Hisense|Toshiba|SRAF\/|SmartTV|SMART-TV|Tizen|webOS|Web0S|HbbTV|Android TV|Google TV|AFT[A-Z0-9]{2,}/i.test(agent))return 'tv';
  if(/iPhone|iPad|iPod|Android|Mobile/i.test(agent)||/Macintosh/i.test(agent)&&touch>1||coarse||touch>0)return 'touch';
  return 'desktop'
 }
@@ -85,7 +89,7 @@ function webAppInstallGuide(ua,installed,canPrompt,touchPoints){
  if(installed)return {mode:'installed',action:'تمت الإضافة',message:'BLOFY يعمل الآن كتطبيق مستقل على هذا الجهاز. المحتوى يحتاج اتصالاً بالإنترنت واشتراكاً فعالاً.'};
  if(/iPhone|iPad|iPod/i.test(String(ua||''))||/Macintosh/i.test(String(ua||''))&&Number(touchPoints)>1)
   return {mode:'ios',action:'طريقة الإضافة للآيفون',message:'افتح tv.blofyplayer.com من Safari ثم مشاركة ← إضافة إلى الشاشة الرئيسية، وفَعِّل «فتح كتطبيق» إن ظهر. لا يُمكن للموقع تثبيت نفسه تلقائياً على iPhone.'};
- if(/VIDAA|Hisense|Toshiba/i.test(String(ua||'')))
+ if(/VIDAA|Hisense|Toshiba|SRAF\//i.test(String(ua||'')))
   return {mode:'tv',action:'طريقة الإضافة للتلفزيون',message:'افتح tv.blofyplayer.com في متصفح التلفزيون. استخدم المفضلة أو «إضافة للرئيسية» إذا ظهرت في خيارات المتصفح؛ تثبيت تطبيق VIDAA رسمي يحتاج نشره عبر المنصة. اختبر التنقل بالريموت وتشغيل قناة فعلية.'};
  if(canPrompt)return {mode:'prompt',action:'تثبيت BLOFY على الجهاز',message:'تثبيت التطبيق من المتصفح لا يحمّل القنوات ولا يضيف اشتراكاً جديداً.'};
  if(/Android/i.test(String(ua||'')))
@@ -1341,7 +1345,7 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.26.10</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.11</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
@@ -1423,7 +1427,7 @@ function shouldUseNativeHls(video){
  // with MEDIA_ERR_SRC_NOT_SUPPORTED (4). Use Hls.js/MSE on these browsers.
  var ua=(navigator.userAgent||'');
  var apple=/Safari/i.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);
- var tv=/VIDAA|Hisense/i.test(ua);
+ var tv=/VIDAA|Hisense|Toshiba|SRAF\//i.test(ua);
  var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
  return apple||tv||!mse
 }
@@ -1458,7 +1462,7 @@ function warmDesktopHlsAfterAuth(){
     S.hlsState==='ready'||S.hlsState==='loading')return;
  var ua=String(navigator.userAgent||'');
  if(!/Chrome|Chromium|Edg|Firefox|OPR/i.test(ua)||
-    /VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android|iPhone|iPad/i.test(ua))return;
+    /VIDAA|Hisense|SRAF\/|SmartTV|Tizen|WebOS|Web0S|Android|iPhone|iPad/i.test(ua))return;
  var account=S.accountEpoch;
  var prepare=function(){
   if(!S.userVerified||account!==S.accountEpoch||document.hidden||
@@ -1748,7 +1752,7 @@ function hlsRemuxWorkerSupported(){
  // Keep legacy VIDAA/Android TV on the known main-thread compatibility path.
  var ua=String(navigator.userAgent||'');
  return !!window.Worker&&!!window.Blob&&!!window.MediaSource&&
-  !/VIDAA|Hisense|SmartTV|Tizen|WebOS|Web0S|Android 9|iPad|iPhone/i.test(ua)
+  !/VIDAA|Hisense|SRAF\/|SmartTV|Tizen|WebOS|Web0S|Android 9|iPad|iPhone/i.test(ua)
 }
 function liveOriginRetryMs(attempt){
  // A temporary origin failure should not trigger a tight re-open loop.
