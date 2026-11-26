@@ -829,3 +829,26 @@ html[data-blofy-device="touch"] .mobile-seek-feedback{top:38%}
   width:46px;height:46px;flex-shrink:0
  }
 }
+
+@media (max-width:730px), (max-height:540px) and (orientation:landscape){
+ html[data-blofy-device="touch"] .phone-content-tabs{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 12px
+ }
+ html[data-blofy-device="touch"] .phone-content-tabs .btn{
+  font-size:13px;min-height:44px;padding:8px 3px;white-space:nowrap
+ }
+ html[data-blofy-device="touch"] .phone-bottom-nav{
+  order:1;display:flex;flex-direction:row;width:100%;height:auto;min-height:60px;
+  flex:none;gap:3px;padding:3px 6px calc(3px + env(safe-area-inset-bottom));overflow:hidden
+ }
+ html[data-blofy-device="touch"] .phone-bottom-nav .rail-link{
+  flex:1 1 0;min-width:0;max-width:none;height:54px;min-height:54px;
+  font-size:11px;display:flex;flex-direction:column;justify-content:center;gap:2px;margin:0;padding:3px
+ }
+ html[data-blofy-device="touch"] .phone-header-action{min-width:40px;padding:6px;font-size:19px}
+ html[data-blofy-device="touch"] .toolbar h1{font-size:18px}
+ html[data-blofy-device="touch"] .catalog-app .catalog-home{display:none}
+ html[data-blofy-device="touch"] .catalog-app .catalog.posters .poster-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));gap:10px
+ }
+}
