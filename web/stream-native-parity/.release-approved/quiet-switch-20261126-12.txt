@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.12
+PR #941 merged after web Docker QA 45883230765 passed. Latest channel handoff, bounded stop retries, quiet progress, external player tickets and commentary conversion. Media PR #940 required. Real device playback and external client interoperability pending.
