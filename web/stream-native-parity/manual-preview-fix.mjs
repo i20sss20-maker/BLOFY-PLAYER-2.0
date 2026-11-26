@@ -747,4 +747,6 @@ change("target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;","target.
 change("var hadScreen=!!target.querySelector('.story-row');","var hadScreen=!!target.querySelector('.home-hero');");
 change("var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-panel');","var panel=phoneLiveLayout()?document.getElementById('workspace'):document.querySelector(kind==='live'?'#channel-list':'.poster-panel');");
 
+change("2026.11.26.2 • '+(installedWebApp()", "2026.11.26.3 • '+(installedWebApp()");
+change("target.searchParams.set('shell','2026.11.26.2');","target.searchParams.set('shell','2026.11.26.3');");
 new Function(app);writeFileSync('app.js',app);
