@@ -37,11 +37,11 @@ try{
   function detach(){if(engine){engine.destroy();engine=null}video.pause();video.removeAttribute('src');video.load()}
   function play(name){starts.push(name);engine=new Hls({enableWorker:false});engine.loadSource('/'+name+'/index.m3u8');engine.attachMedia(video);engine.on(Hls.Events.MANIFEST_PARSED,()=>video.play().catch(()=>{}))}
   async function picture(name){
-   const until=performance.now()+15000;
+   const began=performance.now(),until=began+15000;
    while(performance.now()<until){
     if(video.readyState>=2&&video.videoWidth>0&&video.currentTime>0.4){
      const canvas=document.createElement('canvas');canvas.width=1;canvas.height=1;const c=canvas.getContext('2d');c.drawImage(video,0,0,1,1);const [r,g,b]=c.getImageData(0,0,1,1).data;
-     if(name==='red'?r>b+70:b>r+70)return {width:video.videoWidth,time:video.currentTime};
+     if(name==='red'?r>b+70:b>r+70)return {width:video.videoWidth,time:video.currentTime,observedMs:Math.round(performance.now()-began)};
     }
     await pause(100);
    }
@@ -58,9 +58,19 @@ try{
   await pause(850);
   if(stops.length!==2||stops[1]!=='red-sid'||starts.length!==1)throw Error('incorrect stop retry');
   acks[1](200);
-  const second=await picture('blue');detach();
-  return {first,second,starts,stops};
+  const second=await picture('blue');
+  // Repeat handoffs after the first successful recovery; a single passing
+  // switch cannot catch a player that gets stuck on subsequent channels.
+  const repeated=[];
+  for(const next of ['red','blue','red','blue']){
+   wanted=next;const previous=starts[starts.length-1];
+   queueLiveHlsHandoff(state,{id:next},previous+'-sid',ops);
+   acks[acks.length-1](200);
+   repeated.push(await picture(next));
+  }
+  detach();
+  return {first,second,repeated,starts,stops};
  });
- assert.deepEqual(result.starts,['red','blue']);assert.deepEqual(result.stops,['red-sid','red-sid']);
+ assert.deepEqual(result.starts,['red','blue','red','blue','red','blue']);assert.deepEqual(result.stops,['red-sid','red-sid','blue-sid','red-sid','blue-sid','red-sid']);
  console.log('BLOFY_SYNTHETIC_BROWSER_PLAYBACK',JSON.stringify(result));
 }finally{await browser?.close();await new Promise(r=>server.close(r))}
