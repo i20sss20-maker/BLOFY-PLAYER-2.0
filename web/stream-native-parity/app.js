@@ -3875,6 +3875,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);stopCommentary()};
  video.addEventListener('pause',stopCommentary);
  video.addEventListener('emptied',stopCommentary);
+ // Independent live audio cannot safely keep running through a frozen picture.
+ video.addEventListener('seeking',stopCommentary);
+ video.addEventListener('waiting',function(){if(commentary)stopCommentary()});
  function startCommentary(track){
   stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
