@@ -1,0 +1,2 @@
+WEB RELEASE — 2026.11.26.4
+PR #933 merged at e91e8bd70c8d365720d010bf86d828b23586eb46. Production Docker and web regression suite passed (45873083012). Android audit retains existing Google Play baseline mismatch; no Android files changed. Quiet loading, deferred EPG, reuse admission metadata. No buffer, source or account changes. Real device startup time remains unverified. Rollback: 474d3790-8337-4499-b31e-52c7a4b315c8.
