@@ -99,11 +99,11 @@ test('UI and CI integration: real-player stats only, account-partitioned report,
  assert.match(app,/window\.performance\.now/);
  assert.match(app,/acceptance\.tick\(state\.longTest,acceptanceSnapshot\(\)\)/);
  assert.match(app,/state\.longTestTimer=setInterval\(sampleAcceptance,2000\)/);
- assert.match(app,/id="player-verify-20m"/);
- assert.match(app,/id="last-long-playback-test"/);
+ assert.doesNotMatch(app,/id="player-verify-20m"/);
+ assert.doesNotMatch(app,/id="last-long-playback-test"/);
  assert.doesNotMatch(app,/api\('POST','\/api\/acceptance/);
  assert.match(server,/p==='\/playback-acceptance\.js'/);
- assert.match(html,/<script src="\/playback-acceptance\.js\?v=2026\.11\.26\.4"><\/script>/);
+ assert.match(html,/<script src="\/playback-acceptance\.js\?v=2026\.11\.26\.5"><\/script>/);
  assert.match(docker,/COPY .*playback-acceptance\.js/);
  assert.match(worker,/\/playback-acceptance\.js/);
 });

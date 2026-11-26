@@ -74,3 +74,17 @@ test('live loading status remains stable while actionable errors remain visible'
  assert.match(app,/record\.admissionVideoInfo=\{mode:response\.headers/);
  assert.match(app,/phoneLiveLayout\(\)&&\(!guide\|\|!guide\.classList\.contains\('phone-guide-open'\)\)\)return/);
 });
+
+test('customer settings exposes essential actions only, not engineering reports',()=>{
+ const a=app.indexOf('function settingsScreen()'),b=app.indexOf('function fmt(',a);
+ const source=app.slice(a,b);
+ for(const id of ['refresh-content','refresh-web-shell','clear-watch-history','logout','install-blofy-web'])
+  assert.match(source,new RegExp('id="'+id+'"'));
+ for(const id of ['check-player-health','check-live-share-health','last-playback-diagnostic','last-long-playback-test','test-tv-capabilities','profile-export','profile-import'])
+  assert.doesNotMatch(source,new RegExp('id="'+id+'"'));
+ assert.match(source,/customer-settings/);
+ assert.doesNotMatch(app,/id="player-(verify-20m|health-toggle|diagnostic-toggle|direct-ts)"/);
+ assert.match(app,/id="player-guide-toggle"/);
+ assert.match(source,/cleanupPlayer\(\);/);
+ assert.match(app,/button.hidden=state.mode==='installed'/);
+});

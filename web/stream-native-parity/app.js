@@ -101,8 +101,8 @@ function updateInstallGuide(){
  var button=document.getElementById('install-blofy-web'),feedback=document.getElementById('install-blofy-help');
  if(!button||!feedback)return;
  var state=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
- button.textContent=state.action;button.disabled=state.mode==='installed';
- feedback.textContent=state.message
+ button.textContent=state.action;button.disabled=state.mode==='installed';button.hidden=state.mode==='installed';
+ feedback.textContent=state.mode==='installed'?'':state.message
 }
 
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
@@ -210,7 +210,7 @@ function login(message){
  app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
  '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
  '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
- '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'تفعيل بالكود فقط • نسخة ويب تحت التطوير')+'</div>'+
+ '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
  '</div></div>';
  var button=document.getElementById('redeem');
  button.onclick=redeem;
@@ -1336,110 +1336,13 @@ function checkCatalogVersion(){
  })
 }
 function settingsScreen(){
- var diag=S.lastPlaybackDiag,mode=diag&&({fullvod:'VOD كامل',vodhls:'HLS مؤقت',direct:'MP4 مباشر',hls:'بث HLS',mpegts:'MPEG-TS'}[diag.mode]||'غير معروف');
- var diagText=!diag?'لا توجد مشاهدة مسجلة بعد. شغّل محتوى، ثم ارجع إلى الإعدادات لمعرفة أداء المشغّل.':
-  'آخر مشاهدة: '+(diag.kind==='live'?'بث مباشر':diag.kind==='series'?'حلقة':'فيلم')+
-  ' • المحرك: '+mode+
-  ' • بداية التشغيل: '+(diag.startupMs===null?'لم تبدأ':(diag.startupMs/1000).toFixed(1)+' ث')+
-  ' • مرات الانتظار: '+(diag.bufferingEvents||0)+
-  ' • زمن الانتظار: '+Math.round((diag.bufferingMs||0)/1000)+' ث'+
-  ' • طلبات التقديم: '+(diag.seekAttempts||0)+
-  ' • التقديم الذي وصل للمكان المطلوب: '+(diag.seekReady||0)+
-  ' • منها تقديمات مؤكدة بالصورة: '+(diag.verifiedSeekFrames||0)+
-  ' • حالات انتظار تجاوزت 30 ثانية: '+(diag.seekTimeouts||0)+
-  ' • زمن آخر تقديم ناجح: '+(diag.lastSeekMs===null?'غير متوفر':(diag.lastSeekMs/1000).toFixed(1)+' ث')+
-  ' • أخطاء الوسائط: '+(diag.errors||0)+'.';
- shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button><p id="refresh-progress" role="status" aria-live="polite">فهرس المحتوى يُراجع تلقائيًا عند توفر رقم إصدار جديد.</p></section>'+
- '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
-  '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
-  '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
- '<section class="setting-panel"><h3>اتصالات البث ومشاركة المصدر</h3><p>فحص آمن لكفاءة الجلسات وإجمالي محركات البث الحالية. لا يعرض حسابات العملاء أو أكواد الاشتراك.</p>'+
-  '<button class="btn secondary" id="check-live-share-health" type="button">فحص اتصالات البث</button>'+
-  '<p class="small muted" id="live-share-health-status" role="status" aria-live="polite">مشاركة المصدر معطلة افتراضيًا، ولن تُفعّل من هذا الزر.</p></section>'+
- '<section class="setting-panel"><h3>آخر اختبار مشاهدة فعلي</h3><p id="last-playback-diagnostic" role="status" aria-live="polite">'+esc(diagText)+'</p>'+
-  '<button class="btn secondary" id="clear-playback-diagnostic">مسح بيانات التشخيص</button>'+
-  '<p class="small muted">إحصاءات من المشاهدة داخل هذا المتصفح فقط؛ ليست اختبارًا لكل مصادر Xtream. لا نحفظ بيانات الاشتراك أو رابط المصدر.</p></section>'+
- '<section class="setting-panel"><h3>اختبار جودة حقيقي لمدة 20 دقيقة</h3><p>شغّل قناة أو فيلمًا على جهازك، ثم من خيارات المشغّل اختر «بدء اختبار 20 دقيقة». يراقب المشغل الصورة والانقطاع دون اتصال إضافي بالمصدر. النتيجة لا تثبت جودة الصوت أو توافق كل القنوات.</p>'+
- '<p id="last-long-playback-test" role="status" aria-live="polite">'+esc(S.lastLongPlaybackTest&&window.BlofyPlaybackAcceptance?
-   window.BlofyPlaybackAcceptance.message(S.lastLongPlaybackTest):'لم يكتمل اختبار مستمر لمدة 20 دقيقة على هذا الجهاز.')+'</p>'+
- '<p class="small muted">النتيجة محلية لهذا الاشتراك والمتصفح، ولا تحتوي بيانات أكواد أو روابط أو معرفات للقنوات. يجب اختبار الصوت يدويًا.</p></section>'+
- '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
-  '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
-  '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
- '<section class="setting-panel"><h3>نسخة احتياطية للمفضلة والمتابعة</h3><p>انقل قوائمك ومواقع متابعة الأفلام والحلقات يدويًا بين متصفحاتك. الملف لا يحتوي كود اشتراك أو كلمات مرور أو روابط بث أو بوسترات أو سجل بحث، ولا يُرسل إلى خادم.</p>'+
- '<button class="btn secondary" id="profile-export" type="button">↓ حفظ نسخة محلية</button> '+
- '<button class="btn secondary" id="profile-import" type="button">↑ استيراد نسخة محلية</button>'+
- '<input id="profile-import-file" type="file" accept=".json,application/json" hidden aria-label="اختيار نسخة بيانات BLOFY">'+
- '<div id="profile-import-confirm" class="settings-inline-confirm" hidden><p id="profile-import-summary"></p>'+
- '<button class="btn" type="button" id="profile-import-accept">تأكيد دمج البيانات</button> '+
- '<button class="btn secondary" type="button" id="profile-import-cancel">إلغاء</button></div>'+
- '<p class="small muted" id="profile-transfer-status" role="status" aria-live="polite">الاستيراد يضيف المفضلة ويحافظ على تقدم مشاهدة أحدث لديك. استخدم الملف فقط مع الاشتراك ومصدر المحتوى نفسه؛ هذا نقل يدوي وليس مزامنة سحابية.</p></section>'+
- '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
- '<section class="setting-panel"><h3>استخدم BLOFY كتطبيق على جهازك</h3><p>إضافة للمفضلة أو للشاشة الرئيسية حسب إمكانيات الجهاز، دون APK أو تثبيت من مصادر مجهولة.</p><button class="btn secondary" type="button" id="install-blofy-web">طريقة إضافة BLOFY</button><p class="small muted" id="install-blofy-help" role="status" aria-live="polite"></p><p class="small muted" id="device-experience-result" role="status" aria-live="polite"></p></section>'+ 
- '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
- '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web 1.0 • الإصدار الرسمي</div>');
+ shell('الإعدادات','<div class="customer-settings">'+
+ '<section class="customer-setting-group"><h3>المحتوى</h3><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
+ '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
+ '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
+ '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
+ '<p class="customer-version">BLOFY STREAM · 2026.11.26.5</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
- document.getElementById('check-player-health').onclick=function(){
-  var button=this,box=document.getElementById('player-health-status');
-  button.disabled=true;box.textContent='جار فحص خادم تشغيل الأفلام والمسلسلات…';
-  api('GET','/api/health/media',null,function(st,result){
-   button.disabled=false;if(!box||S.route!=='settings')return;
-   if(st===200&&result&&result.ok){
-    var capacityInfo=result.encoderCapacity||{};
-    var denied=Math.max(0,Math.min(100000,Number(capacityInfo.deniedLastMinute)||0));
-    box.textContent='✓ مشغّل الفيديو جاهز. اختبار التقديم والبث نجح. العمليات الحالية: '+
-     (result.converting||0)+' من '+(result.capacity||0)+'.'+
-     (capacityInfo.busy?' المحرك ممتلئ حاليًا؛ يرجى الانتظار قبل فتح فيديو جديد.':'')+
-     (denied?' • محاولات تشغيل مؤجلة للسعة خلال الدقيقة الأخيرة: '+denied+'.':'')+
-     ' هذه أرقام عن سعة التحويل، وليست اختبارًا لجودة كل مصدر.';
-   }else{
-    box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
-   }
-  })
- };
- document.getElementById('check-live-share-health').onclick=function(){
-  var button=this,target=document.getElementById('live-share-health-status');
-  button.disabled=true;
-  if(target)target.textContent='جار فحص الموارد والجلسات دون تشغيل قناة جديدة…';
-  api('GET','/api/compatible/health',null,function(st,data){
-   button.disabled=false;
-   if(!target||!target.isConnected||S.route!=='settings')return;
-   if(st!==200||!data||!data.ok){
-    target.textContent='تعذّر الوصول لمحرك البث حاليًا. لن يتأثر اشتراكك بهذا الفحص.';
-    return
-   }
-   var share=data.sharedLive||{},enabled=share.enabled===true,
-    groups=Math.max(0,Math.min(100,Number(share.groups)||0)),
-    viewers=Math.max(0,Math.min(400,Number(share.viewers)||0)),
-    pending=Math.max(0,Math.min(400,Number(share.pending)||0)),
-    recovering=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.coolingSources)||0)),
-    affected=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.recentSources)||0)),
-    active=Math.max(0,Math.min(100,Number(data.activeJobs)||0)),
-    cap=Math.max(0,Math.min(100,Number(data.capacity)||0)),
-    encoder=data.encoderCapacity||{},
-    jobKinds=encoder.jobKinds||{},
-    denied=Math.max(0,Math.min(100000,Number(encoder.deniedLastMinute)||0)),
-    free=Math.max(0,Math.min(2,Number(encoder.freeSlots)||0)),
-    liveJobs=Math.max(0,Math.min(2,Number(jobKinds.live)||0)),
-    movieJobs=Math.max(0,Math.min(2,Number(jobKinds.fullVod)||0));
-   target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة وفق إعدادات الخدمة':'معطلة لحماية الاستقرار')+
-    ' • مجموعات البث: '+groups+' • المشاهدون المشاركون: '+viewers+
-    ' • بانتظار اتصال المصدر: '+pending+
-    ' • مصادر في تهدئة الاتصال: '+recovering+
-    ' • مصادر تعثرت خلال دقيقتين: '+affected+
-    ' • محركات الفيديو النشطة: '+active+' من '+cap+
-    ' • المشغولات بالبث المباشر: '+liveJobs+' • تحويل الأفلام الكاملة: '+movieJobs+
-    ' • فتحات تحويل متاحة: '+free+
-    (denied?' • عمليات رفض بسبب انشغال المحرك خلال الدقيقة الأخيرة: '+denied:'')+
-    (cap&&active>=cap?' • المحركات ممتلئة حاليًا؛ قد يلزم الانتظار عند فتح قناة جديدة.':'')+
-    ' • هذه أرقام حالة المحرك فقط، وليست قياسًا لجودة الصورة على جهازك.'
-  })
- };
- document.getElementById('clear-playback-diagnostic').onclick=function(){
-  S.lastPlaybackDiag=null;profileSave('lastPlaybackDiag',null);
-  var box=document.getElementById('last-playback-diagnostic');
-  if(box)box.textContent='تم حذف بيانات التشخيص لهذا الاشتراك من المتصفح.'
- };
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
   if(existing){existing.remove();trigger.focus();return}
@@ -1458,119 +1361,9 @@ function settingsScreen(){
   panel.querySelector('#watch-clear-cancel').onclick=function(){panel.remove();trigger.focus()};
   panel.querySelector('#watch-clear-cancel').focus()
  };
- // This export is user-initiated, browser-local and profile-partitioned.
- // NEVER include encrypted session cookies, activation/device IDs, raw media
- // links, poster URLs or full search history in the portable format.
- var transfer=window.BlofyProfileTransfer||null,
-  transferStatus=document.getElementById('profile-transfer-status'),
-  importInput=document.getElementById('profile-import-file'),
-  importPanel=document.getElementById('profile-import-confirm'),
-  importedCandidate=null,importEpoch=-1,importProfile='';
- function transferMessage(message,error){
-  if(transferStatus){
-   transferStatus.textContent=message;
-   transferStatus.className=error?'small info error':'small muted'
-  }
- }
- function clearImport(){
-  importedCandidate=null;importEpoch=-1;importProfile='';
-  if(importPanel)importPanel.hidden=true;
-  if(importInput)importInput.value=''
- }
- document.getElementById('profile-export').onclick=function(){
-  if(!S.userVerified||!S.profileKey||!transfer){
-   transferMessage('النسخة المحلية غير متاحة قبل تفعيل الاشتراك.',true);return
-  }
-  if(typeof Blob==='undefined'||!window.URL||!window.URL.createObjectURL){
-   transferMessage('هذا المتصفح لا يدعم حفظ الملفات. استخدم متصفح هاتف أو كمبيوتر لنقل البيانات.',true);
-   return
-  }
-  try{
-   var data=transfer.create(S.library,S.watch,S.favoriteItems,Date.now()),
-    blob=new Blob([data],{type:'application/json;charset=utf-8'});
-   if(blob.size>240000)throw Error('backup_too_large');
-   var link=document.createElement('a'),address=window.URL.createObjectURL(blob);
-   link.href=address;link.download='BLOFY-STREAM-Web-Profile-'+new Date().toISOString().slice(0,10)+'.json';
-   link.style.display='none';document.body.appendChild(link);link.click();link.remove();
-   setTimeout(function(){window.URL.revokeObjectURL(address)},15000);
-   transferMessage('تم تجهيز النسخة المحلية. احفظ الملف في مكان آمن، ثم استورده من الإعدادات على جهازك الآخر.')
-  }catch(e){transferMessage('تعذر تجهيز النسخة المحلية. تحقق من مساحة التخزين وإمكانات المتصفح.',true)}
- };
- document.getElementById('profile-import').onclick=function(){
-  if(!S.userVerified||!S.profileKey||!transfer||!importInput){
-   transferMessage('فعّل اشتراكك أولاً قبل الاستيراد.',true);return
-  }
-  clearImport();importInput.click()
- };
- importInput.onchange=function(){
-  var file=importInput.files&&importInput.files[0];
-  if(!file)return;
-  clearImport();
-  if(!S.userVerified||!S.profileKey){transferMessage('انتهت الجلسة؛ أعد التفعيل أولاً.',true);return}
-  if(file.size>240000||file.size<30){
-   transferMessage('حجم ملف النسخة غير صالح أو يتجاوز 240 كيلوبايت.',true);return
-  }
-  if(typeof FileReader==='undefined'){
-   transferMessage('هذه الشاشة لا تدعم قراءة ملف النسخة المحلية.',true);return
-  }
-  var epoch=S.accountEpoch,profile=S.profileKey,reader=new FileReader();
-  reader.onload=function(){
-   if(epoch!==S.accountEpoch||profile!==S.profileKey||!S.userVerified||S.route!=='settings')return;
-   try{
-    var candidate=transfer.parse(String(reader.result||''),Date.now());
-    importedCandidate=candidate;importEpoch=epoch;importProfile=profile;
-    importPanel.hidden=false;
-    document.getElementById('profile-import-summary').textContent=
-     'النسخة تحتوي '+candidate.favorites.length+' عنصرًا بالمفضلة و'+
-     candidate.watch.length+' موضع متابعة. سيتم دمجها مع بيانات الجهاز الحالية دون حذف المفضلة أو استبدال تقدم مشاهدة أحدث. تأكد أن ملف النسخة من الاشتراك ومصدر المحتوى نفسه.';
-    transferMessage('راجع عدد العناصر، ثم أكد الدمج أو ألغِ العملية.');
-    document.getElementById('profile-import-accept').focus()
-   }catch(e){clearImport();transferMessage('رفض الملف: ليس نسخة BLOFY STREAM Web صالحة أو يحتوي بيانات غير معتمدة.',true)}
-  };
-  reader.onerror=function(){clearImport();transferMessage('تعذر قراءة ملف النسخة المحلية.',true)};
-  reader.readAsText(file,'UTF-8')
- };
- document.getElementById('profile-import-cancel').onclick=function(){
-  clearImport();transferMessage('أُلغِي الاستيراد؛ لم تتغير أي بيانات.');document.getElementById('profile-import').focus()
- };
- document.getElementById('profile-import-accept').onclick=function(){
-  if(!importedCandidate||!S.userVerified||S.route!=='settings'||
-   importEpoch!==S.accountEpoch||importProfile!==S.profileKey){
-   clearImport();transferMessage('تغير الحساب أو انتهت صلاحية الاستيراد؛ اختر الملف مرة أخرى.',true);return
-  }
-  var merged=transfer.merge(S.library,S.watch,S.favoriteItems,importedCandidate);
-  var updates=[
-   ['favorites',merged.favorites],['favoriteItems',merged.favoriteItems],['watch',merged.watch]
-  ],old=[];
-  try{
-   // A quota failure must not leave a misleading success message or switch
-   // profile data mid-import. Recover previous storage values best-effort.
-   for(var t=0;t<updates.length;t++){
-    var key=profileStorageKey(updates[t][0]);
-    old.push({key:key,value:localStorage.getItem(key)});
-   }
-   for(var w=0;w<updates.length;w++)
-    localStorage.setItem(profileStorageKey(updates[w][0]),JSON.stringify(updates[w][1]))
-  }catch(e){
-   for(var j=0;j<old.length;j++)try{
-    if(old[j].value===null)localStorage.removeItem(old[j].key);
-    else localStorage.setItem(old[j].key,old[j].value)
-   }catch(ignore){}
-   clearImport();transferMessage('تعذر حفظ النسخة: المساحة المحلية غير كافية أو التخزين مغلق. لم تُعتمد بيانات جديدة.',true);
-   return
-  }
-  S.library=merged.favorites;S.watch=merged.watch;S.favoriteItems=merged.favoriteItems;
-  var stats=merged.stats;
-  clearImport();
-  transferMessage('✓ تم دمج '+stats.newFavorites+' مفضلة جديدة و'+
-   stats.newCheckpoints+' متابعة جديدة، وتحديث '+stats.updatedCheckpoints+
-   ' متابعة، مع الاحتفاظ بـ '+stats.preservedCheckpoints+' متابعة أحدث على الجهاز.');
-  document.getElementById('profile-import').focus()
- };
  var installButton=document.getElementById('install-blofy-web');
  if(installButton){
   updateInstallGuide();
-  updateDeviceExperienceStatus();
   installButton.onclick=function(){
    var guide=webAppInstallGuide(navigator.userAgent,installedWebApp(),!!pendingInstallPrompt,navigator.maxTouchPoints);
    if(guide.mode!=='prompt'||!pendingInstallPrompt){updateInstallGuide();return}
@@ -1589,36 +1382,6 @@ function settingsScreen(){
    }catch(e){if(feedback)feedback.textContent='لم يتمكن المتصفح من فتح التثبيت؛ استخدم قائمة المتصفح.'}
   }
  }
- var tvTest=document.getElementById('test-tv-capabilities');
- if(tvTest)tvTest.onclick=function(){
-  var target=document.getElementById('tv-capabilities-result'),device=document.createElement('video');
-  var ua=navigator.userAgent||'';
-  var vidaa=/VIDAA|Hisense/i.test(ua);
-  var hls='غير معروف',mp4='غير معروف';
-  try{hls=device.canPlayType('application/vnd.apple.mpegurl')||'غير مدعوم'}catch(e){}
-  try{mp4=device.canPlayType('video/mp4; codecs="avc1.42E01E,mp4a.40.2"')||'غير مدعوم'}catch(e){}
-  var hasFullscreen=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen||
-    document.documentElement.mozRequestFullScreen||document.documentElement.msRequestFullscreen);
-  var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
-  var width=Math.round(Number(window.innerWidth)||0),height=Math.round(Number(window.innerHeight)||0);
-  target.textContent='بيئة الجهاز: '+(vidaa?'VIDAA/Hisense محتمل':'لم يتم التعرف على VIDAA من المتصفح')+
-   ' • حجم نافذة العرض: '+width+'×'+height+
-   ' • ملء الشاشة الأصلي: '+(hasFullscreen?'واجهة برمجية متوفرة':'قد يحتاج وضع ملء الصفحة البديل')+
-   ' • HLS الأصلي: '+hls+' • HLS عبر MSE: '+(mse?'متاح مبدئيًا':'غير متاح')+
-   ' • H.264/AAC: '+mp4+
-   '. يلزم تشغيل فيديو حقيقي وتجربة ريموت توشيبا لاعتماد التوافق.';
-  api('GET','/api/compatible/health',null,function(st,data){
-   if(!target||!target.isConnected)return;
-   if(st!==200||!data||!data.ok){
-    target.textContent+=' • خادم الوسائط: تعذّر فحص حالته الآن';
-    return
-   }
-   target.textContent+=' • الحد الأعلى لتحويل البث: '+(data.liveQuality||'غير معروف')+'p'+
-    ' • الحد الأعلى لتحويل الأفلام: '+(data.vodQuality||'غير معروف')+'p'+
-    ' • مشغلات التحويل النشطة: '+(Number(data.activeJobs)||0)+' / '+(Number(data.capacity)||0)+
-    '. قد يستخدم الفيديو الأصلي دقة أعلى عند تشغيله دون تحويل.'
-  })
- };
  document.getElementById('logout').onclick=function(){
   if(S.loggingOut)return;
   S.loggingOut=true;
@@ -3069,17 +2832,12 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?playerControl('player-channel-next','forward','القناة التالية'):playerControl('player-skip-forward','forward','تقديم 10 ثوانٍ'))+
  (nextEpisode?playerControl('player-next-episode','next','الحلقة التالية'):'')+
  playerControl('player-quality','quality','جودة الفيديو')+
- (isLive?playerControl('player-health-shortcut','health','حالة التشغيل الفعلية'):'')+
  (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
  '</div>'+
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
  (isLive?'<button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
- '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
- (isLive?'<button class="btn secondary" id="player-diagnostic-toggle" type="button" aria-expanded="false" aria-controls="player-diagnostic-panel">🔎 تقرير اتصال القناة</button><button class="btn secondary" id="player-direct-ts" type="button" title="تشغيل نفس مصدر القناة مباشرة على الأجهزة التي تدعم H.264/AAC؛ العودة تلقائيًا إلى HLS عند عدم الدعم">⚡ تشغيل MPEG-TS المباشر (بديل)</button>':'')+
- '<button class="btn secondary" id="player-verify-20m" type="button">◷ بدء اختبار 20 دقيقة</button>'+
- '<p class="small muted" id="player-verify-status" role="status" aria-live="polite">يتطلب 20 دقيقة متواصلة من تشغيل الصورة على هذا الجهاز؛ لا يغيّر المصدر ولا يفتح اتصالًا إضافيًا.</p>'+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
