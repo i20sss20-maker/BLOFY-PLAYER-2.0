@@ -110,3 +110,11 @@ test('live abandoned sessions expire sooner without changing VOD idle policy',()
  assert.match(source,/session\.fullVod\?25\*60\*1000:session\.kind==='live'\?60000:110000/);
  assert.match(source,/selectSourcePreservingInput\(sourceBody,!forceCompat&&kind==='live'&&ext==='ts',controller\.signal\)/);
 });
+
+test('source channel quota refusal is not an origin outage',async()=>{
+ const {classifyWebMediaAdmission:classify}=await import('../web-media-admission.mjs');
+ assert.deepEqual(classify('live',503,'2','fanout_source_channel_limit'),{status:503,error:'live_source_channel_limit',retryAfterSeconds:2});
+ assert.equal(classify('live',503,'2','untrusted').error,'live_source_unavailable');
+ assert.equal(classify('movie',503,'2','fanout_source_channel_limit').status,502);
+ assert.match(source,/denial\.error==='live_source_channel_limit'\?'source_channel_limit':'upstream_'\+status/);
+});
