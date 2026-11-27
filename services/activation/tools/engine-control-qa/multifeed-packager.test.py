@@ -45,6 +45,30 @@ class PackagerTests(unittest.TestCase):
                 outputs=list(pool.map(run,range(1,17)))
             self.assertEqual(len(set(outputs)),16)
             self.assertEqual(len(list(root.iterdir())),16)
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),"FFmpeg not installed")
+    def test_timeshift_keeps_two_minutes_of_real_generated_media(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=pathlib.Path(d);g=Guard(1)
+            fixture=subprocess.check_output(["ffmpeg","-nostdin","-hide_banner","-loglevel","error",
+                "-f","lavfi","-i","testsrc2=size=160x90:rate=10",
+                "-f","lavfi","-i","sine=frequency=440:sample_rate=44100",
+                "-t","160","-c:v","mpeg2video","-g","10","-c:a","mp2",
+                "-f","mpegts","pipe:1"],timeout=60)
+            w=mod.ChannelPackager(root,g.identity,g,timeshift=True)
+            try:
+                w.start()
+                for pos in range(0,len(fixture),65536):w.write(fixture[pos:pos+65536])
+            finally:w.close()
+            manifest=(w.output/"index.m3u8").read_text()
+            durations=[float(line.split(":",1)[1].split(",")[0]) for line in manifest.splitlines() if line.startswith("#EXTINF:")]
+            segments=[line for line in manifest.splitlines() if line.startswith("seg-")]
+            self.assertEqual(len(segments),75)
+            self.assertGreaterEqual(sum(durations),120)
+            self.assertIsNotNone(mod.playlist_progress(w.output))
+            self.assertTrue(all((w.output/name).is_file() for name in segments))
+            self.assertLessEqual(len(list(w.output.glob("seg-*.ts"))),79)
+            self.assertIn("video",subprocess.check_output(["ffprobe","-v","error","-show_entries","stream=codec_type","-of","csv=p=0",str(w.output/segments[0])],timeout=15).decode())
+
     def test_unverified_guard_never_starts(self):
         with tempfile.TemporaryDirectory() as d:
             g=Guard(1);g.allowed=False
