@@ -27,7 +27,7 @@ export function createGatewayTsRoute({enabled=false,sourceId,testAccountId,readO
     if(latest?.mode!=='engine'||latest.state!=='ready'||!Object.keys(identity).every(k=>latest[k]===identity[k]))return {ok:false};
     const proof=await readProof(identity),now=clock();
     if(!proof||!Object.keys(identity).every(k=>proof[k]===identity[k])||!Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)return {ok:false};
-    const attached=await ledger.attachViewer({...identity,sessionId,accountId,accountQuota:current.accountQuota,authorizedUntil:current.authorizedUntil});
+    const attached=await ledger.attachViewer({...identity,sessionId,accountId,accountQuota:current.accountQuota,authorizedUntil:current.authorizedUntil,requireEngineGate:true});
     if(!attached?.ok)return {ok:false};
     session={sourceId,reservationId,sessionId,accountId,engineId};
     const expiry=Math.floor(Math.min(Date.parse(attached.expiresAt),now+60000)/1000);
@@ -43,4 +43,23 @@ export function createGatewayTsRoute({enabled=false,sourceId,testAccountId,readO
   }catch{return deny()}
   finally{if(session)try{await ledger.closeViewer(session)}catch{}}
  };
+}
+
+// A single locked DB read checks the source gate and feed ownership together.
+// No writes and no provider calls; uncertainty is never treated as legacy.
+export async function readGatewayOwnedFeed(pool,sourceId){
+ const c=await pool.connect();
+ try{
+  await c.query('BEGIN');
+  await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))',['blofy-linode-feed:'+sourceId]);
+  const {rows:[r]}=await c.query(`SELECT g.mode,g.reservation_id AS gate_reservation,g.engine_id AS gate_engine,
+    f.state,f.reservation_id,f.engine_id,f.channel_id,f.generation,
+    (SELECT count(*)::int FROM blofy_engine_legacy_holds h WHERE h.source_id=g.source_id AND NOT h.closed) AS holds
+    FROM blofy_engine_ingress_gate g LEFT JOIN blofy_linode_feed_ledger f ON f.source_id=g.source_id
+    WHERE g.source_id=$1`,[sourceId]);
+  await c.query('COMMIT');
+  if(r?.mode==='legacy')return {mode:'legacy'};
+  if(r?.mode!=='engine'||r.holds!==0||r.gate_reservation!==r.reservation_id||r.gate_engine!==r.engine_id)return null;
+  return {mode:'engine',sourceId,state:r.state,reservationId:r.reservation_id,engineId:r.engine_id,channelId:r.channel_id,generation:r.generation};
+ }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
 }
