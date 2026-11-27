@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Private single-feed HLS worker. Never starts on install; exclusive slot required."""
-import fcntl, json, os, pwd, re, select, signal, socket, stat, subprocess, sys, time, uuid
+import fcntl, json, os, pwd, re, select, signal, socket, stat, subprocess, sys, time, uuid, shutil
 from blofy_live_lease_guard import LiveLeaseGuard, LeaseError, LeaseWatchdog, notify_watchdog
 from pathlib import Path
 from datetime import datetime, timezone
@@ -78,8 +78,29 @@ def open_media(c, channel):
             conn.close();raise
     raise Stop('REDIRECT_LIMIT')
 
-def command(output):
-    return ['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-i','pipe:0','-map','0:v:0','-map','0:a:0','-c','copy','-f','hls','-hls_time','2','-hls_list_size','12','-hls_delete_threshold','3','-hls_flags','delete_segments+temp_file+omit_endlist','-hls_segment_options','mpegts_flags=+initial_discontinuity','-hls_segment_filename',str(output/'seg-%09d.ts'),str(output/'index.m3u8')]
+def timeshift_enabled(channel, mode, environ=os.environ):
+    # Only the server operator can opt a known channel into a larger DVR window.
+    # No viewer query parameter, source allocation, or change to pilot defaults.
+    allowed=environ.get('BLOFY_LIVE_TIMESHIFT_CHANNELS','')
+    if not allowed:return False
+    channels=allowed.split(',')
+    if len(channels)>64 or any(not re.fullmatch(r'[1-9][0-9]{0,14}',x) for x in channels):
+        raise Stop('INVALID_TIMESHIFT_CHANNELS')
+    return mode=='lease' and channel in channels
+
+def check_dvr_storage(root, output=None):
+    if shutil.disk_usage(root).free<1024*1024*1024:raise Stop('TIMESHIFT_LOW_DISK')
+    if output is None:return
+    size=0
+    for p in output.iterdir():
+        try:st=p.lstat()
+        except FileNotFoundError:continue
+        if not stat.S_ISREG(st.st_mode):raise Stop('TIMESHIFT_UNSAFE_ENTRY')
+        size+=st.st_size
+        if size>768*1024*1024:raise Stop('TIMESHIFT_STORAGE_LIMIT')
+
+def command(output, *, timeshift=False):
+    return ['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-i','pipe:0','-map','0:v:0','-map','0:a:0','-c','copy','-f','hls','-hls_time','2','-hls_list_size','75' if timeshift else '12','-hls_delete_threshold','3','-hls_flags','delete_segments+temp_file+omit_endlist','-hls_segment_options','mpegts_flags=+initial_discontinuity','-hls_segment_filename',str(output/'seg-%09d.ts'),str(output/'index.m3u8')]
 
 def playlist_progress(output):
     """Require complete, fresh HLS segments, not merely a rewritten manifest."""
@@ -128,6 +149,8 @@ def run():
     if mode not in ('pilot','lease'):raise Stop('INVALID_LIVE_MODE')
     duration=int(os.environ.get('BLOFY_LIVE_MAX_SECONDS','120'))
     if mode=='pilot' and not 15<=duration<=180:raise Stop('INVALID_PILOT_DURATION')
+    timeshift=timeshift_enabled(channel,mode)
+    if timeshift:check_dvr_storage(BASE)
     if mode=='lease':
         engine={'blofy-engine-01':'linode','blofy-engine-02':'hostbrr'}.get(socket.gethostname().split('.')[0])
         identity={'engineId':engine,'sourceId':os.environ.get('BLOFY_LIVE_SOURCE_ID',''),'channelId':channel,'reservationId':os.environ.get('BLOFY_LIVE_RESERVATION_ID','')}
@@ -149,9 +172,9 @@ def run():
     try:
         state('opening',generation=generation,channelId=channel)
         conn,r=open_media(c,channel)
-        proc=subprocess.Popen(command(output),stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,user=owner.pw_uid,group=owner.pw_gid,extra_groups=[],umask=0o077)
+        proc=subprocess.Popen(command(output,timeshift=timeshift),stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,user=owner.pw_uid,group=owner.pw_gid,extra_groups=[],umask=0o077)
         deadline=time.monotonic()+duration
-        last_ready=time.monotonic(); last_segment=None; last_report=0
+        last_ready=time.monotonic(); last_segment=None; last_report=0; last_disk_check=0
         while not stop_requested and (mode=='lease' or time.monotonic()<deadline):
             check_lease()
             if proc.poll() is not None:raise Stop('PACKAGER_EXITED')
@@ -161,6 +184,8 @@ def run():
             send(proc,chunk)
             progress=playlist_progress(output)
             now=time.monotonic()
+            if timeshift and now-last_disk_check>=2:
+                check_dvr_storage(BASE,output);last_disk_check=now
             if progress is not None and (last_segment is None or progress>last_segment):
                 last_segment=progress;last_ready=now
                 if not is_ready or now-last_report>=3:
@@ -201,6 +226,16 @@ def self_test():
         (p/names[-1]).unlink();assert not ready(p)
         (p/names[-1]).symlink_to(p/names[0]);assert not ready(p)
         assert 'pipe:0' in command(p) and '-c' in command(p)
+        assert command(p)[command(p).index('-hls_list_size')+1]=='12'
+        assert command(p,timeshift=True)[command(p).index('-hls_list_size')+1]=='75'
+        env={'BLOFY_LIVE_TIMESHIFT_CHANNELS':'123,456'}
+        assert timeshift_enabled('123','lease',env)
+        assert not timeshift_enabled('123','pilot',env)
+        assert not timeshift_enabled('124','lease',env)
+        assert not timeshift_enabled('123','lease',{})
+        try:timeshift_enabled('123','lease',{'BLOFY_LIVE_TIMESHIFT_CHANNELS':'*'})
+        except Stop:pass
+        else:raise AssertionError('invalid DVR selection admitted')
     values=iter([1,1,0]);assert released({},3,0,lambda _:next(values),lambda _:None)
     assert not released({},2,0,lambda _:1,lambda _:None)
     assert not released({},2,0,lambda _: (_ for _ in ()).throw(OSError()),lambda _:None)
