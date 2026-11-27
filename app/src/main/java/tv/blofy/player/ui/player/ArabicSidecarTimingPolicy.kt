@@ -5,6 +5,17 @@ package tv.blofy.player.ui.player
  */
 internal object ArabicSidecarTimingPolicy {
     const val MAX_DELAY_SECONDS = 30
+    const val MAX_VIDEO_DELAY_SECONDS = 120
+
+    fun videoDelay(seconds: Int): Int = seconds.coerceIn(0, MAX_VIDEO_DELAY_SECONDS)
+
+    /** A seek must remain inside the real DVR window, never invent future media. */
+    fun videoSeekTarget(positionMs: Long, liveTargetMs: Long, current: Int, desired: Int): Long? {
+        if (positionMs < 0 || liveTargetMs < 0) return null
+        val delta = (videoDelay(desired) - videoDelay(current)) * 1000L
+        val target = positionMs - delta
+        return target.takeIf { it in 0L..maxOf(positionMs, liveTargetMs) }
+    }
     const val STEP_SECONDS = 1
     const val FAST_FORWARD_RATE = 1.25f
     const val SLOW_DOWN_RATE = 0.80f

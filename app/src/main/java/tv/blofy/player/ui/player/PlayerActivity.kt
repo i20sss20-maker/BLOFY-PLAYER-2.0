@@ -1796,13 +1796,29 @@ open class PlayerActivity : ContentAccessActivity() {
     internal fun inlineArabicDelaySeconds(): Int =
         arabicAudioSession?.takeIf { it.isActive }?.delaySeconds ?: 0
 
+    internal fun inlineVideoDelaySeconds(): Int =
+        arabicAudioSession?.takeIf { it.isActive }?.videoDelaySeconds ?: 0
+
+    internal fun canInlineVideoTimeShift(): Boolean =
+        arabicAudioSession?.canTimeShiftVideo == true
+
+    internal fun adjustInlineVideoSync(delta: Int): Boolean {
+        val controller = arabicAudioSession?.takeIf { it.isActive } ?: return false
+        val changed = if (delta == 0) controller.resetVideoDelay() else controller.adjustVideoDelay(delta)
+        if (changed) controller.currentTrackId?.let { id ->
+            StreamAudioPreferenceStore.save(this, currentStreamId, id,
+                controller.delaySeconds, controller.videoDelaySeconds)
+        }
+        return changed
+    }
+
     /** Inline remote-control sync keys: no second file/folder/dialog. */
     internal fun adjustInlineArabicSync(delta: Int): Int {
         val controller = arabicAudioSession?.takeIf { it.isActive } ?: return 0
-        if (delta == 0) controller.resetDelay()
+        if (delta == 0) { controller.resetDelay(); controller.resetVideoDelay() }
         else controller.adjustDelay(delta)
         controller.currentTrackId?.let { id ->
-            StreamAudioPreferenceStore.save(this, currentStreamId, id, controller.delaySeconds)
+            StreamAudioPreferenceStore.save(this, currentStreamId, id, controller.delaySeconds, controller.videoDelaySeconds)
         }
         return controller.delaySeconds
     }
@@ -1919,7 +1935,7 @@ open class PlayerActivity : ContentAccessActivity() {
                     // Store a preferred voice only after companion playback starts.
                     arabicAudioSession?.takeIf { it.currentTrackId == choice.id }?.let {
                         StreamAudioPreferenceStore.save(this, currentStreamId,
-                            choice.id, it.delaySeconds)
+                            choice.id, it.delaySeconds, it.videoDelaySeconds)
                     }
                     onPlaybackState?.invoke(true)
                 }
@@ -1930,7 +1946,7 @@ open class PlayerActivity : ContentAccessActivity() {
             choice.copy(initialDelaySeconds = saved.delaySeconds) else choice
         arabicAudioSession?.stop()
         arabicAudioSession = controller
-        controller.start(preferred)
+        controller.start(preferred, if (saved?.trackId == choice.id) saved.videoDelaySeconds else 0)
         if (showControls) showArabicAudioControls()
     }
 
@@ -1947,6 +1963,8 @@ open class PlayerActivity : ContentAccessActivity() {
             label.text = (controller.currentLabel ?: "") + "\n" +
                 if (english) "Audio delay: +${controller.delaySeconds}s (0–30s)"
                 else "تأخير الصوت: +${controller.delaySeconds} ثانية (0–30)"
+            label.append(if (english) "\nPicture delay: ${controller.videoDelaySeconds}s (DVR only)"
+                else "\nتأخير الصورة: ${controller.videoDelaySeconds}ث (تايم شفت فقط)")
         }
         refresh()
         val row = LinearLayout(this).apply {
@@ -1961,7 +1979,7 @@ open class PlayerActivity : ContentAccessActivity() {
                     change()
                     controller.currentTrackId?.let { id ->
                         StreamAudioPreferenceStore.save(this@PlayerActivity,
-                            currentStreamId, id, controller.delaySeconds)
+                            currentStreamId, id, controller.delaySeconds, controller.videoDelaySeconds)
                     }
                     refresh()
                 }
@@ -1975,12 +1993,30 @@ open class PlayerActivity : ContentAccessActivity() {
         }
         addAction(if (english) "Reset" else "تصفير") {
             controller.resetDelay()
+            controller.resetVideoDelay()
+        }
+        val videoRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        listOf(-5, 5).forEach { delta ->
+            videoRow.addView(android.widget.Button(this).apply {
+                text = if (english) "Picture ${if (delta > 0) "+" else ""}${delta}s" else "الصورة ${if (delta > 0) "+" else ""}${delta}ث"
+                isAllCaps = false
+                setOnClickListener {
+                    if (!adjustInlineVideoSync(delta)) Toast.makeText(this@PlayerActivity,
+                        if (english) "DVR window unavailable or limit reached." else "التايم شفت غير متاح أو وصلت للحد.",
+                        Toast.LENGTH_SHORT).show()
+                    refresh()
+                }
+            }, LinearLayout.LayoutParams(0, dp(54), 1f))
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
             addView(label)
             addView(row)
+            addView(videoRow)
         }
         AlertDialog.Builder(this)
             .setTitle(if (english) "Arabic audio sync" else "مزامنة الصوت العربي")

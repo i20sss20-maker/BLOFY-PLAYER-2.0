@@ -1123,8 +1123,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             }
             fun updateSync() {
                 val value = activity.inlineArabicDelaySeconds()
-                sync.text = copy("⏱ تأخير المعلق: +${value}ث  •  − تقديم / + تأخير تدريجي",
-                    "⏱ Commentary delay: +${value}s  •  − advance / + gradually delay")
+                val picture = activity.inlineVideoDelaySeconds()
+                sync.text = copy("⏱ الصوت: +${value}ث  •  الصورة: +${picture}ث",
+                    "⏱ Voice: +${value}s  •  Picture: +${picture}s")
             }
 
             fun paintStatus(message: String, state: StreamAudioQuickPickPolicy.State?) {
@@ -1213,6 +1214,24 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 addQuickSync("+1ث", 1)
                 addQuickSync("+5ث", 5)
                 footer.addView(syncButtons, LinearLayout.LayoutParams(-1, dp(45)))
+                addHeading(copy("تأخير الصورة (TimeShift)", "Picture delay (TimeShift)"))
+                val pictureButtons = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = View.LAYOUT_DIRECTION_LTR
+                }
+                listOf(-5, -1, 1, 5).forEach { delta ->
+                    val button = addButton((if (delta > 0) "+" else "") + delta + copy("ث", "s")) {
+                        val changed = activity.adjustInlineVideoSync(delta)
+                        updateSync()
+                        paintStatus(if (changed) copy("تم ضبط توقيت الصورة.", "Picture offset adjusted.")
+                            else if (!activity.canInlineVideoTimeShift()) copy(
+                                "القناة تحتاج بثًا يدعم التايم شفت.", "This channel needs a seekable DVR stream.")
+                            else copy("نافذة البث غير كافية أو وصلت للحد.", "DVR window too short or limit reached."), null)
+                    }
+                    footer.removeView(button)
+                    pictureButtons.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(3) })
+                }
+                footer.addView(pictureButtons, LinearLayout.LayoutParams(-1, dp(45)))
                 addButton(copy("⟲ إعادة المزامنة إلى 0 ثانية",
                     "⟲ Reset audio offset to 0s")) {
                     activity.adjustInlineArabicSync(0)

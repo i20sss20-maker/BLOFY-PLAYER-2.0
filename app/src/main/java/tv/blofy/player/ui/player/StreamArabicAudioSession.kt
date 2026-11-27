@@ -12,6 +12,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -68,6 +69,9 @@ internal class StreamArabicAudioSession(
     private var track: StreamArabicAudioCatalog.Track? = null
     private var originalVolume = 1f
     private var delay = 0
+    private var videoDelay = 0
+    private var savedVideoDelay = 0
+    private var originalVideoItem: MediaItem? = null
     private var started = false
     private var waiting = false
     private var holdPending = false
@@ -87,11 +91,34 @@ internal class StreamArabicAudioSession(
     val currentLabel: String? get() = track?.label
     val currentTrackId: String? get() = track?.id
     val delaySeconds: Int get() = delay
+    val videoDelaySeconds: Int get() = videoDelay
+    val canTimeShiftVideo: Boolean get() = video.currentMediaItem == originalVideoItem &&
+        video.isCurrentMediaItemLive && video.isCurrentMediaItemSeekable &&
+        video.playbackState == Player.STATE_READY && video.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
 
-    fun start(item: StreamArabicAudioCatalog.Track) {
+    /** Negative delta advances a previously delayed picture, not future video. */
+    fun adjustVideoDelay(deltaSeconds: Int): Boolean {
+        if (!isActive || !canTimeShiftVideo) return false
+        val next = ArabicSidecarTimingPolicy.videoDelay((videoDelay.toLong() + deltaSeconds).coerceIn(0L, 120L).toInt())
+        if (next == videoDelay) return false
+        val timeline = video.currentTimeline
+        if (timeline.isEmpty || video.currentMediaItemIndex !in 0 until timeline.windowCount) return false
+        val window = timeline.getWindow(video.currentMediaItemIndex, Timeline.Window())
+        val target = ArabicSidecarTimingPolicy.videoSeekTarget(video.currentPosition,
+            window.defaultPositionMs, videoDelay, next) ?: return false
+        videoDelay = next
+        video.seekTo(target)
+        return true
+    }
+
+    fun resetVideoDelay(): Boolean = adjustVideoDelay(-videoDelay)
+
+    fun start(item: StreamArabicAudioCatalog.Track, initialVideoDelay: Int = 0) {
         stop()
         if (!StreamArabicAudioCatalog.playableUrl(item.playbackUrl)) return
         originalVolume = video.volume
+        originalVideoItem = video.currentMediaItem
+        savedVideoDelay = ArabicSidecarTimingPolicy.videoDelay(initialVideoDelay)
         track = item
         delay = ArabicSidecarTimingPolicy.clamp(item.initialDelaySeconds)
         effectiveDelayMs = delay * 1000.0
@@ -153,6 +180,9 @@ internal class StreamArabicAudioSession(
                     startupHandler.removeCallbacksAndMessages(null)
                     if (!playbackAnnounced) {
                         playbackAnnounced = true
+                        val preferredVideoDelay = savedVideoDelay
+                        savedVideoDelay = 0
+                        if (preferredVideoDelay > 0) adjustVideoDelay(preferredVideoDelay)
                         onStarted()
                     }
                 } else if (!started) {
@@ -350,12 +380,24 @@ internal class StreamArabicAudioSession(
         handler.removeCallbacksAndMessages(null)
         stallHandler.removeCallbacksAndMessages(null)
         startupHandler.removeCallbacksAndMessages(null)
-        audio?.let {
-            it.playWhenReady = false
-            it.release()
+        val companion = audio
+        // Detach before seeking or releasing so primary-player callbacks cannot
+        // restart a companion that is being disposed.
+        if (track != null) {
+            val restoreVideo = videoDelay > 0 && canTimeShiftVideo
+            audio = null
+            if (restoreVideo) {
+                val timeline = video.currentTimeline
+                if (!timeline.isEmpty && video.currentMediaItemIndex in 0 until timeline.windowCount) {
+                    val window = timeline.getWindow(video.currentMediaItemIndex, Timeline.Window())
+                    ArabicSidecarTimingPolicy.videoSeekTarget(video.currentPosition,
+                        window.defaultPositionMs, videoDelay, 0)?.let { video.seekTo(it) }
+                }
+            }
+            video.volume = originalVolume
         }
-        if (track != null) video.volume = originalVolume
         audio = null
+        companion?.let { it.playWhenReady = false; it.release() }
         track = null
         started = false
         playbackAnnounced = false
@@ -368,5 +410,8 @@ internal class StreamArabicAudioSession(
         syncRate = 1f
         syncRateSinceMs = 0L
         delay = 0
+        videoDelay = 0
+        savedVideoDelay = 0
+        originalVideoItem = null
     }
 }

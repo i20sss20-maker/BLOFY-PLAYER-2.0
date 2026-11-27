@@ -4,6 +4,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ArabicSidecarTimingPolicyTest {
+    @Test fun pictureTimeShiftRespectsRealDvrWindow() {
+        assertEquals(120, ArabicSidecarTimingPolicy.videoDelay(999))
+        assertEquals(0, ArabicSidecarTimingPolicy.videoDelay(-5))
+        assertEquals(85_000L, ArabicSidecarTimingPolicy.videoSeekTarget(100_000L, 105_000L, 0, 15))
+        assertEquals(100_000L, ArabicSidecarTimingPolicy.videoSeekTarget(85_000L, 105_000L, 15, 0))
+        org.junit.Assert.assertNull(ArabicSidecarTimingPolicy.videoSeekTarget(5_000L, 10_000L, 0, 15))
+        org.junit.Assert.assertNull(ArabicSidecarTimingPolicy.videoSeekTarget(100_000L, 105_000L, 15, 0))
+    }
+
     @Test fun delayIsBoundedForNonseekableLiveSources() {
         assertEquals(0, ArabicSidecarTimingPolicy.adjust(0, -1))
         assertEquals(1, ArabicSidecarTimingPolicy.adjust(0, 1))
