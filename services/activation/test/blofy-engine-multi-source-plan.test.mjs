@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {planMultiSourceRoute as plan} from '../src/blofy-engine-multi-source-plan.mjs';
 const now=1700000000000;
-const workers={hostbrr:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:20,viewerLimit:150},linode:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:40,viewerLimit:150}};
+const workers={hostbrr:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:20,viewerLimit:150,activeFeeds:0,feedLimit:1},linode:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:40,viewerLimit:150,activeFeeds:1,feedLimit:1}};
 const candidate=(sourceId,poolId)=>({sourceId,poolId,contentId:'content',channelId:'10',
  identity:{authenticated:true,independentPoolVerified:true,sourceId,poolId,observedAt:now},
  entitlement:{sourceId,redistributionAllowed:true,expiresAt:now+60000},
@@ -37,4 +37,17 @@ test('cannot substitute another title or ambiguous source identity',()=>{
  const a=candidate('a','p1');a.contentId='different';
  assert.equal(run([a]).action,'hold');
  assert.equal(run([candidate('a','p1'),candidate('a','p2')]).reason,'duplicate_source_identity');
+});
+
+test('a full worker cannot be assigned a second source even with viewer headroom',()=>{
+ const a=candidate('a','p1');
+ const full={...workers,hostbrr:{...workers.hostbrr,activeFeeds:1}};
+ assert.equal(run([a],{workers:full}).reason,'no_independent_authorized_capacity');
+ const missing={...workers,hostbrr:{...workers.hostbrr,feedLimit:undefined}};
+ assert.equal(run([a],{workers:missing}).action,'hold');
+});
+test('a licensed free feed slot on the other worker can be selected',()=>{
+ const a=candidate('a','p1');
+ const capacity={...workers,hostbrr:{...workers.hostbrr,activeFeeds:1},linode:{...workers.linode,activeFeeds:0}};
+ assert.equal(run([a],{workers:capacity}).engineId,'linode');
 });
