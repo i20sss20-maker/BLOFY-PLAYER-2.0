@@ -6,7 +6,10 @@ const externalOrigins=new Set(['https://media2.blofyplayer.com','https://media.b
 const RESOURCE=/^\/relay\/[0-9a-f]{48}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function relayConfiguration(env=process.env){
-  const origin=String(env.BLOFY_STREAM_RELAY_ORIGIN||'').trim();
+  // Catalog, account, manifest and other control-plane calls retain the
+  // original Railway origin. Move the media broker independently.
+  const override=String(env.BLOFY_STREAM_RELAY_MEDIA_ORIGIN||'').trim();
+  const origin=override||String(env.BLOFY_STREAM_RELAY_ORIGIN||'').trim();
   const token=String(env.BLOFY_STREAM_RELAY_SHARED_TOKEN||'');
   const ids=String(env.BLOFY_STREAM_RELAY_CANARY_ACCOUNT_IDS||'')
     .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));

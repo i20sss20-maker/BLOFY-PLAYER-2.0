@@ -189,3 +189,24 @@ test('existing relay cutover requires explicit flag and binds opaque ticket to s
  assert.equal(isConfiguredRelayTicket(standby+path,{...env,BLOFY_STREAM_RELAY_ORIGIN:standby}),true);
  assert.equal(isConfiguredRelayTicket(origin+path,enabled),true);
 });
+
+test('media origin override preserves independent account and catalog requests on Railway',async()=>{
+ const {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource}=await import('../src/xtream-independent-catalog-relay.mjs');
+ const host='https://media2.blofyplayer.com',path='/relay/'+'a'.repeat(48);
+ const env={...enabled,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'1',BLOFY_STREAM_RELAY_MEDIA_ORIGIN:host,
+  BLOFY_XTREAM_INDEPENDENT_API_ENABLED:'1',BLOFY_XTREAM_INDEPENDENT_API_SOURCE_IDS:account};
+ assert.equal(relayConfiguration(env).origin,host);
+ assert.equal(shouldUseIndependentXtreamSource(account,env),true);
+ const calls=[];
+ const fetchImpl=async(uri,opts)=>{
+   calls.push(uri);
+   if(uri===origin+'/internal/xtream-catalog-relay')return new Response(JSON.stringify({user_info:{auth:1}}));
+   if(uri===host+'/internal/relay-grants')return new Response(JSON.stringify({ok:true,path,expiresInSeconds:45}),{status:201});
+   throw Error('unexpected origin');
+ };
+ await fetchIndependentXtreamSource('https://fixture.example/player_api.php?username=u&password=p',{env,fetchImpl});
+ assert.equal(await issueStreamRelayGrant({kind:'live',sourceUrl:'https://fixture.example/fixture.ts'},{env,fetchImpl}),host+path);
+ assert.deepEqual(calls,[origin+'/internal/xtream-catalog-relay',host+'/internal/relay-grants']);
+ assert.equal(relayConfiguration({...env,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'0'}).origin,'');
+ assert.equal(relayConfiguration({...env,BLOFY_STREAM_RELAY_MEDIA_ORIGIN:''}).origin,origin);
+});
