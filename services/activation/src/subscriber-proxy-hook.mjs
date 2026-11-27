@@ -1,6 +1,7 @@
 import { databaseOptions } from './database-options.mjs';
 import {blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
 import {withSubscriberMediaLifetime,pipeSubscriberMedia,readBoundedSubscriberManifest} from './blofy-subscriber-media-lifetime.mjs';
+import {createLegacyIngress} from './blofy-engine-legacy-ingress.mjs';
 import http from 'node:http';
 import { subscriberSessionValid } from './subscriber-session-validity.mjs';
 import crypto from 'node:crypto';
@@ -260,8 +261,11 @@ async function fetchUpstream(url, req, signal) {
   }
 }
 
+const subscriberIngress=createLegacyIngress(pool,{...process.env,BLOFY_ENGINE_LEGACY_INGRESS_GATE:process.env.BLOFY_ENGINE_SUBSCRIBER_HOLDS==='1'?'1':'0'});
 async function pipeUpstream(req, res, url, token) {
- return withSubscriberMediaLifetime(req,res,async signal=>{
+ const hold=await subscriberIngress(null,{unknownSource:true});
+ if(!hold.ok)return sendJson(res,503,{error:'subscriber_media_temporarily_unavailable'},{'retry-after':'2','cache-control':'no-store'});
+ try{return await withSubscriberMediaLifetime(req,res,async signal=>{
   const upstream = await fetchUpstream(url, req,signal);
   const effectiveUrl = upstream.url || url;
   const type = String(upstream.headers.get('content-type') || '').toLowerCase();
@@ -289,7 +293,7 @@ async function pipeUpstream(req, res, url, token) {
 
   copyUpstreamHeaders(upstream, res, { textual: isTextual });
   await pipeSubscriberMedia(upstream.body,res,{signal,transform:isTextual?replacePrivateOriginStream(req,token):undefined});
- });
+ });}finally{if(!await hold.close())console.warn('BLOFY_SUBSCRIBER_HOLD_CLOSE_UNCONFIRMED');}
 }
 
 async function createSubscriberSession(req, res) {
