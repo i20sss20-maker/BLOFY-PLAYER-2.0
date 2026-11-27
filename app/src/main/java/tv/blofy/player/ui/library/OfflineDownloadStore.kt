@@ -134,7 +134,8 @@ internal object OfflineDownloadStore {
             return@runCatching record
         }
         check(!hostIsNative(url)) { "External download route unavailable" }
-        val host = Uri.parse(url).host.orEmpty()
+        val uri = Uri.parse(url)
+        val host = uri.host.orEmpty()
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle(title.take(85))
             .setDescription("BLOFY • user-requested offline video")
@@ -155,7 +156,8 @@ internal object OfflineDownloadStore {
         // player. Only attach that bearer to our exact HTTPS first-party host.
         if (BuildConfig.CODE_ONLY_LOGIN &&
             host.equals(TRUSTED_STREAM_HOST, ignoreCase = true) &&
-            Uri.parse(url).path.orEmpty().startsWith("/api/v1/stream/media/")) {
+            uri.port in listOf(-1, 443) &&
+            uri.path.orEmpty().startsWith("/api/v1/stream/media/")) {
             val auth = StreamCodeSession.authorization(context)
                 ?: throw IllegalStateException("BLOFY activation is required")
             request.addRequestHeader("Authorization", auth)
@@ -230,6 +232,9 @@ internal object OfflineDownloadStore {
 
     @Synchronized
     fun remove(context: Context, record: Record) {
+        // A stale list row must never remove a replacement transfer.
+        val current = find(context, record.contentKey) ?: return
+        if (current.providerId != record.providerId || current.id != record.id || current.workerId != record.workerId) return
         if (record.workerId != null) {
             val id = UUID.fromString(record.workerId)
             WorkManager.getInstance(context.applicationContext).cancelWorkById(id)
