@@ -46,6 +46,7 @@ import {inspectLinodeGatewayMapping} from './linode-gateway-mapping-qa.mjs';
 import {linodeMaintenanceActive,blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
 import {createLegacyIngress} from './blofy-engine-legacy-ingress.mjs';
 import {createRelayFenceEndpoint} from './blofy-engine-relay-fence-endpoint.mjs';
+import {createAuthorityReadEndpoint,ensureAuthorityReadSchema} from './blofy-engine-authority-read.mjs';
 import {prepareEngineSchema,resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
@@ -146,6 +147,7 @@ const pool = new pg.Pool({
 pool.on('error', error => console.error('xtream gateway database error:', safeErrorSummary(error)));
 const enterLegacyIngress=createLegacyIngress(pool);
 const relayFenceEndpoint=createRelayFenceEndpoint(pool);
+const authorityReadEndpoint=createAuthorityReadEndpoint(pool);
 const distributorCatalog=createDistributorCustomerCatalog({
   pool,enabled:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY==='1',
   distributorAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_IDS||'',
@@ -2782,6 +2784,7 @@ if(process.env.BLOFY_ENGINE_SCHEMA_PREPARE==='1'){
   void ensureReady().then(async()=>{
    const sourceId=await resolveApprovedEngineSource(pool);
    const result=await prepareEngineSchema(pool,{sourceId});
+   if(result.ok&&process.env.BLOFY_ENGINE_AUTHORITY_READ==='1')await ensureAuthorityReadSchema(pool);
    console.info('BLOFY_ENGINE_SCHEMA_PREFLIGHT',JSON.stringify({...result,customerTrafficChanged:false,sourceMediaRequests:0}));
   }).catch(()=>console.warn('BLOFY_ENGINE_SCHEMA_PREFLIGHT',JSON.stringify({ok:false,code:'schema_prepare_failed',customerTrafficChanged:false})));
  },18000);prepare.unref?.();
@@ -2796,6 +2799,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
     catch { return listener(req, res); }
     try {
       if(url.pathname==='/internal/legacy-ingress')return await relayFenceEndpoint(req,res);
+      if(url.pathname==='/internal/engine-authority-read')return await authorityReadEndpoint(req,res);
       if(blocksDuringLinodeMaintenance(url.pathname)){
         return text(res,503,'BLOFY STREAM temporary maintenance','text/plain; charset=utf-8',
           {'retry-after':'60','cache-control':'no-store'});
