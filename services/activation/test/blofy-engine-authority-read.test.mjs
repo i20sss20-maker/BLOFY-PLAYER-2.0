@@ -24,9 +24,9 @@ test('authority reports legacy hold ages without treating them as open or releas
  const sourceId='d96b3b00-a833-4e6e-8d53-975be96fdf52';
  const env={BLOFY_ENGINE_AUTHORITY_READ:'1',BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'test',
   BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED:'1',BLOFY_STREAM_SHARED_LIVE_CANARY:'1',BLOFY_STREAM_LICENSED_LIVE_PRODUCTION:'1'};
- let rows={n:2,oldest:new Date(now-60000),newest:new Date(now-19000)};
+ let rows={n:2,oldest:new Date(now-60000),newest:new Date(now-19000)},quota='5';
  const pool={
-  async query(){return {rows:[{id:sourceId,enabled:true,publish_catalog:true,restreamer:'true',quota:'1'}]};},
+  async query(){return {rows:[{id:sourceId,enabled:true,publish_catalog:true,restreamer:'true',quota}]};},
   async connect(){return {release(){},async query(sql){
    if(sql.startsWith('INSERT INTO blofy_engine_authority_read_nonce'))return {rowCount:1};
    if(sql.includes('FROM blofy_engine_ingress_gate'))return {rows:[{mode:'legacy'}]};
@@ -49,8 +49,12 @@ test('authority reports legacy hold ages without treating them as open or releas
   return body;
  }
  const active=await request();
+ assert.equal(active.reportedMaxConnections,5);
  assert.equal(active.registeredLegacyHolds,2);
  assert.deepEqual(active.legacyHoldAgesSeconds,{oldest:60,newest:19});
  rows={n:0,oldest:null,newest:null};
- assert.equal((await request()).legacyHoldAgesSeconds,null);
+ quota=null;
+ const idle=await request();
+ assert.equal(idle.legacyHoldAgesSeconds,null);
+ assert.equal(idle.reportedMaxConnections,null);
 });

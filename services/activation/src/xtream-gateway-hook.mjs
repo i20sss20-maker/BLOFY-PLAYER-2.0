@@ -51,7 +51,7 @@ import {createLinodeFeedLedger} from './linode-feed-ledger.mjs';
 import {createRelayFenceEndpoint} from './blofy-engine-relay-fence-endpoint.mjs';
 import {createRelayHoldEndpoint} from './blofy-engine-relay-hold-endpoint.mjs';
 import {createAuthorityReadEndpoint,ensureAuthorityReadSchema} from './blofy-engine-authority-read.mjs';
-import {prepareEngineSchema,resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
+import {prepareEngineSchema,resolveApprovedEngineSource,resolveEngineIngressSource} from './blofy-engine-schema-preflight.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
@@ -2813,7 +2813,7 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
 if(process.env.BLOFY_ENGINE_SCHEMA_PREPARE==='1'){
  const prepare=setTimeout(()=>{
   void ensureReady().then(async()=>{
-   const sourceId=await resolveApprovedEngineSource(pool);
+   const sourceId=await resolveEngineIngressSource(pool);
    const result=await prepareEngineSchema(pool,{sourceId});
    if(result.ok&&process.env.BLOFY_ENGINE_AUTHORITY_READ==='1')await ensureAuthorityReadSchema(pool);
    console.info('BLOFY_ENGINE_SCHEMA_PREFLIGHT',JSON.stringify({...result,customerTrafficChanged:false,sourceMediaRequests:0}));

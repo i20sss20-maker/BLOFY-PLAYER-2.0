@@ -39,8 +39,18 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
   })},
   async closeLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
-   const r=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=now() WHERE source_id=$1 AND hold_id=$2 AND NOT closed',[sourceId,holdId]);
-   return r.rowCount===1?{ok:true}:denied('hold_not_open');
+   const r=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=COALESCE(closed_at,now()) WHERE source_id=$1 AND hold_id=$2',[sourceId,holdId]);
+   return r.rowCount===1?{ok:true}:denied('hold_not_found');
+  })},
+  // Used only when the caller never opened upstream because enter was not
+  // acknowledged. Keep a tombstone even if the delayed enter has yet to arrive.
+  async abandonLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
+   if(!row)return denied('gate_missing');
+   const r=await c.query(`INSERT INTO blofy_engine_legacy_holds(source_id,hold_id,closed,closed_at)
+    VALUES($1,$2,true,now()) ON CONFLICT(hold_id) DO UPDATE
+    SET closed=true,closed_at=COALESCE(blofy_engine_legacy_holds.closed_at,EXCLUDED.closed_at)
+    WHERE blofy_engine_legacy_holds.source_id=EXCLUDED.source_id`,[sourceId,holdId]);
+   return r.rowCount===1?{ok:true}:denied('hold_conflict');
   })},
   async beginDrain(){return tx(async(c,row)=>{
    if(row?.mode!=='legacy')return denied('not_legacy');

@@ -24,15 +24,27 @@ export async function prepareEngineSchema(pool,{sourceId}={}){
  return {ok:check.ok&&check.mode==='legacy',code:check.ok&&check.mode==='legacy'?'schema_ready':'gate_unknown',mode:check.mode??null};
 }
 
-export async function resolveApprovedEngineSource(pool,env=process.env){
+export async function readApprovedEngineSource(pool,env=process.env){
  const name=String(env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME||'').trim().toLowerCase();
  if(!/^[a-z0-9][a-z0-9 _-]{0,63}$/.test(name)||env.BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED!=='1'||env.BLOFY_STREAM_SHARED_LIVE_CANARY!=='1'||env.BLOFY_STREAM_LICENSED_LIVE_PRODUCTION!=='1')return null;
  const {rows}=await pool.query(`SELECT id,enabled,publish_catalog,account_info->>'isRestreamer' AS restreamer,
  account_info->>'maxConnections' AS quota FROM blofy_xtream_servers WHERE lower(btrim(name))=$1 AND deletion_requested_at IS NULL LIMIT 2`,[name]);
  const r=rows[0];
- if(rows.length!==1||r.enabled!==true||r.publish_catalog!==true||r.quota!=='1')return null;
+ if(rows.length!==1||r.enabled!==true||r.publish_catalog!==true)return null;
  const manual=env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED==='1'&&name===String(env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME||'').trim().toLowerCase();
  if(r.restreamer!=='true'&&!manual)return null;
  if(env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID&&env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID!==r.id)return null;
- return r.id;
+ const quota=typeof r.quota==='string'&&/^[1-9][0-9]*$/.test(r.quota)?Number(r.quota):null;
+ return {sourceId:r.id,reportedMaxConnections:Number.isSafeInteger(quota)?quota:null};
+}
+
+export async function resolveEngineIngressSource(pool,env=process.env){
+ return (await readApprovedEngineSource(pool,env))?.sourceId??null;
+}
+
+// The existing single-feed canary still requires its exact quota. The shared
+// ingress fence must continue tracking the source across provider plan changes.
+export async function resolveApprovedEngineSource(pool,env=process.env){
+ const source=await readApprovedEngineSource(pool,env);
+ return source?.reportedMaxConnections===1?source.sourceId:null;
 }

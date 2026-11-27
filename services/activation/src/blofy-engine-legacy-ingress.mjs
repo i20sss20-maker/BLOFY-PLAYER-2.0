@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 import {createEngineIngressGate} from './blofy-engine-ingress-gate.mjs';
-import {resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
+import {resolveEngineIngressSource} from './blofy-engine-schema-preflight.mjs';
 // Gate the authenticated source before issuing any media capability or opening
 // a socket. These holds describe gateway requests, NOT provider-wide sockets.
 // In particular, a redirected capability may outlive this request. Independent
@@ -12,20 +13,32 @@ export function createLegacyIngress(pool,env=process.env){
   if(!enabled)return allow();
   const holdId=randomUUID();
   try{
-   const sourceId=await resolveApprovedEngineSource(pool,env);
+   const sourceId=await resolveEngineIngressSource(pool,env);
    if(!sourceId)return {ok:false,reason:'source_identity_unknown'};
    // An opaque subscriber proxy URL can redirect to this source; hold
    // conservatively until its actual upstream identity can be established.
    if(!unknownSource&&source!==sourceId)return allow();
    const gate=createEngineIngressGate(pool,{sourceId,enabled});
-   const r=await gate.enterLegacy(holdId);
+   let r;
+   try{r=await gate.enterLegacy(holdId)}catch{
+    void retryCleanup(()=>gate.abandonLegacy(holdId));
+    return {ok:false,reason:'source_ingress_unknown'};
+   }
    if(!r?.ok)return {ok:false,reason:'source_ingress_fenced'};
-   let closed=false;
-   return {ok:true,async close(){
-    if(closed)return true;
-    try{const r=await gate.closeLegacy(holdId);if(r?.ok){closed=true;return true;}}catch{}
-    return false;
+   let closing;
+   return {ok:true,close(){
+    closing??=retryCleanup(()=>gate.closeLegacy(holdId));
+    return closing;
    }};
   }catch{return {ok:false,reason:'source_ingress_unknown'}}
  };
+}
+
+async function retryCleanup(operation){
+ for(const backoff of [0,150,450]){
+  if(backoff)await delay(backoff);
+  try{if((await operation())?.ok===true)return true}catch{}
+ }
+ console.warn('BLOFY_LEGACY_INGRESS_CLEANUP_UNCONFIRMED');
+ return false;
 }

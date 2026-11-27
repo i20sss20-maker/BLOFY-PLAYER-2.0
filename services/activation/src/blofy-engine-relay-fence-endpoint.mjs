@@ -1,6 +1,6 @@
 import {timingSafeEqual} from 'node:crypto';
 import {createEngineIngressGate} from './blofy-engine-ingress-gate.mjs';
-import {resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
+import {resolveEngineIngressSource} from './blofy-engine-schema-preflight.mjs';
 // Private read-only endpoint. Reuses the existing authenticated relay bridge
 // credential, never the subscriber or admin credential. No mode mutation
 // or provider capacity assertion is possible through this endpoint.
@@ -18,7 +18,7 @@ export function createRelayFenceEndpoint(pool,env=process.env){
   if(token.length<32||a.length!==b.length||!timingSafeEqual(a,b))return reply(403,{ok:false});
   if(!enabled)return reply(503,{ok:false});
   try{
-   const sourceId=await resolveApprovedEngineSource(pool,env);
+   const sourceId=await resolveEngineIngressSource(pool,env);
    if(!sourceId)return reply(503,{ok:false});
    const gate=createEngineIngressGate(pool,{sourceId,enabled});
    const r=await gate.readMode();

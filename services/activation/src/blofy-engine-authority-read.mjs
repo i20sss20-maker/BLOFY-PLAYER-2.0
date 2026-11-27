@@ -1,5 +1,5 @@
 import {createPublicKey,sign,verify,randomBytes} from 'node:crypto';
-import {resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
+import {readApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
 
 const domain='BLOFY_ENGINE_AUTHORITY_READ_V1';
 const pin='MCowBQYDK2VwAyEAxtbHHm7Ic1yMvEAldZh36zPYHCvllmh9KqgM6mxS0P4=';
@@ -34,8 +34,9 @@ export function createAuthorityReadEndpoint(pool,{env=process.env,key=createPubl
    let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>1024){req.destroy();return;}chunks.push(chunk);}
    const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
    if(!verifyAuthorityRead(e,key,clock()))return reply(res,403,{ok:false});
-   const sourceId=await resolveApprovedEngineSource(pool,env);
-   if(!sourceId)return reply(res,503,{ok:false});
+   const source=await readApprovedEngineSource(pool,env);
+   if(!source)return reply(res,503,{ok:false});
+   const {sourceId,reportedMaxConnections}=source;
    const c=await pool.connect();
    let out;
    try{
@@ -53,7 +54,7 @@ export function createAuthorityReadEndpoint(pool,{env=process.env,key=createPubl
     const observedAt=new Date(t.now).getTime();
     const age=value=>Math.max(0,Math.floor((observedAt-new Date(value).getTime())/1000));
     const legacyHoldAgesSeconds=h.n>0?{oldest:age(h.oldest),newest:age(h.newest)}:null;
-    out={ok:true,sourceId,mode:g.mode,registeredLegacyHolds:h.n,legacyHoldAgesSeconds,gateReservationMatches:g.mode==='engine'&&!!r&&g.reservation_id===r.reservation_id&&g.engine_id===r.engine_id,allPathsFenced:false,observedAt,reservation:r?{sourceId,state:r.state,engineId:r.engine_id,channelId:r.channel_id,reservationId:r.reservation_id,generation:r.generation}:null};
+    out={ok:true,sourceId,mode:g.mode,reportedMaxConnections,registeredLegacyHolds:h.n,legacyHoldAgesSeconds,gateReservationMatches:g.mode==='engine'&&!!r&&g.reservation_id===r.reservation_id&&g.engine_id===r.engine_id,allPathsFenced:false,observedAt,reservation:r?{sourceId,state:r.state,engineId:r.engine_id,channelId:r.channel_id,reservationId:r.reservation_id,generation:r.generation}:null};
     await c.query('COMMIT');
    }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
    return reply(res,200,out);
