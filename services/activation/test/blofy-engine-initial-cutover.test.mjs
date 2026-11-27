@@ -25,3 +25,22 @@ test('negative worker result needs independent release confirmation before rollb
  const x=fixture({startWorker:async()=>({ok:false}),verifyRollback:async()=>null});assert.equal((await x.run()).reason,'worker_release_unconfirmed');assert.deepEqual(x.calls,['drain','reserve']);
  const y=fixture({startWorker:async()=>({ok:false})});assert.deepEqual(await y.run(),{ok:false,reason:'worker_not_ready',restoredLegacy:true});assert.deepEqual(y.calls,['drain','reserve','rollback']);
 });
+
+test('only reconciles holds remaining after the verified drain',async()=>{
+ const x=fixture();
+ let reads=0;
+ x.config.gate.readDrain=async()=>({ok:true,mode:'draining',drainStartedAt:123,openHoldIds:reads++?[request.sourceId]:[request.sourceId,randomUUID()]});
+ x.config.ledger.reserve=async args=>{
+  x.calls.push('reserve');
+  assert.deepEqual(args.initialDrain.openHoldIds,[request.sourceId]);
+  return {ok:true,action:'start_once',reservationId:randomUUID()};
+ };
+ assert.equal((await x.run()).action,'feed_ready');
+ assert.equal(reads,2);
+});
+test('a changed drain epoch does not cancel or reserve against another drain',async()=>{
+ const x=fixture();let reads=0;
+ x.config.gate.readDrain=async()=>({ok:true,mode:'draining',drainStartedAt:123+reads++,openHoldIds:[]});
+ assert.equal((await x.run()).reason,'drain_state_changed');
+ assert.deepEqual(x.calls,['drain']);
+});
