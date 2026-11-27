@@ -104,6 +104,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
     private var arabicAudioSession: StreamArabicAudioSession? = null
+    private var arabicAudioMenuRequest = 0L
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -1736,12 +1737,14 @@ open class PlayerActivity : ContentAccessActivity() {
             return
         }
         val channel = currentStreamId
+        val request = ++arabicAudioMenuRequest
         Toast.makeText(this,
             if (english) "Loading Arabic commentary..." else "جاري تحميل الصوتيات العربية...",
             Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val result = StreamArabicAudioCatalog.lookup(applicationContext, channel)
-            if (sessionReleased || isFinishing || currentStreamId != channel) return@launch
+            if (sessionReleased || isFinishing || isDestroyed || currentStreamId != channel ||
+                request != arabicAudioMenuRequest) return@launch
             if (result.tracks.isEmpty()) {
                 val message = when (result.failure) {
                     StreamArabicAudioCatalog.Failure.NO_ENDPOINT ->
@@ -1833,6 +1836,7 @@ open class PlayerActivity : ContentAccessActivity() {
         tracks: List<StreamArabicAudioCatalog.Track>, english: Boolean
     ) {
         if (sessionReleased || kind != KIND_LIVE || tracks.isEmpty()) return
+        val menuChannel = currentStreamId
         val grouped = tracks.groupBy { StreamArabicAudioCatalog.groupName(it, english) }
         val groups = grouped.keys.toList()
         val saved = StreamAudioPreferenceStore.read(this, currentStreamId)
@@ -1848,6 +1852,7 @@ open class PlayerActivity : ContentAccessActivity() {
         AlertDialog.Builder(this)
             .setTitle(if (english) "BLOFY audio library" else "مكتبة الصوتيات • BLOFY")
             .setItems(labels.toTypedArray()) { _, index ->
+                if (sessionReleased || isFinishing || isDestroyed || currentStreamId != menuChannel) return@setItems
                 if (index == 0) {
                     arabicAudioSession?.stop()
                     arabicAudioSession = null
@@ -1868,13 +1873,16 @@ open class PlayerActivity : ContentAccessActivity() {
         title: String, english: Boolean
     ) {
         if (sessionReleased || kind != KIND_LIVE || tracks.isEmpty()) return
+        val menuChannel = currentStreamId
         AlertDialog.Builder(this)
             .setTitle(title)
             .setItems(tracks.map { it.label }.toTypedArray()) { _, index ->
+                if (sessionReleased || isFinishing || isDestroyed || currentStreamId != menuChannel) return@setItems
                 tracks.getOrNull(index)?.let { activateArabicTrack(it, english) }
             }
             .setNeutralButton(if (english) "Back to groups" else "رجوع للأقسام") { _, _ ->
-                showArabicAudioMenu(chooseAnother = true)
+                if (!sessionReleased && !isFinishing && !isDestroyed && currentStreamId == menuChannel)
+                    showArabicAudioMenu(chooseAnother = true)
             }
             .setNegativeButton(if (english) "Cancel" else "إلغاء", null)
             .show()
