@@ -9,8 +9,8 @@ internal object DownloadTransferPolicy {
             (freeBytes >= RESERVE_BYTES && expectedBytes <= freeBytes - RESERVE_BYTES)
 
     fun bytesPerSecond(previousBytes: Long, currentBytes: Long, elapsedMs: Long): Long =
-        if (elapsedMs <= 0L || currentBytes <= previousBytes) 0L
-        else ((currentBytes - previousBytes) * 1000L / elapsedMs).coerceAtLeast(0L)
+        if (elapsedMs <= 0L || previousBytes < 0L || currentBytes <= previousBytes) 0L
+        else ((currentBytes - previousBytes).toDouble() * 1000.0 / elapsedMs).toLong().coerceAtLeast(0L)
 
     fun secondsRemaining(totalBytes: Long, downloadedBytes: Long, speed: Long): Long? {
         if (totalBytes <= 0L || downloadedBytes < 0L ||
@@ -41,6 +41,7 @@ internal object DownloadTransferPolicy {
         else -> RowAction.REMOVE_OR_CANCEL
     }
 
-    fun isValidDownloadedFile(status: Int, bytes: Long, hasUri: Boolean): Boolean =
-        status == android.app.DownloadManager.STATUS_SUCCESSFUL && hasUri && bytes > 0L
+    fun isValidDownloadedFile(status: Int, bytes: Long, hasUri: Boolean, expectedBytes: Long = -1L): Boolean =
+        status == android.app.DownloadManager.STATUS_SUCCESSFUL && hasUri && bytes > 0L &&
+            (expectedBytes <= 0L || bytes == expectedBytes)
 }

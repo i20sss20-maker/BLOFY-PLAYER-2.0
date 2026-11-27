@@ -23,6 +23,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tv.blofy.player.R
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
@@ -36,6 +38,8 @@ import tv.blofy.player.ui.series.EpisodesActivity
 /** One screen for queued, active, completed and failed user-owned transfers. */
 class DownloadsActivity : AppCompatActivity() {
     private lateinit var rows: LinearLayout
+    private lateinit var listScroll: ScrollView
+    private val refreshMutex = Mutex()
     private lateinit var empty: TextView
     private lateinit var space: TextView
     private val buttons = LinkedHashMap<Long, Button>()
@@ -133,13 +137,16 @@ class DownloadsActivity : AppCompatActivity() {
             setPadding(dp(8),dp(24),dp(8),dp(12))
         }
         rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(ScrollView(this).apply {
+        listScroll = ScrollView(this).apply {
+            isFillViewport = true
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             addView(LinearLayout(this@DownloadsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(empty)
                 addView(rows)
             })
-        },LinearLayout.LayoutParams(-1,0,1f))
+        }
+        root.addView(listScroll, LinearLayout.LayoutParams(-1,0,1f))
         setContentView(root)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -150,7 +157,7 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
     }
-    private suspend fun refresh() {
+    private suspend fun refresh() = refreshMutex.withLock {
         val states = withContext(Dispatchers.IO) {
             val activeProvider = BlofyDatabase.get(applicationContext).dao().activeProviderId()
             OfflineDownloadStore.records(applicationContext,activeProvider ?: "__none__").mapNotNull { record ->
@@ -187,6 +194,8 @@ class DownloadsActivity : AppCompatActivity() {
         empty.visibility = if(visible.isEmpty()) View.VISIBLE else View.GONE
         val ids=visible.map { it.record.id }
         if(ids!=rowKeys) {
+            val focusedId = buttons.entries.firstOrNull { it.value.hasFocus() }?.key
+            val oldIndex = focusedId?.let { rowKeys.indexOf(it) } ?: -1
             rowKeys=ids
             buttons.clear()
             rows.removeAllViews()
@@ -246,7 +255,19 @@ class DownloadsActivity : AppCompatActivity() {
                 buttons[p.record.id]=button
                 rows.addView(button, LinearLayout.LayoutParams(-1,dp(80)).apply {bottomMargin=dp(8)})
             }
+            // Polling must not strand a TV remote user when a transfer changes groups.
+            if (focusedId != null) {
+                val target = buttons[focusedId] ?: if (ids.isEmpty()) null
+                    else buttons[ids[oldIndex.coerceIn(0, ids.lastIndex)]]
+                if (target != null) {
+                    target.requestFocus()
+                    target.post {
+                        if (target.hasFocus()) target.requestRectangleOnScreen(android.graphics.Rect(0, 0, target.width, target.height), false)
+                    }
+                } else filterButtons[currentFilter]?.requestFocus()
+            }
         }
+        progressSamples.keys.retainAll(ids.toSet())
         val nowMs = android.os.SystemClock.elapsedRealtime()
         visible.forEach { p ->
             val sample = progressSamples[p.record.id]

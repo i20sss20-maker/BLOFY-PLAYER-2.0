@@ -27,6 +27,7 @@ object ContentUrlResolver {
     fun liveRoute(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): LiveRoute {
         recentRoutes[provider.id] = RouteContext(provider, profile)
         if (codeEdition(provider)) return LiveRoute(codeMedia("live",stream.remoteId,"ts"),null)
+        if (provider.providerType == "m3u") return LiveRoute(requireNotNull(stream.directSource.validHttpUrl()), null)
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
         val fallback = liveFallbackForPrimary(provider, profile, stream, primary)
         return LiveRoute(primary, fallback, recoveryUrls(provider, profile, stream).filterNot { it == primary })
@@ -39,6 +40,7 @@ object ContentUrlResolver {
             "movie" -> codeMedia("movie",stream.remoteId,stream.extension?:"mp4")
             else -> null
         })
+        if (provider.providerType == "m3u") return listOfNotNull(stream.directSource.validHttpUrl())
         val canonical = when (stream.kind) {
             "live" -> canonicalLive(provider, profile, stream)
             "movie" -> canonicalMovie(provider, stream)
@@ -61,7 +63,7 @@ object ContentUrlResolver {
     ).distinct()
 
     fun recoveryUrls(stream: StreamEntity): List<String> {
-        if (BuildConfig.CODE_ONLY_LOGIN) return listOf(codeMedia(
+        if (BuildConfig.CODE_ONLY_LOGIN && stream.providerId == StreamCodeSession.providerId) return listOf(codeMedia(
             if (stream.kind=="live") "live" else "movie",stream.remoteId,
             if (stream.kind=="live") "ts" else stream.extension?:"mp4"))
         val context = recentRoutes[stream.providerId] ?: return listOfNotNull(stream.directSource.safeContextFreeFallback())
@@ -70,7 +72,7 @@ object ContentUrlResolver {
     }
 
     fun recoveryUrls(episode: EpisodeEntity): List<String> {
-        if (BuildConfig.CODE_ONLY_LOGIN) return listOf(codeMedia("series",episode.remoteId,episode.extension))
+        if (BuildConfig.CODE_ONLY_LOGIN && episode.providerId == StreamCodeSession.providerId) return listOf(codeMedia("series",episode.remoteId,episode.extension))
         val context = recentRoutes[episode.providerId] ?: return listOfNotNull(episode.directSource.safeContextFreeFallback())
         return recoveryUrls(context.provider, episode)
     }
@@ -81,6 +83,7 @@ object ContentUrlResolver {
     fun movie(provider: ProviderEntity, stream: StreamEntity): String {
         recentRoutes[provider.id] = RouteContext(provider, recentRoutes[provider.id]?.liveProfile)
         if (codeEdition(provider)) return codeMedia("movie",stream.remoteId,stream.extension?:"mp4")
+        if (provider.providerType == "m3u") return requireNotNull(stream.directSource.validHttpUrl())
         return primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalMovie(provider, stream)
     }
 
@@ -97,7 +100,7 @@ object ContentUrlResolver {
      * route is not applicable, fall back to the canonical Xtream URL.
      */
     fun liveFallback(provider: ProviderEntity, profile: ProviderProfile, stream: StreamEntity): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN) return null
+        if (codeEdition(provider) || provider.providerType == "m3u") return null
         recentRoutes[provider.id] = RouteContext(provider, profile)
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: canonicalLive(provider, profile, stream)
         return liveFallbackForPrimary(provider, profile, stream, primary)
@@ -109,7 +112,7 @@ object ContentUrlResolver {
         stream: StreamEntity,
         primary: String,
     ): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN) return null
+        if (codeEdition(provider) || provider.providerType == "m3u") return null
         val source = stream.directSource
         if (source.validHttpUrl() == null) return null
         val canonical = canonicalLive(provider, profile, stream).takeUnless { it == primary }
@@ -119,7 +122,7 @@ object ContentUrlResolver {
     }
 
     fun movieFallback(provider: ProviderEntity, stream: StreamEntity): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN) return null
+        if (codeEdition(provider) || provider.providerType == "m3u") return null
         val primary = primaryDirectSource(provider.baseUrl, stream.directSource) ?: return null
         val canonical = canonicalMovie(provider, stream).takeUnless { it == primary }
         if (canonical != null) return canonical
@@ -128,7 +131,7 @@ object ContentUrlResolver {
     }
 
     fun episodeFallback(provider: ProviderEntity, episode: EpisodeEntity): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN) return null
+        if (codeEdition(provider) || provider.providerType == "m3u") return null
         val primary = primaryDirectSource(provider.baseUrl, episode.directSource) ?: return null
         val canonical = canonicalEpisode(provider, episode).takeUnless { it == primary }
         if (canonical != null) return canonical
@@ -137,18 +140,19 @@ object ContentUrlResolver {
     }
 
     fun directFallback(provider: ProviderEntity, stream: StreamEntity): String? =
-        if (BuildConfig.CODE_ONLY_LOGIN) null else when (stream.kind) {
+        if (codeEdition(provider)) null else when (stream.kind) {
         "live" -> recentRoutes[provider.id]?.liveProfile?.let { liveFallback(provider, it, stream) }
         "movie" -> movieFallback(provider, stream)
         else -> null
     }
 
     fun directFallback(provider: ProviderEntity, episode: EpisodeEntity): String? =
-        if (BuildConfig.CODE_ONLY_LOGIN) null else episodeFallback(provider, episode)
+        if (codeEdition(provider)) null else episodeFallback(provider, episode)
 
     fun directFallback(stream: StreamEntity): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN) return null
+        if (BuildConfig.CODE_ONLY_LOGIN && stream.providerId == StreamCodeSession.providerId) return null
         val route = recentRoutes[stream.providerId] ?: return stream.directSource.safeContextFreeFallback()
+        if (route.provider.providerType == "m3u") return null
         val primary = primaryDirectSource(route.provider.baseUrl, stream.directSource) ?: return null
         val origin = ProviderHostResolver.providerOriginFallback(route.provider.baseUrl, stream.directSource)
             ?.takeUnless { it == primary }
@@ -163,7 +167,7 @@ object ContentUrlResolver {
     }
 
     fun directFallback(episode: EpisodeEntity): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN) return null
+        if (BuildConfig.CODE_ONLY_LOGIN && episode.providerId == StreamCodeSession.providerId) return null
         val route = recentRoutes[episode.providerId] ?: return episode.directSource.safeContextFreeFallback()
         val primary = primaryDirectSource(route.provider.baseUrl, episode.directSource) ?: return null
         val origin = ProviderHostResolver.providerOriginFallback(route.provider.baseUrl, episode.directSource)
@@ -172,7 +176,8 @@ object ContentUrlResolver {
     }
 
     fun alternateLiveFormat(url: String, profile: ProviderProfile): String? {
-        if (BuildConfig.CODE_ONLY_LOGIN || profile.providerKind != ProviderKind.XTREAM) return null
+        if ((BuildConfig.CODE_ONLY_LOGIN && profile.providerKey == StreamCodeSession.providerId) ||
+            profile.providerKind != ProviderKind.XTREAM) return null
 
         val suffixStart = listOf(url.indexOf('?'), url.indexOf('#'))
             .filter { it >= 0 }

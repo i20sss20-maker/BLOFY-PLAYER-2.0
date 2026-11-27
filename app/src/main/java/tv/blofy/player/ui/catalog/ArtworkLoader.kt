@@ -46,7 +46,7 @@ object ArtworkLoader {
     private val workerCount = adaptiveWorkerCount()
     private val viewRequests = java.util.WeakHashMap<ImageView, ViewRequest>()
     // Local hits must never queue behind a view waiting for a slow HTTP response.
-    private val localPool = Executors.newFixedThreadPool(2)
+    private val localPool = ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue<Runnable>())
     private val backgroundPool = Executors.newFixedThreadPool(2)
     private val storagePool = Executors.newSingleThreadExecutor()
     private val pendingWrites = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
@@ -254,7 +254,11 @@ object ArtworkLoader {
     fun cancel(view: ImageView) {
         view.animate().cancel()
         viewRequests.remove(view)?.let { request ->
-            request.local?.cancel(true)
+            request.local?.let { task ->
+                task.cancel(true)
+                // Rapid TV scrolling must not leave cancelled tasks in the local queue.
+                localPool.remove(task)
+            }
             request.release?.invoke()
         }
         view.tag = null

@@ -103,6 +103,35 @@ class PlaybackSessionReleaseTest {
     }
 
 
+    @Test fun delayedErrorRetryDoesNotRestartAnExplicitlyRecoveredStream() {
+        val fake = FakePlayer()
+        val session = session(fake)
+        try {
+            session.play("https://example.test/live/u/p/1.ts")
+            fake.timeout(ExoTimeoutException.TIMEOUT_OPERATION_DETACH_SURFACE)
+            session.retrySameUrl()
+            assertEquals(2, fake.prepares)
+            shadowOf(Looper.getMainLooper()).idleFor(1000, TimeUnit.MILLISECONDS)
+            assertEquals(2, fake.prepares)
+        } finally { session.release() }
+    }
+
+    @Test fun cleanLiveEndCanRecoverAfterPauseDuringPendingRetry() {
+        val fake = FakePlayer()
+        val session = session(fake)
+        try {
+            session.play("https://example.test/live/u/p/1.ts")
+            fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+            fake.playReady = false
+            shadowOf(Looper.getMainLooper()).idleFor(1000, TimeUnit.MILLISECONDS)
+            assertEquals(1, fake.prepares)
+            fake.playReady = true
+            fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+            shadowOf(Looper.getMainLooper()).idleFor(2100, TimeUnit.MILLISECONDS)
+            assertEquals(2, fake.prepares)
+        } finally { session.release() }
+    }
+
     @Test fun cleanLiveEndReopensSameStreamWithoutReturningToHome() {
         val fake = FakePlayer()
         val session = session(fake)

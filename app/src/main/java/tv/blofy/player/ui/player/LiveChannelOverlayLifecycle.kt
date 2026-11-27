@@ -130,6 +130,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         // A single in-panel selection state. BACK returns to channel controls
         // instead of exiting player or opening another file/library screen.
         private var audioPickerOpen = false
+        private var audioPickerGeneration = 0L
         private var restoreMainActions: (() -> Unit)? = null
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1093,6 +1094,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             returnHome: () -> Unit
         ) {
             audioPickerOpen = true
+            val generation = ++audioPickerGeneration
+            fun isCurrentPicker() = audioPickerOpen && audioPickerGeneration == generation &&
+                dialog?.isShowing == true && !activity.isFinishing && !activity.isDestroyed
+            var catalogLoading = true
+            lateinit var loadVoices: () -> Unit
             val allVoices = mutableListOf<StreamArabicAudioCatalog.Track>()
             var favoritesOnly = false
             var pendingButton: TextView? = null
@@ -1117,8 +1123,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             }
             fun updateSync() {
                 val value = activity.inlineArabicDelaySeconds()
-                sync.text = copy("⏱ تأخير المعلق: +${value}ث  •  − تقديم / + تأخير تدريجي",
-                    "⏱ Commentary delay: +${value}s  •  − advance / + gradually delay")
+                val picture = activity.inlineVideoDelaySeconds()
+                sync.text = copy("⏱ الصوت: +${value}ث  •  الصورة: +${picture}ث",
+                    "⏱ Voice: +${value}s  •  Picture: +${picture}s")
             }
 
             fun paintStatus(message: String, state: StreamAudioQuickPickPolicy.State?) {
@@ -1134,7 +1141,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 focusId: String? = null, focusStar: Boolean = false,
                 focusFirstVoice: Boolean = false
             ) {
-                if (!audioPickerOpen || dialog?.isShowing != true) return
+                if (!isCurrentPicker()) return
                 val savedFavorites = StreamAudioQuickPickPrefs.favorites(activity)
                 val lastGood = activity.lastConfirmedInlineArabicTrackId()
                 val playing = activity.currentInlineArabicTrackId()
@@ -1207,6 +1214,24 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 addQuickSync("+1ث", 1)
                 addQuickSync("+5ث", 5)
                 footer.addView(syncButtons, LinearLayout.LayoutParams(-1, dp(45)))
+                addHeading(copy("تأخير الصورة (TimeShift)", "Picture delay (TimeShift)"))
+                val pictureButtons = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = View.LAYOUT_DIRECTION_LTR
+                }
+                listOf(-5, -1, 1, 5).forEach { delta ->
+                    val button = addButton((if (delta > 0) "+" else "") + delta + copy("ث", "s")) {
+                        val changed = activity.adjustInlineVideoSync(delta)
+                        updateSync()
+                        paintStatus(if (changed) copy("تم ضبط توقيت الصورة.", "Picture offset adjusted.")
+                            else if (!activity.canInlineVideoTimeShift()) copy(
+                                "القناة تحتاج بثًا يدعم التايم شفت.", "This channel needs a seekable DVR stream.")
+                            else copy("نافذة البث غير كافية أو وصلت للحد.", "DVR window too short or limit reached."), null)
+                    }
+                    footer.removeView(button)
+                    pictureButtons.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(3) })
+                }
+                footer.addView(pictureButtons, LinearLayout.LayoutParams(-1, dp(45)))
                 addButton(copy("⟲ إعادة المزامنة إلى 0 ثانية",
                     "⟲ Reset audio offset to 0s")) {
                     activity.adjustInlineArabicSync(0)
@@ -1221,8 +1246,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
 
                 if (allVoices.isEmpty()) {
-                    addHeading(copy("جارٍ جلب المعلقين من BLOFY…",
-                        "Loading voices securely from BLOFY…"))
+                    if (catalogLoading) {
+                        addHeading(copy("جارٍ جلب المعلقين من BLOFY…",
+                            "Loading voices securely from BLOFY…"))
+                    } else {
+                        addButton(copy("⟲ إعادة جلب المعلقين", "⟲ Retry commentary list")) {
+                            loadVoices()
+                        }
+                    }
                     return
                 }
                 if (visible.isEmpty()) {
@@ -1275,8 +1306,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             } else {
                                 StreamAudioQuickPickPrefs.markFailed(activity, voice.id)
                             }
-                            if (audioPickerOpen && dialog?.isShowing == true &&
-                                pendingId == voice.id) {
+                            if (isCurrentPicker() && pendingId == voice.id) {
                                 pendingButton?.isEnabled = true
                                 pendingButton = null
                                 if (actuallyPlaying) {
@@ -1353,14 +1383,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     val target = focusTarget
                     val row = scrollTarget
                     footer.post {
-                        if (dialog?.isShowing == true && audioPickerOpen) {
+                        if (isCurrentPicker()) {
                             target?.requestFocus()
                             scroller.smoothScrollTo(0, row?.top ?: 0)
                         }
                     }
                 } else {
                     footer.post {
-                        if (dialog?.isShowing == true && audioPickerOpen) {
+                        if (isCurrentPicker()) {
                             filterButton.requestFocus()
                             scroller.scrollTo(0, 0)
                         }
@@ -1368,31 +1398,42 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
 
-            paintStatus(copy("اختر المعلق المناسب", "Choose your commentary"), null)
-            // Render controls immediately while the protected catalog loads.
-            // A callback can never populate a picker that has already closed.
-            render()
-            activity.lifecycleScope.launch {
-                val response = activity.inlineArabicAudioTracks()
-                if (!audioPickerOpen || dialog?.isShowing != true ||
-                    activity.isFinishing || activity.isDestroyed) return@launch
-                if (response == null || response.tracks.isEmpty()) {
-                    paintStatus(copy(
-                        "تعذّر جلب الصوتيات الآن. صوت القناة الأصلي مستمر.",
-                        "Voices unavailable right now. Original audio continues."
-                    ), StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
-                    return@launch
+            loadVoices = {
+                if (isCurrentPicker()) {
+                    catalogLoading = true
+                    paintStatus(copy("جارٍ جلب المعلقين", "Loading commentary"), null)
+                    render()
+                    activity.lifecycleScope.launch {
+                        val response = activity.inlineArabicAudioTracks()
+                        if (!isCurrentPicker()) return@launch
+                        catalogLoading = false
+                        if (response == null || response.tracks.isEmpty()) {
+                            val message = when (response?.failure) {
+                                StreamArabicAudioCatalog.Failure.EMPTY_CATALOG ->
+                                    copy("لا توجد صوتيات متاحة الآن.", "No commentary available right now.")
+                                StreamArabicAudioCatalog.Failure.UNAUTHORIZED,
+                                StreamArabicAudioCatalog.Failure.NOT_ACTIVATED ->
+                                    copy("تعذر التحقق من جلسة التفعيل.", "Could not verify activation session.")
+                                StreamArabicAudioCatalog.Failure.RATE_LIMITED ->
+                                    copy("حاول مجددًا بعد قليل.", "Try again in a moment.")
+                                else -> copy("تعذّر جلب الصوتيات الآن.", "Could not load commentary.")
+                            }
+                            paintStatus(message + copy(" صوت القناة الأصلي مستمر.",
+                                " Original audio continues."), StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
+                            render()
+                            return@launch
+                        }
+                        allVoices.clear()
+                        allVoices.addAll(response.tracks.distinctBy { it.id })
+                        paintStatus(copy(
+                            "♫ اختر المعلق بضغطة؛ ☆ لتثبيته. ● تعني تشغيلًا مؤكدًا.",
+                            "♫ One click plays. ☆ pins a voice. ● means confirmed playback."
+                        ), null)
+                        render(focusFirstVoice = true)
+                    }
                 }
-                allVoices.clear()
-                allVoices.addAll(response.tracks.distinctBy { it.id })
-                paintStatus(copy(
-                    "♫ اختر المعلق بضغطة؛ ☆ لتثبيته. ● تعني تشغيلًا مؤكدًا.",
-                    "♫ One click plays. ☆ pins a voice. ● means confirmed playback."
-                ), null)
-                // Most important television UX: the first remote focus goes
-                // directly to a playable voice, not to an empty sub-menu.
-                render(focusFirstVoice = true)
             }
+            loadVoices()
         }
 
         private fun prepareWindow(window: Window, width: Int, height: Int, reveal: Boolean) {

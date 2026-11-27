@@ -22,6 +22,8 @@ import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.URLEncoder
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import tv.blofy.player.core.url.PlaylistUrlPolicy
 import java.nio.charset.StandardCharsets
 
 data class PlaylistSyncResult(
@@ -41,6 +43,7 @@ class PlaylistManager(
         onSectionComplete: suspend (String) -> Unit = {},
         onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
     ): PlaylistSyncResult {
+        if (provider.providerType.equals("m3u", true)) return syncM3u(provider, onProgress)
         require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
         require((BuildConfig.CODE_ONLY_LOGIN && provider.baseUrl.trimEnd('/')==StreamCodeSession.HOST) ||
             (provider.username.isNotBlank() && provider.password.isNotBlank())) {
@@ -130,6 +133,46 @@ class PlaylistManager(
             }
         )
         return PlaylistSyncResult(freshItemCount, sectionResult.failureCount, sectionResult.failureCode)
+    }
+
+    private suspend fun syncM3u(provider: ProviderEntity, onProgress: suspend (PlaylistSyncProgress) -> Unit): PlaylistSyncResult {
+        require(PlaylistUrlPolicy.isValid(provider.baseUrl))
+        val source = provider.baseUrl.toHttpUrl()
+        dao.clearProviderCatalog(provider.id)
+        val groups = linkedMapOf<String, CategoryEntity>()
+        val batch = linkedMapOf<String, StreamEntity>()
+        suspend fun flush() {
+            if (batch.isEmpty()) return
+            dao.applyChangedCatalogRows(batch.values.toList())
+            batch.clear()
+        }
+        var processed = 0
+        val count = api.streamingCall(provider.baseUrl).readCatalog { body ->
+            M3uCatalogParser.parse(body.charStream(), source) { item ->
+                val categoryId = M3uCatalogParser.identity(item.group)
+                val groupKey = "${provider.id}:${item.kind}:$categoryId"
+                if (!groups.containsKey(groupKey)) {
+                    check(groups.size < 10_000) { "Too many playlist groups" }
+                    val group = CategoryEntity(groupKey, provider.id, categoryId, item.kind, item.group, groups.size)
+                    groups[groupKey] = group
+                    dao.upsertCategories(listOf(group))
+                }
+                val id = M3uCatalogParser.identity(item.url)
+                val row = StreamEntity(
+                    key = "${provider.id}:${item.kind}:$id", providerId = provider.id,
+                    remoteId = id, categoryId = categoryId, kind = item.kind, name = item.name,
+                    icon = item.icon, directSource = item.url
+                )
+                batch[row.key] = row
+                processed++
+                if (processed % 256 == 0) {
+                    flush()
+                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, processedItems = processed))
+                }
+            }
+        }
+        flush()
+        return PlaylistSyncResult(count)
     }
 
     suspend fun syncLive(
@@ -506,6 +549,7 @@ class PlaylistManager(
     }
 
     suspend fun syncShortEpg(provider: ProviderEntity, streamId: String, limit: Int = 20) {
+        if (!provider.providerType.equals("xtream", true)) return
         val response = api.objectResponse(actionUrl(provider, "get_short_epg", mapOf("stream_id" to streamId, "limit" to limit.toString())))
         val items = parseEpg(provider.id, streamId, response["epg_listings"] as? List<*> ?: emptyList<Any?>())
         dao.clearEpg(provider.id, streamId)
@@ -513,6 +557,7 @@ class PlaylistManager(
     }
 
     suspend fun syncCatchupEpg(provider: ProviderEntity, streamId: String) {
+        if (!provider.providerType.equals("xtream", true)) return
         val response = api.objectResponse(actionUrl(provider, "get_simple_data_table", mapOf("stream_id" to streamId)))
         val rows = response["epg_listings"] as? List<*> ?: emptyList<Any?>()
         val items = parseEpg(provider.id, streamId, rows)

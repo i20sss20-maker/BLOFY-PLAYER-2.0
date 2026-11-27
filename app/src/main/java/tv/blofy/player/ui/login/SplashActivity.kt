@@ -65,7 +65,8 @@ class SplashActivity : AppCompatActivity() {
                 // Warm start uses only two local SharedPreferences flags, no Room
                 // queries, server fetch or backend sorting. Home asynchronously
                 // revalidates the bearer; invalid/expired sessions still redirect.
-                if (StreamCodeSession.isClaimed(this@SplashActivity) &&
+                if (StreamDirectLogin.selected(this@SplashActivity) != null) CodeOnlyLoginActivity::class.java
+                else if (StreamCodeSession.isClaimed(this@SplashActivity) &&
                     CatalogSyncState.isReady(this@SplashActivity, StreamCodeSession.providerId))
                     HomeActivity::class.java else CodeOnlyLoginActivity::class.java
             } else if (StartupEntryState.shouldOpenHome(this@SplashActivity)) {

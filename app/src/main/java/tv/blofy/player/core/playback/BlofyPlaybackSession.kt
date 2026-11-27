@@ -100,9 +100,9 @@ class BlofyPlaybackSession(
                             val item = currentMediaItem
                             retryHandler.postDelayed({
                                 if (!closing && generation == liveRecoveryGeneration &&
-                                    currentMediaItem == item && playWhenReady) {
+                                    currentMediaItem == item) {
                                     liveEndRecoveryPending = false
-                                    retrySameUrl()
+                                    if (playWhenReady) retrySameUrl()
                                 }
                             }, plan.delayMs)
                         }
@@ -155,6 +155,10 @@ class BlofyPlaybackSession(
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
+                    // An explicit retry, route change or new channel invalidates queued
+                    // error recovery before it can restart the current decoder again.
+                    val errorGeneration = liveRecoveryGeneration
+                    val errorItem = currentMediaItem
                     if (!contentKind.isLiveContent() &&
                         !ultraHdCompatibilityFallbackAttempted &&
                         PlaybackFailureDetails.isUltraHdDecoderFailure(error, videoFormat)
@@ -165,7 +169,10 @@ class BlofyPlaybackSession(
                             .setMaxVideoSize(1920, 1080)
                             .build()
                         automaticRetries = MAX_AUTOMATIC_RETRIES
-                        retryHandler.post { retrySameUrl() }
+                        retryHandler.post {
+                            if (!closing && errorGeneration == liveRecoveryGeneration &&
+                                currentMediaItem == errorItem) retrySameUrl()
+                        }
                         return
                     }
                     val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
@@ -184,10 +191,14 @@ class BlofyPlaybackSession(
                     )
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES && delay != null) {
                         automaticRetries++
-                        retryHandler.postDelayed({ if (!closing) retrySameUrl() }, delay)
+                        retryHandler.postDelayed({
+                            if (!closing && errorGeneration == liveRecoveryGeneration &&
+                                currentMediaItem == errorItem) retrySameUrl()
+                        }, delay)
                     } else if (failedUrl.isNotBlank()) {
                         retryHandler.post {
-                            if (closing) return@post
+                            if (closing || errorGeneration != liveRecoveryGeneration ||
+                                currentMediaItem != errorItem) return@post
                             // A configured provider-origin fallback exists specifically to escape an
                             // unreachable direct/hidden host. Try that route before changing .ts/.m3u8
                             // on the same failed origin; otherwise a dead hidden hostname costs another
@@ -345,7 +356,8 @@ class BlofyPlaybackSession(
         if (liveStallStartedAtMs == 0L) liveStallStartedAtMs = now
 
         val stalledForMs = now - liveStallStartedAtMs
-        val recoveryCooldownPassed = now - lastLiveStallRecoveryAtMs >= LIVE_STALL_RECOVERY_COOLDOWN_MS
+        val recoveryCooldownPassed = lastLiveStallRecoveryAtMs == 0L ||
+            now - lastLiveStallRecoveryAtMs >= LIVE_STALL_RECOVERY_COOLDOWN_MS
         if (stalledForMs >= LIVE_STALL_RECOVERY_THRESHOLD_MS &&
             recoveryCooldownPassed &&
             liveStallRecoveries < MAX_LIVE_STALL_RECOVERIES_PER_ITEM

@@ -47,11 +47,11 @@ android {
         applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        // Isolated STREAM 56.0.2 background catalog refresh and inline-settings UX release candidate. This branch does
-        // not change the main app, customer updater or Google Play releases.
-        versionCode = 2000117
-        // VersionCode is higher than the published signed STREAM 55.8.24 (2000101).
-        versionName = "2.0.0-rc07.56.0.2" // STREAM build type appends -STREAM
+        // STREAM 56.0.3 full signed release based on published 56.0.2.
+        // Build on this isolated branch; distribution requires separate approval.
+        versionCode = 2000118
+        // VersionCode is higher than the verified 56.0.2 baseline (2000117).
+        versionName = "2.0.0-rc07.56.0.3" // STREAM build type appends -STREAM
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
         manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
@@ -131,7 +131,13 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+        unitTests.all {
+            it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            // Use the canonical Maven Central endpoint and shared local Maven cache
+            // rather than Robolectric's default repo1 endpoint.
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            it.maxParallelForks = 1
+        }
     }
 }
 

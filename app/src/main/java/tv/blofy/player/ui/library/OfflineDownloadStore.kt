@@ -102,11 +102,12 @@ internal object OfflineDownloadStore {
         val existing = find(context,contentKey)
         if(existing != null) {
             val current = progress(context,existing)
-            if (current?.status !in setOf(null, DownloadManager.STATUS_FAILED)) return@runCatching existing
-            runCatching { dm.remove(existing.id) }
+            if (current?.status !in setOf(null, STATUS_MISSING, DownloadManager.STATUS_FAILED)) return@runCatching existing
+            remove(context, existing)
         }
         check(records(context).size < MAX_RECORDS) { "Download list is full; remove old entries first" }
-        val host = Uri.parse(url).host.orEmpty()
+        val uri = Uri.parse(url)
+        val host = uri.host.orEmpty()
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle(title.take(85))
             .setDescription("BLOFY • user-requested offline video")
@@ -127,7 +128,8 @@ internal object OfflineDownloadStore {
         // player. Only attach that bearer to our exact HTTPS first-party host.
         if (BuildConfig.CODE_ONLY_LOGIN &&
             host.equals(TRUSTED_STREAM_HOST, ignoreCase = true) &&
-            Uri.parse(url).path.orEmpty().startsWith("/api/v1/stream/media/")) {
+            uri.port in listOf(-1, 443) &&
+            uri.path.orEmpty().startsWith("/api/v1/stream/media/")) {
             val auth = StreamCodeSession.authorization(context)
                 ?: throw IllegalStateException("BLOFY activation is required")
             request.addRequestHeader("Authorization", auth)
@@ -160,7 +162,7 @@ internal object OfflineDownloadStore {
             else null
             // A stale or deleted file is not a valid completed download.
             val actualStatus = if (status == DownloadManager.STATUS_SUCCESSFUL &&
-                !DownloadTransferPolicy.isValidDownloadedFile(status, done, uri != null))
+                !DownloadTransferPolicy.isValidDownloadedFile(status, done, uri != null, total))
                 STATUS_MISSING else status
             return Progress(record,actualStatus,done,total,reason,uri)
         }
@@ -169,6 +171,8 @@ internal object OfflineDownloadStore {
 
     @Synchronized
     fun remove(context: Context, record: Record) {
+        val current = find(context, record.contentKey) ?: return
+        if (current.id != record.id || current.providerId != record.providerId) return
         manager(context).remove(record.id)
         prefs(context).edit().remove(storageKey(record.contentKey)).apply()
     }
