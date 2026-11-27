@@ -218,6 +218,15 @@ internal class StreamArabicAudioSession(
                 video.playWhenReady && companion != null && !companion.isPlaying
             ) video.volume = originalVolume
         }, 2_500L)
+        // A previously audible sidecar must not remain selected forever if
+        // its decoder is starved. Do not tear down while the main video is paused.
+        stallHandler.postDelayed({
+            val companion = audio
+            if (version == generation && started && playbackAnnounced &&
+                video.playWhenReady && video.playbackState == Player.STATE_READY &&
+                companion != null && companion.playbackState == Player.STATE_BUFFERING &&
+                !companion.isPlaying) failAndRestore(FailureReason.TIMEOUT)
+        }, 18_000L)
     }
 
     fun onPrimaryPlaybackChanged() {
