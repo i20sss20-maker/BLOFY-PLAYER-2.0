@@ -20,6 +20,36 @@ export function verifyLeaseClaim(e,key,now=Date.now()){
   return b.length===64&&b.toString('base64url')===e.signature&&verify(null,encode(e),key,b);
  }catch{return false}
 }
+// Persist one-time signed claim nonces across portal replicas and restarts.
+export async function ensureLeaseClaimSchema(db){
+ await db.query('CREATE TABLE IF NOT EXISTS blofy_engine_lease_claim_nonce(nonce text PRIMARY KEY, expires_at timestamptz NOT NULL)');
+}
+export function createLeaseNonceClaim(pool){
+ return async(nonce,ts)=>{
+  if(!/^[a-f0-9]{32}$/.test(nonce??'')||!Number.isSafeInteger(ts))return false;
+  const c=await pool.connect();
+  try{
+   await c.query('BEGIN');
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('blofy-engine-lease-claim-nonce',0))");
+   await c.query('DELETE FROM blofy_engine_lease_claim_nonce WHERE expires_at<=clock_timestamp()');
+   const r=await c.query("INSERT INTO blofy_engine_lease_claim_nonce(nonce,expires_at) SELECT $1,clock_timestamp()+interval '30 seconds' WHERE to_timestamp($2::double precision/1000) BETWEEN clock_timestamp()-interval '10 seconds' AND clock_timestamp()+interval '2 seconds' ON CONFLICT DO NOTHING",[nonce,ts]);
+   await c.query('COMMIT');return r.rowCount===1;
+  }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
+ };
+}
+export function createLeaseClaimHttpEndpoint(handler){
+ return async(req,res)=>{
+  const reply=(code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body))};
+  if(req.method!=='POST')return reply(405,{ok:false});
+  if(!/^application\\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(415,{ok:false});
+  try{
+   let size=0;const chunks=[];
+   for await(const c of req){size+=c.length;if(size>2048){req.destroy();return;}chunks.push(c)}
+   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+   const r=await handler(e);return reply(r.code,r.body);
+  }catch{return reply(503,{ok:false})}
+ };
+}
 // This transport cannot accept fence evidence from the wire. Only the
 // independent server-side verifier can supply an authoritative fence.
 export function createLeaseClaimHandler({key=createPublicKey({key:Buffer.from(pin,'base64'),format:'der',type:'spki'}),claimNonce,readFence,ledger,enabled=false,clock=Date.now}={}){
