@@ -8,6 +8,7 @@ import {createFeedProofTransport} from '../../src/blofy-live-feed-proof-transpor
 import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
 import {createReadyProofRead} from '../../src/blofy-engine-ready-proof-read.mjs';
 import {signAuthorityRead} from '../../src/blofy-engine-authority-read.mjs';
+import {createLeaseClaimClient} from '../../src/blofy-engine-lease-claim.mjs';
 import {createMultiLeasePoll} from '../../src/blofy-multifeed-lease-poll.mjs';
 import {createMultiFeedProofTransport} from '../../src/blofy-multifeed-proof-transport.mjs';
 import {verifyWorkerStatus} from '../../src/blofy-engine-status-response.mjs';
@@ -34,8 +35,11 @@ const db=new DatabaseSync(root+'/status.sqlite');
 db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=3000;');
 const transport=createDurableStatusTransport(db,{controllerKey,workerKeys});
 const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
-// Inert transport until the authoritative source fence and ledger are connected.
-const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
+// Explicit opt-in. Portal owns the independent source-fence decision and
+// committed lease sequence; this service keeps the signing key.
+const remoteLeaseEnabled=process.env.BLOFY_ENGINE_REMOTE_LEASE_ISSUANCE==='1';
+const claimCommittedLease=createLeaseClaimClient({controllerKey,enabled:remoteLeaseEnabled});
+const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:remoteLeaseEnabled,readCommittedReservation,claimCommittedLease});
 const multiControlEnabled=process.env.BLOFY_ENGINE_MULTIFEED_CONTROL==='1';
 const workerBundlePath='/control/multifeed/worker-bundle';
 const workerBundle=multiControlEnabled?readFileSync(new URL('../multifeed-worker.tar.gz',import.meta.url)):null;
