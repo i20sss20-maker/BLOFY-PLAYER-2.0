@@ -4,6 +4,7 @@ import {mkdirSync,chmodSync,chownSync,readFileSync,writeFileSync,existsSync,stat
 import {DatabaseSync} from 'node:sqlite';
 import {createDurableStatusTransport} from '../../src/blofy-engine-durable-status.mjs';
 import {createLiveLeasePoll} from '../../src/blofy-live-lease-poll.mjs';
+import {createFeedProofTransport} from '../../src/blofy-live-feed-proof-transport.mjs';
 import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
@@ -30,21 +31,25 @@ const transport=createDurableStatusTransport(db,{controllerKey,workerKeys});
 const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
 // Inert transport until the authoritative source fence and ledger are connected.
 const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
+// No production reservation authority is connected to this isolated QA service.
+const feedProof=createFeedProofTransport({db,workerKeys,enabled:false});
 const logged=new Map();
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
  try{
-  const installers=new Set(['bounded-pilot-worker.py','blofy_live_lease_guard.py','live_runtime_leased_candidate.py','blofy-live-lease-agent.py']);
+  const installers=new Set(['bounded-pilot-worker.py','blofy_live_lease_guard.py','live_runtime_leased_candidate.py','blofy-live-lease-agent.py','blofy-live-feed-proof-worker.py']);
   const installer=req.url?.startsWith('/install/')?req.url.slice(9):'';
   if(req.method==='GET'&&installers.has(installer)){
    const body=readFileSync(new URL('../'+(installer==='bounded-pilot-worker.py'?'blofy-bounded-pilot-worker.py':installer),import.meta.url));
    res.writeHead(200,{'content-type':'text/plain; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-length':body.length});return res.end(body);
   }
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
-  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll'].includes(req.url))return reply(res,404,{ok:false});
+  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete'].includes(req.url))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>4096){req.destroy();return;}chunks.push(c);}
   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(req.url==='/control/feed-proof/poll'){const r=await feedProof.poll(e);return reply(res,r.code,r.body);}
+  if(req.url==='/control/feed-proof/complete'){const r=await feedProof.complete(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/lease/poll'){const r=await liveLeasePoll(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/pilot/poll'){const r=pilot(e);return reply(res,r.code,r.body);}
   const poll=req.url.endsWith('/poll');
