@@ -41,7 +41,7 @@ export function createLeaseClaimHttpEndpoint(handler){
  return async(req,res)=>{
   const reply=(code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body))};
   if(req.method!=='POST')return reply(405,{ok:false});
-  if(!/^application\\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(415,{ok:false});
+  if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(415,{ok:false});
   try{
    let size=0;const chunks=[];
    for await(const c of req){size+=c.length;if(size>2048){req.destroy();return;}chunks.push(c)}
