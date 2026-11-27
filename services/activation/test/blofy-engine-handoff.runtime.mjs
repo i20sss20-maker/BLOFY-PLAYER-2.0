@@ -71,3 +71,51 @@ test('confirmed release transfers one source slot and lease to Linode',{timeout:
   assert.equal((await ingress.restoreLegacy()).reason,'engine_release_unconfirmed');
  }finally{await pool.end();}
 });
+
+test('initial drain atomically reserves and reconciles only with fresh exact evidence',{timeout:30000},async()=>{
+ const url=process.env.BLOFY_HANDOFF_TEST_DATABASE_URL;
+ assert.equal(url,'postgresql://blofy:blofy_test@127.0.0.1:5432/blofy_engine_shadow_test');
+ const pool=new pg.Pool({connectionString:url,ssl:false,max:8});
+ const sourceId=randomUUID(),channelId='456',engineId='hostbrr';
+ try{
+  await ensureLinodeFeedLedger(pool);
+  await ensureEngineIngressGate(pool);
+  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId,BLOFY_ENGINE_RENEWABLE_LEASE:'1'};
+  const ledger=createLinodeFeedLedger(pool,env);
+  const ingress=createEngineIngressGate(pool,{sourceId,enabled:true});
+  assert.equal((await ingress.initialize()).ok,true);
+  const holdId=randomUUID();
+  assert.equal((await ingress.enterLegacy(holdId)).ok,true);
+  assert.equal((await ingress.beginDrain()).ok,true);
+  const {drainStartedAt,openHoldIds}=await ingress.readDrain({includeOpenHoldIds:true});
+  const capacity=()=>({sourceId,scope:'all_paths',authoritative:true,activeConnections:0,maxConnections:1,observedAt:Date.now(),drainStartedAt});
+  const args={sourceId,channelId,engineId,requestId:randomUUID()};
+  const reserve=(proof=capacity(),ids=openHoldIds)=>ledger.reserve({...args,initialDrain:{proof,openHoldIds:ids}});
+  assert.equal((await reserve({...capacity(),activeConnections:1})).reason,'initial_drain_unconfirmed');
+  assert.equal((await reserve({...capacity(),drainStartedAt:drainStartedAt-1})).reason,'initial_drain_unconfirmed');
+  assert.equal((await reserve(capacity(),[randomUUID()])).reason,'initial_drain_hold_snapshot_changed');
+  assert.equal((await ledger.readRoutingState({sourceId})).state,'empty');
+  assert.equal((await ingress.readDrain()).registeredLegacyHolds,1);
+  assert.equal((await ingress.cancelDrain()).ok,true);
+  assert.equal((await ingress.beginDrain()).ok,true);
+  const fresh=await ingress.readDrain({includeOpenHoldIds:true});
+  const proof={...capacity(),drainStartedAt:fresh.drainStartedAt};
+  const results=await Promise.all(Array.from({length:16},()=>reserve(proof,fresh.openHoldIds)));
+  assert.equal(results.filter(x=>x.action==='start_once').length,1);
+  assert.equal(results.filter(x=>x.action==='existing').length,15);
+  const winner=results.find(x=>x.action==='start_once');
+  assert.equal((await ingress.readMode()).mode,'engine');
+  assert.equal((await ingress.readDrain()).registeredLegacyHolds,0);
+  const row=(await pool.query('SELECT state,worker_lease_sequence FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId])).rows[0];
+  assert.equal(row.state,'pending');
+  assert.equal(Number(row.worker_lease_sequence),0);
+  assert.ok(await ingress.readFence({sourceId,engineId,reservationId:winner.reservationId}));
+  assert.equal((await ingress.enterLegacy(randomUUID())).reason,'legacy_fenced');
+ }finally{
+  await pool.query('DELETE FROM blofy_engine_legacy_holds WHERE source_id=$1',[sourceId]);
+  await pool.query('DELETE FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+  await pool.query('DELETE FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+  await pool.query('DELETE FROM blofy_linode_feed_requests WHERE source_id=$1',[sourceId]);
+  await pool.end();
+ }
+});
