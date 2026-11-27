@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -44,6 +45,7 @@ class AiChatActivity : AppCompatActivity() {
     private lateinit var conversationScroll: ScrollView
     private lateinit var compose: EditText
     private lateinit var send: Button
+    private var resultFocusPending = false
     private var busy = false
     private var lastQuestion: String? = null
     private val history = ArrayList<Pair<String, String>>()
@@ -82,8 +84,9 @@ class AiChatActivity : AppCompatActivity() {
         }
         conversationScroll = ScrollView(this).apply {
             isFillViewport = true
-            isVerticalScrollBarEnabled = false
-            isFocusable = false
+            isVerticalScrollBarEnabled = true
+            isFocusable = true
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             clipToPadding = false
             addView(transcript, FrameLayout.LayoutParams(-1, -2))
         }
@@ -156,9 +159,12 @@ class AiChatActivity : AppCompatActivity() {
             imeOptions = EditorInfo.IME_ACTION_SEND
             background = CinemaStyle.surface(this@AiChatActivity)
             setPadding(dp(15), dp(9), dp(15), dp(9))
-            setOnEditorActionListener { _, _, _ ->
-                ask(text.toString())
-                true
+            setOnEditorActionListener { _, actionId, event ->
+                if (actionId == EditorInfo.IME_ACTION_SEND ||
+                    (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP)) {
+                    ask(text.toString())
+                    true
+                } else false
             }
         }
         composer.addView(compose, LinearLayout.LayoutParams(0, dp(58), 1f))
@@ -190,6 +196,7 @@ class AiChatActivity : AppCompatActivity() {
         val question = raw.trim().take(160)
         if (busy || question.length < 3) return
         busy = true
+        resultFocusPending = false
         send.isEnabled = false
         compose.text?.clear()
         // The TV soft keyboard must not cover the conversation and its
@@ -274,7 +281,7 @@ class AiChatActivity : AppCompatActivity() {
                 if (!isDestroyed) {
                     busy = false
                     send.isEnabled = true
-                    scrollBottom()
+                    if (!resultFocusPending) scrollBottom()
                 }
             }
         }
@@ -370,11 +377,19 @@ class AiChatActivity : AppCompatActivity() {
             })
         }
         transcript.addView(group, LinearLayout.LayoutParams(-1, -2))
-        scrollBottom()
         if (DeviceClass.detect(this) == DeviceClass.Kind.TV) {
             val target = firstResult
-            transcript.post { if (!isFinishing && !isDestroyed) target?.requestFocus() }
-        }
+            resultFocusPending = target != null
+            conversationScroll.post {
+                if (!isFinishing && !isDestroyed) {
+                    target?.let {
+                        it.requestFocus()
+                        it.requestRectangleOnScreen(android.graphics.Rect(0, 0, it.width, it.height), true)
+                    }
+                }
+                resultFocusPending = false
+            }
+        } else scrollBottom()
     }
 
     /** Only a verified, unlocked row from the local catalog becomes clickable. */
@@ -390,7 +405,7 @@ class AiChatActivity : AppCompatActivity() {
     private fun scrollBottom() {
         if (!::conversationScroll.isInitialized) return
         conversationScroll.post {
-            if (!isDestroyed) conversationScroll.smoothScrollTo(0, transcript.bottom)
+            if (!isDestroyed && !resultFocusPending) conversationScroll.smoothScrollTo(0, transcript.bottom)
         }
     }
 
