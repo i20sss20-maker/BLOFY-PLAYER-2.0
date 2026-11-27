@@ -25,11 +25,11 @@ object StreamDirectLogin {
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).commit())
     }
 
-    data class Credentials(val host: String, val username: String, val password: String, val format: String = "ts") {
+    data class Credentials(val host: String, val username: String, val password: String, val format: String = "ts", val type: String = "xtream") {
         fun provider(): ProviderEntity {
-            val id = PREFIX + UUID.nameUUIDFromBytes(("xtream|" + host + "|" + username).toByteArray(Charsets.UTF_8))
-            return ProviderEntity(id = id, name = "Xtream", baseUrl = host,
-                username = username, password = password, liveFormat = format,
+            val id = PREFIX + UUID.nameUUIDFromBytes((type + "|" + host + "|" + username).toByteArray(Charsets.UTF_8))
+            return ProviderEntity(id = id, name = if (type == "m3u") "M3U" else "Xtream", baseUrl = host,
+                username = username, password = password, providerType = type, liveFormat = format,
                 preferredTransport = "http", allowCrossProtocolRedirects = false, enabled = false)
         }
         override fun toString() = "Credentials(redacted)"
@@ -45,12 +45,13 @@ object StreamDirectLogin {
     }
 
     /** Xtream-exported M3U links are imported via the same authenticated catalog.
-     * Arbitrary standalone M3U files are not silently treated as Xtream. */
+     * Standalone M3U files use a separate channel-list importer. */
     fun m3u(link: String): Credentials? {
         val raw = link.trim()
         if (!PlaylistUrlPolicy.isValid(raw)) return null
         val url = raw.toHttpUrlOrNull() ?: return null
-        if (!url.encodedPath.endsWith("/get.php", true) || url.fragment != null) return null
+        if (url.host.equals("blofyplayer.com", true) || url.fragment != null) return null
+        if (!url.encodedPath.endsWith("/get.php", true)) return Credentials(url.toString(), "", "", type = "m3u")
         if (url.queryParameterValues("username").size != 1 ||
             url.queryParameterValues("password").size != 1) return null
         val host = url.newBuilder().removePathSegment(url.pathSegments.lastIndex).query(null).fragment(null).build()

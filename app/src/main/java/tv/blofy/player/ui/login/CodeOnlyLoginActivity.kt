@@ -224,7 +224,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
         passwordInput = directField(copy("كلمة المرور", "Password"),
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        linkInput = directField(copy("رابط M3U (Xtream)", "M3U URL (Xtream)"),
+        linkInput = directField(copy("رابط M3U", "M3U URL"),
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         listOf(passwordInput, linkInput).forEach { field ->
             field.imeOptions = EditorInfo.IME_ACTION_DONE
@@ -357,7 +357,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         }
         if (credentials == null) {
             statusText.text = if (mode == Mode.M3U)
-                copy("أدخل رابط M3U صادرًا من اكستريم يحتوي على بيانات الاشتراك.", "Enter an Xtream-exported M3U URL with subscription credentials.")
+                copy("أدخل رابط قائمة M3U صالحًا.", "Enter a valid M3U playlist URL.")
                 else copy("تحقق من رابط السيرفر واسم المستخدم وكلمة المرور.", "Check the server URL, username and password.")
             return
         }

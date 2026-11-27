@@ -26,7 +26,7 @@ class StreamDirectLoginTest {
         assertNull(StreamDirectLogin.xtream("https://blofyplayer.com", "user", "secret"))
         assertNull(StreamDirectLogin.xtream("http://127.0.0.1", "user", "secret"))
         assertNull(StreamDirectLogin.xtream("https://example.com", "", "secret"))
-        assertNull(StreamDirectLogin.m3u("https://example.com/playlist.m3u"))
+        assertEquals("m3u", StreamDirectLogin.m3u("https://example.com/playlist.m3u")!!.provider().providerType)
         assertNull(StreamDirectLogin.m3u("https://example.com/get.php?username=a&username=b&password=c"))
     }
 }
