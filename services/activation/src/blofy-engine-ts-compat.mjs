@@ -26,7 +26,7 @@ export function createEngineTsCompatibility({fetchPart,enabled=false,clock=Date.
    try{for(;;){const x=await reader.read();if(x.done)break;n+=x.value.byteLength;if(n>65536)throw Error('manifest_limit');chunks.push(Buffer.from(x.value))}}
    finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
    const m=validateEngineManifest(Buffer.concat(chunks).toString('utf8'));
-   if(!m||m.includes('#EXT-X-ENDLIST'))throw Error('invalid_live_manifest');
+   if(!m||m.includes('#EXT-X-ENDLIST')||m.includes('#EXT-X-DISCONTINUITY'))throw Error('invalid_live_manifest');
    return m.split('\n').filter(x=>/^seg-[0-9]{9}\.ts$/.test(x));
   }
   async function* media(initial){
@@ -43,9 +43,14 @@ export function createEngineTsCompatibility({fetchPart,enabled=false,clock=Date.
         !Number.isSafeInteger(length)||length<188||length>64*1024*1024||length%188!==0){
       await r.body.cancel().catch(()=>{});throw Error('invalid_ts_segment');
      }
-     let bytes=0;
-     try{for await(const chunk of r.body){bytes+=chunk.byteLength;if(bytes>length)throw Error('segment_length');yield Buffer.from(chunk)}}
-     finally{if(!r.bodyUsed)await r.body.cancel().catch(()=>{})}
+     let bytes=0,tail=Buffer.alloc(0);
+     try{for await(const chunk of r.body){
+      bytes+=chunk.byteLength;if(bytes>length)throw Error('segment_length');
+      const b=Buffer.concat([tail,Buffer.from(chunk)]),end=b.length-b.length%188;
+      for(let i=0;i<end;i+=188)if(b[i]!==0x47)throw Error('invalid_ts_sync');
+      if(end)yield b.subarray(0,end);
+      tail=b.subarray(end);
+     }}finally{if(!r.bodyUsed)await r.body.cancel().catch(()=>{})}
      if(bytes!==length)throw Error('segment_length');
      last=seq;lastProgress=clock();
     }
