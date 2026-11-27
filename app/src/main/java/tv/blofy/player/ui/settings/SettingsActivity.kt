@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.ui.login.StreamDirectLogin
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.device.StreamDeviceCompatibility
@@ -182,7 +183,7 @@ class SettingsActivity : AppCompatActivity() {
         }.apply { tag = "stream_language_picker" })
 
         addSection(page, copy("اشتراكي والمكتبة", "Subscription & library"))
-        addCard(actionCard(copy("اشتراكي", "My subscription"),
+        if (StreamDirectLogin.selected(this) == null) addCard(actionCard(copy("اشتراكي", "My subscription"),
             copy("حالة الكود وتاريخ انتهاء الاشتراك", "Status and subscription expiry")) { showStreamSubscription() })
         refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
             copy("تحديث تلقائي في الخلفية • اضغط للفحص الآن",
@@ -259,8 +260,12 @@ class SettingsActivity : AppCompatActivity() {
                     // Invalidate only local readiness markers, not the installation binding.
                     // Otherwise a different redeemed code might re-open the previous code's
                     // cached catalog without downloading its own authorized content.
-                    StreamCodeSession.clearClaim(applicationContext)
-                    CatalogSyncState.clear(applicationContext, StreamCodeSession.providerId)
+                    if (StreamDirectLogin.selected(applicationContext) != null) {
+                        StreamDirectLogin.clear(applicationContext)
+                    } else {
+                        StreamCodeSession.clearClaim(applicationContext)
+                        CatalogSyncState.clear(applicationContext, StreamCodeSession.providerId)
+                    }
                     StartupEntryState.clear(applicationContext)
                     startActivity(Intent(this, CodeOnlyLoginActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
@@ -719,6 +724,13 @@ class SettingsActivity : AppCompatActivity() {
                 "Finish the first playlist setup, then refresh content here."
             )
             updateSyncStatus()
+            return
+        }
+        if (BuildConfig.CODE_ONLY_LOGIN && StreamDirectLogin.isDirectId(active.id)) {
+            startActivity(Intent(this, tv.blofy.player.ui.login.CatalogLoadingActivity::class.java)
+                .putExtra(tv.blofy.player.ui.login.CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
+                .putExtra(tv.blofy.player.ui.login.CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true))
+            finish()
             return
         }
         if (BuildConfig.CODE_ONLY_LOGIN) {

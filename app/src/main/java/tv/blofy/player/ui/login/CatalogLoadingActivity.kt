@@ -86,6 +86,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
             fail(getString(R.string.catalog_provider_missing))
             return
         }
+        if (BuildConfig.CODE_ONLY_LOGIN && StreamDirectLogin.isDirectId(providerId) &&
+            StreamDirectLogin.selected(this) != providerId) {
+            fail(getString(R.string.catalog_provider_missing))
+            return
+        }
         val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
         retryButton.setOnClickListener { startLoading(providerId, forceRefreshOnRetry) }
         cachedButton.setOnClickListener { openCommittedCatalogInstead(providerId) }
@@ -179,7 +184,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                         // STREAM always enters from the saved server catalogue immediately.
                         if (!BuildConfig.CODE_ONLY_LOGIN) awaitEntryReadyCache(providerId)
                         openHome(providerId)
-                    } else if (BuildConfig.CODE_ONLY_LOGIN && forceRefresh && hasCachedCatalog) {
+                    } else if (BuildConfig.CODE_ONLY_LOGIN && !StreamDirectLogin.isDirectId(providerId) && forceRefresh && hasCachedCatalog) {
                         // STREAM 56 refresh from Settings uses the same login
                         // loader UI, but NOT the obsolete 95% full-catalog Room
                         // replacement. Server-side delta pages commit quietly.
@@ -462,7 +467,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 !CatalogSyncState.isReady(applicationContext, providerId) || !dao.hasStreamsForProvider(providerId)
             }
         }
-        val pendingSource = if (firstLoad) null else withContext(Dispatchers.IO) {
+        val pendingSource = if (firstLoad || StreamDirectLogin.isDirectId(providerId)) null else withContext(Dispatchers.IO) {
             PortalPlaylistClient.pendingSource(applicationContext, dao, providerId)
         }
         val source = pendingSource ?: target

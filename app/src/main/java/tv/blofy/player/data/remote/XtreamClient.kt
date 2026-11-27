@@ -73,8 +73,9 @@ object XtreamClient {
             val original=chain.request()
             if (!BuildConfig.CODE_ONLY_LOGIN) return@addNetworkInterceptor chain.proceed(original)
             val url=original.url
-            val trusted=url.scheme=="https" && url.host=="blofyplayer.com" &&
-                url.encodedPath=="/player_api.php"
+            val trusted=url.scheme=="https" && url.host=="blofyplayer.com" && url.port==443 &&
+                url.encodedPath=="/player_api.php" && url.queryParameter("username") == null &&
+                url.queryParameter("password") == null
             val next=original.newBuilder().removeHeader("Authorization")
             if (trusted) {
                 application?.let { StreamCodeSession.authorization(it) }?.let {
