@@ -182,6 +182,31 @@ export function createLinodeFeedLedger(pool,env=process.env){
     return {ok:true,action:'start_once',reservationId,state:'pending'};
    });
   },
+  // Safe rollback for an initial reservation that has NEVER received a lease.
+  // The orchestrator must independently verify that there is no worker or
+  // provider connection and that the lease is the exclusive path to startup.
+  // This operation cannot retire a ready feed or an issued/uncertain lease.
+  async rollbackUnissuedInitial({sourceId,reservationId,engineId,proof}={}){
+   if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||!uuid.test(reservationId??''))return blocked('rollback_disabled_or_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||row.reservation_id!==reservationId||row.engine_id!==engineId||row.state!=='pending'||
+       row.generation!==null||Number(row.worker_lease_sequence)!==0)return blocked('rollback_reservation_not_unissued');
+    const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(gate?.mode!=='engine'||gate.reservation_id!==reservationId||gate.engine_id!==engineId)return blocked('rollback_gate_mismatch');
+    const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(clock.now).getTime();
+    if(proof?.sourceId!==sourceId||proof.reservationId!==reservationId||proof.engineId!==engineId||
+       proof.authoritative!==true||proof.scope!=='all_paths'||proof.activeConnections!==0||
+       proof.exclusiveLeaseStartup!==true||proof.workerStopped!==true||
+       !Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)
+      return blocked('rollback_release_unconfirmed');
+    const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(holds.n!==0)return blocked('rollback_legacy_holds_open');
+    await c.query("UPDATE blofy_linode_feed_ledger SET state='released',generation=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
+    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
+    return {ok:true,mode:'legacy',state:'released'};
+   });
+  },
   // Only authenticated server-owned input, not public request bodies.
   // Same-source lock serializes viewer quotas and feed transitions.
   async attachViewer({sourceId,reservationId,channelId,generation,sessionId,accountId,
