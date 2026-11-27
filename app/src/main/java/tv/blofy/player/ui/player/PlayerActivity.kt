@@ -578,7 +578,7 @@ open class PlayerActivity : ContentAccessActivity() {
                     override fun onStopTrackingTouch(seekBar: SeekBar) {
                         seeking = false
                         val duration = session.player.duration
-                        if (duration > 0) session.player.seekTo(duration * seekBar.progress / seekBar.max)
+                        if (duration > 0) session.seekFromUser((duration.toDouble() * seekBar.progress / seekBar.max.coerceAtLeast(1)).toLong())
                         showHudBriefly()
                     }
                 })
@@ -871,7 +871,7 @@ open class PlayerActivity : ContentAccessActivity() {
         }
         val duration = session.player.duration.takeIf { it > 0L }
         val target = (session.player.currentPosition + deltaMs).coerceAtLeast(0L)
-        session.player.seekTo(if (duration != null) target.coerceAtMost(duration) else target)
+        session.seekFromUser(if (duration != null) target.coerceAtMost(duration) else target)
         controlHint.text = (if (deltaMs >= 0L) "+" else "") + (deltaMs / 1_000L).toString() + "s"
     }
 
@@ -2239,8 +2239,7 @@ open class PlayerActivity : ContentAccessActivity() {
         }
         saveResume()
         val playWhenReady = session.player.playWhenReady
-        session.retrySameUrl()
-        if (kind != KIND_LIVE && checkpoint.positionMs > 0L) session.player.seekTo(checkpoint.positionMs)
+        session.retrySameUrl(checkpoint.positionMs.takeIf { kind != KIND_LIVE && it > 0L })
         session.player.playWhenReady = playWhenReady
         showConnectionNotice(getString(R.string.player_reconnecting))
     }
