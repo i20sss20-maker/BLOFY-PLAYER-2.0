@@ -1,4 +1,4 @@
-import concurrent.futures, importlib.util, os, pathlib, tempfile, unittest, uuid
+import concurrent.futures, importlib.util, json, os, pathlib, subprocess, sys, tempfile, unittest, uuid
 path=pathlib.Path(__file__).resolve().parents[1]/"blofy_multifeed_local_slots.py"
 spec=importlib.util.spec_from_file_location("blofy_multifeed_local_slots",path)
 mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
@@ -6,6 +6,40 @@ source=str(uuid.uuid4())
 def identity(n,engine="hostbrr"):
     return {"sourceId":source,"channelId":str(n),"reservationId":str(uuid.uuid4()),"engineId":engine}
 class SlotTests(unittest.TestCase):
+    def test_confirmed_release_rejects_replay_in_a_new_process(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=pathlib.Path(d)/"slots"
+            original=identity(7)
+            slots=mod.LocalSlots(root,"hostbrr",1,owner=os.getuid())
+            slots.reserve(original,lambda _:True)
+            self.assertTrue(slots.release(original,lambda _:True))
+            self.assertEqual(slots.snapshot()["occupied"],0)
+
+            child_code="""
+import json, os, sys
+from blofy_multifeed_local_slots import LocalSlots, SlotError
+
+slots=LocalSlots(sys.argv[1],"hostbrr",1,owner=os.getuid())
+old,replacement=map(json.loads,sys.argv[2:])
+try:
+    slots.reserve(old,lambda _:True)
+except SlotError as error:
+    if str(error)!="RESERVATION_ALREADY_USED":
+        raise
+else:
+    raise AssertionError("released reservation was reused")
+
+assert slots.reserve(replacement,lambda _:True)["used"]==1
+"""
+            replacement=identity(7)
+            result=subprocess.run(
+                [sys.executable,"-c",child_code,str(root),json.dumps(original),json.dumps(replacement)],
+                cwd=path.parent,capture_output=True,text=True,timeout=10
+            )
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(slots.snapshot()["occupied"],1)
+            self.assertTrue((root/(original["reservationId"]+".released")).is_file())
+
     def test_concurrent_slots_and_crash_persistence(self):
         with tempfile.TemporaryDirectory() as d:
             def make():return mod.LocalSlots(pathlib.Path(d)/"slots","hostbrr",16,owner=os.getuid())
