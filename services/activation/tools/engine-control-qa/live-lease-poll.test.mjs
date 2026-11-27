@@ -25,3 +25,26 @@ test('authenticated polls issue only from matching committed ledger with fresh f
   assert.equal(calls,1);
  }finally{db.close()}
 });
+
+test('remote lease mode trusts only exact authenticated worker and committed reservation',async()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  const a=generateKeyPairSync('ed25519'),b=generateKeyPairSync('ed25519'),c=generateKeyPairSync('ed25519'),now=Date.now();
+  const identity={engineId:'hostbrr',sourceId:randomUUID(),channelId:'123',reservationId:randomUUID()};
+  const proof=(engineId='hostbrr',key=a.privateKey)=>{const status={version:1,engineId,challenge:randomBytes(16).toString('hex'),observedAt:now,deliveryActive:true,heartbeatActive:true};return {status,signature:sign(null,Buffer.from(JSON.stringify(['BLOFY_WORKER_STATUS_V1',...Object.values(status)])),key).toString('base64url')}};
+  let state='pending',calls=0,permit=false;
+  const poll=createLiveLeasePoll({db,controllerKey:c.privateKey,workerKeys:{hostbrr:a.publicKey,linode:b.publicKey},enabled:true,clock:()=>now,
+   readCommittedReservation:async()=>({...identity,state}),
+   claimCommittedLease:async i=>{assert.deepEqual(i,identity);calls++;return permit?signLiveLease({version:1,...i,sequence:calls,issuedAt:now,expiresAt:now+60000},c.privateKey,now):null}});
+  assert.equal((await poll(proof('hostbrr',b.privateKey))).code,403);
+  assert.equal((await poll(proof('linode',b.privateKey))).body.lease,null);
+  assert.equal(calls,0);
+  assert.equal((await poll(proof())).body.lease,null);
+  permit=true;
+  const p=proof(),r=await poll(p);
+  assert.ok(verifyLiveLease({lease:r.body.lease,signature:r.body.signature},{key:c.publicKey,identity,now}));
+  assert.equal((await poll(p)).code,429);
+  state='unknown';assert.equal((await poll(proof())).body.lease,null);
+  assert.equal(calls,2);
+ }finally{db.close()}
+});
