@@ -55,7 +55,7 @@ object TransportFactory {
             .addNetworkInterceptor { chain ->
                 val request=chain.request()
                 val url=request.url
-                val trusted=url.scheme=="https" && url.host=="blofyplayer.com" &&
+                val trusted=url.scheme=="https" && url.host=="blofyplayer.com" && url.port == 443 &&
                     url.encodedPath.startsWith("/api/v1/stream/media/")
                 val next=request.newBuilder().removeHeader("Authorization")
                 if (trusted) {
