@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,
-  createFirstAccountSharedLiveTestPilot} from '../src/xtream-licensed-live-fanout-policy.mjs';
+  createFirstAccountSharedLiveTestPilot,authorizedLiveTrialQuota} from '../src/xtream-licensed-live-fanout-policy.mjs';
 import {issueStreamRelayGrant} from '../src/xtream-stream-relay-bridge.mjs';
 const source='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
@@ -254,4 +254,26 @@ test('shared source channel limit preserves retry hint and returns only a fixed 
  assert.equal(res.status,503);assert.equal(reason,'fanout_source_channel_limit');
  assert.equal(headers['retry-after'],'2');assert.equal(headers['x-blofy-live-status'],reason);
  assert.equal(res.body,'Provider concurrent channel limit reached');
+});
+
+
+test('explicit five-feed trial requires a unique approved source, reported one slot, and bounded active window',()=>{
+ const now=Date.parse('2026-11-27T05:00:00Z');
+ const cfg={...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED:'1',
+  BLOFY_STREAM_LICENSED_LIVE_PRODUCTION:'1',
+  BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL:'1',
+  BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_UNTIL:'2026-11-27T05:20:00Z'};
+ const row={sourceId:source,sourceName:'saleh',sourceNameMatches:1,providerMaxConcurrentFeeds:1};
+ assert.equal(authorizedLiveTrialQuota(row,cfg,now),5);
+ assert.equal(authorizedLiveTrialQuota(row,cfg,now+20*60000),1);
+ assert.equal(authorizedLiveTrialQuota(row,cfg,now-11*60000),1);
+ assert.equal(authorizedLiveTrialQuota(row,env,now),1);
+ assert.equal(authorizedLiveTrialQuota({...row,sourceName:'other'},cfg,now),1);
+ assert.equal(authorizedLiveTrialQuota({...row,sourceNameMatches:2},cfg,now),1);
+ assert.equal(authorizedLiveTrialQuota({...row,providerMaxConcurrentFeeds:null},cfg,now),null);
+ assert.equal(authorizedLiveTrialQuota({...row,providerMaxConcurrentFeeds:2},cfg,now),2);
+ for(const flag of ['BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED','BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED','BLOFY_STREAM_SHARED_LIVE_CANARY','BLOFY_STREAM_LICENSED_LIVE_PRODUCTION','BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL'])
+  assert.equal(authorizedLiveTrialQuota(row,{...cfg,[flag]:'0'},now),1);
 });
