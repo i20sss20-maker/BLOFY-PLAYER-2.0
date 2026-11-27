@@ -23,6 +23,13 @@ export function createInitialCutover({gate,ledger,verifyDrain,verifyRollback,sta
    if(snapshot?.ok!==true||snapshot.mode!=='draining'||!Array.isArray(snapshot.openHoldIds))return cancel('drain_snapshot_unavailable');
    proof=await verifyDrain({sourceId,drainStartedAt:snapshot.drainStartedAt});
    if(!proof)return cancel('drain_unconfirmed');
+   // Existing requests can finish during provider verification. Read the
+   // exact residual holds again, but never adopt a different drain epoch.
+   const finalSnapshot=await gate.readDrain({includeOpenHoldIds:true});
+   if(finalSnapshot?.ok!==true||finalSnapshot.mode!=='draining'||
+      finalSnapshot.drainStartedAt!==snapshot.drainStartedAt||
+      !Array.isArray(finalSnapshot.openHoldIds))return hold('drain_state_changed');
+   snapshot=finalSnapshot;
   }catch{return cancel('drain_unconfirmed')}
   let reserved;
   try{
