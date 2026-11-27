@@ -14,7 +14,8 @@ export function createInitialCutover({gate,ledger,verifyDrain,verifyRollback,sta
   // If beginDrain throws, ownership is ambiguous: don't cancel another drain.
   try{if(!(await gate.beginDrain())?.ok)return hold('drain_not_acquired')}catch{return hold('drain_state_unknown')}
   const cancel=async reason=>{
-   try{return (await gate.cancelDrain())?.ok?{ok:false,reason,restoredLegacy:true}:hold('cancel_unconfirmed')}
+   if(!Number.isSafeInteger(snapshot?.drainStartedAt))return hold('cancel_epoch_unknown');
+   try{return (await gate.cancelDrain({expectedDrainStartedAt:snapshot.drainStartedAt}))?.ok?{ok:false,reason,restoredLegacy:true}:hold('cancel_unconfirmed')}
    catch{return hold('cancel_unconfirmed')}
   };
   let snapshot,proof;
