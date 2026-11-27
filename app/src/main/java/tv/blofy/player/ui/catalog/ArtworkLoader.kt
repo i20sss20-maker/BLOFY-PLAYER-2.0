@@ -579,8 +579,9 @@ object ArtworkLoader {
     private fun memoryCacheKb(): Int {
         val maxMb = Runtime.getRuntime().maxMemory() / (1024L * 1024L)
         return when {
-            maxMb <= 192 -> 32 * 1024
-            maxMb <= 384 -> 48 * 1024
+            maxMb <= 128 -> 12 * 1024
+            maxMb <= 192 -> 20 * 1024
+            maxMb <= 384 -> 40 * 1024
             else -> 64 * 1024
         }
     }
