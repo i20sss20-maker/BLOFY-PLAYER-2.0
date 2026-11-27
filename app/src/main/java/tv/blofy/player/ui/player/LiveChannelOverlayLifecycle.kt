@@ -971,6 +971,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         view.animate().cancel()
                         view.animate().alpha(if (focused) 1f else 0.92f)
                             .setDuration(90L).start()
+                        if (focused) view.requestRectangleOnScreen(
+                            android.graphics.Rect(0, 0, view.width, view.height), true)
                     }
                     setOnClickListener { onTap() }
                     setOnKeyListener { _, keyCode, event ->
@@ -1264,7 +1266,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     var playButtonRef: TextView? = null
                     val playButton = addButton(prefix + voice.label) {
                         // One click starts the chosen voice; no group/file pages.
-                        pendingButton?.isEnabled = true
+                        if (pendingId == voice.id && pendingButton != null) return@addButton
                         pendingButton = null
                         pendingId = voice.id
                         val attempt = copy("جارٍ تجربة ", "Connecting: ") + voice.label
@@ -1296,8 +1298,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         }
                         if (accepted) {
                             pendingButton = playButtonRef
-                            // Prevent accidental repeat clicks while buffering.
-                            playButtonRef?.isEnabled = false
+                            // Keep D-pad focus while buffering. Repeat clicks are gated above.
                         } else {
                             pendingId = null
                             StreamAudioQuickPickPrefs.markFailed(activity, voice.id)
@@ -1355,7 +1356,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     footer.post {
                         if (dialog?.isShowing == true && audioPickerOpen) {
                             target?.requestFocus()
-                            scroller.smoothScrollTo(0, row?.top ?: 0)
+                            row?.requestRectangleOnScreen(android.graphics.Rect(0, 0, row.width, row.height), true)
                         }
                     }
                 } else {
