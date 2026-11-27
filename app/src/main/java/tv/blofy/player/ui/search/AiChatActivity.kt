@@ -29,6 +29,8 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.NativeExternalCatalogSession
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -238,7 +240,9 @@ class AiChatActivity : AppCompatActivity() {
                         // A temporarily unreachable AI does not make the
                         // user's downloaded catalog unusable. Local fallback
                         // never runs for revoked sessions or rate-limit errors.
-                        val canUseLocal = response.reason in setOf(
+                        val authorizedNative = response.reason == StreamAiSearchClient.Problem.NOT_ACTIVATED &&
+                            NativeExternalCatalogSession.activeId(applicationContext) != null
+                        val canUseLocal = authorizedNative || response.reason in setOf(
                             StreamAiSearchClient.Problem.CONNECTION,
                             StreamAiSearchClient.Problem.SERVICE,
                             StreamAiSearchClient.Problem.BAD_RESPONSE
@@ -291,8 +295,11 @@ class AiChatActivity : AppCompatActivity() {
         parsed: StreamAiSearchClient.Intent, question: String
     ): AiChatCatalogResolver.Results = withContext(Dispatchers.IO) {
         val dao = BlofyDatabase.get(applicationContext).dao()
+        val providerId = if (StreamCodeSession.authorization(applicationContext) != null)
+            dao.activeProviderId()?.takeIf { it == StreamCodeSession.providerId }
+        else NativeExternalCatalogSession.activeId(applicationContext)
         val providers = dao.providersStored().first()
-            .filter { it.enabled }.take(4)
+            .filter { it.enabled && it.id == providerId }
         AiChatCatalogResolver.find(dao, providers.map { it.id }, parsed,
             question, applicationContext)
     }
