@@ -32,11 +32,12 @@ const transport=createDurableStatusTransport(db,{controllerKey,workerKeys});
 const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
 // Inert transport until the authoritative source fence and ledger are connected.
 const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
-// No production reservation authority is connected to this isolated QA service.
-const feedProof=createFeedProofTransport({db,workerKeys,enabled:false});
+// Proof collection reads committed production state, never grants a lease.
+const feedProof=createFeedProofTransport({db,workerKeys,enabled:process.env.BLOFY_ENGINE_FEED_PROOF_READ==='1',readReservation:async engineId=>{
+ try{const s=await readAuthority();return s.mode==='engine'&&s.gateReservationMatches===true&&s.registeredLegacyHolds===0&&s.reservation?.sourceId===s.sourceId&&s.reservation?.engineId===engineId?s.reservation:null;}catch{return null}
+}});
 // Read-only production link; no worker activation or source requests.
-const authorityProbe=async()=>{
- try{
+async function readAuthority(){
   const r=await fetch('https://blofy-activation-portal-production.up.railway.app/internal/engine-authority-read',{method:'POST',redirect:'error',signal:AbortSignal.timeout(4000),headers:{'content-type':'application/json'},body:JSON.stringify(signAuthorityRead(controllerKey))});
   if(r.status!==200){await r.body?.cancel().catch(()=>{});throw Error('authority_unavailable')}
   const reader=r.body?.getReader();if(!reader)throw Error('authority_body_missing');
@@ -45,6 +46,11 @@ const authorityProbe=async()=>{
   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
   const s=JSON.parse(Buffer.concat(parts).toString('utf8'));
   if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>5000)throw Error('authority_invalid');
+  return s;
+}
+const authorityProbe=async()=>{
+ try{
+  const s=await readAuthority();
   console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,registeredLegacyHolds:s.registeredLegacyHolds,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
  }catch{console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:false,customerTrafficChanged:false}));}
 };
