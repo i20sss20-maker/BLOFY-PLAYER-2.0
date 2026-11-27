@@ -173,6 +173,8 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm test
+      - name: Multi-channel worker local slot concurrency
+        run: python3 tools/engine-control-qa/multifeed-local-slots.test.py
       - name: Multi-channel shadow ledger concurrency in isolated PostgreSQL
         env:
           BLOFY_SHADOW_TEST_DATABASE_URL: postgresql://blofy:blofy_test@127.0.0.1:5432/blofy_engine_shadow_test
