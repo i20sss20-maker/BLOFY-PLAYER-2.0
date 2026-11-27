@@ -298,3 +298,22 @@ test('persistent five-feed ceiling survives trial expiry only for the explicitly
  for(const flag of ['BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED','BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED','BLOFY_STREAM_SHARED_LIVE_CANARY','BLOFY_STREAM_LICENSED_LIVE_PRODUCTION'])
   assert.equal(authorizedLiveTrialQuota(row,{...cfg,[flag]:'0'},now),1);
 });
+
+
+test('explicit source-specific approved capacity is configurable but bounded and never global',()=>{
+ const cfg={...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED:'1',
+  BLOFY_STREAM_LICENSED_LIVE_PRODUCTION:'1',
+  BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_PERSISTENT:'1'};
+ const row={sourceId:source,sourceName:'saleh',sourceNameMatches:1,providerMaxConcurrentFeeds:1};
+ for(const n of [1,5,8,16,32,64]){
+  const configured={...cfg,BLOFY_XTREAM_AUTHORIZED_SOURCE_FEED_CEILING:String(n)};
+  assert.equal(authorizedLiveTrialQuota(row,configured),n);
+  assert.equal(authorizedLiveTrialQuota({...row,sourceName:'other'},configured),1);
+  assert.equal(authorizedLiveTrialQuota({...row,sourceNameMatches:2},configured),1);
+ }
+ for(const invalid of ['0','65','100','*','unlimited','8.5','-1']){
+  assert.equal(authorizedLiveTrialQuota(row,{...cfg,BLOFY_XTREAM_AUTHORIZED_SOURCE_FEED_CEILING:invalid}),5);
+ }
+});
