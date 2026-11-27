@@ -927,8 +927,9 @@ async function runSmartConnection(id){
 
 // Read-only parity check from the original PLAYER egress for the SAME
 // alphabetically first movie IDs checked over isolated STREAM earlier.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id))return;
@@ -982,8 +983,9 @@ if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
 // Operator-only media-client compatibility check. Revisit the SAME first
 // three sorted movie IDs that produce mixed 206/404 in the admin probe.
 // No catalog edits, no alternative stream IDs, no customer routing changes.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -1483,8 +1485,9 @@ if(process.env.BLOFY_XTREAM_ONE_SHOT_DIAGNOSTIC==='1'){
 // Explicit one-time release smoke test, never run during ordinary restarts.
 // Test only the first account API that is reachable and already has indexed
 // content. Read the initial media bytes; DO NOT claim picture/audio playback.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_ONE_SHOT_MEDIA_PROBE==='1'){
+if(process.env.BLOFY_XTREAM_ONE_SHOT_MEDIA_PROBE==='1'){
   const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
     void(async()=>{
       const sources=(await serverRows()).filter(row=>row.enabled===true);
       let tested=0;
@@ -1912,8 +1915,9 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC_ON_BOOT==='1'){
 // One-shot source-scoped replay of the exact admin live sample selection.
 // Reports only status, redacted error enum and latency. Never changes the
 // source account, catalog, subscriber routes or active client playback.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -1943,8 +1947,9 @@ if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT=
 // project. Uses three indexed live channels and reads at most one initial
 // media chunk from each; never changes activation, source or user rows.
 // A valid TS signature is NOT proof that audio/video decodes on a TV.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
   const mediaProbeTimer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
     void(async()=>{
       const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
       if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -2016,8 +2021,9 @@ if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_
 // One-time, source-pinned read-only evidence for the second provider's
 // partially failing episode sample. The admin HTTP 200 is NOT media success.
 // Never include titles, source episode IDs, usernames, URLs or passwords.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_PROBE_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_PROBE_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_SOURCE_ID||'').trim();
    if(!validUuid(id))return;
@@ -2078,8 +2084,9 @@ if(process.env.BLOFY_XTREAM_OFFICIAL_M3U_PROBE_ON_BOOT==='1'){
 
 // Operator-only one-shot assessment after the approved source was proved to
 // return real TS bytes via STREAM. No catalog or client traffic changes.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
   const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
     void(async()=>{
       const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
       if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -5008,8 +5015,9 @@ export { ensureReady as ensureXtreamAdminReady };
 // positions. The ordinary admin sample picks the first sorted movies and
 // stops on success, so those results cannot estimate provider-wide 404 rates.
 // Never touch user entitlements, URLs, catalog, or raw media files.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -5061,8 +5069,9 @@ if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_
 // One-shot source-specific series/episode sample, intentionally spread across
 // the imported series catalog. Does not fetch whole media or change the
 // customer's source binding; only reads metadata and tiny media first bytes.
-if(!linodeMaintenanceActive()&&process.env.BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT_ON_BOOT==='1'){
+if(process.env.BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
