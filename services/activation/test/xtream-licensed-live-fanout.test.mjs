@@ -214,10 +214,12 @@ test('shared live uses same-origin response for bearer and Xtream clients, with 
  assert.match(scope,/return text\(res,503,'Shared live relay unavailable'/);
  const fn=gateway.slice(gateway.indexOf('async function proxySharedLiveTicket('),start);
  const calls=[];
- const run=new Function('fetch','text','pipeline','Readable',fn+'\nreturn proxySharedLiveTicket;')(
+ const {isConfiguredRelayTicket}=await import('../src/xtream-stream-relay-bridge.mjs');
+ const ticketEnv={BLOFY_STREAM_RELAY_ORIGIN:'https://blofy-stream-api-production.up.railway.app',BLOFY_STREAM_RELAY_SHARED_TOKEN:'test-only-key-at-least-32-characters'};
+ const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket',fn+'\nreturn proxySharedLiveTicket;')(
    async(url,opts)=>{calls.push({url:String(url),opts});return new Response('busy',{status:429})},
    (res,status,body,ct,headers)=>{res.status=status;res.retry=headers?.['retry-after']},
-   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x});
+   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},value=>isConfiguredRelayTicket(value,ticketEnv));
  const req={once(){},off(){},aborted:false};
  const res={once(){},off(){},destroyed:false,headersSent:false};
  await run(req,res,'https://example.invalid/relay/'+'a'.repeat(48),()=>{});
@@ -244,10 +246,12 @@ test('shared source channel limit preserves retry hint and returns only a fixed 
  const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
  const fn=gateway.slice(gateway.indexOf('async function proxySharedLiveTicket('),gateway.indexOf('async function proxyMedia('));
  let reason,headers;
- const run=new Function('fetch','text','pipeline','Readable',fn+'\nreturn proxySharedLiveTicket;')(
+ const {isConfiguredRelayTicket}=await import('../src/xtream-stream-relay-bridge.mjs');
+ const ticketEnv={BLOFY_STREAM_RELAY_ORIGIN:'https://blofy-stream-api-production.up.railway.app',BLOFY_STREAM_RELAY_SHARED_TOKEN:'test-only-key-at-least-32-characters'};
+ const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket',fn+'\nreturn proxySharedLiveTicket;')(
    async()=>new Response(JSON.stringify({ok:false,code:'fanout_source_channel_limit',private:'not forwarded'}),{status:503,headers:{'content-type':'application/json','retry-after':'2'}}),
    (res,status,body,ct,h)=>{res.status=status;res.body=body;headers=h},
-   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x});
+   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},value=>isConfiguredRelayTicket(value,ticketEnv));
  const req={once(){},off(){},aborted:false};
  const res={once(){},off(){},destroyed:false,headersSent:false};
  await run(req,res,'https://blofy-stream-api-production.up.railway.app/relay/'+'a'.repeat(48),(phase,d)=>{reason=d.reason});
