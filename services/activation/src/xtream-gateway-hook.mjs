@@ -101,7 +101,7 @@ import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,permittedLicensedLiveProduction,
-  createFirstAccountSharedLiveTestPilot} from './xtream-licensed-live-fanout-policy.mjs';
+  createFirstAccountSharedLiveTestPilot,authorizedLiveTrialQuota} from './xtream-licensed-live-fanout-policy.mjs';
 import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
   from './xtream-shared-pilot-registry.mjs';
 const firstAccountSharedLiveTestPilot=createFirstAccountSharedLiveTestPilot();
@@ -1451,10 +1451,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         sourceUrl:upstream.href,kind,sharedLive:true,
         requireSharedLive:true,licensedCdnRedirect:true,
         licensedSourceId:row.server_id,
-        providerMaxConcurrentFeeds:
-          Number.isSafeInteger(row.source_reported_max_connections)&&
-          row.source_reported_max_connections>=1&&row.source_reported_max_connections<=64
-            ?row.source_reported_max_connections:null
+        providerMaxConcurrentFeeds:authorizedLiveTrialQuota({
+          sourceId:row.server_id,sourceName:row.source_name,
+          sourceNameMatches:row.source_name_matches,
+          providerMaxConcurrentFeeds:row.source_reported_max_connections
+        })
       });
       observe('shared_grant'); // capability issued, not proven playback
       return await proxySharedLiveTicket(req,res,destination,observe);
