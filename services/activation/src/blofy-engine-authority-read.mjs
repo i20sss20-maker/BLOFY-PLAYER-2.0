@@ -47,10 +47,13 @@ export function createAuthorityReadEndpoint(pool,{env=process.env,key=createPubl
     await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))',['blofy-linode-feed:'+sourceId]);
     const {rows:[g]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
     const {rows:[r]}=await c.query('SELECT state,engine_id,channel_id,reservation_id,generation FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
-    const {rows:[h]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    const {rows:[h]}=await c.query('SELECT count(*)::int n,min(created_at) oldest,max(created_at) newest FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
     const {rows:[t]}=await c.query('SELECT clock_timestamp() AS now');
     if(!g)throw Error('gate_missing');
-    out={ok:true,sourceId,mode:g.mode,registeredLegacyHolds:h.n,gateReservationMatches:g.mode==='engine'&&!!r&&g.reservation_id===r.reservation_id&&g.engine_id===r.engine_id,allPathsFenced:false,observedAt:new Date(t.now).getTime(),reservation:r?{sourceId,state:r.state,engineId:r.engine_id,channelId:r.channel_id,reservationId:r.reservation_id,generation:r.generation}:null};
+    const observedAt=new Date(t.now).getTime();
+    const age=value=>Math.max(0,Math.floor((observedAt-new Date(value).getTime())/1000));
+    const legacyHoldAgesSeconds=h.n>0?{oldest:age(h.oldest),newest:age(h.newest)}:null;
+    out={ok:true,sourceId,mode:g.mode,registeredLegacyHolds:h.n,legacyHoldAgesSeconds,gateReservationMatches:g.mode==='engine'&&!!r&&g.reservation_id===r.reservation_id&&g.engine_id===r.engine_id,allPathsFenced:false,observedAt,reservation:r?{sourceId,state:r.state,engineId:r.engine_id,channelId:r.channel_id,reservationId:r.reservation_id,generation:r.generation}:null};
     await c.query('COMMIT');
    }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
    return reply(res,200,out);

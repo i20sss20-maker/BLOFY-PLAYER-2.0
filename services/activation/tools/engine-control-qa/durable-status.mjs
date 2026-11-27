@@ -71,7 +71,7 @@ async function readAuthority(){
 const authorityProbe=async()=>{
  try{
   const s=await readAuthority();
-  console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,registeredLegacyHolds:s.registeredLegacyHolds,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
+  console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,registeredLegacyHolds:s.registeredLegacyHolds,legacyHoldAgesSeconds:s.legacyHoldAgesSeconds??null,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
  }catch{console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:false,customerTrafficChanged:false}));}
 };
 if(process.env.BLOFY_ENGINE_AUTHORITY_PROBE==='1'){
