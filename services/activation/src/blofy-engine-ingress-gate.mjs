@@ -47,6 +47,15 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    await c.query("UPDATE blofy_engine_ingress_gate SET mode='draining',updated_at=now() WHERE source_id=$1",[sourceId]);
    return {ok:true,mode:'draining'};
   })},
+  // Abort an incomplete drain only before an engine has taken ownership.
+  // A pending or unknown reservation must first be reconciled independently.
+  async cancelDrain(){return tx(async(c,row)=>{
+   if(row?.mode!=='draining')return denied('not_draining');
+   const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+   if(feed&&feed.state!=='released')return denied('reservation_unresolved');
+   await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
+   return {ok:true,mode:'legacy'};
+  })},
   async readMode(){return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
