@@ -173,6 +173,10 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm test
+      - name: Sixteen isolated HLS packagers with generated media
+        run: |
+          command -v ffmpeg && command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          python3 tools/engine-control-qa/multifeed-packager.test.py
       - name: Multi-channel worker local slot concurrency
         run: python3 tools/engine-control-qa/multifeed-local-slots.test.py
       - name: Multi-channel shadow ledger concurrency in isolated PostgreSQL
