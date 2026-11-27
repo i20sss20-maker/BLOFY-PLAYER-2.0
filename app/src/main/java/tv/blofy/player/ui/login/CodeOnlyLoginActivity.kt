@@ -486,6 +486,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         if (busy) return
         val code = StreamCodeClient.normalizeCode(codeInput.text.toString())
         if (code.isEmpty()) {
+            if (StreamCodeSession.isClaimed(this)) { restoreSession(); return }
             statusText.text = getString(R.string.stream_ui_code_length)
             codeInput.requestFocus()
             return
@@ -570,6 +571,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                         withContext(Dispatchers.IO) {
                             dao.disableAllProviders()
                             dao.activateProvider(StreamCodeSession.providerId)
+                            StreamDirectLogin.clear(applicationContext)
                         }
                         val ready=withContext(Dispatchers.IO) {
                             CatalogSyncState.isReady(applicationContext,StreamCodeSession.providerId) &&
