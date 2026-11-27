@@ -96,7 +96,14 @@ if(process.env.BLOFY_ENGINE_AUTHORITY_PROBE==='1'){
 }
 const readyRead=createReadyProofRead({secret:process.env.BLOFY_ENGINE_READY_READ_SECRET,controllerKey,enabled:process.env.BLOFY_ENGINE_READY_READ==='1',readProof:async identity=>{
  const s=await readAuthority();
- if(s.mode!=='engine'||s.gateReservationMatches!==true||s.registeredLegacyHolds!==0||s.reservation?.state!=='ready'||!['sourceId','channelId','engineId','reservationId','generation'].every(k=>s.reservation[k]===identity[k]))return null;
+ // The authenticated orchestrator needs proof while the feed is still
+ // pending, otherwise pending -> ready would require a proof it cannot read.
+ // Viewer grants remain separately conditional on committed ready state.
+ if(s.mode!=='engine'||s.gateReservationMatches!==true||s.registeredLegacyHolds!==0||
+    !['pending','ready'].includes(s.reservation?.state)||
+    !['sourceId','channelId','engineId','reservationId'].every(k=>s.reservation[k]===identity[k]))return null;
+ const generation=s.reservation.reservationId.replaceAll('-','');
+ if(identity.generation!==generation||(s.reservation.state==='ready'&&s.reservation.generation!==generation))return null;
  return feedProof.read(identity);
 }});
 const logged=new Map();
