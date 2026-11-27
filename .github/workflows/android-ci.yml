@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Do not let obsolete commits on the same PR compete for Maven downloads.
+concurrency:
+  group: android-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -134,15 +139,30 @@ jobs:
       - name: Test lint and assemble
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
+          # Retry only a dependency download rate-limit, never a failing test.
+          run_gradle() {
+            local log
+            log="$(mktemp)"
+            for attempt in 1 2 3; do
+              if gradle --no-daemon --max-workers=2 "$@" 2>&1 | tee "$log"; then
+                cat "$log" >> gradle-ci.log
+                rm -f "$log"
+                return 0
+              fi
+              cat "$log" >> gradle-ci.log
+              if [ "$attempt" = 3 ] || ! grep -Eq 'Received status code 429|Too Many Requests' "$log"; then
+                rm -f "$log"
+                return 1
+              fi
+              sleep "$((attempt * 30))"
+            done
+          }
           # Unit tests start BlofyApp; never let fixtures register on a customer service.
-          gradle --no-daemon \
-            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
-            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
-            testDebugUnitTest 2>&1 | tee gradle-ci.log
-          gradle --no-daemon \
-            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
-            lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee -a gradle-ci.log
+          run_gradle -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 testDebugUnitTest
+          run_gradle -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            lintDebug assembleDebug assembleDebugAndroidTest
       - name: Verify channel and search are separate windows on STREAM
         if: github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-settings-first-login-sync-20261118' || github.head_ref == 'feature/stream-56-clean-customer-ui-20261118' || github.head_ref == 'fix/stream-live-clean-end-reconnect-20261118' || github.head_ref == 'fix/stream-auto-catalog-inline-refresh-20261121' || github.head_ref == 'qa/stream-56-0-2-stable-refinement-20261128'
         shell: bash
@@ -175,7 +195,9 @@ jobs:
             --tests 'tv.blofy.player.data.CatalogSectionRetryTest' \
              --tests 'tv.blofy.player.core.diagnostics.StreamCustomerTextTest' \
              --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshRouteTest' \
-            --tests 'tv.blofy.player.data.StreamCatalogRefreshCadenceTest'
+            --tests 'tv.blofy.player.data.StreamCatalogRefreshCadenceTest' \
+            --tests 'tv.blofy.player.ui.login.StreamDirectLoginTest' \
+            --tests 'tv.blofy.player.core.playback.PlaybackSessionReleaseTest'
 
       - name: Upload Gradle diagnostics
         if: always()
@@ -254,7 +276,7 @@ jobs:
   owner-signed-stream-qa:
     # Private owner-signed artifact only. Never upload to release, website or customer update feed.
     needs: verify
-    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-settings-first-login-sync-20261118' || github.head_ref == 'feature/stream-56-clean-customer-ui-20261118' || github.head_ref == 'fix/stream-live-clean-end-reconnect-20261118' || github.head_ref == 'fix/stream-auto-catalog-inline-refresh-20261121')
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-settings-first-login-sync-20261118' || github.head_ref == 'feature/stream-56-clean-customer-ui-20261118' || github.head_ref == 'fix/stream-live-clean-end-reconnect-20261118' || github.head_ref == 'fix/stream-auto-catalog-inline-refresh-20261121' || github.head_ref == 'qa/stream-56-0-2-stable-refinement-20261128')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 150
@@ -310,7 +332,9 @@ jobs:
             --tests 'tv.blofy.player.data.CatalogRefreshProgressTest' \
             --tests 'tv.blofy.player.data.CatalogSectionRetryTest' \
              --tests 'tv.blofy.player.core.diagnostics.StreamCustomerTextTest' \
-             --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshRouteTest'
+             --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshRouteTest' \
+             --tests 'tv.blofy.player.ui.login.StreamDirectLoginTest' \
+             --tests 'tv.blofy.player.core.playback.PlaybackSessionReleaseTest'
       - name: Sign full BLOFY STREAM with original owner certificate
         shell: bash
         env:
@@ -357,14 +381,14 @@ jobs:
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
           done
           mkdir -p build/owner-signed-qa
-          name="BLOFY-STREAM-56.0.2-AUTO-CATALOG-FIX-OWNER-SIGNED.apk"
+          name="BLOFY-STREAM-56.0.2-PRIVATE-QA-OWNER-SIGNED.apk"
           cp "$source_apk" "build/owner-signed-qa/$name"
           (cd build/owner-signed-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
           printf 'application_id=tv.blofy.player.v2.stream\nversion_code=2000117\nsource_sha=%s\nchannel=private_owner_qa_no_auto_update\n' "$GITHUB_SHA" > build/owner-signed-qa/IDENTITY.txt
       - name: Upload verified owner-signed APK for manual testing only
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-56.0.2-AUTO-CATALOG-OWNER-SIGNED-${{ github.sha }}
+          name: BLOFY-STREAM-56.0.2-PRIVATE-QA-OWNER-SIGNED-${{ github.sha }}
           path: |
             build/owner-signed-qa/
             build/ffmpeg-native/compliance/
