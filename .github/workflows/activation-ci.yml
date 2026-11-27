@@ -132,6 +132,18 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - name: Concurrent PostgreSQL limits and cross-process session revocation
         run: node --test test/admin-session-persistence.runtime.mjs
+  multifeed-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Independent signed multifeed readiness proofs
+        run: node --test services/activation/tools/engine-control-qa/multifeed-proof-transport.test.mjs
   verify:
     runs-on: ubuntu-latest
     services:
