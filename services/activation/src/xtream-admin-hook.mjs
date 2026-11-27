@@ -856,7 +856,7 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
       'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};
 }
 
-async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2}={}) {
+async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2,connectionCountsOnly=false}={}) {
   const creds = decryptCredentials(row);
   await assertPublicXtreamUrl(row.base_url);
   const response = await withXtreamAccountReconnect(
@@ -869,7 +869,25 @@ async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2}={}) {
   try { payload = JSON.parse(text); } catch { throw new Error('xtream_account_response_invalid'); }
   const info = sanitizeXtreamAccount(payload);
   if (!info.authenticated) throw Object.assign(new Error('xtream_auth_failed'), { status: 401 });
+  if (connectionCountsOnly) {
+    const count=value=>{
+      if(typeof value==='string'&&/^(0|[1-9][0-9]*)$/.test(value))value=Number(value);
+      if(!Number.isSafeInteger(value)||value<0)throw Error('xtream_connection_count_unknown');
+      return value;
+    };
+    if(info.status&&info.status.toLowerCase()!=='active')throw Error('xtream_account_inactive');
+    return {activeConnections:count(payload.user_info?.active_cons),
+      maxConnections:count(payload.user_info?.max_connections)};
+  }
   return info;
+}
+
+// Used only by the signed engine authority read. Fetches the authenticated
+// account document with no action, without opening media or updating metadata.
+export async function readEngineProviderAccount(sourceId){
+  const row=await serverById(sourceId);
+  if(!row?.enabled||row.publish_catalog!==true)throw Error('engine_source_unavailable');
+  return fetchAccount(row,{timeoutMs:5500,maxAttempts:1,connectionCountsOnly:true});
 }
 
 const smartConnectionCooldowns=new Map();

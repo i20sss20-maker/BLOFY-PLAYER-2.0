@@ -57,15 +57,15 @@ const feedProof=createFeedProofTransport({db,workerKeys,enabled:process.env.BLOF
  try{return await readCommittedReservation(engineId);}catch{return null}
 }});
 // Read-only production link; no worker activation or source requests.
-async function readAuthority(){
-  const r=await fetch('https://blofy-activation-portal-production.up.railway.app/internal/engine-authority-read',{method:'POST',redirect:'error',signal:AbortSignal.timeout(4000),headers:{'content-type':'application/json'},body:JSON.stringify(signAuthorityRead(controllerKey))});
+async function readAuthority({probeProvider=false}={}){
+  const r=await fetch('https://blofy-activation-portal-production.up.railway.app/internal/engine-authority-read',{method:'POST',redirect:'error',signal:AbortSignal.timeout(probeProvider?14000:4000),headers:{'content-type':'application/json'},body:JSON.stringify(signAuthorityRead(controllerKey,Date.now(),{probeProvider}))});
   if(r.status!==200){await r.body?.cancel().catch(()=>{});throw Error('authority_unavailable')}
   const reader=r.body?.getReader();if(!reader)throw Error('authority_body_missing');
   let size=0,parts=[];
   try{for(;;){const c=await reader.read();if(c.done)break;size+=c.value.byteLength;if(size>2048)throw Error('authority_body_too_large');parts.push(Buffer.from(c.value));}}
   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
   const s=JSON.parse(Buffer.concat(parts).toString('utf8'));
-  if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>5000)throw Error('authority_invalid');
+  if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>(probeProvider?15000:5000))throw Error('authority_invalid');
   return s;
 }
 const authorityProbe=async()=>{
@@ -77,6 +77,18 @@ const authorityProbe=async()=>{
 if(process.env.BLOFY_ENGINE_AUTHORITY_PROBE==='1'){
  const first=setTimeout(()=>void authorityProbe(),5000);first.unref();
  const periodic=setInterval(()=>void authorityProbe(),60000);periodic.unref();
+ const provider=setTimeout(async()=>{
+  try{
+   const s=await readAuthority({probeProvider:true});
+   const p=s.providerAccount;
+   const ok=Number.isSafeInteger(p?.activeConnections)&&p.activeConnections>=0&&
+     Number.isSafeInteger(p.maxConnections)&&p.maxConnections>=0&&
+     Number.isSafeInteger(p.observedAt)&&Math.abs(Date.now()-p.observedAt)<=5000;
+   console.log('BLOFY_XTREAM_PROVIDER_ACCOUNT '+JSON.stringify(ok?{ok,activeConnections:p.activeConnections,
+    maxConnections:p.maxConnections,reportedMaxConnections:s.reportedMaxConnections,mode:s.mode,
+    registeredLegacyHolds:s.registeredLegacyHolds,providerMediaRequests:0}: {ok:false,providerMediaRequests:0}));
+  }catch{console.log('BLOFY_XTREAM_PROVIDER_ACCOUNT '+JSON.stringify({ok:false,providerMediaRequests:0}));}
+ },25000);provider.unref();
 }
 const readyRead=createReadyProofRead({secret:process.env.BLOFY_ENGINE_READY_READ_SECRET,controllerKey,enabled:process.env.BLOFY_ENGINE_READY_READ==='1',readProof:async identity=>{
  const s=await readAuthority();

@@ -10,7 +10,7 @@ import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,
   from './xtream-live-ts-recovery.mjs';
 import {summarizeXtreamLiveStability} from './xtream-live-stability-summary.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
-import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
+import {ensureXtreamAdminReady,getXtreamStudioBranding,readEngineProviderAccount} from './xtream-admin-hook.mjs';
 import {
   assertPublicXtreamUrl,
   decryptXtreamSecret,
@@ -152,7 +152,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const enterLegacyIngress=createLegacyIngress(pool);
 const relayFenceEndpoint=createRelayFenceEndpoint(pool);
 const relayHoldEndpoint=createRelayHoldEndpoint(pool);
-const authorityReadEndpoint=createAuthorityReadEndpoint(pool);
+const authorityReadEndpoint=createAuthorityReadEndpoint(pool,{readProviderAccount:readEngineProviderAccount});
 const distributorCatalog=createDistributorCustomerCatalog({
   pool,enabled:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY==='1',
   distributorAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_IDS||'',
