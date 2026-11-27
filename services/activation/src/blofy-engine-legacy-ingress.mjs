@@ -8,13 +8,15 @@ import {resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
 export function createLegacyIngress(pool,env=process.env){
  const enabled=env.BLOFY_ENGINE_LEGACY_INGRESS_GATE==='1';
  const allow=()=>({ok:true,close:async()=>true});
- return async function enter(source){
+ return async function enter(source,{unknownSource=false}={}){
   if(!enabled)return allow();
   const holdId=randomUUID();
   try{
    const sourceId=await resolveApprovedEngineSource(pool,env);
    if(!sourceId)return {ok:false,reason:'source_identity_unknown'};
-   if(source!==sourceId)return allow();
+   // An opaque subscriber proxy URL can redirect to this source; hold
+   // conservatively until its actual upstream identity can be established.
+   if(!unknownSource&&source!==sourceId)return allow();
    const gate=createEngineIngressGate(pool,{sourceId,enabled});
    const r=await gate.enterLegacy(holdId);
    if(!r?.ok)return {ok:false,reason:'source_ingress_fenced'};
