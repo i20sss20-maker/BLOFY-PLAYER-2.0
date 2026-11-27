@@ -31,7 +31,8 @@ export function planEngineRoute({feed,workers,feedProof,capacity,entitlement,req
     capacity.activeConnections!==0||capacity.maxConnections!==1||
     !Number.isFinite(capacity.observedAt)||capacity.observedAt<now-10000||capacity.observedAt>now+2000)return hold('capacity_unconfirmed');
  const eligible=engines.filter(id=>healthy(id)&&Number.isSafeInteger(workers[id].activeViewers)&&workers[id].activeViewers>=0&&Number.isSafeInteger(workers[id].viewerLimit)&&workers[id].viewerLimit>workers[id].activeViewers);
- eligible.sort((a,b)=>workers[a].activeViewers/workers[a].viewerLimit-workers[b].activeViewers/workers[b].viewerLimit||engines.indexOf(a)-engines.indexOf(b));
+ // HostBrr is primary. Linode is standby, not a load-balancing peer.
+ eligible.sort((a,b)=>engines.indexOf(a)-engines.indexOf(b));
  if(!eligible.length)return hold('no_healthy_capacity');
  return {action:'request_reservation',engineId:eligible[0]};
 }
