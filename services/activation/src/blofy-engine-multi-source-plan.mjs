@@ -28,11 +28,20 @@ export function planMultiSourceRoute({candidates,workers,request,now=Date.now(),
      i.poolId!==c.poolId||i.sourceId!==c.sourceId||
      !Number.isFinite(i.observedAt)||i.observedAt<now-300000||i.observedAt>now+2000||
      c.contentId!==request.contentId||typeof c.channelId!=='string'||!c.channelId)continue;
-  const plan=planEngineRoute({feed:c.feed,workers,feedProof:c.feedProof,
+  // A worker's viewer headroom is NOT upstream feed headroom. The existing
+  // systemd runtime supports one feed per engine. A future multi-feed worker
+  // must publish authenticated feed limits before it can be selected.
+  const workerSnapshot=Object.fromEntries(Object.entries(workers||{}).filter(([id,w])=>{
+   if(!Number.isSafeInteger(w?.feedLimit)||w.feedLimit<1||
+      !Number.isSafeInteger(w?.activeFeeds)||w.activeFeeds<0||w.activeFeeds>w.feedLimit)return false;
+   if(c.feed?.state==='ready'&&c.feed.engineId===id)return w.activeFeeds>0;
+   return w.activeFeeds<w.feedLimit;
+  }));
+  const plan=planEngineRoute({feed:c.feed,workers:workerSnapshot,feedProof:c.feedProof,
    capacity:c.capacity,entitlement:c.entitlement,
    request:{authorized:true,sourceId:c.sourceId,channelId:c.channelId,expiresAt:request.expiresAt},now,enabled:true});
   if(!['reuse','request_reservation'].includes(plan.action))continue;
-  const w=workers?.[plan.engineId];
+  const w=workerSnapshot[plan.engineId];
   if(!Number.isSafeInteger(w?.viewerLimit)||!Number.isSafeInteger(w?.activeViewers)||
      w.activeViewers<0||w.viewerLimit<=w.activeViewers)continue;
   plans.push({...plan,sourceId:c.sourceId,poolId:c.poolId,channelId:c.channelId,
