@@ -23,4 +23,7 @@ RUN node --test test/blofy-engine-ready-proof-read.test.mjs
 COPY services/activation/src/blofy-multifeed-lease-poll.mjs services/activation/src/blofy-multifeed-proof-transport.mjs ./src/
 COPY services/activation/tools/engine-control-qa/multifeed-lease-poll.test.mjs services/activation/tools/engine-control-qa/multifeed-proof-transport.test.mjs ./tools/engine-control-qa/
 RUN node --test tools/engine-control-qa/multifeed-lease-poll.test.mjs tools/engine-control-qa/multifeed-proof-transport.test.mjs
+COPY services/activation/tools/blofy_multifeed_local_slots.py services/activation/tools/blofy_multifeed_packager.py /bundle/
+COPY services/activation/tools/engine-control-qa/multifeed-local-slots.test.py services/activation/tools/engine-control-qa/multifeed-packager.test.py /bundle/engine-control-qa/
+RUN tar --format=ustar --mtime=@0 --owner=0 --group=0 --numeric-owner -C /bundle -cf /tmp/multifeed-worker.tar blofy_multifeed_local_slots.py blofy_multifeed_packager.py engine-control-qa/multifeed-local-slots.test.py engine-control-qa/multifeed-packager.test.py && gzip -n -9 < /tmp/multifeed-worker.tar > tools/multifeed-worker.tar.gz && rm -rf /bundle /tmp/multifeed-worker.tar
 CMD ["node","tools/engine-control-qa/durable-status.mjs"]

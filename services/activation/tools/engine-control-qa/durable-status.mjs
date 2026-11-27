@@ -10,6 +10,7 @@ import {createReadyProofRead} from '../../src/blofy-engine-ready-proof-read.mjs'
 import {signAuthorityRead} from '../../src/blofy-engine-authority-read.mjs';
 import {createMultiLeasePoll} from '../../src/blofy-multifeed-lease-poll.mjs';
 import {createMultiFeedProofTransport} from '../../src/blofy-multifeed-proof-transport.mjs';
+import {verifyWorkerStatus} from '../../src/blofy-engine-status-response.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
 if(!existsSync('/data')||!statSync('/data').isDirectory())throw Error('persistent_volume_required');
@@ -36,6 +37,9 @@ const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
 // Inert transport until the authoritative source fence and ledger are connected.
 const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
 const multiControlEnabled=process.env.BLOFY_ENGINE_MULTIFEED_CONTROL==='1';
+const workerBundlePath='/control/multifeed/worker-bundle';
+const workerBundle=multiControlEnabled?readFileSync(new URL('../multifeed-worker.tar.gz',import.meta.url)):null;
+const bundleReads=new Map();
 const multiLeasePoll=createMultiLeasePoll({db,controllerKey,workerKeys,enabled:multiControlEnabled});
 async function readCommittedReservation(engineId){
  const s=await readAuthority();
@@ -96,10 +100,19 @@ const server=createServer(async(req,res)=>{
   }
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
   const multiRoute=multiControlEnabled?multiRoutes.get(req.url):undefined;
-  if(req.method!=='POST'||(!multiRoute&&!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete','/control/feed-proof/read'].includes(req.url)))return reply(res,404,{ok:false});
+  const bundleRequest=multiControlEnabled&&req.url===workerBundlePath;
+  if(req.method!=='POST'||(!multiRoute&&!bundleRequest&&!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete','/control/feed-proof/read'].includes(req.url)))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>4096){req.destroy();return;}chunks.push(c);}
   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(bundleRequest){
+   const status=e?.status,engineId=status?.engineId,now=Date.now();
+   if(!Object.hasOwn(workerKeys,engineId)||!verifyWorkerStatus(e,{publicKey:workerKeys[engineId],engineId,challenge:status.challenge,now}))return reply(res,403,{ok:false});
+   if((bundleReads.get(engineId)??0)>now-2000)return reply(res,429,{ok:false});
+   bundleReads.set(engineId,now);
+   res.writeHead(200,{'content-type':'application/gzip','cache-control':'no-store','x-content-type-options':'nosniff','content-length':workerBundle.length});
+   return res.end(workerBundle);
+  }
   if(multiRoute){const r=await multiRoute(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/read'){const r=await readyRead(e,req.headers.authorization);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/poll'){const r=await feedProof.poll(e);return reply(res,r.code,r.body);}
