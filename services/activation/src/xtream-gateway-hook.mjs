@@ -99,7 +99,7 @@ import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs'
 import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
   unsealXtreamHlsTicket,refreshExpiredXtreamHlsTicket} from './xtream-hls-playback.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
-import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {relayEligible,issueStreamRelayGrant,isConfiguredRelayTicket} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,permittedLicensedLiveProduction,
   createFirstAccountSharedLiveTestPilot,authorizedLiveTrialQuota} from './xtream-licensed-live-fanout-policy.mjs';
 import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
@@ -1279,9 +1279,7 @@ async function proxySharedLiveTicket(req,res,destination,observe){
   let timer=null,response=null;
   try{
     const target=new URL(destination);
-    if(target.origin!=='https://blofy-stream-api-production.up.railway.app'||
-      !/^\/relay\/[a-f0-9]{48}$/.test(target.pathname)||target.search||target.hash||
-      target.username||target.password)throw Error('shared_live_ticket_invalid');
+    if(!isConfiguredRelayTicket(target))throw Error('shared_live_ticket_invalid');
     if(req.aborted||res.destroyed)return;
     timer=setTimeout(cancel,20000);timer.unref?.();
     response=await fetch(target,{method:'GET',redirect:'manual',
