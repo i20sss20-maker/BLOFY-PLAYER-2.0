@@ -96,7 +96,9 @@ test('initial drain atomically reserves and reconciles only with fresh exact evi
   assert.equal((await reserve(capacity(),[randomUUID()])).reason,'initial_drain_hold_snapshot_changed');
   assert.equal((await ledger.readRoutingState({sourceId})).state,'empty');
   assert.equal((await ingress.readDrain()).registeredLegacyHolds,1);
-  assert.equal((await ingress.cancelDrain()).ok,true);
+  assert.equal((await ingress.cancelDrain({expectedDrainStartedAt:drainStartedAt-1})).reason,'drain_epoch_changed');
+  assert.equal((await ingress.readMode()).mode,'draining');
+  assert.equal((await ingress.cancelDrain({expectedDrainStartedAt:drainStartedAt})).ok,true);
   assert.equal((await ingress.beginDrain()).ok,true);
   const fresh=await ingress.readDrain({includeOpenHoldIds:true});
   const proof={...capacity(),drainStartedAt:fresh.drainStartedAt};
