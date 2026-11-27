@@ -106,7 +106,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
    if(!enabled(sourceId)||!engineAllowed(engineId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
     let gate;
-    if(handoff||env.BLOFY_ENGINE_RENEWABLE_LEASE==='1'){
+    if(handoff||(env.BLOFY_ENGINE_RENEWABLE_LEASE==='1'&&row?.state==='released')){
      const {rows:[current]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
      gate=current;
     }
