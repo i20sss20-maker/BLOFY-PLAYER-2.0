@@ -28,7 +28,7 @@ test('stable same-origin HLS authorizes each request and renews expiring private
   const r=await fetch(base+'index.m3u8');assert.equal(r.status,200);assert.equal(await r.text(),playlist);
   now+=61000;
   const s=await fetch(base+'seg-000000001.ts');assert.equal(s.status,200);assert.deepEqual(Buffer.from(await s.arrayBuffer()),payload);
-  assert.notEqual(upstreams[0].split('/')[5],upstreams[1].split('/')[5]);assert.equal(authorizations,2);
+  assert.notEqual(new URL(upstreams[0]).pathname.split('/')[4],new URL(upstreams[1]).pathname.split('/')[4]);assert.equal(authorizations,2);
   allowed=false;assert.equal((await fetch(base+'seg-000000002.ts')).status,403);assert.equal(upstreams.length,2);
   allowed=true;grantHost='elsewhere.example';assert.equal((await fetch(base+'index.m3u8')).status,403);
   grantHost='media2.blofyplayer.com';grantGeneration='f'.repeat(32);assert.equal((await fetch(base+'index.m3u8')).status,503);
