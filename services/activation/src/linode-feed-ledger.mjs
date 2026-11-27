@@ -133,7 +133,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
   // Only authenticated server-owned input, not public request bodies.
   // Same-source lock serializes viewer quotas and feed transitions.
   async attachViewer({sourceId,reservationId,channelId,generation,sessionId,accountId,
-    accountQuota,authorizedUntil,engineId='linode'}={}){
+    accountQuota,authorizedUntil,engineId='linode',requireEngineGate=false}={}){
    const valid=x=>typeof x==='string'&&uuid.test(x)&&x===x.toLowerCase();
    if(!enabled(sourceId)||!engineAllowed(engineId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
       ![reservationId,sessionId,accountId].every(valid)||typeof channelId!=='string'||
@@ -144,6 +144,11 @@ export function createLinodeFeedLedger(pool,env=process.env){
    return tx(sourceId,async(c,row)=>{
     if(!row||row.engine_id!==engineId||row.state!=='ready'||row.reservation_id!==reservationId||
        row.channel_id!==channelId||row.generation!==generation)return blocked('feed_not_ready');
+    if(requireEngineGate){
+     const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+     const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+     if(gate?.mode!=='engine'||gate.reservation_id!==reservationId||gate.engine_id!==engineId||holds.n!==0)return blocked('viewer_ingress_gate_closed');
+    }
     const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
     const now=new Date(clock.now).getTime();
     const until=Math.min(Date.parse(authorizedUntil),now+60000);
