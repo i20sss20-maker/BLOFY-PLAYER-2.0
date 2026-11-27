@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,generateKeyPairSync} from 'node:crypto';
+import {verifyLiveLease} from '../src/blofy-live-worker-lease.mjs';
+import {ensureEngineIngressGate,createEngineIngressGate} from '../src/blofy-engine-ingress-gate.mjs';
 import pg from 'pg';
+import {ensureEngineRouteClaims,createEngineRouteClaims} from '../src/blofy-engine-route-claims.mjs';
+import {createEngineRouteCoordinator} from '../src/blofy-engine-route-coordinator.mjs';
 import {ensureLinodeFeedLedger,createLinodeFeedLedger} from '../src/linode-feed-ledger.mjs';
 
 // Only the disposable CI database, never DATABASE_URL or production.
@@ -19,6 +23,8 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_VIEWER_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId};
   const ledger=createLinodeFeedLedger(pool,env);
   const args={sourceId,channelId:'123',requestId};
+  assert.deepEqual(await ledger.readRoutingState({sourceId}),{sourceId,state:'empty'});
+  assert.equal(await ledger.readRoutingState({sourceId:randomUUID()}),null);
   const all=await Promise.all(Array.from({length:30},()=>ledger.reserve(args)));
   assert.equal(all.filter(x=>x.action==='start_once').length,1);
   assert.equal(all.filter(x=>x.action==='existing').length,29);
@@ -36,6 +42,7 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   const generation=randomUUID().replaceAll('-','');
   assert.equal((await restored.findReady(args)).ok,false);
   assert.equal((await restored.transition({...t,next:'ready',generation})).ok,true);
+  assert.deepEqual(await restored.readRoutingState({sourceId}),{sourceId,state:'ready',engineId:'linode',channelId:'123',reservationId,generation,releaseConfirmed:false});
   const join=await Promise.all(Array.from({length:30},()=>restored.findReady(args)));
   assert.ok(join.every(x=>x.ok&&x.reservationId===reservationId&&x.generation===generation&&x.requestId===requestId));
   assert.equal((await restored.findReady({...args,channelId:'124'})).ok,false);
@@ -60,14 +67,29 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.closeViewer(viewer)).ok,true);
   assert.equal((await restored.attachViewer(viewer)).ok,false);
   assert.equal((await restored.attachViewer({...viewer,sessionId:randomUUID()})).reason,'viewer_quota');
+  await ensureEngineIngressGate(pool);
+  await pool.query("INSERT INTO blofy_engine_ingress_gate(source_id,mode,reservation_id,engine_id) VALUES($1,'engine',$2,'linode')",[sourceId,reservationId]);
+  const proxyViewer={...viewer,accountId:randomUUID(),sessionId:randomUUID(),requireEngineGate:true,proxied:true};
+  assert.equal((await restored.attachViewer({...proxyViewer,requireEngineGate:false})).reason,'viewer_invalid');
+  assert.equal((await restored.attachViewer(proxyViewer)).ok,true);
+  assert.equal((await restored.attachViewer({...proxyViewer,proxied:false})).reason,'viewer_session_closed_or_mismatch');
+  assert.equal((await restored.attachViewer({...proxyViewer,sessionId:randomUUID()})).reason,'viewer_quota');
+  assert.equal((await restored.closeViewer(proxyViewer)).ok,true);
+  assert.equal((await restored.attachViewer(proxyViewer)).reason,'viewer_session_closed_or_mismatch');
+  const reconnect={...proxyViewer,sessionId:randomUUID()};
+  assert.equal((await restored.attachViewer(reconnect)).ok,true);
+  assert.equal((await restored.closeViewer(reconnect)).ok,true);
   const more=await Promise.all(Array.from({length:155},()=>restored.attachViewer({...viewer,accountId:randomUUID(),sessionId:randomUUID()})));
   assert.equal(more.filter(x=>x.ok).length,148);
   assert.equal(more.filter(x=>x.reason==='viewer_quota').length,7);
   assert.equal((await restored.transition({...t,next:'unknown'})).ok,true);
+  assert.equal((await restored.readRoutingState({sourceId})).state,'unknown');
+  assert.equal((await restored.readRoutingState({sourceId})).releaseConfirmed,false);
   assert.equal((await restored.findReady(args)).ok,false);
   assert.equal((await restored.transition({...t,next:'released'})).ok,false);
   assert.equal((await restored.reserve({...args,requestId:randomUUID()})).ok,false);
   assert.equal((await restored.transition({...t,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await restored.readRoutingState({sourceId})).releaseConfirmed,true);
   const newId=randomUUID();
   const next=await restored.reserve({...args,requestId:newId,engineId:'hostbrr'});
   assert.equal(next.action,'start_once');
@@ -75,6 +97,154 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.transition({sourceId,reservationId:next.reservationId,next:'released',releaseConfirmed:true})).ok,false);
   assert.equal((await restored.transition({sourceId,reservationId:next.reservationId,engineId:'hostbrr',next:'released',releaseConfirmed:true})).ok,true);
   assert.equal((await restored.reserve(args)).ok,false);
+ }finally{
+  if(pool)await pool.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
+
+test('durable route claim across pools and restart; dispatch once against PostgreSQL',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();
+  await ensureEngineRouteClaims(a);
+  const sourceId=randomUUID(),requestId=randomUUID(),now=Date.now();
+  const claims=p=>createEngineRouteClaims(p,{enabled:true,sourceId});
+  await ensureLinodeFeedLedger(a);
+  const ledger=p=>createLinodeFeedLedger(p,{BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId});
+  const request={sourceId,requestId,channelId:'123',authorized:true,expiresAt:now+60000};
+  const snapshot={entitlement:{sourceId,redistributionAllowed:true,expiresAt:now+60000},
+    feed:{sourceId,state:'empty'},capacity:{sourceId,authoritative:true,scope:'dedicated_licensed_pool',activeConnections:0,maxConnections:1,observedAt:now},
+    workers:{hostbrr:{authenticated:true,observedAt:now,deliveryActive:true,heartbeatActive:true,activeViewers:0,viewerLimit:150}}};
+  let starts=0;
+  const route=p=>createEngineRouteCoordinator({claims:claims(p),ledger:ledger(p),enabled:true,clock:()=>now,readSnapshot:async()=>snapshot,
+   start:async()=>{starts++;const r=await ledger(p).reserve({sourceId,requestId,channelId:'123',engineId:'hostbrr'});assert.equal(r.action,'start_once');assert.equal((await ledger(p).transition({sourceId,reservationId:r.reservationId,engineId:'hostbrr',next:'ready',generation:randomUUID().replaceAll('-','')})).ok,true);return {ok:true,action:'feed_ready',sourceId,channelId:'123',engineId:'hostbrr',reservationId:r.reservationId}}});
+  const ra=route(a),rb=route(b);
+  const results=await Promise.all(Array.from({length:40},(_,i)=>(i%2?ra:rb)(request)));
+  assert.equal(starts,1);assert.equal(results.filter(r=>r.ok).length,1);
+  assert.equal(results.filter(r=>r.reason==='already_claimed').length,39);
+  const {rows:[stored]}=await a.query('SELECT state,action FROM blofy_engine_route_claims WHERE request_id=$1',[requestId]);
+  assert.deepEqual(stored,{state:'finished',action:'feed_ready'});
+  const unresolved={sourceId,requestId:randomUUID()};
+  assert.equal((await claims(a).claim(unresolved)).acquired,true);
+  await a.end();a=null;await b.end();b=null;a=open();
+  assert.equal((await route(a)(request)).reason,'already_claimed');
+  assert.equal((await claims(a).claim(unresolved)).acquired,false);
+  assert.equal(starts,1);
+  assert.equal((await ledger(a).readRoutingState({sourceId})).state,'ready');
+ }finally{
+  if(a)await a.end();if(b)await b.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
+
+test('worker lease sequence is serialized by source lock; fencing blocks renewal',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();await ensureLinodeFeedLedger(a);
+  const sourceId=randomUUID(),engineId='hostbrr',channelId='123';
+  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId,BLOFY_ENGINE_RENEWABLE_LEASE:'1'};
+  const one=createLinodeFeedLedger(a,env),two=createLinodeFeedLedger(b,env);
+  const {reservationId}=await one.reserve({sourceId,engineId,channelId,requestId:randomUUID()});
+  const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+  await ensureEngineIngressGate(a);
+  const gate=createEngineIngressGate(a,{sourceId,enabled:true}),gate2=createEngineIngressGate(b,{sourceId,enabled:true});
+  assert.equal((await gate.initialize()).ok,true);
+  const hold=randomUUID();
+  assert.equal((await gate.enterLegacy(hold)).ok,true);
+  assert.equal((await gate2.beginDrain()).ok,true);
+  assert.equal((await gate.enterLegacy(randomUUID())).ok,false);
+  const external=()=>({sourceId,authoritative:true,scope:'all_paths',activeConnections:0,maxConnections:1,observedAt:Date.now()});
+  const promotion=()=>({reservationId,engineId,proof:external()});
+  assert.equal((await gate.promote(promotion())).reason,'legacy_holds_open');
+  assert.deepEqual(await gate2.readDrain(),{ok:true,mode:'draining',registeredLegacyHolds:1,allPathsDrained:false});
+  assert.equal((await gate2.closeLegacy(hold)).ok,true);
+  assert.equal((await gate.promote({...promotion(),proof:null})).ok,false);
+  const identity={sourceId,engineId,channelId,reservationId};
+  const request=()=>({...identity,signingKey:privateKey,fence:{...identity,authoritative:true,scope:'all_paths',observedAt:Date.now(),expiresAt:Date.now()+90000}});
+  assert.equal((await one.issueWorkerLease({...request(),fence:null})).ok,false);
+  assert.equal((await one.issueWorkerLease(request())).reason,'lease_ingress_gate_closed');
+  assert.equal((await gate.promote(promotion())).ok,true);
+  assert.equal((await gate2.readFence(identity)).registeredIngressFenced,true);
+  assert.equal((await gate2.enterLegacy(randomUUID())).ok,false);
+  assert.equal((await gate2.restoreLegacy()).ok,false);
+  assert.equal((await one.issueWorkerLease({...request(),engineId:'linode'})).ok,false);
+  const results=await Promise.all(Array.from({length:24},(_,i)=>(i%2?one:two).issueWorkerLease(request())));
+  assert.ok(results.every(r=>r.ok&&verifyLiveLease({lease:r.lease,signature:r.signature},{key:publicKey,identity})));
+  assert.deepEqual(results.map(r=>r.lease.sequence).sort((x,y)=>x-y),Array.from({length:24},(_,i)=>i+1));
+  await a.end();a=open();
+  const restored=createLinodeFeedLedger(a,env);
+  assert.equal((await restored.issueWorkerLease(request())).lease.sequence,25);
+  assert.equal((await restored.transition({...identity,next:'unknown'})).ok,true);
+  assert.equal((await two.issueWorkerLease(request())).ok,false);
+  assert.equal((await restored.transition({...identity,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await two.issueWorkerLease(request())).ok,false);
+  assert.equal((await gate2.restoreLegacy()).ok,true);
+  assert.equal((await gate2.enterLegacy(hold)).ok,false);
+  assert.equal((await gate2.enterLegacy(randomUUID())).ok,true);
+ }finally{
+  if(a)await a.end();if(b)await b.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
+
+
+test('independent source reservations contend for the same physical worker slot',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();await ensureLinodeFeedLedger(a);
+  const sources=Array.from({length:20},()=>randomUUID());
+  const ledger=(p,sourceId)=>createLinodeFeedLedger(p,{BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId});
+  const attempt=(p,sourceId,engineId)=>ledger(p,sourceId).reserve({sourceId,engineId,channelId:'123',requestId:randomUUID()});
+  const results=await Promise.all(sources.map((sourceId,i)=>attempt(i%2?a:b,sourceId,'hostbrr')));
+  assert.equal(results.filter(r=>r.action==='start_once').length,1);
+  assert.equal(results.filter(r=>r.reason==='engine_feed_slot_occupied').length,19);
+  const index=results.findIndex(r=>r.ok),sourceId=sources[index],reservationId=results[index].reservationId;
+  const other=sources[(index+1)%sources.length];
+  assert.equal((await attempt(b,other,'linode')).ok,true);
+  const third=sources.find(s=>s!==sourceId&&s!==other);
+  const id={sourceId,reservationId,engineId:'hostbrr'};
+  assert.equal((await ledger(a,sourceId).transition({...id,next:'unknown'})).ok,true);
+  assert.equal((await attempt(b,third,'hostbrr')).reason,'engine_feed_slot_occupied');
+  assert.equal((await ledger(a,sourceId).transition({...id,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await attempt(b,third,'hostbrr')).action,'start_once');
+ }finally{
+  if(a)await a.end();if(b)await b.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
+
+test('incomplete drain rollback never restores legacy while a reservation remains unresolved',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let pool;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  pool=new pg.Pool({...options,options:'-c search_path='+schema,max:4});
+  await ensureLinodeFeedLedger(pool);await ensureEngineIngressGate(pool);
+  const sourceId=randomUUID(),engineId='hostbrr';
+  const gate=createEngineIngressGate(pool,{sourceId,enabled:true});
+  const ledger=createLinodeFeedLedger(pool,{BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId});
+  assert.equal((await gate.initialize()).ok,true);
+  assert.equal((await gate.beginDrain()).ok,true);
+  assert.equal((await gate.cancelDrain()).mode,'legacy');
+  assert.equal((await gate.beginDrain()).ok,true);
+  const r=await ledger.reserve({sourceId,engineId,channelId:'123',requestId:randomUUID()});
+  assert.equal(r.action,'start_once');
+  assert.equal((await gate.cancelDrain()).reason,'reservation_unresolved');
+  const identity={sourceId,engineId,reservationId:r.reservationId};
+  assert.equal((await ledger.transition({...identity,next:'unknown'})).ok,true);
+  assert.equal((await gate.cancelDrain()).reason,'reservation_unresolved');
+  assert.equal((await ledger.transition({...identity,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await gate.cancelDrain()).mode,'legacy');
  }finally{
   if(pool)await pool.end();
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());

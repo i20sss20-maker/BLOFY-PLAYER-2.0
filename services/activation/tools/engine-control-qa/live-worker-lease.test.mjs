@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {signLiveLease,verifyLiveLease} from '../../src/blofy-live-worker-lease.mjs';
+test('renewal requires matching reservation and strictly newer sequence',()=>{
+ const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+ const now=1700000000000;
+ const identity={engineId:'hostbrr',sourceId:randomUUID(),channelId:'123',reservationId:randomUUID()};
+ const lease={version:1,...identity,sequence:1,issuedAt:now,expiresAt:now+60000};
+ const e=signLiveLease(lease,privateKey,now);
+ const check={key:publicKey,identity,now};
+ assert.equal(verifyLiveLease(e,check),true);
+ assert.equal(verifyLiveLease(e,{...check,previousSequence:1}),false);
+ assert.equal(verifyLiveLease(e,{...check,identity:{...identity,engineId:'linode'}}),false);
+ assert.equal(verifyLiveLease(e,{...check,now:now+60000}),false);
+ assert.equal(verifyLiveLease({...e,lease:{...lease,channelId:'124'}},check),false);
+ assert.throws(()=>signLiveLease({...lease,expiresAt:now+90001},privateKey,now));
+ const renewal=signLiveLease({...lease,sequence:2,issuedAt:now+20000,expiresAt:now+80000},privateKey,now+20000);
+ assert.equal(verifyLiveLease(renewal,{...check,previousSequence:1,now:now+20000}),true);
+});

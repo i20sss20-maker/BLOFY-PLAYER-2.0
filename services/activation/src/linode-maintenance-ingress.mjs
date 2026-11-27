@@ -8,6 +8,7 @@ export function blocksDuringLinodeMaintenance(path,env=process.env){
  if(!linodeMaintenanceActive(env)||typeof path!=='string')return false;
  return /^\/(live|movie|series|hls)(\/|$)/i.test(path)||
   /^\/api\/v1\/stream\/media\//i.test(path)||
+  /^\/api\/v1\/subscribers\/xtream\/(live|movie|series|url|raw)(\/|$)/i.test(path)||
   /^\/internal\/blofy-content-hub\//i.test(path)||
   /^\/api\/v1\/admin\/xtream-gateway\/(playback-probe|episode-delivery-audit|unavailable-media\/recheck(?:-now)?)(\/|$)/i.test(path);
 }
