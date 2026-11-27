@@ -50,7 +50,8 @@ object TransportFactory {
         val client=OkHttpClient.Builder()
             .followRedirects(true).followSslRedirects(false)
             .connectTimeout(device.connectTimeoutSeconds,java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(device.readTimeoutSeconds,java.util.concurrent.TimeUnit.SECONDS)
+            // Preserve a recovering authenticated gateway socket instead of reopening it early.
+            .readTimeout(65L,java.util.concurrent.TimeUnit.SECONDS)
             .addNetworkInterceptor { chain ->
                 val request=chain.request()
                 val url=request.url
