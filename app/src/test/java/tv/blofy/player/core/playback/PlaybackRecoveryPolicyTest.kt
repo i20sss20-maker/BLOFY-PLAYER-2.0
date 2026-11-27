@@ -44,4 +44,21 @@ class PlaybackRecoveryPolicyTest {
         assertEquals(65_000L to 1,PlaybackRecoveryPolicy.failureWindowCount(65_000,5000,4))
         assertEquals(42L to 1,PlaybackRecoveryPolicy.failureWindowCount(42,5000,4))
     }
+    @Test fun gatewayLiveOnlyExtendsGraceAfterReady() {
+        assertEquals(12_000L, PlaybackRecoveryPolicy.liveBufferGraceMs(true, false))
+        assertEquals(12_000L, PlaybackRecoveryPolicy.liveBufferGraceMs(false, true))
+        assertEquals(58_000L, PlaybackRecoveryPolicy.liveBufferGraceMs(true, true))
+    }
+
+    @Test fun gatewayVodRetriesAreBoundedAndRejectPermanentFailures() {
+        val error = PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+        assertEquals(800L, PlaybackRecoveryPolicy.gatewayVodRetryDelay(error, 503, 0, 1))
+        assertEquals(1_600L, PlaybackRecoveryPolicy.gatewayVodRetryDelay(error, 502, 1, 2))
+        assertEquals(3_000L, PlaybackRecoveryPolicy.gatewayVodRetryDelay(error, 408, 2, 3))
+        assertNull(PlaybackRecoveryPolicy.gatewayVodRetryDelay(error, 503, 3, 4))
+        assertNull(PlaybackRecoveryPolicy.gatewayVodRetryDelay(error, 503, 0, 5))
+        for (status in listOf(401, 403, 404, 416, 429))
+            assertNull(PlaybackRecoveryPolicy.gatewayVodRetryDelay(error, status, 0, 1))
+        assertNull(PlaybackRecoveryPolicy.gatewayVodRetryDelay(PlaybackException.ERROR_CODE_DECODING_FAILED, null, 0, 1))
+    }
 }
