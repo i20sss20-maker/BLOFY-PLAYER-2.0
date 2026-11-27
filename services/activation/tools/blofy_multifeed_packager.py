@@ -4,10 +4,16 @@ The caller supplies an already authorized transport stream and an active
 reservation guard. No URL, credential, remote command, or source allocation
 is accepted here. Not installed on either production worker.
 """
-import json, os, re, select, stat, subprocess, time
+import json, os, re, select, stat, subprocess, time, shutil
 from pathlib import Path
 
 class PackagerError(Exception):pass
+
+# Opt-in only; two-second target segments are not a duration guarantee.
+NORMAL_WINDOW=12
+TIMESHIFT_WINDOW=75
+TIMESHIFT_MAX_BYTES=768*1024*1024
+TIMESHIFT_MIN_FREE_BYTES=1024*1024*1024
 
 def playlist_progress(output,now=time.time):
     path=Path(output)/"index.m3u8"
@@ -33,16 +39,19 @@ def playlist_progress(output,now=time.time):
         return seq[-1]
     except (OSError,ValueError):return None
 
-def command(output,executable="/usr/bin/ffmpeg"):
+def command(output,executable="/usr/bin/ffmpeg",*,timeshift=False):
+    if type(timeshift) is not bool:raise PackagerError("INVALID_TIMESHIFT_POLICY")
     return [executable,"-nostdin","-hide_banner","-loglevel","error","-i","pipe:0",
             "-map","0:v:0","-map","0:a?","-c","copy","-f","hls",
-            "-hls_time","2","-hls_list_size","12","-hls_delete_threshold","3",
+            "-hls_time","2","-hls_list_size",str(TIMESHIFT_WINDOW if timeshift else NORMAL_WINDOW),"-hls_delete_threshold","3",
             "-hls_flags","delete_segments+temp_file+omit_endlist",
             "-hls_segment_options","mpegts_flags=+initial_discontinuity",
             "-hls_segment_filename",str(output/"seg-%09d.ts"),str(output/"index.m3u8")]
 
 class ChannelPackager:
-    def __init__(self,root,identity,guard,*,spawn=subprocess.Popen):
+    def __init__(self,root,identity,guard,*,spawn=subprocess.Popen,timeshift=False):
+        if type(timeshift) is not bool:raise PackagerError("INVALID_TIMESHIFT_POLICY")
+        self.timeshift=timeshift;self.last_storage_check=None
         reservation=identity.get("reservationId","")
         if not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}",reservation):raise PackagerError("INVALID_RESERVATION")
         if not re.fullmatch(r"[1-9][0-9]{0,14}",identity.get("channelId","")):raise PackagerError("INVALID_CHANNEL")
@@ -52,18 +61,34 @@ class ChannelPackager:
         self.proc=None;self.started=False;self.last_progress=None
     def check(self):
         if self.guard.active() is not True:raise PackagerError("LEASE_INACTIVE")
+    def check_timeshift_storage(self):
+        if not self.timeshift:return
+        now=time.monotonic()
+        if self.last_storage_check is not None and now-self.last_storage_check<2:return
+        if shutil.disk_usage(self.root).free<TIMESHIFT_MIN_FREE_BYTES:raise PackagerError("TIMESHIFT_LOW_DISK")
+        if self.output.exists():
+            size=0
+            for p in self.output.iterdir():
+                try:st=p.lstat()
+                except FileNotFoundError:continue # FFmpeg may retire a segment concurrently.
+                if not stat.S_ISREG(st.st_mode):raise PackagerError("TIMESHIFT_UNSAFE_ENTRY")
+                size+=st.st_size
+                if size>TIMESHIFT_MAX_BYTES:raise PackagerError("TIMESHIFT_STORAGE_LIMIT")
+        self.last_storage_check=now
     def start(self):
         if self.started:raise PackagerError("ALREADY_STARTED")
         self.check()
         st=self.root.lstat()
         if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.getuid() or st.st_mode&0o077:raise PackagerError("UNSAFE_ROOT")
+        self.check_timeshift_storage()
         self.output.mkdir(mode=0o700)
         self.started=True
-        self.proc=self.spawn(command(self.output),stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        self.proc=self.spawn(command(self.output,timeshift=self.timeshift),stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         os.set_blocking(self.proc.stdin.fileno(),False)
     def write(self,data,timeout=5):
         if not self.proc or self.proc.poll() is not None:raise PackagerError("PACKAGER_NOT_RUNNING")
         if not isinstance(data,bytes) or not 0<len(data)<=65536:raise PackagerError("INVALID_CHUNK")
+        self.check_timeshift_storage()
         deadline=time.monotonic()+timeout;view=memoryview(data);fd=self.proc.stdin.fileno()
         while view:
             self.check()
@@ -73,6 +98,7 @@ class ChannelPackager:
                 except BlockingIOError:pass
     def progress(self):
         self.check()
+        self.check_timeshift_storage()
         seq=playlist_progress(self.output)
         if seq is not None:
             if self.last_progress is not None and seq<self.last_progress:raise PackagerError("SEGMENT_REGRESSION")

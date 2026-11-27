@@ -7,7 +7,8 @@ const pathPattern=/^\/v1\/([a-f0-9]{32})\/[a-f0-9]{32}\/(\d{10})\/[a-f0-9]{64}\/
 // Single-rendition engine HLS. Manifest URIs remain relative to the
 // authenticated BLOFY route, not the short-lived worker HMAC URL.
 // Reject arbitrary URIs, encryption keys and unsupported playlist types.
-export function validateEngineManifest(input){
+export function validateEngineManifest(input,{timeshift=false}={}){
+ if(typeof timeshift!=='boolean')return null;
  if(typeof input!=='string'||Buffer.byteLength(input)>65536)return null;
  const lines=input.split(/\r?\n/);
  if(lines[0]!=='#EXTM3U')return null;
@@ -25,7 +26,7 @@ export function validateEngineManifest(input){
   const n=Number(line.slice(4,-3));if(!Number.isSafeInteger(n)||(previous!==-1&&n!==previous+1))return null;
   previous=n;pending=false;count++;
  }
- return !pending&&count>=3&&count<=30?lines.join('\n'):null;
+ return !pending&&count>=3&&count<=(timeshift?75:30)?lines.join('\n'):null;
 }
 async function boundedText(body){
  const reader=body.getReader();const chunks=[];let size=0;
@@ -39,7 +40,7 @@ async function boundedText(body){
 // fresh worker proof and rights on EACH manifest/segment request. It returns
 // a new server-generated signedLinodePlayback grant, never caller URLs.
 // Worker capabilities never leave the backend; no redirect to an expired URL.
-export function createEngineHlsDelivery({authorizeGrant,fetchImpl=fetch,enabled=false,clock=Date.now}={}){
+export function createEngineHlsDelivery({authorizeGrant,fetchImpl=fetch,enabled=false,timeshiftEnabled=false,clock=Date.now}={}){
  return async function deliver(req,res,context){
   const fail=(code)=>{if(!res.headersSent&&!res.destroyed){res.writeHead(code,{'cache-control':'no-store','retry-after':'2','content-type':'text/plain'});res.end('Playback temporarily unavailable')}else if(!res.destroyed)res.destroy()};
   if(!enabled||typeof authorizeGrant!=='function')return fail(503);
@@ -58,7 +59,8 @@ export function createEngineHlsDelivery({authorizeGrant,fetchImpl=fetch,enabled=
    upstream=await fetchImpl(url,{method:'GET',redirect:'error',headers:{accept:context.name==='index.m3u8'?'application/vnd.apple.mpegurl':'video/mp2t','accept-encoding':'identity'},signal:AbortSignal.any([c.signal,AbortSignal.timeout(15000)])});
    if(upstream.status!==200||!upstream.body)return fail(502);
    if(context.name==='index.m3u8'){
-    const manifest=validateEngineManifest(await boundedText(upstream.body));
+    // Only an operator-configured delivery can expose a larger window.
+    const manifest=validateEngineManifest(await boundedText(upstream.body),{timeshift:timeshiftEnabled===true});
     if(!manifest)return fail(502);
     const body=Buffer.from(manifest);
     res.writeHead(200,{'content-type':'application/vnd.apple.mpegurl','content-length':body.length,'cache-control':'no-store, private','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});

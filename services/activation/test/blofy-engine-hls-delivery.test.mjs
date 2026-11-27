@@ -10,6 +10,13 @@ test('worker manifest accepts only consecutive local media and no external URIs'
  assert.equal(validateEngineManifest(playlist),playlist);
  for(const bad of [playlist.replace('seg-000000001.ts','https://elsewhere.example/a.ts'),playlist.replace('seg-000000001.ts','../a.ts'),playlist.replace('seg-000000001.ts','seg-000000003.ts'),playlist.replace('#EXT-X-VERSION:3','#EXT-X-KEY:METHOD=AES-128,URI="secret"'),playlist.replace('seg-000000002.ts','')])assert.equal(validateEngineManifest(bad),null);
 });
+test('long DVR manifest needs explicit operator opt-in and rejects oversized windows',()=>{
+ const make=n=>'#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n'+Array.from({length:n},(_,i)=>'#EXTINF:2.000000,\nseg-'+String(i).padStart(9,'0')+'.ts\n').join('');
+ assert.equal(validateEngineManifest(make(75)),null);
+ assert.equal(validateEngineManifest(make(75),{timeshift:true}),make(75));
+ assert.equal(validateEngineManifest(make(76),{timeshift:true}),null);
+ assert.equal(validateEngineManifest(make(75).replace('seg-000000010.ts','https://example.com/a.ts'),{timeshift:true}),null);
+});
 test('stable same-origin HLS authorizes each request and renews expiring private worker grants',async()=>{
  let now=1700000000000,allowed=true,grantHost='media2.blofyplayer.com',grantGeneration=g,grantLifetime=60,authorizations=0,upstreams=[];
  const deliver=createEngineHlsDelivery({enabled:true,clock:()=>now,authorizeGrant:async context=>{

@@ -8,6 +8,22 @@ class Guard:
         self.allowed=True
     def active(self):return self.allowed
 class PackagerTests(unittest.TestCase):
+    def test_timeshift_window_opt_in_and_disk_guard(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d:
+            root=pathlib.Path(d);g=Guard(1)
+            def window(cmd):return cmd[cmd.index('-hls_list_size')+1]
+            self.assertEqual(window(mod.command(root)), '12')
+            self.assertEqual(window(mod.command(root,timeshift=True)), '75')
+            w=mod.ChannelPackager(root,g.identity,g,timeshift=True,spawn=lambda *a,**k:self.fail('spawned'))
+            with patch.object(mod.shutil,'disk_usage',return_value=shutil._ntuple_diskusage(100,99,1)):
+                with self.assertRaisesRegex(mod.PackagerError,'TIMESHIFT_LOW_DISK'):w.start()
+            self.assertFalse(w.output.exists())
+            w.output.mkdir(mode=0o700)
+            with (w.output/'seg-000000001.ts').open('wb') as f:f.truncate(mod.TIMESHIFT_MAX_BYTES+1)
+            with patch.object(mod.shutil,'disk_usage',return_value=shutil._ntuple_diskusage(10**12,0,10**12)):
+                with self.assertRaisesRegex(mod.PackagerError,'TIMESHIFT_STORAGE_LIMIT'):w.check_timeshift_storage()
+
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),"FFmpeg not installed")
     def test_16_real_local_hls_packagers(self):
         # Generated media only, no provider connection or customer data.
