@@ -102,10 +102,30 @@ export function createLinodeFeedLedger(pool,env=process.env){
       requestId:row.request_id};
    });
   },
-  async reserve({sourceId,channelId,requestId,engineId='linode'}={}){
+  async reserve({sourceId,channelId,requestId,engineId='linode',handoff=null}={}){
    if(!enabled(sourceId)||!engineAllowed(engineId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
-    if(row&&row.state!=='released'){
+    // A handoff is a new reservation and gate update in one source transaction.
+   // A trusted caller must obtain fresh, independent all-paths release proof;
+   // the old worker's expiry or heartbeat alone cannot establish release.
+   if(handoff!==null){
+    const {rows:[t]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(t.now).getTime(),p=handoff.proof;
+    if(!row||row.state!=='released'||row.reservation_id!==handoff.reservationId||
+       row.engine_id!==handoff.engineId||row.engine_id===engineId||row.channel_id!==channelId)
+      return blocked('handoff_release_unconfirmed');
+    if(p?.authoritative!==true||p.scope!=='all_paths'||p.sourceId!==sourceId||
+       p.reservationId!==row.reservation_id||p.engineId!==row.engine_id||
+       p.activeConnections!==0||p.maxConnections!==1||!Number.isSafeInteger(p.observedAt)||
+       p.observedAt<now-10000||p.observedAt>now+2000||
+       p.observedAt<new Date(row.updated_at).getTime())return blocked('handoff_proof_invalid');
+    const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(gate?.mode!=='engine'||gate.reservation_id!==row.reservation_id||gate.engine_id!==row.engine_id)
+      return blocked('handoff_gate_mismatch');
+    const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(holds.n!==0)return blocked('handoff_legacy_holds_open');
+   }
+   if(row&&row.state!=='released'){
      if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown'&&row.engine_id===engineId)
       return {ok:true,action:'existing',reservationId:row.reservation_id,state:row.state};
      return blocked('feed_occupied_or_uncertain');
@@ -128,6 +148,9 @@ export function createLinodeFeedLedger(pool,env=process.env){
      ON CONFLICT(source_id) DO UPDATE SET channel_id=EXCLUDED.channel_id,
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
      state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,worker_lease_sequence=0,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
+    if(handoff!==null){
+     await c.query("UPDATE blofy_engine_ingress_gate SET reservation_id=$2,engine_id=$3,updated_at=now() WHERE source_id=$1",[sourceId,reservationId,engineId]);
+    }
     return {ok:true,action:'start_once',reservationId,state:'pending'};
    });
   },
