@@ -18,3 +18,24 @@ test('resolve exactly one enabled and approved source with provider quota 1',asy
 test('unconfigured source never opens a database connection',async()=>{
  assert.deepEqual(await prepareEngineSchema({connect:()=>{throw Error('must not connect')}},{sourceId:null}),{ok:false,code:'source_not_configured'});
 });
+
+import {createLegacyIngress} from '../src/blofy-engine-legacy-ingress.mjs';
+test('opaque subscriber requests register a durable hold before upstream; draining denies them',async()=>{
+ let mode='legacy',holds=0,closed=0;
+ const pool={query:async()=>({rows:[{id,enabled:true,publish_catalog:true,quota:'1',restreamer:'true'}]}),
+ connect:async()=>({release(){},async query(sql){
+  if(sql.startsWith('SELECT * FROM blofy_engine_ingress_gate'))return {rows:[{mode}]};
+  if(sql.startsWith('INSERT INTO blofy_engine_legacy_holds')){holds++;return {rowCount:1}}
+  if(sql.startsWith('UPDATE blofy_engine_legacy_holds')){closed++;return {rowCount:1}}
+  return {rows:[]};
+ }})};
+ const enter=createLegacyIngress(pool,{...env,BLOFY_ENGINE_LEGACY_INGRESS_GATE:'1'});
+ const h=await enter(null,{unknownSource:true});
+ assert.equal(h.ok,true);assert.equal(holds,1);
+ assert.equal(await h.close(),true);assert.equal(await h.close(),true);assert.equal(closed,1);
+ mode='draining';
+ assert.equal((await enter(null,{unknownSource:true})).ok,false);
+ assert.equal(holds,1);
+ assert.equal((await enter('other')).ok,true);
+ assert.equal((await createLegacyIngress(null,{})(null,{unknownSource:true})).ok,true);
+});
