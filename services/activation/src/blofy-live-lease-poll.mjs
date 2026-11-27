@@ -3,7 +3,7 @@ import {verifyLiveLease} from './blofy-live-worker-lease.mjs';
 // Executable bridge between the already-committed source ledger and the
 // authenticated engine poll. No new reservation, capacity or entitlement is
 // inferred from this transport. All authorities are injected by the caller.
-export function createLiveLeasePoll({db,ledger,readFence,controllerKey,workerKeys,sourceId,enabled=false,clock=Date.now}={}){
+export function createLiveLeasePoll({db,ledger,readFence,controllerKey,workerKeys,sourceId,readCommittedReservation,claimCommittedLease,enabled=false,clock=Date.now}={}){
  const deny=(code=409)=>({code,body:{ok:false}});
  const standby=()=>({code:200,body:{ok:true,lease:null}});
  db.exec('CREATE TABLE IF NOT EXISTS live_lease_poll_replay(engine TEXT NOT NULL,challenge TEXT NOT NULL,expires INTEGER NOT NULL,PRIMARY KEY(engine,challenge));');
@@ -21,6 +21,20 @@ export function createLiveLeasePoll({db,ledger,readFence,controllerKey,workerKey
    db.exec('COMMIT');if(!fresh)return deny(429);
   }catch(err){db.exec('ROLLBACK');throw err}
   if(e.status.deliveryActive!==true||e.status.heartbeatActive!==true)return standby();
+  // Remote authority owns the DB lock and independent fence validation.
+  // Never synthesize an all-paths fence from controller telemetry.
+  if(typeof claimCommittedLease==='function'){
+   if(typeof readCommittedReservation!=='function')return standby();
+   try{
+    const r=await readCommittedReservation(id);
+    if(!r||r.engineId!==id||!['pending','ready'].includes(r.state))return standby();
+    const identity={sourceId:r.sourceId,engineId:id,channelId:r.channelId,reservationId:r.reservationId};
+    const envelope=await claimCommittedLease(identity);
+    if(!envelope)return standby();
+    if(!verifyLiveLease(envelope,{key:workerPublicControllerKey(),identity,now:clock()}))return deny();
+    return {code:200,body:{ok:true,...envelope}};
+   }catch{return deny(503)}
+  }
   if(typeof ledger?.readRoutingState!=='function'||typeof ledger?.issueWorkerLease!=='function'||typeof readFence!=='function')return standby();
   try{
    const r=await ledger.readRoutingState({sourceId});
