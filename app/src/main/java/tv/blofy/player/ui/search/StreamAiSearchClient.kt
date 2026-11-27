@@ -13,6 +13,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.network.awaitResponse
 import java.util.concurrent.TimeUnit
+import java.security.MessageDigest
 
 /**
  * First-party BLOFY AI intent parser. Only the typed search text and locale
@@ -51,7 +52,9 @@ internal object StreamAiSearchClient {
             return Outcome.Unavailable(Problem.NOT_ACTIVATED)
         val access = StreamCodeSession.authorization(context)
             ?: return Outcome.Unavailable(Problem.NOT_ACTIVATED)
-        val key = access.hashCode().toString() + ":" + locale + ":" + clean.lowercase()
+        val sessionKey = MessageDigest.getInstance("SHA-256").digest(access.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val key = sessionKey + ":" + locale + ":" + clean.lowercase()
         synchronized(cache) { cache[key]?.let { return Outcome.Ready(it, cached = true) } }
         return withContext(Dispatchers.IO) {
             try {
@@ -70,7 +73,13 @@ internal object StreamAiSearchClient {
                         in 500..599 -> Problem.SERVICE
                         else -> Problem.BAD_RESPONSE
                     })
-                    val root = JSONObject(response.body?.string().orEmpty())
+                    val body = response.body ?: return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
+                    val source = body.source()
+                    if (body.contentLength() > 65_536L || source.request(65_537L))
+                        return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
+                    if (StreamCodeSession.authorization(context) != access)
+                        return@withContext Outcome.Unavailable(Problem.EXPIRED_SESSION)
+                    val root = JSONObject(source.readUtf8())
                     if (!root.optBoolean("ok")) return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
                     val suggestions = root.optJSONArray("suggestedTitles")
                     val titles = ArrayList<String>()
