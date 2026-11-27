@@ -140,7 +140,10 @@ def run():
     c=read_secret(); owner=pwd.getpwnam('blofylive')
     if account(c)!=0:raise Stop('SOURCE_BUSY_NO_MEDIA_REQUEST')
     check_lease()
-    generation=uuid.uuid4().hex
+    # Lease reservations are one-shot. A deterministic generation lets the
+    # controller challenge the exact reserved feed before its first report.
+    # The existing durable started marker prevents reuse after a crash.
+    generation=identity['reservationId'].replace('-','') if mode=='lease' else uuid.uuid4().hex
     output=BASE/generation;output.mkdir(mode=0o700);os.chown(output,owner.pw_uid,owner.pw_gid)
     conn=r=proc=None; reason='pilot_finished'; is_ready=False
     try:
