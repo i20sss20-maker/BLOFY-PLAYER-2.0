@@ -305,8 +305,8 @@ private fun Any?.asNumber(): Number? = when(this) {
  * Not a push service: sleeping devices may be checked later by Android.
  */
 internal object StreamCatalogRefreshCadence {
-    const val ENTRY_MINIMUM_GAP_MS = 20L * 60_000L
-    const val PERIODIC_MINUTES = 30L
+    const val ENTRY_MINIMUM_GAP_MS = 5L * 60_000L
+    const val PERIODIC_MINUTES = 15L
 
     fun isEntryCheckDue(lastAttemptMs: Long, nowMs: Long): Boolean =
         lastAttemptMs <= 0L || nowMs < lastAttemptMs ||
