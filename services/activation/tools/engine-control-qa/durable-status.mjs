@@ -6,6 +6,7 @@ import {createDurableStatusTransport} from '../../src/blofy-engine-durable-statu
 import {createLiveLeasePoll} from '../../src/blofy-live-lease-poll.mjs';
 import {createFeedProofTransport} from '../../src/blofy-live-feed-proof-transport.mjs';
 import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
+import {signAuthorityRead} from '../../src/blofy-engine-authority-read.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
 if(!existsSync('/data')||!statSync('/data').isDirectory())throw Error('persistent_volume_required');
@@ -33,6 +34,24 @@ const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
 const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
 // No production reservation authority is connected to this isolated QA service.
 const feedProof=createFeedProofTransport({db,workerKeys,enabled:false});
+// Read-only production link; no worker activation or source requests.
+const authorityProbe=async()=>{
+ try{
+  const r=await fetch('https://blofy-activation-portal-production.up.railway.app/internal/engine-authority-read',{method:'POST',redirect:'error',signal:AbortSignal.timeout(4000),headers:{'content-type':'application/json'},body:JSON.stringify(signAuthorityRead(controllerKey))});
+  if(r.status!==200){await r.body?.cancel().catch(()=>{});throw Error('authority_unavailable')}
+  const reader=r.body?.getReader();if(!reader)throw Error('authority_body_missing');
+  let size=0,parts=[];
+  try{for(;;){const c=await reader.read();if(c.done)break;size+=c.value.byteLength;if(size>2048)throw Error('authority_body_too_large');parts.push(Buffer.from(c.value));}}
+  finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+  const s=JSON.parse(Buffer.concat(parts).toString('utf8'));
+  if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>5000)throw Error('authority_invalid');
+  console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,registeredLegacyHolds:s.registeredLegacyHolds,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
+ }catch{console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:false,customerTrafficChanged:false}));}
+};
+if(process.env.BLOFY_ENGINE_AUTHORITY_PROBE==='1'){
+ const first=setTimeout(()=>void authorityProbe(),5000);first.unref();
+ const periodic=setInterval(()=>void authorityProbe(),60000);periodic.unref();
+}
 const logged=new Map();
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
