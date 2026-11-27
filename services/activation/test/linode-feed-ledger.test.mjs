@@ -11,6 +11,7 @@ function fixture(){
  const db={connect:async()=>({release(){},async query(sql,args=[]){
   calls.push(sql);
   if(sql.startsWith('SELECT *'))return {rows:row?[{...row}]:[]};
+  if(sql.startsWith('SELECT count(*)::int AS n FROM blofy_linode_feed_ledger'))return {rows:[{n:row&&row.engine_id===args[0]&&row.source_id!==args[1]&&row.state!=='released'?1:0}]};
   if(sql.startsWith('INSERT INTO blofy_linode_feed_requests')){
    if(seen.has(args[0]))return {rowCount:0};seen.add(args[0]);return {rowCount:1};
   }
