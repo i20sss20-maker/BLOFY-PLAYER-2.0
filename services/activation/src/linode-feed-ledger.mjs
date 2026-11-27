@@ -109,6 +109,13 @@ export function createLinodeFeedLedger(pool,env=process.env){
       return {ok:true,action:'existing',reservationId:row.reservation_id,state:row.state};
      return blocked('feed_occupied_or_uncertain');
     }
+    // Each installed worker currently has one systemd source runtime.
+    // A source lock alone cannot prevent two different source reservations
+    // from occupying that same worker. Serialize cross-source admission;
+    // pending, ready and unknown all occupy the physical worker slot.
+    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))',['blofy-engine-slot:'+engineId]);
+    const {rows:[occupied]}=await c.query("SELECT count(*)::int AS n FROM blofy_linode_feed_ledger WHERE engine_id=$1 AND source_id<>$2 AND state<>'released'",[engineId,sourceId]);
+    if(occupied.n!==0)return blocked('engine_feed_slot_occupied');
     // A replay of the last released request must not reopen its feed.
     if(row?.request_id===requestId)return blocked('request_closed');
     const claimed=await c.query('INSERT INTO blofy_linode_feed_requests(request_id,source_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING request_id',[requestId,sourceId]);
