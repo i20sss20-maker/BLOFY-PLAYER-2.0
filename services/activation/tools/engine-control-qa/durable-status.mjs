@@ -6,6 +6,7 @@ import {createDurableStatusTransport} from '../../src/blofy-engine-durable-statu
 import {createLiveLeasePoll} from '../../src/blofy-live-lease-poll.mjs';
 import {createFeedProofTransport} from '../../src/blofy-live-feed-proof-transport.mjs';
 import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
+import {createReadyProofRead} from '../../src/blofy-engine-ready-proof-read.mjs';
 import {signAuthorityRead} from '../../src/blofy-engine-authority-read.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
@@ -58,6 +59,11 @@ if(process.env.BLOFY_ENGINE_AUTHORITY_PROBE==='1'){
  const first=setTimeout(()=>void authorityProbe(),5000);first.unref();
  const periodic=setInterval(()=>void authorityProbe(),60000);periodic.unref();
 }
+const readyRead=createReadyProofRead({secret:process.env.BLOFY_ENGINE_READY_READ_SECRET,controllerKey,enabled:process.env.BLOFY_ENGINE_READY_READ==='1',readProof:async identity=>{
+ const s=await readAuthority();
+ if(s.mode!=='engine'||s.gateReservationMatches!==true||s.registeredLegacyHolds!==0||s.reservation?.state!=='ready'||!['sourceId','channelId','engineId','reservationId','generation'].every(k=>s.reservation[k]===identity[k]))return null;
+ return feedProof.read(identity);
+}});
 const logged=new Map();
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
@@ -69,10 +75,11 @@ const server=createServer(async(req,res)=>{
    res.writeHead(200,{'content-type':'text/plain; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-length':body.length});return res.end(body);
   }
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
-  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete'].includes(req.url))return reply(res,404,{ok:false});
+  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete','/control/feed-proof/read'].includes(req.url))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>4096){req.destroy();return;}chunks.push(c);}
   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(req.url==='/control/feed-proof/read'){const r=await readyRead(e,req.headers.authorization);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/poll'){const r=await feedProof.poll(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/complete'){const r=await feedProof.complete(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/lease/poll'){const r=await liveLeasePoll(e);return reply(res,r.code,r.body);}
