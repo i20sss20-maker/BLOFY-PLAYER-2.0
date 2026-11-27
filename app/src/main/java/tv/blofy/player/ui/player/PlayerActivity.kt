@@ -869,9 +869,7 @@ open class PlayerActivity : ContentAccessActivity() {
             else "Seeking is unavailable for this source"
             return
         }
-        val duration = session.player.duration.takeIf { it > 0L }
-        val target = (session.player.currentPosition + deltaMs).coerceAtLeast(0L)
-        session.seekFromUser(if (duration != null) target.coerceAtMost(duration) else target)
+        session.seekByUser(deltaMs)
         controlHint.text = (if (deltaMs >= 0L) "+" else "") + (deltaMs / 1_000L).toString() + "s"
     }
 
