@@ -111,6 +111,13 @@ test('initial drain atomically reserves and reconciles only with fresh exact evi
   assert.equal(Number(row.worker_lease_sequence),0);
   assert.ok(await ingress.readFence({sourceId,engineId,reservationId:winner.reservationId}));
   assert.equal((await ingress.enterLegacy(randomUUID())).reason,'legacy_fenced');
+  const identity={sourceId,engineId,reservationId:winner.reservationId};
+  const releaseProof=()=>({...identity,authoritative:true,scope:'all_paths',activeConnections:0,exclusiveLeaseStartup:true,workerStopped:true,observedAt:Date.now()});
+  assert.equal((await ledger.rollbackUnissuedInitial({...identity,proof:{...releaseProof(),activeConnections:1}})).reason,'rollback_release_unconfirmed');
+  assert.equal((await ingress.readMode()).mode,'engine');
+  assert.deepEqual(await ledger.rollbackUnissuedInitial({...identity,proof:releaseProof()}),{ok:true,mode:'legacy',state:'released'});
+  assert.equal((await ledger.readRoutingState({sourceId})).state,'released');
+  assert.equal((await ingress.enterLegacy(randomUUID())).ok,true);
  }finally{
   await pool.query('DELETE FROM blofy_engine_legacy_holds WHERE source_id=$1',[sourceId]);
   await pool.query('DELETE FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
