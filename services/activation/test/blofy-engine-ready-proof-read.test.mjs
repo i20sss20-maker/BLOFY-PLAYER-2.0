@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {generateKeyPairSync} from 'node:crypto';
+import {createReadyProofRead,verifyReadyProof} from '../src/blofy-engine-ready-proof-read.mjs';
+const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+const now=1700000000000,secret='c'.repeat(64),nonce='d'.repeat(32);
+const identity={engineId:'hostbrr',sourceId:'11111111-1111-4111-8111-111111111111',reservationId:'22222222-2222-4222-8222-222222222222',generation:'22222222222242228222222222222222',channelId:'483976'};
+test('only authenticated current feed proof is attested and response is bound to request nonce',async()=>{
+ let p={...identity,status:'private_hls_ready',observedAt:now,lastSegment:123,localSourceConnections:1};
+ const read=createReadyProofRead({enabled:true,secret,controllerKey:privateKey,clock:()=>now,readProof:async()=>p});
+ const request={...identity,nonce};
+ assert.equal((await read(request,'Bearer wrong')).code,403);
+ const r=await read(request,'Bearer '+secret);assert.equal(r.code,200);
+ const verify=(body,id=identity,n=nonce,t=now)=>verifyReadyProof(body,id,n,{key:publicKey,now:t});
+ assert.equal(verify(r.body).lastSegment,123);
+ assert.equal(verify(r.body,identity,'e'.repeat(32)),null);
+ assert.equal(verify(r.body,{...identity,engineId:'linode'}),null);
+ assert.equal(verify(r.body,identity,nonce,now+10001),null);
+ assert.equal(verify({...r.body,proof:{...r.body.proof,lastSegment:124}}),null);
+ p={...p,observedAt:now-10001};assert.equal((await read(request,'Bearer '+secret)).code,503);
+ p={...p,observedAt:now,localSourceConnections:0};assert.equal((await read(request,'Bearer '+secret)).code,503);
+});
