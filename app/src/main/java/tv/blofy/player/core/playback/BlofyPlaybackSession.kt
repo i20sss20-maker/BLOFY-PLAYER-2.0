@@ -20,6 +20,7 @@ import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.diagnostics.PlaybackFailureDetails
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.device.StreamDeviceCompatibility
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
@@ -36,6 +37,9 @@ class BlofyPlaybackSession(
     private var resumeFallbackUrls: List<String> = emptyList()
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
+    private var reachedReady = false
+    private var lastSeekStallRestartAtMs = 0L
+    private val isGateway: Boolean get() = BuildConfig.CODE_ONLY_LOGIN && profile.providerKey == StreamCodeSession.providerId
     private var playStartedAtMs = 0L
     private var automaticRetries = 0
     // Cap repeated reconnects even if a stream briefly renders a first frame
@@ -79,6 +83,7 @@ class BlofyPlaybackSession(
                     if (closing) return
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
                     if (playbackState == Player.STATE_READY) {
+                        reachedReady = true
                         metric?.let { metric = PlaybackDiagnostics.ready(it) }
                         resetLiveStallTimer(keepPosition = true)
                         if (!contentKind.isLiveContent()) seekRecoveryGeneration++
@@ -106,17 +111,6 @@ class BlofyPlaybackSession(
                                 }
                             }, plan.delayMs)
                         }
-                    }
-                }
-
-                override fun onPositionDiscontinuity(
-                    oldPosition: Player.PositionInfo,
-                    newPosition: Player.PositionInfo,
-                    reason: Int
-                ) {
-                    if (closing) return
-                    if (reason == Player.DISCONTINUITY_REASON_SEEK && !contentKind.isLiveContent()) {
-                        scheduleSeekRecovery(newPosition.positionMs.coerceAtLeast(0L))
                     }
                 }
 
@@ -178,16 +172,23 @@ class BlofyPlaybackSession(
                     )
                     playerErrorWindowStartMs = windowStart
                     repeatedPlayerErrors = failures
-                    val delay = PlaybackRecoveryPolicy.delayForSameUrlRetry(
-                        error.errorCode, PlaybackRecoveryPolicy.httpStatus(error),
-                        automaticRetries, repeatedPlayerErrors
-                    )
-                    if (automaticRetries < MAX_AUTOMATIC_RETRIES && delay != null) {
+                    val status = PlaybackRecoveryPolicy.httpStatus(error)
+                    val gatewayVod = isGateway && contentKind in setOf("movie", "episode")
+                    val delay = if (gatewayVod) PlaybackRecoveryPolicy.gatewayVodRetryDelay(
+                        error.errorCode, status, automaticRetries, repeatedPlayerErrors
+                    ) ?: PlaybackRecoveryPolicy.delayForSameUrlRetry(error.errorCode, status, automaticRetries, repeatedPlayerErrors)
+                    else PlaybackRecoveryPolicy.delayForSameUrlRetry(error.errorCode, status, automaticRetries, repeatedPlayerErrors)
+                    val generation = liveRecoveryGeneration
+                    val failedItem = currentMediaItem
+                    if (delay != null) {
                         automaticRetries++
-                        retryHandler.postDelayed({ if (!closing) retrySameUrl() }, delay)
+                        retryHandler.postDelayed({
+                            if (!closing && generation == liveRecoveryGeneration && player.currentMediaItem == failedItem)
+                                retrySameUrl()
+                        }, delay)
                     } else if (failedUrl.isNotBlank()) {
                         retryHandler.post {
-                            if (closing) return@post
+                            if (closing || generation != liveRecoveryGeneration || player.currentMediaItem != failedItem) return@post
                             // A configured provider-origin fallback exists specifically to escape an
                             // unreachable direct/hidden host. Try that route before changing .ts/.m3u8
                             // on the same failed origin; otherwise a dead hidden hostname costs another
@@ -219,6 +220,8 @@ class BlofyPlaybackSession(
         if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
+        lastSeekStallRestartAtMs = 0L
+        reachedReady = false
         liveRecoveryGeneration++
         liveQuickEnds = 0
         liveEndRecoveryPending = false
@@ -258,6 +261,7 @@ class BlofyPlaybackSession(
         liveEndRecoveryPending = false
         // A stalled seek may report zero or the old position until buffering recovers.
         val position = (resumePositionMs ?: player.currentPosition).coerceAtLeast(0L)
+        val shouldPlay = player.playWhenReady
         seekRecoveryGeneration++
         resetLiveStallTimer(keepPosition = false)
         playStartedAtMs = SystemClock.elapsedRealtime()
@@ -266,16 +270,26 @@ class BlofyPlaybackSession(
         player.setMediaItem(item)
         player.prepare()
         if (!contentKind.isLiveContent() && position > 0L) player.seekTo(position)
-        player.playWhenReady = true
+        player.playWhenReady = shouldPlay
+    }
+
+    fun seekFromUser(targetMs: Long) {
+        if (closing || contentKind.isLiveContent() || player.currentMediaItem == null) return
+        val target = targetMs.coerceAtLeast(0L)
+        player.seekTo(target)
+        scheduleSeekRecovery(target)
     }
 
     private fun scheduleSeekRecovery(targetMs: Long) {
         val generation = ++seekRecoveryGeneration
+        val item = player.currentMediaItem
         retryHandler.postDelayed({
             if (closing || generation != seekRecoveryGeneration || contentKind.isLiveContent()) return@postDelayed
-            if (player.currentMediaItem == null || !player.playWhenReady) return@postDelayed
+            if (player.currentMediaItem != item || !player.playWhenReady) return@postDelayed
             if (player.playbackState == Player.STATE_BUFFERING) {
-                automaticRetries = 0
+                val now = SystemClock.elapsedRealtime()
+                if (lastSeekStallRestartAtMs > 0L && now - lastSeekStallRestartAtMs < 60_000L) return@postDelayed
+                lastSeekStallRestartAtMs = now
                 retrySameUrl(targetMs)
             }
         }, SEEK_STALL_RECOVERY_MS)
@@ -345,8 +359,8 @@ class BlofyPlaybackSession(
         if (liveStallStartedAtMs == 0L) liveStallStartedAtMs = now
 
         val stalledForMs = now - liveStallStartedAtMs
-        val recoveryCooldownPassed = now - lastLiveStallRecoveryAtMs >= LIVE_STALL_RECOVERY_COOLDOWN_MS
-        if (stalledForMs >= LIVE_STALL_RECOVERY_THRESHOLD_MS &&
+        val recoveryCooldownPassed = lastLiveStallRecoveryAtMs == 0L || now - lastLiveStallRecoveryAtMs >= LIVE_STALL_RECOVERY_COOLDOWN_MS
+        if (stalledForMs >= PlaybackRecoveryPolicy.liveBufferGraceMs(isGateway, reachedReady) &&
             recoveryCooldownPassed &&
             liveStallRecoveries < MAX_LIVE_STALL_RECOVERIES_PER_ITEM
         ) {
@@ -440,11 +454,10 @@ class BlofyPlaybackSession(
 
     private companion object {
         const val MAX_AUTOMATIC_RETRIES = 1
-        const val SEEK_STALL_RECOVERY_MS = 8_000L
+        const val SEEK_STALL_RECOVERY_MS = 20_000L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_FIRST_FRAME_TIMEOUT_MS = 16_000L
         const val MAX_NO_FIRST_FRAME_RECOVERIES = 2
-        const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
         const val MAX_LIVE_STALL_RECOVERIES_PER_ITEM = 3
     }
