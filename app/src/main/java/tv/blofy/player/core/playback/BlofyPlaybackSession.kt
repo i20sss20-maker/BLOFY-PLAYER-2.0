@@ -60,6 +60,12 @@ class BlofyPlaybackSession(
     private var liveEndRecoveryPending = false
     private var liveRecoveryGeneration = 0
     private var seekRecoveryGeneration = 0
+    private var pendingUserSeekMs: Long? = null
+    private var pendingSeekGeneration = 0
+    private fun cancelPendingSeek() {
+        pendingSeekGeneration++
+        pendingUserSeekMs = null
+    }
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
@@ -219,6 +225,7 @@ class BlofyPlaybackSession(
     fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null, fallbackUrls: List<String> = emptyList()) {
         if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
+        cancelPendingSeek()
         seekRecoveryGeneration++
         lastSeekStallRestartAtMs = 0L
         reachedReady = false
@@ -260,7 +267,8 @@ class BlofyPlaybackSession(
         liveRecoveryGeneration++
         liveEndRecoveryPending = false
         // A stalled seek may report zero or the old position until buffering recovers.
-        val position = (resumePositionMs ?: player.currentPosition).coerceAtLeast(0L)
+        val position = (resumePositionMs ?: pendingUserSeekMs ?: player.currentPosition).coerceAtLeast(0L)
+        cancelPendingSeek()
         val shouldPlay = player.playWhenReady
         seekRecoveryGeneration++
         resetLiveStallTimer(keepPosition = false)
@@ -275,9 +283,31 @@ class BlofyPlaybackSession(
 
     fun seekFromUser(targetMs: Long) {
         if (closing || contentKind.isLiveContent() || player.currentMediaItem == null) return
+        cancelPendingSeek()
         val target = targetMs.coerceAtLeast(0L)
         player.seekTo(target)
         scheduleSeekRecovery(target)
+    }
+
+    /** Coalesce repeated remote presses before opening another VOD Range request. */
+    fun seekByUser(deltaMs: Long) {
+        if (closing || contentKind.isLiveContent() || player.currentMediaItem == null) return
+        val base = (pendingUserSeekMs ?: player.currentPosition).coerceAtLeast(0L)
+        val target = when {
+            deltaMs > 0L && base > Long.MAX_VALUE - deltaMs -> Long.MAX_VALUE
+            deltaMs == Long.MIN_VALUE || (deltaMs < 0L && base < -deltaMs) -> 0L
+            else -> base + deltaMs
+        }
+        val duration = player.duration.takeIf { it > 0L }
+        pendingUserSeekMs = if (duration != null) target.coerceAtMost(duration) else target
+        seekRecoveryGeneration++
+        val generation = ++pendingSeekGeneration
+        val item = player.currentMediaItem
+        retryHandler.postDelayed({
+            if (!closing && generation == pendingSeekGeneration && player.currentMediaItem == item) {
+                pendingUserSeekMs?.let { seekFromUser(it) }
+            }
+        }, 300L)
     }
 
     private fun scheduleSeekRecovery(targetMs: Long) {
@@ -386,6 +416,8 @@ class BlofyPlaybackSession(
 
     private fun playInternalFallback(url: String) {
         if (closing) return
+        cancelPendingSeek()
+        seekRecoveryGeneration++
         liveRecoveryGeneration++
         liveEndRecoveryPending = false
         liveQuickEnds = 0
@@ -428,6 +460,7 @@ class BlofyPlaybackSession(
     fun release(detachOutput: () -> Unit = {}) {
         if (closing) return
         closing = true
+        cancelPendingSeek()
         liveRecoveryGeneration++
         liveEndRecoveryPending = false
         metric?.let { current ->
