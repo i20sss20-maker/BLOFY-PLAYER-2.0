@@ -181,3 +181,32 @@ test('worker lease sequence is serialized by source lock; fencing blocks renewal
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
  }
 });
+
+
+test('independent source reservations contend for the same physical worker slot',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();await ensureLinodeFeedLedger(a);
+  const sources=Array.from({length:20},()=>randomUUID());
+  const ledger=(p,sourceId)=>createLinodeFeedLedger(p,{BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId});
+  const attempt=(p,sourceId,engineId)=>ledger(p,sourceId).reserve({sourceId,engineId,channelId:'123',requestId:randomUUID()});
+  const results=await Promise.all(sources.map((sourceId,i)=>attempt(i%2?a:b,sourceId,'hostbrr')));
+  assert.equal(results.filter(r=>r.action==='start_once').length,1);
+  assert.equal(results.filter(r=>r.reason==='engine_feed_slot_occupied').length,19);
+  const index=results.findIndex(r=>r.ok),sourceId=sources[index],reservationId=results[index].reservationId;
+  const other=sources[(index+1)%sources.length];
+  assert.equal((await attempt(b,other,'linode')).ok,true);
+  const third=sources.find(s=>s!==sourceId&&s!==other);
+  const id={sourceId,reservationId,engineId:'hostbrr'};
+  assert.equal((await ledger(a,sourceId).transition({...id,next:'unknown'})).ok,true);
+  assert.equal((await attempt(b,third,'hostbrr')).reason,'engine_feed_slot_occupied');
+  assert.equal((await ledger(a,sourceId).transition({...id,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await attempt(b,third,'hostbrr')).action,'start_once');
+ }finally{
+  if(a)await a.end();if(b)await b.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
