@@ -250,3 +250,53 @@ test('incomplete drain rollback never restores legacy while a reservation remain
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
  }
 });
+
+
+test('atomic HostBrr to Linode handoff never reopens legacy ingress',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let a,b;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const open=()=>new pg.Pool({...options,options:'-c search_path='+schema,max:8});
+  a=open();b=open();await ensureLinodeFeedLedger(a);await ensureEngineIngressGate(a);
+  const sourceId=randomUUID(),channelId='123',engineId='hostbrr';
+  const env={BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId,BLOFY_ENGINE_RENEWABLE_LEASE:'1'};
+  const first=createLinodeFeedLedger(a,env),second=createLinodeFeedLedger(b,env);
+  const gate=createEngineIngressGate(a,{sourceId,enabled:true});
+  await gate.initialize();await gate.beginDrain();
+  const old=await first.reserve({sourceId,engineId,channelId,requestId:randomUUID()});
+  const oldIds={sourceId,engineId,reservationId:old.reservationId};
+  const proof=async()=>{const {rows:[t]}=await a.query('SELECT clock_timestamp() AS now');return {...oldIds,authoritative:true,scope:'all_paths',activeConnections:0,maxConnections:1,observedAt:new Date(t.now).getTime()}};
+  assert.equal((await gate.promote({...oldIds,proof:await proof()})).ok,true);
+  const requestId=randomUUID();
+  const next=async()=>({sourceId,channelId,engineId:'linode',requestId,handoff:{...oldIds,proof:await proof()}});
+  assert.equal((await second.reserve(await next())).reason,'handoff_release_unconfirmed');
+  assert.equal((await first.transition({...oldIds,next:'unknown'})).ok,true);
+  assert.equal((await second.reserve(await next())).reason,'handoff_release_unconfirmed');
+  assert.equal((await first.transition({...oldIds,next:'released',releaseConfirmed:true})).ok,true);
+  const stale=await next();stale.handoff.proof.observedAt-=20000;
+  assert.equal((await second.reserve(stale)).reason,'handoff_proof_invalid');
+  const busy=await next();busy.handoff.proof.activeConnections=1;
+  assert.equal((await second.reserve(busy)).reason,'handoff_proof_invalid');
+  const other=await next();other.channelId='124';
+  assert.equal((await second.reserve(other)).reason,'handoff_release_unconfirmed');
+  const input=await next();
+  const attempts=await Promise.all([first.reserve(input),second.reserve(input),gate.enterLegacy(randomUUID())]);
+  assert.equal(attempts.filter(x=>x.action==='start_once').length,1);
+  assert.equal(attempts[2].ok,false);
+  const winner=attempts.find(x=>x.action==='start_once');
+  const identity={sourceId,channelId,engineId:'linode',reservationId:winner.reservationId};
+  assert.equal((await gate.readFence(identity)).registeredIngressFenced,true);
+  assert.equal(await gate.readFence(oldIds),null);
+  assert.equal((await gate.restoreLegacy()).ok,false);
+  const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+  const permit=ids=>({...ids,channelId,signingKey:privateKey,fence:{...ids,authoritative:true,scope:'all_paths',observedAt:Date.now(),expiresAt:Date.now()+90000}});
+  assert.equal((await first.issueWorkerLease(permit(oldIds))).ok,false);
+  const issued=await second.issueWorkerLease(permit(identity));
+  assert.equal(issued.ok,true);
+  assert.equal(verifyLiveLease({lease:issued.lease,signature:issued.signature},{key:publicKey,identity}),true);
+ }finally{
+  if(a)await a.end();if(b)await b.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
