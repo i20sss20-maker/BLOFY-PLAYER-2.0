@@ -67,6 +67,18 @@ test('concurrent reservations, restart persistence and release fencing',{timeout
   assert.equal((await restored.closeViewer(viewer)).ok,true);
   assert.equal((await restored.attachViewer(viewer)).ok,false);
   assert.equal((await restored.attachViewer({...viewer,sessionId:randomUUID()})).reason,'viewer_quota');
+  await ensureEngineIngressGate(pool);
+  await pool.query("INSERT INTO blofy_engine_ingress_gate(source_id,mode,reservation_id,engine_id) VALUES($1,'engine',$2,'linode')",[sourceId,reservationId]);
+  const proxyViewer={...viewer,accountId:randomUUID(),sessionId:randomUUID(),requireEngineGate:true,proxied:true};
+  assert.equal((await restored.attachViewer({...proxyViewer,requireEngineGate:false})).reason,'viewer_invalid');
+  assert.equal((await restored.attachViewer(proxyViewer)).ok,true);
+  assert.equal((await restored.attachViewer({...proxyViewer,proxied:false})).reason,'viewer_session_closed_or_mismatch');
+  assert.equal((await restored.attachViewer({...proxyViewer,sessionId:randomUUID()})).reason,'viewer_quota');
+  assert.equal((await restored.closeViewer(proxyViewer)).ok,true);
+  assert.equal((await restored.attachViewer(proxyViewer)).reason,'viewer_session_closed_or_mismatch');
+  const reconnect={...proxyViewer,sessionId:randomUUID()};
+  assert.equal((await restored.attachViewer(reconnect)).ok,true);
+  assert.equal((await restored.closeViewer(reconnect)).ok,true);
   const more=await Promise.all(Array.from({length:155},()=>restored.attachViewer({...viewer,accountId:randomUUID(),sessionId:randomUUID()})));
   assert.equal(more.filter(x=>x.ok).length,148);
   assert.equal(more.filter(x=>x.reason==='viewer_quota').length,7);

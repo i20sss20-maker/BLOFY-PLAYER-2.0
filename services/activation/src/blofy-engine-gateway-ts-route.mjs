@@ -8,7 +8,7 @@ export function createGatewayTsRoute({enabled=false,sourceId,testAccountId,readO
  return async function route(req,res,{account,row,kind,extension}={}){
   if(!enabled||kind!=='live'||row?.server_id!==sourceId||account?.id!==testAccountId)return false;
   const deny=()=>{if(!res.headersSent&&!res.destroyed){res.writeHead(503,{'retry-after':'3','cache-control':'no-store'});res.end('Playback temporarily unavailable')}else if(!res.destroyed)res.destroy();return true};
-  if(req.method!=='GET'||extension!=='ts')return false;
+  if(!['GET','HEAD'].includes(req.method)||String(extension||'ts').toLowerCase()!=='ts')return false;
   let session;
   try{
    const feed=await readOwnedFeed(sourceId);
@@ -19,15 +19,28 @@ export function createGatewayTsRoute({enabled=false,sourceId,testAccountId,readO
    const accountId=account.id,sessionId=randomUUID();
    const key=keys[engineId];
    if(!Buffer.isBuffer(key)||key.length!==32)return deny();
-   const authorizeGrant=async()=>{
-    if(req.aborted||res.destroyed)return {ok:false};
+   const authorizeViewer=async()=>{
+    if(req.aborted||res.destroyed)return null;
     const current=await recheck({accountId,sourceId,channelId});
-    if(current?.ok!==true)return {ok:false};
+    if(current?.ok!==true)return null;
     const latest=await readOwnedFeed(sourceId);
-    if(latest?.mode!=='engine'||latest.state!=='ready'||!Object.keys(identity).every(k=>latest[k]===identity[k]))return {ok:false};
+    if(latest?.mode!=='engine'||latest.state!=='ready'||!Object.keys(identity).every(k=>latest[k]===identity[k]))return null;
     const proof=await readProof(identity),now=clock();
-    if(!proof||!Object.keys(identity).every(k=>proof[k]===identity[k])||!Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)return {ok:false};
-    const attached=await ledger.attachViewer({...identity,sessionId,accountId,accountQuota:current.accountQuota,authorizedUntil:current.authorizedUntil,requireEngineGate:true});
+    if(!proof||!Object.keys(identity).every(k=>proof[k]===identity[k])||!Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)return null;
+    return current;
+   };
+   if(req.method==='HEAD'){
+    if(!await authorizeViewer())return deny();
+    if(res.destroyed||req.aborted)return true;
+    res.writeHead(200,{'content-type':'video/mp2t','cache-control':'no-store, no-transform','x-content-type-options':'nosniff'});
+    res.end();
+    return true;
+   }
+   const authorizeGrant=async()=>{
+    const current=await authorizeViewer();
+    if(!current||req.aborted||res.destroyed)return {ok:false};
+    const now=clock();
+    const attached=await ledger.attachViewer({...identity,sessionId,accountId,accountQuota:current.accountQuota,authorizedUntil:current.authorizedUntil,requireEngineGate:true,proxied:true});
     if(!attached?.ok)return {ok:false};
     session={sourceId,reservationId,sessionId,accountId,engineId};
     const expiry=Math.floor(Math.min(Date.parse(attached.expiresAt),now+60000)/1000);

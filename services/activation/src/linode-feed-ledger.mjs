@@ -26,6 +26,7 @@ export async function ensureLinodeFeedLedger(db){
  account_id uuid NOT NULL, channel_id text NOT NULL, generation text NOT NULL,
  expires_at timestamptz NOT NULL, closed boolean NOT NULL DEFAULT false
  )`);
+ await db.query('ALTER TABLE blofy_linode_viewer_sessions ADD COLUMN IF NOT EXISTS proxied boolean NOT NULL DEFAULT false');
  await db.query('CREATE INDEX IF NOT EXISTS blofy_linode_viewers_reservation_expiry_idx ON blofy_linode_viewer_sessions(reservation_id, expires_at)');
 }
 export function createLinodeFeedLedger(pool,env=process.env){
@@ -133,12 +134,13 @@ export function createLinodeFeedLedger(pool,env=process.env){
   // Only authenticated server-owned input, not public request bodies.
   // Same-source lock serializes viewer quotas and feed transitions.
   async attachViewer({sourceId,reservationId,channelId,generation,sessionId,accountId,
-    accountQuota,authorizedUntil,engineId='linode',requireEngineGate=false}={}){
+    accountQuota,authorizedUntil,engineId='linode',requireEngineGate=false,proxied=false}={}){
    const valid=x=>typeof x==='string'&&uuid.test(x)&&x===x.toLowerCase();
    if(!enabled(sourceId)||!engineAllowed(engineId)||env.BLOFY_LINODE_VIEWER_LEDGER!=='1'||
       ![reservationId,sessionId,accountId].every(valid)||typeof channelId!=='string'||
       !channel.test(channelId)||typeof generation!=='string'||!/^[0-9a-f]{32}$/.test(generation)||
       !Number.isSafeInteger(accountQuota)||accountQuota<1||accountQuota>150||
+      typeof proxied!=='boolean'||(proxied&&!requireEngineGate)||
       typeof authorizedUntil!=='string'||!Number.isFinite(Date.parse(authorizedUntil)))
      return blocked('viewer_invalid');
    return tx(sourceId,async(c,row)=>{
@@ -156,19 +158,20 @@ export function createLinodeFeedLedger(pool,env=process.env){
     const {rows:[old]}=await c.query('SELECT * FROM blofy_linode_viewer_sessions WHERE session_id=$1',[sessionId]);
     if(old&&(old.closed||new Date(old.expires_at).getTime()<=now||
        old.account_id!==accountId||old.source_id!==sourceId||old.reservation_id!==reservationId||
-       old.channel_id!==channelId||old.generation!==generation))return blocked('viewer_session_closed_or_mismatch');
-    // Closed sessions can still have an outstanding signed URL. Count them
-    // until its bounded lease expires; close only denies further renewal.
+       old.channel_id!==channelId||old.generation!==generation||old.proxied!==proxied))return blocked('viewer_session_closed_or_mismatch');
+    // A closed direct session may still have a client-held signed URL.
+    // A proxied session owns its requests server-side and closes after they end.
     const {rows:[counts]}=await c.query(`SELECT count(*)::int AS total,
       count(*) FILTER(WHERE account_id=$2)::int AS account
       FROM blofy_linode_viewer_sessions
-      WHERE reservation_id=$1 AND expires_at>$3 AND session_id<>$4`,
+      WHERE reservation_id=$1 AND expires_at>$3 AND session_id<>$4
+        AND (NOT proxied OR NOT closed)`,
       [reservationId,accountId,new Date(now),sessionId]);
     if(counts.total>=150||counts.account>=accountQuota)return blocked('viewer_quota');
     const expiresAt=new Date(until).toISOString();
     const result=await c.query(`INSERT INTO blofy_linode_viewer_sessions
-      (session_id,source_id,reservation_id,account_id,channel_id,generation,expires_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7)
+      (session_id,source_id,reservation_id,account_id,channel_id,generation,expires_at,proxied)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8)
       ON CONFLICT(session_id) DO UPDATE SET expires_at=GREATEST(blofy_linode_viewer_sessions.expires_at,EXCLUDED.expires_at)
       WHERE NOT blofy_linode_viewer_sessions.closed
         AND blofy_linode_viewer_sessions.account_id=EXCLUDED.account_id
@@ -176,8 +179,9 @@ export function createLinodeFeedLedger(pool,env=process.env){
         AND blofy_linode_viewer_sessions.reservation_id=EXCLUDED.reservation_id
         AND blofy_linode_viewer_sessions.channel_id=EXCLUDED.channel_id
         AND blofy_linode_viewer_sessions.generation=EXCLUDED.generation
-        AND blofy_linode_viewer_sessions.expires_at>$8
-      RETURNING session_id`,[sessionId,sourceId,reservationId,accountId,channelId,generation,expiresAt,new Date(now)]);
+        AND blofy_linode_viewer_sessions.proxied=EXCLUDED.proxied
+        AND blofy_linode_viewer_sessions.expires_at>$9
+      RETURNING session_id`,[sessionId,sourceId,reservationId,accountId,channelId,generation,expiresAt,proxied,new Date(now)]);
     if(result.rowCount!==1)return blocked('viewer_session_conflict');
     return {ok:true,sessionId,reservationId,expiresAt};
    });
