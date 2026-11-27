@@ -36,17 +36,20 @@ class LocalSlots:
         finally:os.close(fd)
     def _records(self):
         records=[]
+        released=set()
         for p in self.root.iterdir():
             if p.name==".lock":continue
-            if not p.name.endswith(".json") or not UUID.fullmatch(p.stem):raise SlotError("UNKNOWN_SLOT_ENTRY")
+            if p.suffix not in (".json",".released") or not UUID.fullmatch(p.stem):raise SlotError("UNKNOWN_SLOT_ENTRY")
             fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
             with os.fdopen(fd,"rb") as f:
                 st=os.fstat(f.fileno())
                 if not stat.S_ISREG(st.st_mode) or st.st_uid!=self.owner or st.st_mode&0o077 or not 0<st.st_size<=4096:raise SlotError("UNSAFE_SLOT")
                 record=json.loads(f.read(4097))
             if not identity_ok(record) or record["reservationId"]!=p.stem or record["engineId"]!=self.engine:raise SlotError("INVALID_SLOT_RECORD")
-            records.append(record)
+            if p.suffix==".released":released.add(record["reservationId"])
+            else:records.append(record)
         if len({(r["sourceId"],r["channelId"]) for r in records})!=len(records):raise SlotError("DUPLICATE_SLOT_RECORD")
+        if any(r["reservationId"] in released for r in records):raise SlotError("CONFLICTING_SLOT_RECORD")
         return records
     def _sync(self):
         fd=os.open(self.root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
@@ -59,7 +62,7 @@ class LocalSlots:
         with self._locked():
             if verify_lease(identity) is not True:raise SlotError("LEASE_UNCONFIRMED")
             records=self._records()
-            if any(r["reservationId"]==identity["reservationId"] for r in records):raise SlotError("RESERVATION_ALREADY_USED")
+            if (self.root/(identity["reservationId"]+".released")).exists() or any(r["reservationId"]==identity["reservationId"] for r in records):raise SlotError("RESERVATION_ALREADY_USED")
             if any(r["sourceId"]==identity["sourceId"] and r["channelId"]==identity["channelId"] for r in records):raise SlotError("CHANNEL_OCCUPIED")
             if len(records)>=self.capacity:raise SlotError("WORKER_CAPACITY")
             p=self.root/(identity["reservationId"]+".json")
@@ -78,6 +81,8 @@ class LocalSlots:
         with self._locked():
             if identity not in self._records():raise SlotError("RESERVATION_MISMATCH")
             if verify_release(identity) is not True:raise SlotError("RELEASE_UNCONFIRMED")
-            (self.root/(identity["reservationId"]+".json")).unlink()
+            # Preserve the authenticated reservation identity as a durable tombstone.
+            # Atomic rename frees capacity without allowing replay after restart.
+            os.rename(self.root/(identity["reservationId"]+".json"),self.root/(identity["reservationId"]+".released"))
             self._sync()
             return True
