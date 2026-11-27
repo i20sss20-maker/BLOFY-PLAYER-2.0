@@ -134,6 +134,10 @@ class DownloadsActivity : AppCompatActivity() {
         }
         rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = true
+            isFocusable = true
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             addView(LinearLayout(this@DownloadsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(empty)
@@ -187,6 +191,7 @@ class DownloadsActivity : AppCompatActivity() {
         empty.visibility = if(visible.isEmpty()) View.VISIBLE else View.GONE
         val ids=visible.map { it.record.id }
         if(ids!=rowKeys) {
+            val focusedDownload = buttons.entries.firstOrNull { it.value.hasFocus() }?.key
             rowKeys=ids
             buttons.clear()
             rows.removeAllViews()
@@ -245,6 +250,16 @@ class DownloadsActivity : AppCompatActivity() {
                 }
                 buttons[p.record.id]=button
                 rows.addView(button, LinearLayout.LayoutParams(-1,dp(80)).apply {bottomMargin=dp(8)})
+            }
+            if (focusedDownload != null) {
+                val target = buttons[focusedDownload] ?: visible.firstOrNull()?.let { buttons[it.record.id] }
+                    ?: filterButtons[currentFilter]
+                rows.post {
+                    if (!isFinishing && !isDestroyed && target?.isAttachedToWindow == true) {
+                        target.requestFocus()
+                        target.requestRectangleOnScreen(android.graphics.Rect(0, 0, target.width, target.height), true)
+                    }
+                }
             }
         }
         val nowMs = android.os.SystemClock.elapsedRealtime()
