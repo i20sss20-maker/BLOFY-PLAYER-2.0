@@ -1,7 +1,7 @@
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 const generation=/^[a-f0-9]{32}$/;
-const segment=/^seg-[0-9]{9,16}\.ts$/;
+const segment=/^seg-[0-9]{9}\.ts$/;
 const hosts=new Set(['media.blofyplayer.com','media2.blofyplayer.com']);
 const pathPattern=/^\/v1\/([a-f0-9]{32})\/[a-f0-9]{32}\/(\d{10})\/[a-f0-9]{64}\/index\.m3u8$/;
 // Single-rendition engine HLS. Manifest URIs remain relative to the
@@ -25,7 +25,7 @@ export function validateEngineManifest(input){
   const n=Number(line.slice(4,-3));if(!Number.isSafeInteger(n)||(previous!==-1&&n!==previous+1))return null;
   previous=n;pending=false;count++;
  }
- return !pending&&count>=3&&count<=64?lines.join('\n'):null;
+ return !pending&&count>=3&&count<=30?lines.join('\n'):null;
 }
 async function boundedText(body){
  const reader=body.getReader();const chunks=[];let size=0;
@@ -33,6 +33,7 @@ async function boundedText(body){
  return Buffer.concat(chunks).toString('utf8');}
  finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
 }
+// Bounded same-origin CANARY proxy, not the high-volume production data plane.
 // Called only by a stable authenticated playback endpoint. authorizeGrant
 // MUST recheck subscriber/catalog ACL, committed viewer session, generation,
 // fresh worker proof and rights on EACH manifest/segment request. It returns
@@ -66,7 +67,7 @@ export function createEngineHlsDelivery({authorizeGrant,fetchImpl=fetch,enabled=
    const type=upstream.headers.get('content-type')||'';
    if(!/^(video\/mp2t|application\/octet-stream)(?:;|$)/i.test(type))return fail(502);
    const len=upstream.headers.get('content-length');
-   if(!len||!/^\d{1,8}$/.test(len)||Number(len)<188||Number(len)>32*1024*1024)return fail(502);
+   if(!len||!/^\d{1,8}$/.test(len)||Number(len)<188||Number(len)>64*1024*1024)return fail(502);
    // Bound segment size even if a broken origin sends a mismatched body.
    const expected=Number(len);let sent=0;
    async function* media(){for await(const chunk of upstream.body){sent+=chunk.byteLength;if(sent>expected)throw Error('segment_length');yield Buffer.from(chunk)}if(sent!==expected)throw Error('segment_length')}
