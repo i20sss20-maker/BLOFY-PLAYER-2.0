@@ -50,11 +50,12 @@ object TransportFactory {
         val client=OkHttpClient.Builder()
             .followRedirects(true).followSslRedirects(false)
             .connectTimeout(device.connectTimeoutSeconds,java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(device.readTimeoutSeconds,java.util.concurrent.TimeUnit.SECONDS)
+            // Preserve a recovering authenticated gateway socket instead of reopening it early.
+            .readTimeout(65L,java.util.concurrent.TimeUnit.SECONDS)
             .addNetworkInterceptor { chain ->
                 val request=chain.request()
                 val url=request.url
-                val trusted=url.scheme=="https" && url.host=="blofyplayer.com" &&
+                val trusted=url.scheme=="https" && url.host=="blofyplayer.com" && url.port == 443 &&
                     url.encodedPath.startsWith("/api/v1/stream/media/")
                 val next=request.newBuilder().removeHeader("Authorization")
                 if (trusted) {

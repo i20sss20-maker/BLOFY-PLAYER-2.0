@@ -26,6 +26,9 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.NativeExternalCatalogSession
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
@@ -43,10 +46,12 @@ class DownloadsActivity : AppCompatActivity() {
     private var currentFilter = "all"
     private val filterButtons = linkedMapOf<String, Button>()
     private val progressSamples = mutableMapOf<Long, Pair<Long, Long>>()
+    private val refreshMutex = Mutex()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Never expose previously saved files from a signed-out device.
-        if (BuildConfig.CODE_ONLY_LOGIN && StreamCodeSession.authorization(this) == null) {
+        if (BuildConfig.CODE_ONLY_LOGIN && StreamCodeSession.authorization(this) == null &&
+            !NativeExternalCatalogSession.hasStaged(this)) {
             finish()
             return
         }
@@ -134,6 +139,10 @@ class DownloadsActivity : AppCompatActivity() {
         }
         rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = true
+            isFocusable = true
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             addView(LinearLayout(this@DownloadsActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(empty)
@@ -150,9 +159,16 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
     }
-    private suspend fun refresh() {
+    private suspend fun refresh() = refreshMutex.withLock {
+        if (isFinishing || isDestroyed) return@withLock
+        val externalOnly = BuildConfig.CODE_ONLY_LOGIN && StreamCodeSession.authorization(this) == null
+        val externalId = if (externalOnly) NativeExternalCatalogSession.activeId(applicationContext) else null
+        if (externalOnly && externalId == null) {
+            finish()
+            return@withLock
+        }
         val states = withContext(Dispatchers.IO) {
-            val activeProvider = BlofyDatabase.get(applicationContext).dao().activeProviderId()
+            val activeProvider = if (externalOnly) externalId else BlofyDatabase.get(applicationContext).dao().activeProviderId()
             OfflineDownloadStore.records(applicationContext,activeProvider ?: "__none__").mapNotNull { record ->
                 OfflineDownloadStore.progress(applicationContext,record)
                     ?: OfflineDownloadStore.Progress(record,OfflineDownloadStore.STATUS_MISSING,0L,-1L,0,null)
@@ -187,6 +203,7 @@ class DownloadsActivity : AppCompatActivity() {
         empty.visibility = if(visible.isEmpty()) View.VISIBLE else View.GONE
         val ids=visible.map { it.record.id }
         if(ids!=rowKeys) {
+            val focusedDownload = buttons.entries.firstOrNull { it.value.hasFocus() }?.key
             rowKeys=ids
             buttons.clear()
             rows.removeAllViews()
@@ -246,7 +263,19 @@ class DownloadsActivity : AppCompatActivity() {
                 buttons[p.record.id]=button
                 rows.addView(button, LinearLayout.LayoutParams(-1,dp(80)).apply {bottomMargin=dp(8)})
             }
+            if (focusedDownload != null) {
+                val target = buttons[focusedDownload] ?: visible.firstOrNull()?.let { buttons[it.record.id] }
+                    ?: filterButtons[currentFilter]
+                rows.post {
+                    if (!isFinishing && !isDestroyed && target?.isAttachedToWindow == true) {
+                        target.requestFocus()
+                        target.requestRectangleOnScreen(android.graphics.Rect(0, 0, target.width, target.height), true)
+                    }
+                }
+            }
         }
+        if (isFinishing || isDestroyed) return@withLock
+        progressSamples.keys.retainAll(states.map { it.record.id }.toSet())
         val nowMs = android.os.SystemClock.elapsedRealtime()
         visible.forEach { p ->
             val sample = progressSamples[p.record.id]

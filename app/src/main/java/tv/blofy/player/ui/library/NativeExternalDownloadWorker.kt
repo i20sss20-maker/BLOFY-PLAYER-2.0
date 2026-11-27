@@ -67,8 +67,16 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
             val call = NativeExternalMediaTransport.client(app,provider).newCall(request)
             call.execute().use { response ->
                 if (response.code !in setOf(200,206)) {
-                    if ((response.code == 416 && requestedOffset > 0L) || response.code in 500..599)
+                    if (response.code == 416 && requestedOffset > 0L) {
+                        // The stored offset is no longer accepted; restart safely.
+                        partial.delete()
+                        validator.delete()
+                        throw IOException("Download range no longer available")
+                    }
+                    if (response.code == 408 || response.code == 429 || response.code in 500..599) {
+                        preservePartial = requestedOffset > 0L && previousTag != null
                         throw IOException("Download response retry")
+                    }
                     return@withContext failure(DownloadManager.ERROR_UNHANDLED_HTTP_CODE)
                 }
                 if (response.header("Content-Encoding")?.equals("identity",true) == false)
@@ -80,7 +88,12 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
                     return@withContext failure(DownloadManager.ERROR_UNHANDLED_HTTP_CODE)
                 val plan = NativeDownloadResumePolicy.plan(response.code,requestedOffset,previousTag,
                     response.header("ETag"),response.header("Content-Range"),body.contentLength())
-                    ?: throw IOException("Invalid download range")
+                    ?: run {
+                        // Never append an unvalidated or changed representation.
+                        partial.delete()
+                        validator.delete()
+                        throw IOException("Invalid download range")
+                    }
                 if (!DownloadTransferPolicy.enoughSpace(file.parentFile!!.usableSpace,plan.total-plan.offset))
                     return@withContext failure(DownloadManager.ERROR_INSUFFICIENT_SPACE)
                 if (plan.offset == 0L) {
@@ -112,9 +125,10 @@ class NativeExternalDownloadWorker(context: Context, params: WorkerParameters) :
                         }
                     }
                 }
-                if (done != total || partial.length() != total ||
-                    NativeExternalCatalogSession.activeId(app) != provider)
+                if (NativeExternalCatalogSession.activeId(app) != provider)
                     return@withContext failure(DownloadManager.ERROR_HTTP_DATA_ERROR)
+                if (done != total || partial.length() != total)
+                    throw IOException("Incomplete download body")
                 currentCoroutineContext().ensureActive()
                 check(OfflineDownloadStore.records(app,provider).any { it.workerId == id.toString() })
                 check(OfflineDownloadStore.publishNativeFile(app,provider,id,partial,file))

@@ -13,6 +13,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.network.awaitResponse
 import java.util.concurrent.TimeUnit
+import java.security.MessageDigest
 
 /**
  * First-party BLOFY AI intent parser. Only the typed search text and locale
@@ -40,6 +41,7 @@ internal object StreamAiSearchClient {
         .readTimeout(19, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false)
         .build()
+    private const val MAX_RESPONSE_BYTES = 65_536L
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val cache = object : LinkedHashMap<String, Intent>(32, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Intent>?) = size > 32
@@ -51,7 +53,9 @@ internal object StreamAiSearchClient {
             return Outcome.Unavailable(Problem.NOT_ACTIVATED)
         val access = StreamCodeSession.authorization(context)
             ?: return Outcome.Unavailable(Problem.NOT_ACTIVATED)
-        val key = access.hashCode().toString() + ":" + locale + ":" + clean.lowercase()
+        val account = MessageDigest.getInstance("SHA-256").digest(access.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val key = account + ":" + locale + ":" + clean.lowercase()
         synchronized(cache) { cache[key]?.let { return Outcome.Ready(it, cached = true) } }
         return withContext(Dispatchers.IO) {
             try {
@@ -70,7 +74,15 @@ internal object StreamAiSearchClient {
                         in 500..599 -> Problem.SERVICE
                         else -> Problem.BAD_RESPONSE
                     })
-                    val root = JSONObject(response.body?.string().orEmpty())
+                    val body = response.body ?: return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
+                    if (body.contentLength() > MAX_RESPONSE_BYTES)
+                        return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
+                    val source = body.source()
+                    if (source.request(MAX_RESPONSE_BYTES + 1L))
+                        return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
+                    if (StreamCodeSession.authorization(context) != access)
+                        return@withContext Outcome.Unavailable(Problem.EXPIRED_SESSION)
+                    val root = JSONObject(source.readUtf8())
                     if (!root.optBoolean("ok")) return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
                     val suggestions = root.optJSONArray("suggestedTitles")
                     val titles = ArrayList<String>()

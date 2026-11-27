@@ -20,6 +20,19 @@ internal object PlaybackRecoveryPolicy {
     private const val MAX_REPEATED_ERRORS_PER_WINDOW = 4
     const val ERROR_WINDOW_MS = 60_000L
 
+    fun liveBufferGraceMs(isGateway: Boolean, wasReady: Boolean): Long =
+        if (isGateway && wasReady) 58_000L else 12_000L
+
+    /** Only authenticated progressive VOD gets additional positional retries. */
+    fun gatewayVodRetryDelay(errorCode: Int, status: Int?, attempt: Int, failures: Int): Long? {
+        if (attempt !in 0..2 || failures > MAX_REPEATED_ERRORS_PER_WINDOW) return null
+        val transient = if (status != null) status in setOf(408, 500, 502, 503, 504)
+            else errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+        if (!transient) return null
+        return when (attempt) { 0 -> 800L; 1 -> 1_600L; else -> 3_000L }
+    }
+
     fun httpStatus(error: Throwable): Int? =
         generateSequence(error) { it.cause }.take(6).firstNotNullOfOrNull { cause ->
             when (cause) {

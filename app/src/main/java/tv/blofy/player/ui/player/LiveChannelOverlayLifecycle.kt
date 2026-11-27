@@ -971,6 +971,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         view.animate().cancel()
                         view.animate().alpha(if (focused) 1f else 0.92f)
                             .setDuration(90L).start()
+                        if (focused) view.requestRectangleOnScreen(
+                            android.graphics.Rect(0, 0, view.width, view.height), true)
                     }
                     setOnClickListener { onTap() }
                     setOnKeyListener { _, keyCode, event ->
@@ -1095,6 +1097,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             audioPickerOpen = true
             val allVoices = mutableListOf<StreamArabicAudioCatalog.Track>()
             var favoritesOnly = false
+            var loadingVoices = true
+            var retryVoices: (() -> Unit)? = null
             var pendingButton: TextView? = null
             var pendingId: String? = null
             val baseColor = BlofyTvDesign.TextSecondary
@@ -1163,6 +1167,19 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 footer.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply {
                     topMargin = dp(2); bottomMargin = dp(4)
                 })
+                if (allVoices.isEmpty()) {
+                    val retry = addButton(if (loadingVoices) copy("جارٍ تحميل المعلقين…", "Loading commentary…")
+                        else copy("إعادة تحميل المعلقين", "Retry loading commentary")) {
+                        if (!loadingVoices) retryVoices?.invoke()
+                    }
+                    footer.post {
+                        if (audioPickerOpen && dialog?.isShowing == true) {
+                            retry.requestFocus()
+                            retry.requestRectangleOnScreen(android.graphics.Rect(0, 0, retry.width, retry.height), true)
+                        }
+                    }
+                    return
+                }
                 // Keep synchronization ABOVE the station list, never after
                 // dozens of tracks. The user can tune audio while watching.
                 addHeading(copy("⏱ مزامنة الصوت مع الصورة", "⏱ SYNC COMMENTARY WITH VIDEO"))
@@ -1220,11 +1237,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     render()
                 }
 
-                if (allVoices.isEmpty()) {
-                    addHeading(copy("جارٍ جلب المعلقين من BLOFY…",
-                        "Loading voices securely from BLOFY…"))
-                    return
-                }
                 if (visible.isEmpty()) {
                     addHeading(copy("ما ثبتت معلقين. افتح الكل واضغط ☆ لحفظ المفضل.",
                         "No favorites yet. Show all, then press ☆ to pin a voice."))
@@ -1264,7 +1276,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     var playButtonRef: TextView? = null
                     val playButton = addButton(prefix + voice.label) {
                         // One click starts the chosen voice; no group/file pages.
-                        pendingButton?.isEnabled = true
+                        if (pendingId == voice.id && pendingButton != null) return@addButton
                         pendingButton = null
                         pendingId = voice.id
                         val attempt = copy("جارٍ تجربة ", "Connecting: ") + voice.label
@@ -1296,8 +1308,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         }
                         if (accepted) {
                             pendingButton = playButtonRef
-                            // Prevent accidental repeat clicks while buffering.
-                            playButtonRef?.isEnabled = false
+                            // Keep D-pad focus while buffering. Repeat clicks are gated above.
                         } else {
                             pendingId = null
                             StreamAudioQuickPickPrefs.markFailed(activity, voice.id)
@@ -1355,7 +1366,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     footer.post {
                         if (dialog?.isShowing == true && audioPickerOpen) {
                             target?.requestFocus()
-                            scroller.smoothScrollTo(0, row?.top ?: 0)
+                            row?.requestRectangleOnScreen(android.graphics.Rect(0, 0, row.width, row.height), true)
                         }
                     }
                 } else {
@@ -1371,16 +1382,26 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             paintStatus(copy("اختر المعلق المناسب", "Choose your commentary"), null)
             // Render controls immediately while the protected catalog loads.
             // A callback can never populate a picker that has already closed.
-            render()
-            activity.lifecycleScope.launch {
+            retryVoices = {
+                loadingVoices = true
+                paintStatus(copy("جارٍ تحميل المعلقين…", "Loading commentary…"), null)
+                render()
+                activity.lifecycleScope.launch {
                 val response = activity.inlineArabicAudioTracks()
                 if (!audioPickerOpen || dialog?.isShowing != true ||
                     activity.isFinishing || activity.isDestroyed) return@launch
+                loadingVoices = false
                 if (response == null || response.tracks.isEmpty()) {
-                    paintStatus(copy(
-                        "تعذّر جلب الصوتيات الآن. صوت القناة الأصلي مستمر.",
-                        "Voices unavailable right now. Original audio continues."
-                    ), StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
+                    val message = when (response?.failure) {
+                        StreamArabicAudioCatalog.Failure.NOT_ACTIVATED -> copy("الصوتيات تحتاج جلسة BLOFY مخوّلة.", "Commentary requires an authorized BLOFY session.")
+                        StreamArabicAudioCatalog.Failure.UNAUTHORIZED -> copy("لا يسمح السيرفر لهذه الجلسة بالصوتيات (401/403).", "Server denied commentary for this session (401/403).")
+                        StreamArabicAudioCatalog.Failure.NO_ENDPOINT -> copy("خدمة الصوتيات غير متاحة على السيرفر (404).", "Commentary endpoint unavailable (404).")
+                        StreamArabicAudioCatalog.Failure.EMPTY_CATALOG -> copy("لا توجد صوتيات متاحة حاليًا.", "No commentary sources currently available.")
+                        StreamArabicAudioCatalog.Failure.RATE_LIMITED -> copy("طلبات كثيرة، حاول لاحقًا.", "Too many requests; try later.")
+                        else -> copy("تعذر الاتصال بالصوتيات. الصوت الأصلي مستمر.", "Commentary connection failed. Original audio continues.")
+                    }
+                    paintStatus(message, StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
+                    render()
                     return@launch
                 }
                 allVoices.clear()
@@ -1392,7 +1413,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 // Most important television UX: the first remote focus goes
                 // directly to a playable voice, not to an empty sub-menu.
                 render(focusFirstVoice = true)
+                }
             }
+            retryVoices?.invoke()
         }
 
         private fun prepareWindow(window: Window, width: Int, height: Int, reveal: Boolean) {
