@@ -45,6 +45,9 @@ import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
 import {inspectLinodeGatewayMapping} from './linode-gateway-mapping-qa.mjs';
 import {linodeMaintenanceActive,blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
 import {createLegacyIngress} from './blofy-engine-legacy-ingress.mjs';
+import {createGatewayTsRoute,readGatewayOwnedFeed} from './blofy-engine-gateway-ts-route.mjs';
+import {createReadyProofReader} from './blofy-engine-ready-proof-read.mjs';
+import {createLinodeFeedLedger} from './linode-feed-ledger.mjs';
 import {createRelayFenceEndpoint} from './blofy-engine-relay-fence-endpoint.mjs';
 import {createRelayHoldEndpoint} from './blofy-engine-relay-hold-endpoint.mjs';
 import {createAuthorityReadEndpoint,ensureAuthorityReadSchema} from './blofy-engine-authority-read.mjs';
@@ -1367,6 +1370,31 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     if(req.method!=='HEAD')recordXtreamPlayback({
       kind,phase:'failed',itemId:gatewayId,reason:'merchant_catalog_hidden'});
     return text(res,404,'Stream not found');
+  }
+  // Default-disabled, exact-account TS canary. Preserve existing URL and auth.
+  if(process.env.BLOFY_ENGINE_GATEWAY_TS_CANARY==='1'&&kind==='live'&&
+     account.id===process.env.BLOFY_LINODE_MEDIA_TEST_ACCOUNT_ID&&
+     row.server_id===process.env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID){
+    const approved=await resolveApprovedEngineSource(pool,process.env);
+    if(approved!==row.server_id)return text(res,503,'Source temporarily unavailable');
+    const key=name=>{const v=process.env[name]||'';return /^[a-f0-9]{64}$/i.test(v)?Buffer.from(v,'hex'):null};
+    const route=createGatewayTsRoute({
+      enabled:true,sourceId:approved,testAccountId:account.id,
+      readOwnedFeed:id=>readGatewayOwnedFeed(pool,id),
+      readProof:createReadyProofReader({enabled:true,secret:process.env.BLOFY_ENGINE_READY_READ_SECRET}),
+      ledger:createLinodeFeedLedger(pool),
+      keys:{hostbrr:key('BLOFY_HOSTBRR_DELIVERY_KEY_HEX'),linode:key('BLOFY_LINODE_DELIVERY_KEY_HEX')},
+      recheck:async({accountId,sourceId,channelId})=>{
+        const a=authorizedAccount?await authenticateAppBearer(req):await authenticate(username,password,{touch:false});
+        if(!a||a.id!==accountId||a.source_id!==sourceId||a.enabled!==true||!a.expires_at||new Date(a.expires_at).getTime()<=Date.now())return {ok:false};
+        const latest=await gatewayItemById('live',gatewayId,a.source_id);
+        if(!latest||latest.server_id!==sourceId||String(latest.source_id)!==channelId||!latest.server_enabled)return {ok:false};
+        if(await distributorCatalog.isHidden(await distributorCatalog.forAccount(a),'live',latest.source_id))return {ok:false};
+        if(await resolveApprovedEngineSource(pool,process.env)!==sourceId)return {ok:false};
+        return {ok:true,accountQuota:Number(a.max_connections),authorizedUntil:new Date(a.expires_at).toISOString()};
+      }
+    });
+    if(await route(req,res,{account,row,kind,extension:requestedExtension||extension}))return;
   }
   const ingress=await enterLegacyIngress(row.server_id);
   if(!ingress.ok)return text(res,503,'Source temporarily unavailable','text/plain; charset=utf-8',{'retry-after':'5','cache-control':'no-store'});
