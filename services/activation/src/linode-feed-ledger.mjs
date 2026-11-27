@@ -45,24 +45,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
   }catch(e){try{await c.query('ROLLBACK');}catch{}throw e;}
   finally{c.release();}
  }
- return {
-  // Internal locked snapshot, not an admission decision. reserve/attach/transition
-  // must recheck state under the same source lock after the planner returns.
-  async readRoutingState({sourceId}={}){
-   if(!enabled(sourceId))return null;
-   return tx(sourceId,async(c,row)=>{
-    if(!row)return {sourceId,state:'empty'};
-    if(!engineAllowed(row.engine_id))return null;
-    return {sourceId,state:row.state,engineId:row.engine_id,
-     channelId:row.channel_id,reservationId:row.reservation_id,generation:row.generation,
-     // Only the trusted transition writes released; timestamps alone never do.
-     releaseConfirmed:row.state==='released'};
-   });
-  },
-  // Issue only while holding the SAME source lock as reserve and transition.
-  // A caller must supply a separately enforced source-wide ingress fence;
-  // a maintenance flag, heartbeat, or provider zero alone is not that proof.
-  async issueWorkerLease({sourceId,reservationId,engineId,channelId,fence,signingKey}={}){
+ async function commitWorkerLease({sourceId,reservationId,engineId,channelId,fence}={},encode){
    if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||
       !uuid.test(reservationId??'')||!channel.test(channelId??''))return blocked('lease_disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
@@ -82,11 +65,39 @@ export function createLinodeFeedLedger(pool,env=process.env){
     if(holds.n!==0)return blocked('lease_legacy_holds_open');
     const sequence=Number(row.worker_lease_sequence)+1;
     if(!Number.isSafeInteger(sequence)||sequence<1)return blocked('lease_sequence_invalid');
-    const lease=signLiveLease({version:1,sourceId,reservationId,channelId,engineId,sequence,
-      issuedAt:now,expiresAt:Math.min(now+60000,fence.expiresAt)},signingKey,now);
+    const claims={version:1,sourceId,reservationId,channelId,engineId,sequence,
+      issuedAt:now,expiresAt:Math.min(now+60000,fence.expiresAt)};
+    const lease=encode(claims,now);
     await c.query('UPDATE blofy_linode_feed_ledger SET worker_lease_sequence=$2 WHERE source_id=$1',[sourceId,sequence]);
     return {ok:true,...lease};
    });
+ }
+ return {
+  // Internal locked snapshot, not an admission decision. reserve/attach/transition
+  // must recheck state under the same source lock after the planner returns.
+  async readRoutingState({sourceId}={}){
+   if(!enabled(sourceId))return null;
+   return tx(sourceId,async(c,row)=>{
+    if(!row)return {sourceId,state:'empty'};
+    if(!engineAllowed(row.engine_id))return null;
+    return {sourceId,state:row.state,engineId:row.engine_id,
+     channelId:row.channel_id,reservationId:row.reservation_id,generation:row.generation,
+     // Only the trusted transition writes released; timestamps alone never do.
+     releaseConfirmed:row.state==='released'};
+   });
+  },
+  // Issue only while holding the SAME source lock as reserve and transition.
+  // A caller must supply a separately enforced source-wide ingress fence;
+  // a maintenance flag, heartbeat, or provider zero alone is not that proof.
+  async issueWorkerLease(input={}){
+   return commitWorkerLease(input,(claims,now)=>signLiveLease(claims,input.signingKey,now));
+  },
+  // For a future authenticated private authority link: reserve the exact
+  // sequence under the PostgreSQL lock without exporting the controller key.
+  // The caller must be trusted and must independently verify the fence.
+  // No HTTP route or automatic lease issuance is enabled by this method.
+  async claimWorkerLease(input={}){
+   return commitWorkerLease(input,claims=>({lease:claims}));
   },
   // Trusted internal lookup only. This cannot authorize playback or open a
   // source socket. attachViewer must recheck this identity under the same
