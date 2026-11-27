@@ -48,4 +48,9 @@ class DownloadTransferPolicyTest {
         assertFalse(DownloadTransferPolicy.isValidDownloadedFile(8, 10L, false))
         assertTrue(DownloadTransferPolicy.isValidDownloadedFile(8, 10L, true))
     }
+    @Test fun knownLengthMustMatchAndLargeSpeedCannotOverflow() {
+        assertFalse(DownloadTransferPolicy.isValidDownloadedFile(8, 99L, true, 100L))
+        assertTrue(DownloadTransferPolicy.isValidDownloadedFile(8, 100L, true, 100L))
+        assertEquals(Long.MAX_VALUE, DownloadTransferPolicy.bytesPerSecond(0L, Long.MAX_VALUE, 1L))
+    }
 }
