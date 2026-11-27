@@ -59,7 +59,18 @@ internal object StreamAiTranslationClient {
                             else -> Problem.INVALID
                         })
                     }
-                    val root = JSONObject(response.body?.string().orEmpty())
+                    val body = response.body ?: return@withContext Outcome.Unavailable(Problem.INVALID)
+                    val source = body.source()
+                    // Bound both declared and chunked/decompressed responses before parsing.
+                    if (body.contentLength() > 65_536L || source.request(65_537L))
+                        return@withContext Outcome.Unavailable(Problem.INVALID)
+                    if (StreamCodeSession.authorization(context) != authorization)
+                        return@withContext Outcome.Unavailable(Problem.SESSION)
+                    val root = try {
+                        JSONObject(source.readUtf8())
+                    } catch (_: org.json.JSONException) {
+                        return@withContext Outcome.Unavailable(Problem.INVALID)
+                    }
                     if (!root.optBoolean("ok")) return@withContext Outcome.Unavailable(Problem.SERVICE)
                     val newTitle = root.optString("translatedTitle").trim().take(250)
                     val newOverview = root.optString("translatedOverview").trim().take(5500)
@@ -67,6 +78,8 @@ internal object StreamAiTranslationClient {
                         return@withContext Outcome.Unavailable(Problem.INVALID)
                     if (originalOverview.isNotBlank() && newOverview.isBlank())
                         return@withContext Outcome.Unavailable(Problem.INVALID)
+                    if (StreamCodeSession.authorization(context) != authorization)
+                        return@withContext Outcome.Unavailable(Problem.SESSION)
                     Outcome.Ready(Translation(newTitle, newOverview))
                 }
             } catch (cancelled: CancellationException) {
