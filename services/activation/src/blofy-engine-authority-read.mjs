@@ -50,7 +50,7 @@ export function createAuthorityReadEndpoint(pool,{env=process.env,key=createPubl
     const {rows:[h]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
     const {rows:[t]}=await c.query('SELECT clock_timestamp() AS now');
     if(!g)throw Error('gate_missing');
-    out={ok:true,sourceId,mode:g.mode,registeredLegacyHolds:h.n,allPathsFenced:false,observedAt:new Date(t.now).getTime(),reservation:r?{sourceId,state:r.state,engineId:r.engine_id,channelId:r.channel_id,reservationId:r.reservation_id,generation:r.generation}:null};
+    out={ok:true,sourceId,mode:g.mode,registeredLegacyHolds:h.n,gateReservationMatches:g.mode==='engine'&&!!r&&g.reservation_id===r.reservation_id&&g.engine_id===r.engine_id,allPathsFenced:false,observedAt:new Date(t.now).getTime(),reservation:r?{sourceId,state:r.state,engineId:r.engine_id,channelId:r.channel_id,reservationId:r.reservation_id,generation:r.generation}:null};
     await c.query('COMMIT');
    }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
    return reply(res,200,out);
