@@ -277,3 +277,24 @@ test('explicit five-feed trial requires a unique approved source, reported one s
  for(const flag of ['BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED','BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED','BLOFY_STREAM_SHARED_LIVE_CANARY','BLOFY_STREAM_LICENSED_LIVE_PRODUCTION','BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL'])
   assert.equal(authorizedLiveTrialQuota(row,{...cfg,[flag]:'0'},now),1);
 });
+
+
+test('persistent five-feed ceiling survives trial expiry only for the explicitly approved source',()=>{
+ const now=Date.parse('2026-11-27T06:00:00Z');
+ const cfg={...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED:'1',
+  BLOFY_STREAM_LICENSED_LIVE_PRODUCTION:'1',
+  BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_PERSISTENT:'1',
+  BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL:'0',
+  BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_UNTIL:'2026-11-27T05:17:00Z'};
+ const row={sourceId:source,sourceName:'saleh',sourceNameMatches:1,providerMaxConcurrentFeeds:1};
+ assert.equal(authorizedLiveTrialQuota(row,cfg,now),5);
+ assert.equal(authorizedLiveTrialQuota(row,cfg,now+86400000),5);
+ assert.equal(authorizedLiveTrialQuota(row,{...cfg,BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_PERSISTENT:'0'},now),1);
+ assert.equal(authorizedLiveTrialQuota({...row,sourceName:'other'},cfg,now),1);
+ assert.equal(authorizedLiveTrialQuota({...row,sourceNameMatches:2},cfg,now),1);
+ assert.equal(authorizedLiveTrialQuota({...row,providerMaxConcurrentFeeds:null},cfg,now),null);
+ for(const flag of ['BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED','BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED','BLOFY_STREAM_SHARED_LIVE_CANARY','BLOFY_STREAM_LICENSED_LIVE_PRODUCTION'])
+  assert.equal(authorizedLiveTrialQuota(row,{...cfg,[flag]:'0'},now),1);
+});

@@ -89,7 +89,7 @@ export function permittedLicensedLiveProduction({providerMaxConcurrentFeeds}={},
 }
 
 
-// Explicit, time-bounded operator test of a manually authorized source.
+// Source-specific operator-authorized quota, persistent only with explicit opt-in.
 // The provider's reported quota is not overwritten in storage or diagnostics.
 // This is an admission ceiling, not proof that the upstream will accept it.
 // All existing account checks, source rights, denial and cooldown handling
@@ -100,11 +100,15 @@ export function authorizedLiveTrialQuota({
  const reported=Number.isSafeInteger(providerMaxConcurrentFeeds)&&
    providerMaxConcurrentFeeds>=1&&providerMaxConcurrentFeeds<=64
      ?providerMaxConcurrentFeeds:null;
- if(reported!==1||env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL!=='1'||
+ if(reported!==1||
     env.BLOFY_STREAM_LICENSED_LIVE_PRODUCTION!=='1'||
     env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED!=='1'||
     !permittedLicensedLiveFanout({sourceId,sourceName,sourceNameMatches,
       kind:'live',extension:'ts',upstreamRestreamer:false},env))return reported;
+ // Persist only the separately approved five-feed ceiling for the exact
+ // manual-grant source. No wildcard, no unlimited mode, no source DB rewrite.
+ if(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_PERSISTENT==='1')return 5;
+ if(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL!=='1')return reported;
  const deadline=Date.parse(String(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_UNTIL||''));
  if(!Number.isFinite(now)||!Number.isFinite(deadline)||deadline<=now||
     deadline-now>30*60*1000)return reported;
