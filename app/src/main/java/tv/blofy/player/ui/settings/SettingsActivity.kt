@@ -213,6 +213,11 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         addSection(page, copy("الحساب والمساعدة", "Account & help"))
+        addCard(actionCard(copy("تغيير طريقة الدخول", "Change login method"),
+            copy("الكود • اكستريم • M3U", "Code • Xtream • M3U")) {
+            startActivity(Intent(this, CodeOnlyLoginActivity::class.java)
+                .putExtra(CodeOnlyLoginActivity.EXTRA_CHOOSE_MODE, true))
+        })
         // Customer UI stays clean: connectivity diagnostics, codecs, engine
         // selections, raw SDK details and diagnostic reports are not exposed.
         // Internal playback telemetry and support logs remain available to operators.

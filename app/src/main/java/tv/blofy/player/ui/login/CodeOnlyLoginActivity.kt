@@ -63,7 +63,9 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         buildPremiumScreen()
-        if (StreamDirectLogin.selected(this) != null) {
+        if (intent.getBooleanExtra(EXTRA_CHOOSE_MODE, false)) {
+            focusFirst()
+        } else if (StreamDirectLogin.selected(this) != null) {
             restoreDirectSession()
         } else if (StreamCodeSession.isClaimed(this)) restoreSession() else focusFirst()
     }
@@ -375,17 +377,21 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         statusText.text = copy("جاري إعداد القائمة…", "Preparing playlist…")
         lifecycleScope.launch {
             try {
-                val provider = credentials.provider()
-                withContext(Dispatchers.IO) {
+                val requested = credentials.provider()
+                val provider = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao()
-                    val previous = dao.provider(provider.id)
-                    // New credentials for the same account must be checked by a fresh import.
-                    if (previous == null || previous.password != provider.password ||
-                        previous.liveFormat != provider.liveFormat) {
-                        CatalogSyncState.markPending(applicationContext, provider.id)
+                    val previous = dao.provider(requested.id)
+                    // Keep the working library and credentials if an edited login fails.
+                    val next = if (previous != null && (previous.password != requested.password ||
+                        previous.liveFormat != requested.liveFormat)) {
+                        requested.copy(id = requested.id + "-" + java.util.UUID.randomUUID())
+                    } else requested
+                    if (previous == null || next.id != requested.id) {
+                        CatalogSyncState.markPending(applicationContext, next.id)
                     }
-                    dao.upsertProvider(provider.copy(enabled = previous?.enabled == true))
-                    StreamDirectLogin.select(applicationContext, provider.id)
+                    dao.upsertProvider(next.copy(enabled = previous?.id == next.id && previous?.enabled == true))
+                    StreamDirectLogin.select(applicationContext, next.id)
+                    next
                 }
                 passwordInput.text?.clear()
                 linkInput.text?.clear()
@@ -600,6 +606,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             }
         }
     }
+
+    companion object { const val EXTRA_CHOOSE_MODE = "choose_stream_login_mode" }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }

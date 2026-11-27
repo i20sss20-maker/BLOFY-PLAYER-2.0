@@ -79,7 +79,11 @@ object StreamCodeSession {
             plain.takeIf { it.matches(Regex("v1\\.[0-9a-f-]{36}\\.[A-Za-z0-9_-]{43}")) }
         }.getOrNull()
     }
-    fun authorization(context: Context): String? = token(context)?.let { "Bearer $it" }
+    fun authorization(context: Context): String? {
+        // A locally selected third-party playlist cannot borrow a saved BLOFY bearer.
+        if (tv.blofy.player.ui.login.StreamDirectLogin.selected(context) != null) return null
+        return token(context)?.let { "Bearer $it" }
+    }
 
     fun save(context: Context, accessToken: String, activatedAt: Long, expiresAt: Long) {
         require(accessToken.matches(Regex("v1\\.[0-9a-f-]{36}\\.[A-Za-z0-9_-]{43}")))
