@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {
- relayConfiguration,relayEligible,issueStreamRelayGrant,checkStreamRelayBridge,
+ relayConfiguration,relayEligible,issueStreamRelayGrant,checkStreamRelayBridge,isConfiguredRelayTicket,
  checkStreamRelaySyntheticMedia
 } from '../src/xtream-stream-relay-bridge.mjs';
 const account='b27ee9da-2f71-4ae3-a1ce-a5e051f60937';
@@ -164,4 +164,28 @@ test('licensed channel quota is relayed only on authenticated shared TS grants',
  assert.equal(payloads[1].providerMaxConcurrentFeeds,undefined);
  await issueStreamRelayGrant({...base,sharedLive:false,requireSharedLive:false},{env:licensedEnv,fetchImpl});
  assert.equal(payloads[2].licensedSourceId,undefined);
+});
+
+test('existing relay cutover requires explicit flag and binds opaque ticket to selected server',async()=>{
+ const host='https://media2.blofyplayer.com',standby='https://media.blofyplayer.com';
+ const path='/relay/'+'f'.repeat(48);
+ assert.equal(relayConfiguration({...enabled,BLOFY_STREAM_RELAY_ORIGIN:host}).origin,'');
+ const env={...enabled,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'1',BLOFY_STREAM_RELAY_ORIGIN:host};
+ assert.equal(relayConfiguration(env).origin,host);
+ assert.equal(isConfiguredRelayTicket(host+path,env),true);
+ for(const bad of [origin+path,standby+path,host+path+'?a=1',host+path+'#x',host.replace('https:','http:')+path,'https://user@media2.blofyplayer.com'+path]){
+  assert.equal(isConfiguredRelayTicket(bad,env),false);
+ }
+ for(const bad of ['https://media2.blofyplayer.com.evil.test','https://evil.test','https://media2.blofyplayer.com:444','http://media2.blofyplayer.com']){
+  assert.equal(relayConfiguration({...env,BLOFY_STREAM_RELAY_ORIGIN:bad}).origin,'');
+ }
+ const url=await issueStreamRelayGrant({kind:'live',sourceUrl:'https://fixture.example/synthetic.ts'},{
+  env,fetchImpl:async(uri,options)=>{
+   assert.equal(uri,host+'/internal/relay-grants');
+   assert.equal(options.headers.authorization,'Bearer '+key);
+   return new Response(JSON.stringify({ok:true,path,expiresInSeconds:45}),{status:201});
+  }});
+ assert.equal(url,host+path);
+ assert.equal(isConfiguredRelayTicket(standby+path,{...env,BLOFY_STREAM_RELAY_ORIGIN:standby}),true);
+ assert.equal(isConfiguredRelayTicket(origin+path,enabled),true);
 });
