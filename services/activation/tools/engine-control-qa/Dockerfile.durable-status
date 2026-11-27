@@ -20,4 +20,7 @@ COPY services/activation/tools/blofy-live-lease-guard.py ./tools/blofy_live_leas
 RUN node --test tools/engine-control-qa/durable-status.test.mjs tools/engine-control-qa/bounded-pilot.test.mjs tools/engine-control-qa/live-worker-lease.test.mjs tools/engine-control-qa/live-feed-proof.test.mjs tools/engine-control-qa/live-lease-poll.test.mjs tools/engine-control-qa/feed-proof-transport.test.mjs
 COPY services/activation/test/blofy-engine-ready-proof-read.test.mjs ./test/
 RUN node --test test/blofy-engine-ready-proof-read.test.mjs
+COPY services/activation/src/blofy-multifeed-lease-poll.mjs services/activation/src/blofy-multifeed-proof-transport.mjs ./src/
+COPY services/activation/tools/engine-control-qa/multifeed-lease-poll.test.mjs services/activation/tools/engine-control-qa/multifeed-proof-transport.test.mjs ./tools/engine-control-qa/
+RUN node --test tools/engine-control-qa/multifeed-lease-poll.test.mjs tools/engine-control-qa/multifeed-proof-transport.test.mjs
 CMD ["node","tools/engine-control-qa/durable-status.mjs"]
