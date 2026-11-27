@@ -102,24 +102,45 @@ export function createLinodeFeedLedger(pool,env=process.env){
       requestId:row.request_id};
    });
   },
-  async reserve({sourceId,channelId,requestId,engineId='linode',handoff=null}={}){
+  async reserve({sourceId,channelId,requestId,engineId='linode',handoff=null,initialDrain=null}={}){
    if(!enabled(sourceId)||!engineAllowed(engineId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
+    if(initialDrain&&handoff)return blocked('conflicting_cutover_modes');
     let gate;
-    if(handoff||(env.BLOFY_ENGINE_RENEWABLE_LEASE==='1'&&row?.state==='released')){
-     const {rows:[current]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(initialDrain||handoff||(env.BLOFY_ENGINE_RENEWABLE_LEASE==='1'&&row?.state==='released')){
+     const {rows:[current]}=await c.query('SELECT mode,reservation_id,engine_id,updated_at FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
      gate=current;
     }
     const gateOwnsRow=gate?.mode==='engine'&&row&&gate.reservation_id===row.reservation_id&&gate.engine_id===row.engine_id;
     if(row&&row.state!=='released'){
      if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown'&&row.engine_id===engineId)
-      return !handoff||gateOwnsRow?{ok:true,action:'existing',reservationId:row.reservation_id,state:row.state}:blocked('handoff_gate_mismatch');
+      return (!handoff&&!initialDrain)||gateOwnsRow?{ok:true,action:'existing',reservationId:row.reservation_id,state:row.state}:blocked('handoff_gate_mismatch');
      return blocked('feed_occupied_or_uncertain');
     }
     // Replace a demonstrably released engine reservation without reopening
     // legacy ingress. Neither a missed heartbeat nor a provider count alone
     // can transfer ownership.
-    if(handoff){
+    // Atomic initial cutover: no pending reservation can be stranded if the
+    // drain evidence fails. The proof must come from the trusted orchestrator,
+    // never a public request or an inference from old hold ages.
+    let reconcileIds=null;
+    if(initialDrain){
+     if(gate?.mode!=='draining')return blocked('initial_drain_not_active');
+     const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+     const now=new Date(clock.now).getTime(),started=new Date(gate.updated_at).getTime();
+     const {proof,openHoldIds}=initialDrain;
+     if(proof?.sourceId!==sourceId||proof.authoritative!==true||proof.scope!=='all_paths'||
+        proof.activeConnections!==0||proof.maxConnections!==1||!Number.isSafeInteger(proof.observedAt)||
+        proof.observedAt<now-10000||proof.observedAt>now+2000||
+        !Number.isSafeInteger(started)||proof.drainStartedAt!==started||proof.observedAt<started)
+       return blocked('initial_drain_unconfirmed');
+     if(!Array.isArray(openHoldIds)||!openHoldIds.every(x=>typeof x==='string'&&uuid.test(x)&&x===x.toLowerCase())||
+        new Set(openHoldIds).size!==openHoldIds.length)return blocked('initial_drain_hold_snapshot_invalid');
+     const {rows:holds}=await c.query('SELECT hold_id FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed ORDER BY hold_id',[sourceId]);
+     const actual=holds.map(x=>x.hold_id);
+     if(actual.length!==openHoldIds.length||actual.some(x=>!openHoldIds.includes(x)))return blocked('initial_drain_hold_snapshot_changed');
+     reconcileIds=openHoldIds;
+    }else if(handoff){
      if(!gateOwnsRow||row.state!=='released'||row.reservation_id!==handoff.fromReservationId||
         row.engine_id!==handoff.fromEngineId)return blocked('handoff_gate_mismatch');
      const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
@@ -151,7 +172,11 @@ export function createLinodeFeedLedger(pool,env=process.env){
      ON CONFLICT(source_id) DO UPDATE SET channel_id=EXCLUDED.channel_id,
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
      state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,worker_lease_sequence=0,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
-    if(handoff){
+    if(initialDrain){
+     const closed=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=clock_timestamp() WHERE source_id=$1 AND NOT closed AND hold_id=ANY($2::uuid[])',[sourceId,reconcileIds]);
+     if(closed.rowCount!==reconcileIds.length)throw Error('initial_drain_hold_snapshot_changed');
+     await c.query("UPDATE blofy_engine_ingress_gate SET mode='engine',reservation_id=$2,engine_id=$3,updated_at=now() WHERE source_id=$1",[sourceId,reservationId,engineId]);
+    }else if(handoff){
      await c.query("UPDATE blofy_engine_ingress_gate SET reservation_id=$2,engine_id=$3,updated_at=now() WHERE source_id=$1",[sourceId,reservationId,engineId]);
     }
     return {ok:true,action:'start_once',reservationId,state:'pending'};
