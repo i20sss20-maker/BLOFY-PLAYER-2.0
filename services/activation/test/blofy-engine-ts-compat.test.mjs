@@ -15,7 +15,7 @@ test('legacy TS response follows HLS window without duplicate segments or switch
    return Object.assign(response,{generation:manifests>=3?'b'.repeat(32):g});
   }
   parts.push(n);
-  const payload=Buffer.alloc(188,Number(n.slice(4,-3)));
+  const payload=Buffer.alloc(188,Number(n.slice(4,-3)));payload[0]=0x47;
   return Object.assign(new Response(payload,{headers:{'content-type':'video/mp2t','content-length':'188'}}),{generation:g});
  }});
  const server=http.createServer((req,res)=>void deliver(req,res,{generation:g}));
