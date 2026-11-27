@@ -77,6 +77,12 @@ test('confirmed release transfers one source slot and lease to Linode',{timeout:
   assert.equal(claim.signature,undefined);
   const renewed=await ledger.issueWorkerLease({...target,fence,signingKey:privateKey});
   assert.equal(renewed.lease.sequence,3);
+  const generation=target.reservationId.replaceAll('-','');
+  const proof={...target,generation,observedAt:Date.now(),lastSegment:3};
+  assert.equal((await ledger.markLeaseReady({...target,proof:{...proof,generation:'0'.repeat(32)}})).reason,'ready_proof_unconfirmed');
+  assert.equal((await ledger.readRoutingState({sourceId})).state,'pending');
+  assert.deepEqual(await ledger.markLeaseReady({...target,proof}),{ok:true,state:'ready',generation});
+  assert.deepEqual(await ledger.markLeaseReady({...target,proof}),{ok:true,state:'ready',generation});
   assert.equal((await ingress.restoreLegacy()).reason,'engine_release_unconfirmed');
  }finally{await pool.end();}
 });
