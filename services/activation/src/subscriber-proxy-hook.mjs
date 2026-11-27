@@ -1,5 +1,6 @@
 import { databaseOptions } from './database-options.mjs';
 import {blocksDuringLinodeMaintenance} from './linode-maintenance-ingress.mjs';
+import {withSubscriberMediaLifetime,pipeSubscriberMedia,readBoundedSubscriberManifest} from './blofy-subscriber-media-lifetime.mjs';
 import http from 'node:http';
 import { subscriberSessionValid } from './subscriber-session-validity.mjs';
 import crypto from 'node:crypto';
@@ -239,7 +240,7 @@ function copyUpstreamHeaders(upstream, res, { textual = false } = {}) {
   res.writeHead(upstream.status, headers);
 }
 
-async function fetchUpstream(url, req) {
+async function fetchUpstream(url, req, signal) {
   const headers = {};
   for (const name of ['range', 'accept', 'accept-language', 'user-agent', 'if-none-match', 'if-modified-since']) {
     const value = req.headers[name];
@@ -252,7 +253,7 @@ async function fetchUpstream(url, req) {
       method: 'GET',
       headers,
       redirect: 'follow',
-      signal: controller.signal
+      signal: AbortSignal.any([controller.signal,signal])
     });
   } finally {
     clearTimeout(timer);
@@ -260,7 +261,8 @@ async function fetchUpstream(url, req) {
 }
 
 async function pipeUpstream(req, res, url, token) {
-  const upstream = await fetchUpstream(url, req);
+ return withSubscriberMediaLifetime(req,res,async signal=>{
+  const upstream = await fetchUpstream(url, req,signal);
   const effectiveUrl = upstream.url || url;
   const type = String(upstream.headers.get('content-type') || '').toLowerCase();
   const isHls = type.includes('mpegurl') || effectiveUrl.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('.m3u8');
@@ -272,7 +274,7 @@ async function pipeUpstream(req, res, url, token) {
   }
 
   if (isHls) {
-    const text = await upstream.text();
+    const text = await readBoundedSubscriberManifest(upstream.body);
     const rewritten = rewriteHlsManifest(req, token, text, effectiveUrl);
     const headers = {};
     for (const [key, value] of upstream.headers.entries()) {
@@ -286,9 +288,8 @@ async function pipeUpstream(req, res, url, token) {
   }
 
   copyUpstreamHeaders(upstream, res, { textual: isTextual });
-  const readable = Readable.fromWeb(upstream.body);
-  if (isTextual) readable.pipe(replacePrivateOriginStream(req, token)).pipe(res);
-  else readable.pipe(res);
+  await pipeSubscriberMedia(upstream.body,res,{signal,transform:isTextual?replacePrivateOriginStream(req,token):undefined});
+ });
 }
 
 async function createSubscriberSession(req, res) {
