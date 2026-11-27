@@ -49,9 +49,18 @@ async function readAuthority(){
   if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>5000)throw Error('authority_invalid');
   return s;
 }
+let sourceBindingLogged=false;
 const authorityProbe=async()=>{
  try{
   const s=await readAuthority();
+  // Operator opt-in. Emit only the approved internal source ID while there is
+  // no worker feed, and only once per controller process.
+  if(!sourceBindingLogged&&process.env.BLOFY_ENGINE_SOURCE_BINDING_LOG==='1'&&
+     s.mode==='legacy'&&s.reservation===null&&
+     typeof s.sourceId==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(s.sourceId)){
+   sourceBindingLogged=true;
+   console.log('BLOFY_ENGINE_APPROVED_SOURCE_BINDING '+s.sourceId);
+  }
   console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,registeredLegacyHolds:s.registeredLegacyHolds,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
  }catch{console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:false,customerTrafficChanged:false}));}
 };
