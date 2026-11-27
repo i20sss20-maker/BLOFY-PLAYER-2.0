@@ -210,3 +210,14 @@ test('media origin override preserves independent account and catalog requests o
  assert.equal(relayConfiguration({...env,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'0'}).origin,'');
  assert.equal(relayConfiguration({...env,BLOFY_STREAM_RELAY_MEDIA_ORIGIN:''}).origin,origin);
 });
+
+
+test('maintenance refuses every new media grant before network access but keeps health reads',async()=>{
+ const env={...enabled,BLOFY_LINODE_MEDIA_MAINTENANCE:'1'};
+ let calls=0;
+ const fetchImpl=async()=>{calls++;return new Response(JSON.stringify({ok:true,relayReady:true,service:'BLOFY-STREAM',role:'media_plane'}))};
+ for(const kind of ['live','movie','series'])await assert.rejects(issueStreamRelayGrant({kind,sourceUrl:'https://fixture.example/sample.ts'},{env,fetchImpl}),{message:'xtream_media_maintenance'});
+ assert.equal(calls,0);
+ assert.equal((await checkStreamRelayBridge({env,fetchImpl})).ok,true);
+ assert.equal(calls,1);
+});

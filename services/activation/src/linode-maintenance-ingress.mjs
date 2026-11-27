@@ -12,3 +12,9 @@ export function blocksDuringLinodeMaintenance(path,env=process.env){
   /^\/internal\/blofy-content-hub\//i.test(path)||
   /^\/api\/v1\/admin\/xtream-gateway\/(playback-probe|episode-delivery-audit|unavailable-media\/recheck(?:-now)?)(\/|$)/i.test(path);
 }
+
+// New diagnostic media requests must obey the same maintenance barrier as
+// customer ingress. Account/catalog reads intentionally remain available.
+export function assertMediaProbeAllowed(env=process.env){
+ if(linodeMaintenanceActive(env))throw Object.assign(new Error('xtream_media_maintenance'),{status:503});
+}

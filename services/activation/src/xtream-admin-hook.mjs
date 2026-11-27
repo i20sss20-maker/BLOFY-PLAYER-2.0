@@ -1,4 +1,5 @@
 import { databaseOptions } from './database-options.mjs';
+import {linodeMaintenanceActive,assertMediaProbeAllowed} from './linode-maintenance-ingress.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
@@ -534,6 +535,7 @@ async function recordOperatorVodAvailability(source,kind,itemId,seriesId,probe){
 }
 
 async function probeXtreamEpisodeMedia(source,creds,episode) {
+  assertMediaProbeAllowed();
   const started=Date.now(),controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),9500);
   const path=['series',creds.username,creds.password,String(episode.id)]
@@ -716,6 +718,7 @@ async function persistSourceMediaProbe(id,kind,result){
 // appear in the response; the request is initiated by the administrator only.
 async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
   sampleOffset=0,probeAllCandidates=false}={}) {
+  assertMediaProbeAllowed();
   if(mediaType==='series'||mediaType==='episode')return probeXtreamSeries(id,mediaType,{sampleOffset,probeAllCandidates});
   if(!['live','movie'].includes(mediaType))
     throw Object.assign(new Error('xtream_probe_type_invalid'),{status:400});
@@ -926,6 +929,7 @@ async function runSmartConnection(id){
 // alphabetically first movie IDs checked over isolated STREAM earlier.
 if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id))return;
@@ -981,6 +985,7 @@ if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
 // No catalog edits, no alternative stream IDs, no customer routing changes.
 if(process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -1482,6 +1487,7 @@ if(process.env.BLOFY_XTREAM_ONE_SHOT_DIAGNOSTIC==='1'){
 // content. Read the initial media bytes; DO NOT claim picture/audio playback.
 if(process.env.BLOFY_XTREAM_ONE_SHOT_MEDIA_PROBE==='1'){
   const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
     void(async()=>{
       const sources=(await serverRows()).filter(row=>row.enabled===true);
       let tested=0;
@@ -1911,6 +1917,7 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC_ON_BOOT==='1'){
 // source account, catalog, subscriber routes or active client playback.
 if(process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -1942,6 +1949,7 @@ if(process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT==='1'){
 // A valid TS signature is NOT proof that audio/video decodes on a TV.
 if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
   const mediaProbeTimer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
     void(async()=>{
       const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
       if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -2015,6 +2023,7 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
 // Never include titles, source episode IDs, usernames, URLs or passwords.
 if(process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_PROBE_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_SOURCE_ID||'').trim();
    if(!validUuid(id))return;
@@ -2077,6 +2086,7 @@ if(process.env.BLOFY_XTREAM_OFFICIAL_M3U_PROBE_ON_BOOT==='1'){
 // return real TS bytes via STREAM. No catalog or client traffic changes.
 if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
   const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
     void(async()=>{
       const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
       if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -5007,6 +5017,7 @@ export { ensureReady as ensureXtreamAdminReady };
 // Never touch user entitlements, URLs, catalog, or raw media files.
 if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
@@ -5060,6 +5071,7 @@ if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
 // customer's source binding; only reads metadata and tiny media first bytes.
 if(process.env.BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT_ON_BOOT==='1'){
  const timer=setTimeout(()=>{
+    if(linodeMaintenanceActive())return;
   void(async()=>{
    const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
    if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;

@@ -1,3 +1,4 @@
+import {assertMediaProbeAllowed} from './linode-maintenance-ingress.mjs';
 // BLOFY PLAYER stays the authoritative account, source and catalog control
 // plane. STREAM only receives a 45-second opaque capability over a pinned
 // HTTPS service-to-service origin. Default OFF and allowlisted BY account UUID.
@@ -77,6 +78,7 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
   requireSharedLive=false,licensedCdnRedirect=false,
   licensedSourceId='',providerMaxConcurrentFeeds=null},{
   env=process.env,fetchImpl=fetch}={}){
+  assertMediaProbeAllowed(env);
   if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
     throw new Error('stream_bridge_invalid_media');
   const result=await remoteRelayRequest('/internal/relay-grants',{
