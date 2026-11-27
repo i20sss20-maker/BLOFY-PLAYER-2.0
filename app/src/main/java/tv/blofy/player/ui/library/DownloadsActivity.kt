@@ -195,7 +195,7 @@ class DownloadsActivity : AppCompatActivity() {
         val ids=visible.map { it.record.id }
         if(ids!=rowKeys) {
             val focusedId = buttons.entries.firstOrNull { it.value.hasFocus() }?.key
-            val oldIndex = rowKeys.indexOf(focusedId)
+            val oldIndex = focusedId?.let { rowKeys.indexOf(it) } ?: -1
             rowKeys=ids
             buttons.clear()
             rows.removeAllViews()
@@ -257,7 +257,8 @@ class DownloadsActivity : AppCompatActivity() {
             }
             // Polling must not strand a TV remote user when a transfer changes groups.
             if (focusedId != null) {
-                val target = buttons[focusedId] ?: ids.getOrNull(oldIndex.coerceAtLeast(0).coerceAtMost((ids.size - 1).coerceAtLeast(0)))?.let(buttons::get)
+                val target = buttons[focusedId] ?: if (ids.isEmpty()) null
+                    else buttons[ids[oldIndex.coerceIn(0, ids.lastIndex)]]
                 if (target != null) {
                     target.requestFocus()
                     target.post {
