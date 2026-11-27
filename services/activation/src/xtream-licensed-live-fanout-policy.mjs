@@ -105,9 +105,16 @@ export function authorizedLiveTrialQuota({
     env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED!=='1'||
     !permittedLicensedLiveFanout({sourceId,sourceName,sourceNameMatches,
       kind:'live',extension:'ts',upstreamRestreamer:false},env))return reported;
- // Persist only the separately approved five-feed ceiling for the exact
+ // Persist only the separately approved source ceiling for the exact
  // manual-grant source. No wildcard, no unlimited mode, no source DB rewrite.
- if(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_PERSISTENT==='1')return 5;
+ if(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_PERSISTENT==='1'){
+  // Explicitly configured authorized capacity; malformed values cannot
+  // silently expand access. The media process retains its own hard cap.
+  const configured=String(env.BLOFY_XTREAM_AUTHORIZED_SOURCE_FEED_CEILING||'5');
+  if(!/^[1-9][0-9]?$/.test(configured))return 5;
+  const ceiling=Number(configured);
+  return ceiling>=1&&ceiling<=64?ceiling:5;
+ }
  if(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_TRIAL!=='1')return reported;
  const deadline=Date.parse(String(env.BLOFY_XTREAM_AUTHORIZED_FIVE_FEED_UNTIL||''));
  if(!Number.isFinite(now)||!Number.isFinite(deadline)||deadline<=now||
