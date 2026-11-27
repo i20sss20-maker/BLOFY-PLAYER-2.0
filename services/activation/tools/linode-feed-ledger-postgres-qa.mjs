@@ -210,3 +210,31 @@ test('independent source reservations contend for the same physical worker slot'
   await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
  }
 });
+
+test('incomplete drain rollback never restores legacy while a reservation remains unresolved',{timeout:60000},async()=>{
+ const admin=new pg.Pool({...options,max:1}),schema='qa_'+randomUUID().replaceAll('-','');
+ let pool;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  pool=new pg.Pool({...options,options:'-c search_path='+schema,max:4});
+  await ensureLinodeFeedLedger(pool);await ensureEngineIngressGate(pool);
+  const sourceId=randomUUID(),engineId='hostbrr';
+  const gate=createEngineIngressGate(pool,{sourceId,enabled:true});
+  const ledger=createLinodeFeedLedger(pool,{BLOFY_LINODE_FEED_LEDGER:'1',BLOFY_HOSTBRR_FEED_LEDGER:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:sourceId});
+  assert.equal((await gate.initialize()).ok,true);
+  assert.equal((await gate.beginDrain()).ok,true);
+  assert.equal((await gate.cancelDrain()).mode,'legacy');
+  assert.equal((await gate.beginDrain()).ok,true);
+  const r=await ledger.reserve({sourceId,engineId,channelId:'123',requestId:randomUUID()});
+  assert.equal(r.action,'start_once');
+  assert.equal((await gate.cancelDrain()).reason,'reservation_unresolved');
+  const identity={sourceId,engineId,reservationId:r.reservationId};
+  assert.equal((await ledger.transition({...identity,next:'unknown'})).ok,true);
+  assert.equal((await gate.cancelDrain()).reason,'reservation_unresolved');
+  assert.equal((await ledger.transition({...identity,next:'released',releaseConfirmed:true})).ok,true);
+  assert.equal((await gate.cancelDrain()).mode,'legacy');
+ }finally{
+  if(pool)await pool.end();
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE').finally(()=>admin.end());
+ }
+});
