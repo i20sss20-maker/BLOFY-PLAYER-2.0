@@ -82,8 +82,9 @@ class AiChatActivity : AppCompatActivity() {
         }
         conversationScroll = ScrollView(this).apply {
             isFillViewport = true
-            isVerticalScrollBarEnabled = false
-            isFocusable = false
+            isVerticalScrollBarEnabled = true
+            isFocusable = DeviceClass.detect(this@AiChatActivity) == DeviceClass.Kind.TV
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             clipToPadding = false
             addView(transcript, FrameLayout.LayoutParams(-1, -2))
         }
@@ -205,6 +206,7 @@ class AiChatActivity : AppCompatActivity() {
             .let { if (it == "en") "en" else "ar" }
 
         lifecycleScope.launch {
+            var hasTitleResults = false
             try {
                 val response = StreamAiSearchClient.lookup(applicationContext, contextual, locale)
                 if (isFinishing || isDestroyed) return@launch
@@ -225,7 +227,10 @@ class AiChatActivity : AppCompatActivity() {
                             .filterNotNull().joinToString("\n\n")
                         pending.text = reply
                         record(question, reply)
-                        if (matches.titles.isNotEmpty()) addTitleButtons(matches.titles)
+                        if (matches.titles.isNotEmpty()) {
+                            hasTitleResults = true
+                            addTitleButtons(matches.titles)
+                        }
                     }
                     is StreamAiSearchClient.Outcome.Unavailable -> {
                         // A temporarily unreachable AI does not make the
@@ -247,6 +252,7 @@ class AiChatActivity : AppCompatActivity() {
                                 else ""
                             pending.text = answer
                             record(question, answer)
+                            hasTitleResults = true
                             addTitleButtons(local.titles)
                         } else {
                             val answer = when (response.reason) {
@@ -274,7 +280,15 @@ class AiChatActivity : AppCompatActivity() {
                 if (!isDestroyed) {
                     busy = false
                     send.isEnabled = true
-                    scrollBottom()
+                    // Do not jump to the last result after focusing the first one.
+                    if (!hasTitleResults || DeviceClass.detect(this@AiChatActivity) != DeviceClass.Kind.TV) {
+                        conversationScroll.post {
+                            if (!isFinishing && !isDestroyed) {
+                                val bubble = pending.parent as? View
+                                conversationScroll.smoothScrollTo(0, bubble?.top ?: 0)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -304,7 +318,6 @@ class AiChatActivity : AppCompatActivity() {
         val body = TextView(this).apply {
             text = message
             textSize = 15f
-            maxLines = 8
             setTextColor(if (fromUser) CinemaStyle.Background else CinemaStyle.White)
             setPadding(dp(18), dp(13), dp(18), dp(13))
             background = if (fromUser) CinemaStyle.buttonBackground(this@AiChatActivity, true, false)
@@ -370,7 +383,6 @@ class AiChatActivity : AppCompatActivity() {
             })
         }
         transcript.addView(group, LinearLayout.LayoutParams(-1, -2))
-        scrollBottom()
         if (DeviceClass.detect(this) == DeviceClass.Kind.TV) {
             val target = firstResult
             transcript.post { if (!isFinishing && !isDestroyed) target?.requestFocus() }

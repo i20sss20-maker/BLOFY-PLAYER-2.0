@@ -2,12 +2,14 @@ package tv.blofy.player.ui.player
 
 import android.content.Context
 import android.net.Uri
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.network.awaitResponse
 import java.util.concurrent.TimeUnit
 
 /**
@@ -102,12 +104,12 @@ internal object StreamArabicAudioCatalog {
                 return@withContext Lookup(emptyList(), Failure.INVALID_CHANNEL)
             val bearer = StreamCodeSession.authorization(context)
                 ?: return@withContext Lookup(emptyList(), Failure.NOT_ACTIVATED)
-            runCatching {
+            try {
                 val request = Request.Builder()
                     .url(StreamCodeSession.HOST + "/api/v1/stream/audio/catalog")
                     .header("Authorization", bearer)
                     .header("Accept", "application/json").get().build()
-                client.newCall(request).execute().use { response ->
+                client.newCall(request).awaitResponse().use { response ->
                     val reason = when (response.code) {
                         401, 403 -> Failure.UNAUTHORIZED
                         404 -> Failure.NO_ENDPOINT
@@ -131,13 +133,19 @@ internal object StreamArabicAudioCatalog {
                         if (output.size() > MAX_JSON_BYTES) ""
                         else output.toString(Charsets.UTF_8.name())
                     }
+                    if (StreamCodeSession.authorization(context) != bearer)
+                        return@use Lookup(emptyList(), Failure.UNAUTHORIZED)
                     val source = runCatching { JSONObject(raw) }.getOrNull()
                     val tracks = (if (source?.has("channels") == true)
                         decodeForChannel(raw, channelId)
                     else decode(raw)).filter { trustedAudioUrl(it.playbackUrl) }
                     Lookup(tracks, if (tracks.isEmpty()) Failure.EMPTY_CATALOG else Failure.NONE)
                 }
-            }.getOrElse { Lookup(emptyList(), Failure.NETWORK) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                Lookup(emptyList(), Failure.NETWORK)
+            }
         }
 
     suspend fun list(context: Context, channelId: String): List<Track> =
