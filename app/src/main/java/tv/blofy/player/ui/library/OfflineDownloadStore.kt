@@ -213,7 +213,7 @@ internal object OfflineDownloadStore {
             else null
             // A stale or deleted file is not a valid completed download.
             val actualStatus = if (status == DownloadManager.STATUS_SUCCESSFUL &&
-                !DownloadTransferPolicy.isValidDownloadedFile(status, done, uri != null))
+                !DownloadTransferPolicy.isValidDownloadedFile(status, done, uri != null, total))
                 STATUS_MISSING else status
             return Progress(record,actualStatus,done,total,reason,uri)
         }
