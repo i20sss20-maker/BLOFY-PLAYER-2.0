@@ -2022,6 +2022,11 @@ function liveTimeshiftTarget(video,record,action){
  target=Math.max(range.start+0.1,Math.min(range.end-0.75,target));
  return Math.abs(target-range.at)>=0.5?target:null
 }
+function subtitleTrackLabel(label,language,index){
+ var code=String(language||'').toLowerCase().split(/[-_]/)[0],names={ar:'العربية',ara:'العربية',en:'الإنجليزية',eng:'الإنجليزية',fr:'الفرنسية',fra:'الفرنسية',fre:'الفرنسية',es:'الإسبانية',spa:'الإسبانية',fa:'الفارسية',fas:'الفارسية',per:'الفارسية',tr:'التركية',tur:'التركية',de:'الألمانية',deu:'الألمانية',ger:'الألمانية',hi:'الهندية',hin:'الهندية',ur:'الأردية',urd:'الأردية',ru:'الروسية',rus:'الروسية'};
+ var name=String(label||'').trim(),localized=names[code]||names[name.toLowerCase()]||'';
+ return localized&&(!name||names[name.toLowerCase()]||name.toLowerCase()===code)?localized:localized?localized+' • '+name:name||String(language||'')||('ترجمة '+(index+1))
+}
 // Convert only bounded plain-text timed cues. No external resources or markup.
 function localSubtitleVtt(raw){
  if(typeof raw!=='string'||raw.length>2*1024*1024)return null;
@@ -4695,16 +4700,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   // HLS.js manages its own subtitle tracks. Native textTracks may include
   // duplicate generated tracks; prefer the HLS API for those tracks.
   for(var k=0;k<subs.length;k++)(function(track,index){
-   options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index&&engine.subtitleDisplay!==false,
+   options.push({name:subtitleTrackLabel(track.name,track.lang,index),selected:engine.subtitleTrack===index&&engine.subtitleDisplay!==false,
     select:function(){if(!S.play||S.play.engine!==engine)return;disableSubtitles();engine.subtitleTrack=index;engine.subtitleDisplay=true}})
   })(subs[k],k);
   for(var j=0;j<list.length;j++)(function(track,index){
    if(subs.length&&(!localSubtitle||track!==localSubtitle.element.track))return;
-   options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
+   options.push({name:subtitleTrackLabel(track.label,track.language,index),selected:track.mode==='showing',
     select:function(){disableSubtitles();track.mode='showing'}})
   })(list[j],j);
   if(!isLive&&window.FileReader&&window.URL&&URL.createObjectURL)options.push({name:'اختيار ملف ترجمة SRT / VTT',selected:false,select:localSubtitlePicker});
-  showPlayerChoices('الترجمة',options,this)
+  showPlayerChoices(subs.length||list.some(function(t){return !localSubtitle||t!==localSubtitle.element.track})?'الترجمة':'لا توجد مسارات ترجمة في التشغيل الحالي',options,this)
  };
  if(qualityButton)qualityButton.onclick=function(){
   // The native-like TV quality panel can explicitly switch H.264 source-copy
