@@ -113,7 +113,9 @@ try{
  await page.locator('.rail-link[data-go="home"].active').waitFor();
  assert.deepEqual(failures,[]);
  console.log('BLOFY_TV_REMOTE_SYNTHETIC_PASS 720p directional keys, login, navigation and back');
- await tv.close();
+ await tv.close();await browser.close();
+ // Chrome is installed in browser QA and supports native H.264/AAC MP4 decoding.
+ browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
  const offline=await browser.newContext({serviceWorkers:'allow'});
  const offPage=await offline.newPage(),profile='c'.repeat(24),expiresAt=Date.now()+3600000;
  let activated=false,mediaCalls=0;
@@ -151,7 +153,10 @@ try{
  await offPage.reload({waitUntil:'domcontentloaded'});
  await offPage.locator('#offline-reconnect').waitFor();
  await offPage.locator('[data-offline-play="0"]').click();
- await offPage.waitForFunction(()=>{const v=document.getElementById('offline-video');return v&&v.readyState>=2&&v.videoWidth>0});
+ await offPage.locator('#offline-video').waitFor();
+ try{await offPage.waitForFunction(()=>{const v=document.getElementById('offline-video');return v&&v.readyState>=2&&v.videoWidth>0},null,{timeout:12000})}catch(e){
+  console.log('BLOFY_OFFLINE_VIDEO_DIAGNOSTIC',await offPage.evaluate(()=>{const v=document.getElementById('offline-video');return {ready:v?.readyState,network:v?.networkState,error:v?.error?.code,message:v?.error?.message,src:v?.src?.startsWith('blob:'),codec:v?.canPlayType('video/mp4; codecs="avc1.42E01E,mp4a.40.2"'),status:document.getElementById('offline-status')?.textContent}}));throw e
+ }
  await offPage.locator('#offline-video').evaluate(v=>{v.muted=true;return v.play()});
  await offPage.waitForFunction(()=>document.getElementById('offline-video').currentTime>0.25);
  assert.equal(mediaCalls,1);
