@@ -1119,3 +1119,55 @@ html[data-blofy-device="touch"] .native-compact-navigation .workspace,html[data-
 html[data-blofy-device="touch"] .native-compact-navigation .native-home-bottom{order:1;display:flex;flex-direction:row;width:100%;height:auto;min-height:60px;flex:none;gap:3px;padding:3px 8px calc(3px + env(safe-area-inset-bottom,0px));border:0;border-top:1px solid #ffffff22;background:#10303b}
 html[data-blofy-device="touch"] .native-touch-detail .toolbar{flex-wrap:wrap;gap:8px}
 html[data-blofy-device="touch"] .native-touch-detail .toolbar h1{min-width:0;overflow-wrap:break-word;font-size:19px}
+
+/* Restore the requested native right-side navigation and category list.
+   Keep independent scrolling and enough touch space on phones. */
+html[data-blofy-device="touch"] .app.native-compact-navigation{
+ display:flex;flex-direction:row;direction:rtl;overflow:hidden
+}
+html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bottom{
+ order:0;flex:0 0 clamp(74px,18vw,150px);width:clamp(74px,18vw,150px);
+ height:100%;min-height:0;max-height:none;display:flex;flex-direction:column;
+ justify-content:flex-start;align-items:stretch;gap:8px;padding:12px 5px;
+ border:0;border-left:1px solid #ffffff22;overflow-y:auto;overflow-x:hidden
+}
+html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bottom .rail-link{
+ flex:0 0 auto;min-height:56px;height:auto;width:100%;display:flex;flex-direction:column;
+ justify-content:center;gap:4px;padding:6px 2px;margin:0;font-size:11px;
+ white-space:normal;line-height:1.4;text-align:center
+}
+html[data-blofy-device="touch"] .app.native-compact-navigation>.workspace{
+ order:1;flex:1 1 0;width:auto;min-width:0;height:100%;padding-inline:8px
+}
+html[data-blofy-device="touch"] .native-home-header{flex-wrap:wrap;gap:4px}
+@media (max-width:730px), (max-height:540px) and (orientation:landscape){
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.live-catalog,
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters{
+  display:flex;flex-direction:row;direction:rtl;align-items:stretch;gap:6px;
+  height:calc(100vh - 100px);height:calc(100dvh - 100px);min-height:220px;overflow:hidden
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail{
+  display:flex;flex-direction:column;flex:0 0 clamp(88px,29%,175px);
+  width:clamp(88px,29%,175px);min-width:0;height:100%;overflow:hidden;
+  background:#10303b;border:1px solid #ffffff22;border-radius:12px
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail .pane-head{
+  display:block;padding:7px;font-size:12px
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail .pane-scroll{
+  display:block;flex:1 1 0;min-height:0;max-height:none;height:auto;padding:0;overflow-y:auto;overflow-x:hidden
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-item{
+  display:block;width:100%;min-height:44px;white-space:normal;overflow-wrap:anywhere;
+  text-align:right;line-height:1.4;font-size:12px;padding:8px 6px
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .channels,
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .poster-panel{
+  flex:1 1 0;width:auto;min-width:0;height:100%;max-height:none;overflow:auto
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .channels .pane-scroll{
+  flex:1 1 0;min-height:0;max-height:none;overflow-y:auto
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-panel{padding:6px}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+}
