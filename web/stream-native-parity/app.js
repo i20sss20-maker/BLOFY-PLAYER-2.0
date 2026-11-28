@@ -1140,9 +1140,11 @@ function finishResume(kind,id){
  // Only explicitly verified media EOF can mark a title as fully watched.
  if(kind==='live')return;
  var player=S.playerView;
- if(player&&player.kind===kind&&String(player.id)===String(id))player.completed=true;
+ var current=player&&player.kind===kind&&String(player.id)===String(id),wasCompleted=current&&player.completed;
+ if(current)player.completed=true;
  delete S.watch[progressKey(kind,id)];
- profileSave('watch',S.watch)
+ profileSave('watch',S.watch);
+ if(current&&!wasCompleted&&typeof player.afterVerifiedEnd==='function')player.afterVerifiedEnd()
 }
 function saveResume(kind,id,pos,duration,ready){
  if(kind==='live'||!ready||!isFinite(pos)||pos<0)return;
@@ -1766,7 +1768,7 @@ function pictureFitMode(value){return value==='zoom'?'cover':value==='fill'?'fil
 function settingsScreen(){
  shell('الإعدادات','<div class="customer-settings">'+
  '<section class="customer-setting-group"><h3>اشتراكي والمكتبة</h3><button class="customer-setting-row" id="subscription-status">اشتراكي <span>‹</span></button><p id="subscription-feedback" class="customer-setting-feedback" role="status" aria-live="polite"></p><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
- '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button></section>'+
+ '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button><button class="customer-setting-row" id="auto-next-episode">تشغيل الحلقة التالية تلقائيًا <span id="auto-next-label"></span></button></section>'+
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row" id="switch-saved-login" hidden>تبديل الاشتراك <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
@@ -1790,6 +1792,9 @@ function settingsScreen(){
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  var fitButton=document.getElementById('picture-fit'),fitLabel=document.getElementById('picture-fit-label'),fitOptions=['fit','zoom','fill'],fitLabels=['ملاءمة','تكبير','ملء'];
  function updateFit(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));fitLabel.textContent=fitLabels[Math.max(0,index)]}
+ var autoNext=document.getElementById('auto-next-episode'),autoNextLabel=document.getElementById('auto-next-label');
+ function updateAutoNext(){autoNextLabel.textContent=readJson(profileStorageKey('autoNextEpisode'),true)!==false?'مفعّل':'متوقف'}
+ updateAutoNext();autoNext.onclick=function(){profileSave('autoNextEpisode',readJson(profileStorageKey('autoNextEpisode'),true)===false);updateAutoNext()};
  updateFit();fitButton.onclick=function(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));profileSave('pictureFit',fitOptions[(Math.max(0,index)+1)%3]);updateFit()};
  document.getElementById('subscription-status').onclick=function(){
   var button=this,notice=document.getElementById('subscription-feedback'),epoch=S.accountEpoch;button.disabled=true;notice.textContent='جار التحقق…';
@@ -1977,6 +1982,7 @@ function cleanupPlayer(){
   S.playerView.liveHlsHandoff=null;
   clearVodBufferNotice(S.playerView);
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
+  if(S.playerView.nextEpisodeTimer)clearTimeout(S.playerView.nextEpisodeTimer);
   if(S.playerView.disposeSubtitles)S.playerView.disposeSubtitles();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
@@ -4923,6 +4929,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    targetEpisode.title||'الحلقة '+(targetEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0,true);
   S.previousBeforePlayer=previous;
  }
+ state.afterVerifiedEnd=function(){
+  if(kind!=='series'||!nextEpisode||readJson(profileStorageKey('autoNextEpisode'),true)===false||document.hidden)return;
+  if(state.nextEpisodeTimer)return;
+  state.nextEpisodeTimer=setTimeout(function(){state.nextEpisodeTimer=null;if(S.playerView===state&&S.route==='player'&&state.completed&&!document.hidden&&readJson(profileStorageKey('autoNextEpisode'),true)!==false)jumpEpisode(nextEpisode)},3000)
+ };
  var nextBtn=document.getElementById('player-next-episode'),previousBtn=document.getElementById('player-previous-episode');
  if(nextBtn&&nextEpisode)nextBtn.onclick=function(){jumpEpisode(nextEpisode)};
  if(previousBtn&&previousEpisode)previousBtn.onclick=function(){jumpEpisode(previousEpisode)};
