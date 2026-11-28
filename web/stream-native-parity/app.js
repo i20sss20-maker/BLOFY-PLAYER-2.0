@@ -2001,6 +2001,7 @@ function cleanupPlayer(){
   if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
   if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
   if(S.playerView.channelSwitchTimer){clearTimeout(S.playerView.channelSwitchTimer);S.playerView.channelSwitchTimer=null}
+  if(S.playerView.channelFocusTimer){clearTimeout(S.playerView.channelFocusTimer);S.playerView.channelFocusTimer=null}
   if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
   if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
   if(S.playerView.seekFrameId!==null&&S.playerView.seekFrameId!==undefined&&
@@ -5026,6 +5027,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    selectFullscreenChannel(itemId(items[(current+step+items.length)%items.length],'live'))
   }
   function closeLiveChannels(){
+   if(state.channelFocusTimer){clearTimeout(state.channelFocusTimer);state.channelFocusTimer=null}
    var panel=document.getElementById('player-channel-panel');
    if(panel)panel.hidden=true;
    var toggle=document.getElementById('player-channels-toggle');
@@ -5050,12 +5052,21 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var root=document.getElementById('player-root');if(root)root.classList.remove('controls-hidden');
    var close=document.getElementById('player-channel-close');
    if(close)close.onclick=function(){closeLiveChannels();if(video)video.focus()};
+   function chooseRow(button){
+    if(!button||panel.hidden||S.playerView!==state||S.route!=='player')return;
+    var cid=button.getAttribute('data-player-channel');if(!cid||String(cid)===String(state.id))return;
+    selectFullscreenChannel(cid);
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-player-channel]'),function(row){
+     var active=row.getAttribute('data-player-channel')===cid;
+     row.classList.toggle('selected',active);var now=row.querySelector('.native-channel-now');if(now)now.remove();if(active){var mark=document.createElement('span');mark.className='native-channel-now';mark.textContent='يعمل الآن';row.appendChild(mark)}
+    })
+   }
    Array.prototype.forEach.call(panel.querySelectorAll('[data-player-channel]'),function(button){
-    button.onclick=function(){
-     selectFullscreenChannel(button.getAttribute('data-player-channel'));
-     closeLiveChannels();
-     if(video)video.focus()
-    }
+    button.onfocus=function(){
+     if(state.channelFocusTimer)clearTimeout(state.channelFocusTimer);
+     state.channelFocusTimer=setTimeout(function(){state.channelFocusTimer=null;if(document.activeElement===button)chooseRow(button)},350)
+    };
+    button.onclick=function(){if(state.channelFocusTimer)clearTimeout(state.channelFocusTimer);state.channelFocusTimer=null;chooseRow(button)}
    });
    var selectedButton=panel.querySelector('.native-channel-item.selected')||panel.querySelector('.native-channel-item');
    if(selectedButton){selectedButton.focus();selectedButton.scrollIntoView({block:'nearest'})}
