@@ -77,3 +77,25 @@ test('download slots remain bounded and cancellation frees them without requesti
  assert.equal((await route.handle(fixtureRequest(),{Authorization:'Bearer fixture-three'})).status,429);
  await first.body.cancel();await second.body.cancel();assert.equal(route.count(),0);assert.equal(cancelled,2);
 });
+
+test('web download UI permits one pending preflight and ignores stale account responses',async()=>{
+ const source=readFileSync('app.js','utf8'),a=source.indexOf('function requestWebDownload('),b=source.indexOf('function favoritesScreen(',a);
+ const S={accountEpoch:1,userVerified:true,route:'detail',downloadPending:null},message={textContent:''},pending=[],saved=[],clicks=[],timers=new Map();
+ const document={getElementById:()=>message,createElement:()=>({click(){clicks.push(this.href)},remove(){}}),body:{appendChild(){}}};
+ let tick=0;
+ const request=new Function('S','document','webDownloadPath','fetch','setTimeout','clearTimeout','webDownloadHistory','profileSave','downloadsScreen',source.slice(a,b)+';return requestWebDownload')(
+ S,document,vodDownloadPath,()=>new Promise(resolve=>pending.push(resolve)),fn=>{timers.set(++tick,fn);return tick},id=>timers.delete(id),()=>[],(_,rows)=>saved.push(rows),()=>{});
+ request('movie','123','mp4','One');request('movie','124','mp4','Two');
+ assert.equal(pending.length,1);
+ S.accountEpoch++;S.downloadPending=null;
+ request('movie','124','mp4','Two');assert.equal(pending.length,2);
+ pending[0]({ok:true});await Promise.resolve();await Promise.resolve();
+ assert.equal(clicks.length,0);
+ pending[1]({ok:true});await Promise.resolve();await Promise.resolve();
+ assert.deepEqual(clicks,['/api/download/movie/124.mp4']);assert.equal(saved.length,1);assert.equal(S.downloadPending,null);
+ request('movie','125','mp4','Three');
+ const expire=[...timers.values()][0];expire();
+ assert.equal(S.downloadPending,null);
+ pending[2]({ok:true});await Promise.resolve();await Promise.resolve();
+ assert.equal(clicks.length,1);
+});
