@@ -17,16 +17,27 @@ export async function readBoundedJson(req,maxBytes,timeoutMs=5000){
  const declared=req.headers.get('content-length');
  if(declared!==null&&(!/^\d+$/.test(declared)||Number(declared)>maxBytes))return {ok:false,status:413};
  if(!req.body)return {ok:false,status:400};
- const reader=req.body.getReader();let size=0;const chunks=[];
- let timer;const deadline=new Promise(resolve=>{timer=setTimeout(()=>resolve({timeout:true}),timeoutMs)});
+ const reader=req.body.getReader();let size=0,reads=0,timedOut=false;
+ // Fixed memory per JSON reader, even for excessively fragmented requests.
+ const data=new Uint8Array(maxBytes);
+ const expires=performance.now()+timeoutMs;
  const cancel=()=>{try{void reader.cancel().catch(()=>{})}catch{}};
+ const timer=setTimeout(()=>{timedOut=true;cancel()},timeoutMs);
  try{
-  while(true){const part=await Promise.race([reader.read(),deadline]);if(part.timeout){cancel();return {ok:false,status:408}}const {done,value}=part;if(done)break;size+=value.byteLength;if(size>maxBytes){cancel();return {ok:false,status:413}}chunks.push(value)}
-  const data=new Uint8Array(size);let offset=0;for(const chunk of chunks){data.set(chunk,offset);offset+=chunk.byteLength}
-  const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data));
+  while(true){
+   if(timedOut||performance.now()>=expires){cancel();return {ok:false,status:408}}
+   const {done,value}=await reader.read();
+   if(timedOut||performance.now()>=expires){cancel();return {ok:false,status:408}}
+   if(done)break;
+   // Limit pathological zero-length/tiny chunk floods independently of bytes.
+   if(++reads>4096||value.byteLength>maxBytes-size){cancel();return {ok:false,status:413}}
+   data.set(value,size);size+=value.byteLength;
+   if(reads%64===0)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data.subarray(0,size)));
   if(!value||typeof value!=='object'||Array.isArray(value))return {ok:false,status:400};
   return {ok:true,value};
- }catch{return {ok:false,status:400}}finally{clearTimeout(timer);try{reader.releaseLock()}catch{}}
+ }catch{return {ok:false,status:timedOut?408:400}}finally{clearTimeout(timer);try{reader.releaseLock()}catch{}}
 }
 
  // Never translate an upstream outage into a revoked subscription.
