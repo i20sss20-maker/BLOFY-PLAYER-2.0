@@ -1,0 +1,4 @@
+Operator requested publication to tv.blofyplayer.com in chat.
+Validated candidate: 4f97b4bb98797effb09fd1f4b5c121ab706378e2.
+Isolated Railway deployment b5dfd855-7028-495c-b5d9-5656dd5ab6e6 SUCCESS; 159 automated tests passed. Previous browser QA verified synthetic mobile/TV navigation and decoded playback.
+Release scope: web shell and tested fixes only. Preserve current production variables, sessions and activation. New direct/external login and VOD download gates remain disabled; full server TimeShift and physical-device QA are pending. Prior production commit 2f7dc96c7aa5a6e02aa8db1efc3f62c43221d52d retained for rollback.
