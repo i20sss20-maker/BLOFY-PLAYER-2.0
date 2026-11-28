@@ -15,7 +15,7 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const origin='http://127.0.0.1:'+server.address().port;
 let browser;
 try{
- browser=await chromium.launch({channel:'chrome',headless:true});
+ browser=await chromium.launch({headless:true,...(process.env.BLOFY_QA_BUNDLED_CHROMIUM==='1'?{}:{channel:'chrome'})});
  for(const mode of ['code','xtream','m3u']){
   const ctx=await browser.newContext({...devices['iPhone 13'],serviceWorkers:'block'});
   const page=await ctx.newPage(),requests=[],errors=[];
@@ -39,6 +39,7 @@ try{
   });
   await page.goto(origin);
   await page.locator('#activation-code').waitFor();
+  await page.waitForFunction(()=>document.documentElement.getAttribute('data-blofy-device')==='touch');
   if(mode==='code'){
    await page.waitForFunction(()=>document.getElementById('login-mode-xtream').disabled);
    await page.locator('#activation-code').fill('12345678');
