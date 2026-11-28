@@ -1050,7 +1050,7 @@ html[data-blofy-device="tv"] .search-result-grid .poster-art img{z-index:1}
 
 
 /* 56.0.3 native code-login parity: scoped to entry screen, never playback. */
-.login-screen:has(.native-stream-login){padding:32px 25px}
+.login-screen.native-login-screen{padding:32px 25px}
 .login-panel.native-stream-login{box-sizing:border-box;width:620px;max-width:100%;padding:26px 38px 30px;border:1px solid #327f89;border-radius:26px;background:linear-gradient(135deg,#143e4c,#0b2a36,#071c26);text-align:center}
 .native-stream-login .native-login-brand{font-size:28px;letter-spacing:.045em;color:#fff;line-height:1.25}
 .native-stream-login .native-login-brand:before{width:172px;height:108px;margin:0 auto 6px}
