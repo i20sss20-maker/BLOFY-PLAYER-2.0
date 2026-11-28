@@ -27,7 +27,8 @@ try{
   if(u.origin!==provider)return route.abort();
   requests.push({path:u.pathname,headers:route.request().headers()});
   const headers={'access-control-allow-origin':origin,'cache-control':'no-store'};
-  if(u.pathname==='/catalog.m3u')return route.fulfill({status:200,headers,contentType:'text/plain',body:'#EXTM3U\n#EXTINF:-1 group-title="Fixtures",Red Channel\n/red/index.m3u8\n#EXTINF:-1 group-title="Fixtures",Blue Channel\n/blue/index.m3u8\n#EXTINF:-1,Blocked\nhttps://unapproved.example.com/no.m3u8'});
+  if(u.pathname==='/get.php'){assert.equal(u.searchParams.get('username'),'fixture-user');assert.equal(u.searchParams.get('password'),'fixture+secret');assert.equal(u.searchParams.get('output'),'m3u8')}
+  if(u.pathname==='/catalog.m3u'||u.pathname==='/get.php')return route.fulfill({status:200,headers,contentType:'text/plain',body:'#EXTM3U\n#EXTINF:-1 group-title="Fixtures",Red Channel\n/red/index.m3u8\n#EXTINF:-1 group-title="Fixtures",Blue Channel\n/blue/index.m3u8\n#EXTINF:-1,Blocked\nhttps://unapproved.example.com/no.m3u8'});
   if(/^\/(red|blue)\/(index\.m3u8|seg-\d+\.ts)$/.test(u.pathname))return route.fulfill({status:200,headers,contentType:u.pathname.endsWith('.m3u8')?'application/vnd.apple.mpegurl':'video/mp2t',body:readFileSync('qa-fixtures'+u.pathname)});
   return route.fulfill({status:404,headers});
  });
@@ -51,6 +52,19 @@ try{
  await picture(false);
  await page.locator('#playlist-query').fill('Blue');assert.equal(await page.locator('.playlist-item').count(),1);
  await page.locator('#playlist-clear').click();assert.equal(await page.locator('.playlist-item').count(),0);
+ await page.locator('#external-mode-xtream').click();
+ await page.locator('#external-host').fill(provider);
+ await page.locator('#external-username').fill('fixture-user');
+ await page.locator('#external-password').fill('fixture+secret');
+ await page.locator('#playlist-load').click();
+ await page.getByRole('button',{name:'Red Channel',exact:true}).waitFor();
+ assert.equal(await page.locator('#external-password').inputValue(),'');
+ assert.equal(await page.locator('#external-username').inputValue(),'');
+ await page.getByRole('button',{name:'Red Channel',exact:true}).click();
+ await picture(true);
+ await page.locator('#external-mode-m3u').click();
+ assert.equal(await page.locator('.playlist-item').count(),0);
+ assert.ok(requests.some(x=>x.path==='/get.php'));
  assert.ok(requests.some(x=>x.path==='/red/index.m3u8'));assert.ok(requests.some(x=>x.path==='/blue/index.m3u8'));
  for(const request of requests){assert.ok(!request.headers.cookie);assert.ok(!request.headers.referer)}
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
