@@ -216,10 +216,11 @@ test('shared live uses same-origin response for bearer and Xtream clients, with 
  const calls=[];
  const {isConfiguredRelayTicket}=await import('../src/xtream-stream-relay-bridge.mjs');
  const ticketEnv={BLOFY_STREAM_RELAY_ORIGIN:'https://blofy-stream-api-production.up.railway.app',BLOFY_STREAM_RELAY_SHARED_TOKEN:'test-only-key-at-least-32-characters'};
- const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket',fn+'\nreturn proxySharedLiveTicket;')(
+ const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket','waitSharedLiveHandoff',fn+'\nreturn proxySharedLiveTicket;')(
    async(url,opts)=>{calls.push({url:String(url),opts});return new Response('busy',{status:429})},
    (res,status,body,ct,headers)=>{res.status=status;res.retry=headers?.['retry-after']},
-   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},value=>isConfiguredRelayTicket(value,ticketEnv));
+   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},value=>isConfiguredRelayTicket(value,ticketEnv),
+   (await import('../src/xtream-shared-live-handoff-retry.mjs')).waitSharedLiveHandoff);
  const req={once(){},off(){},aborted:false};
  const res={once(){},off(){},destroyed:false,headersSent:false};
  await run(req,res,'https://example.invalid/relay/'+'a'.repeat(48),()=>{});
@@ -248,10 +249,11 @@ test('shared source channel limit preserves retry hint and returns only a fixed 
  let reason,headers;
  const {isConfiguredRelayTicket}=await import('../src/xtream-stream-relay-bridge.mjs');
  const ticketEnv={BLOFY_STREAM_RELAY_ORIGIN:'https://blofy-stream-api-production.up.railway.app',BLOFY_STREAM_RELAY_SHARED_TOKEN:'test-only-key-at-least-32-characters'};
- const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket',fn+'\nreturn proxySharedLiveTicket;')(
+ const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket','waitSharedLiveHandoff',fn+'\nreturn proxySharedLiveTicket;')(
    async()=>new Response(JSON.stringify({ok:false,code:'fanout_source_channel_limit',private:'not forwarded'}),{status:503,headers:{'content-type':'application/json','retry-after':'2'}}),
    (res,status,body,ct,h)=>{res.status=status;res.body=body;headers=h},
-   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},value=>isConfiguredRelayTicket(value,ticketEnv));
+   async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},value=>isConfiguredRelayTicket(value,ticketEnv),
+   (await import('../src/xtream-shared-live-handoff-retry.mjs')).waitSharedLiveHandoff);
  const req={once(){},off(){},aborted:false};
  const res={once(){},off(){},destroyed:false,headersSent:false};
  await run(req,res,'https://blofy-stream-api-production.up.railway.app/relay/'+'a'.repeat(48),(phase,d)=>{reason=d.reason});
@@ -320,4 +322,19 @@ test('explicit source-specific approved capacity is configurable but bounded and
  for(const invalid of ['0','65','100','*','unlimited','8.5','-1']){
   assert.equal(authorizedLiveTrialQuota(row,{...cfg,BLOFY_XTREAM_AUTHORIZED_SOURCE_FEED_CEILING:invalid}),5);
  }
+});
+
+test('explicit pending handoff retries the same pinned relay exactly once',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const fn=gateway.slice(gateway.indexOf('async function proxySharedLiveTicket('),gateway.indexOf('async function proxyMedia('));
+ const {sharedLiveHandoffDelay}=await import('../src/xtream-shared-live-handoff-retry.mjs');
+ const calls=[],ticket='https://media2.blofyplayer.com/relay/'+'a'.repeat(48);
+ const run=new Function('fetch','text','pipeline','Readable','isConfiguredRelayTicket','waitSharedLiveHandoff',fn+'\nreturn proxySharedLiveTicket;')(
+   async url=>{calls.push(String(url));return new Response(JSON.stringify({ok:false,code:'fanout_source_handoff_pending'}),{status:503,headers:{'content-type':'application/json','retry-after':'1'}})},
+   (res,status)=>{res.status=status},async()=>{throw Error('unexpected pipeline')},{fromWeb:x=>x},url=>String(url)===ticket,
+   async opts=>sharedLiveHandoffDelay(opts)!==null);
+ const req={once(){},off(){},aborted:false};
+ const res={once(){},off(){},destroyed:false,headersSent:false};
+ await run(req,res,ticket,()=>{});
+ assert.deepEqual(calls,[ticket,ticket]);assert.equal(res.status,503);
 });
