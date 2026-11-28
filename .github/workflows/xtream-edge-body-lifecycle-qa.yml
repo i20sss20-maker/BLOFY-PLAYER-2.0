@@ -5,11 +5,15 @@ on:
     paths:
       - 'services/activation/src/xtream-edge-body-lifecycle.mjs'
       - 'services/activation/test/xtream-edge-body-lifecycle.test.mjs'
+      - 'services/activation/test/xtream-edge-loopback.bun.mjs'
+      - 'services/activation/test/fixtures/xtream-edge-loopback.mjs'
       - '.github/workflows/xtream-edge-body-lifecycle-qa.yml'
   pull_request:
     paths:
       - 'services/activation/src/xtream-edge-body-lifecycle.mjs'
       - 'services/activation/test/xtream-edge-body-lifecycle.test.mjs'
+      - 'services/activation/test/xtream-edge-loopback.bun.mjs'
+      - 'services/activation/test/fixtures/xtream-edge-loopback.mjs'
       - '.github/workflows/xtream-edge-body-lifecycle-qa.yml'
 permissions:
   contents: read
@@ -27,3 +31,4 @@ jobs:
         with:
           bun-version: '1.4.4'
       - run: bun test services/activation/test/xtream-edge-body-lifecycle.test.mjs
+      - run: bun test services/activation/test/xtream-edge-loopback.bun.mjs
