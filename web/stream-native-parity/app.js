@@ -520,6 +520,15 @@ function posterCategory(item,kind){
  for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return String(rows[i].category_name||'');
  return String(item&&item.category_name||item&&item.genre||'')
 }
+function refreshPosterCategories(kind){
+ var cards=document.querySelectorAll('[data-details] .poster-category');
+ for(var i=0;i<cards.length;i++){
+  var card=cards[i].closest('[data-details]'),key=card&&card.getAttribute('data-details')||'',prefix=kind+':';
+  if(key.indexOf(prefix)!==0)continue;
+  var item=findItem(kind,key.slice(prefix.length)),label=item&&posterCategory(item,kind);
+  if(label)cards[i].textContent=label
+ }
+}
 function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
@@ -578,7 +587,8 @@ function home(){
  // shelves arrive independently; a slow source cannot hold home hostage.
  draw();
  if(!movies)getListing('movie','all',function(st,d){movies=d||{items:[]};draw()});
- if(!series)getListing('series','all',function(st,d){series=d||{items:[]};draw()})
+ if(!series)getListing('series','all',function(st,d){series=d||{items:[]};draw()});
+ ['movie','series'].forEach(function(kind){if(!S.cats[kind])categories(kind,function(){if(S.route==='home')refreshPosterCategories(kind)})})
 }
 function catalog(kind){
  S.kind=kind;var cat=S.cat[kind]||'all';
@@ -595,6 +605,7 @@ function catalog(kind){
  });
  categories(kind,function(){
   if(S.route!==kind||(S.cat[kind]||'all')!==cat)return;
+  refreshPosterCategories(kind);
   var panel=document.querySelector('#catalog-root .cat-rail');if(!panel)return;
   var oldScroll=panel.querySelector('.pane-scroll'),y=oldScroll?oldScroll.scrollTop:0;
   var focused=S.keyboardMode&&panel.contains(document.activeElement);
@@ -1170,9 +1181,9 @@ function details(o){
   var info=(extra&&extra.info)||{};
   if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
   var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
-  var plot=String(info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM');
+  var plot=String(info.plot||info.description||info.overview||item.plot||item.description||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM');
   if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation='';plotPending='';plotAttempted='';plotOriginal=false}
-  var gen=info.genre||info.genres||'',year=info.releaseDate||info.release_date||item.release_date||'',rating=info.rating||item.rating||'';
+  var gen=info.genre||info.genres||item.genre||'',year=info.releaseDate||info.release_date||info.releasedate||item.release_date||item.year||'',rating=info.rating||item.rating||'';
   var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
    (hasResume?'<button class="btn secondary" data-watch="movie:'+esc(id)+'" data-from="0">ابدأ من البداية</button>':''):
