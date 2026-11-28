@@ -1,4 +1,5 @@
 import { databaseOptions } from './database-options.mjs';
+import {createLegacyIngress} from './blofy-engine-legacy-ingress.mjs';
 import {linodeMaintenanceActive,assertMediaProbeAllowed} from './linode-maintenance-ingress.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
@@ -119,6 +120,7 @@ const pool = new pg.Pool({
   statement_timeout: 30000
 });
 pool.on('error', error => console.error('xtream database error:', safeErrorSummary(error)));
+const enterAdminMediaIngress=createLegacyIngress(pool);
 
 // Reserve connections for short, committed administration mutations.
 // Long catalog synchronizations and cleanup must never starve Delete/Pause.
@@ -536,6 +538,9 @@ async function recordOperatorVodAvailability(source,kind,itemId,seriesId,probe){
 
 async function probeXtreamEpisodeMedia(source,creds,episode) {
   assertMediaProbeAllowed();
+  const hold=await enterAdminMediaIngress(source.id);
+  if(!hold.ok)return{ok:false,httpStatus:null,error:'source_ingress_fenced'};
+  try{
   const started=Date.now(),controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),9500);
   const path=['series',creds.username,creds.password,String(episode.id)]
@@ -602,11 +607,13 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
     clearTimeout(timeout);
     controller.abort();
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+    else if(response?.body){try{await response.body.cancel()}catch{}}
   }
   const ok=(httpStatus===200||httpStatus===206)
     && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
   return{ok,httpStatus,contentType,providerHint,latencyMs:Date.now()-started,error:errorCode,
     rangeFallbackUsed:!useFirstByteRange};
+  }finally{await hold.close()}
 }
 
 async function probeXtreamSeries(id,mediaType,{sampleOffset=0,probeAllCandidates=false}={}){
@@ -725,6 +732,9 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
   const source=await serverById(id);
   if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   if(!source.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  const hold=await enterAdminMediaIngress(source.id);
+  if(!hold.ok)return{ok:false,mediaType,reason:'source_ingress_fenced',checks:[]};
+  try{
   // The ordinary admin probe still starts at 0 and stops at first success.
   // Only a separate, explicitly opted-in boot audit may spread samples.
   const offset=mediaType==='movie'&&probeAllCandidates&&
@@ -773,11 +783,11 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
     const timeout=setTimeout(()=>controller.abort(),livePolicy?
       liveDiagnosticTimeoutMs(liveDeadline-Date.now()):9500);
     let httpStatus=null,contentType='',errorCode=null,providerHint=null;
-    let useFirstByteRange=mediaType==='movie';
+    let useFirstByteRange=mediaType==='movie',response;
     try{
       for(let hop=0;hop<=3;hop++){
         await assertPublicXtreamUrl(target.origin);
-        const response=await fetch(target,{
+        response=await fetch(target,{
           method:'GET',redirect:'manual',signal:controller.signal,
           headers:{
             'user-agent':'BLOFY-Media-Probe/1.0',
@@ -824,7 +834,7 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
       errorCode=controller.signal.aborted?'timeout':
       ['redirect_invalid','xtream_private_host_blocked','xtream_host_unresolved'].includes(String(error?.message||''))
         ?String(error.message):(safeXtreamTransportCategory(error)||'upstream_unreachable');
-    }finally{clearTimeout(timeout);}
+    }finally{clearTimeout(timeout);controller.abort();if(response?.body&&!response.body.locked)await response.body.cancel().catch(()=>{});}
     const ok=(httpStatus===200||httpStatus===206)
       && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
     checks.push({
@@ -857,6 +867,7 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
   return {ok:checks.some(check=>check.ok),mediaType,checks,
     note:(livePolicy?outputFormatDescription(livePolicy)+' HLS: وصول القائمة لا يؤكد عمل مقاطع الفيديو. ':'')+
       'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};
+  }finally{await hold.close()}
 }
 
 async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2,connectionCountsOnly=false}={}) {
@@ -1959,6 +1970,9 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
       const items=(await pool.query(`SELECT source_id FROM blofy_xtream_items
         WHERE server_id=$1 AND media_type='live' AND enabled=TRUE ORDER BY random() LIMIT 3`,
         [id])).rows;
+      const hold=await enterAdminMediaIngress(row.id);
+      if(!hold.ok)return;
+      try{
       const checks=[];
       for(const item of items){
         let status=null,format=null,verified=false,providerStatus=null,denialCode=null;
@@ -2010,6 +2024,7 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
           ? row.account_info.allowedOutputFormats.filter(v=>['ts','m3u8','rtmp'].includes(v)) : [],
         audioVideoDecoded:false,customerCutover:false,credentialsLogged:false
       }));
+    }finally{await hold.close()}
     })().catch(()=>{
       console.warn('BLOFY_XTREAM_INDEPENDENT_MEDIA_PROOF',
         JSON.stringify({ok:false,code:'probe_unavailable',customerCutover:false}));
