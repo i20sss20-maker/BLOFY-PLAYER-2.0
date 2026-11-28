@@ -257,3 +257,18 @@ test('legacy SRAF television browser receives TV mode rather than desktop',()=>{
  assert.equal(detect('iPhone',5,true),'touch');
  assert.equal(detect('Chrome desktop',0,false),'desktop');
 });
+
+test('HLS failure evidence records only known reasons and bounded retry hints',async()=>{
+ const server=await readFile(new URL('./server.ts',import.meta.url),'utf8');
+ const start=server.indexOf('const HLS_FAILURE_REASONS='),end=server.indexOf("import {normalizeDirectEntry}",start);
+ const source=server.slice(start,end).replace(/:(string|number|unknown)\b/g,'');
+ const evidence=new Function(source+';return hlsFailureEvidence')();
+ assert.deepEqual(evidence('live','index.m3u8',503,'hls_origin_backoff',2),
+  {kind:'live',resource:'manifest',status:503,reason:'hls_origin_backoff',retrySeconds:2});
+ const safe=evidence('live','seg-000001.ts',503,'https://example.invalid/private-token',999);
+ assert.equal(safe.reason,'other');assert.equal(safe.retrySeconds,0);
+ assert.doesNotMatch(JSON.stringify(safe),/private-token|000001/);
+ assert.equal(evidence('live','index.m3u8',401,'authorization_missing',1),null);
+ assert.equal(evidence('live','index.m3u8',503,{secret:'not-for-logs'},1).reason,'other');
+ assert.equal(evidence('private-account','sid-private',429,'hls_capacity',-1).kind,'unknown');
+});
