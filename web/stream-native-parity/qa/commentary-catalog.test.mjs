@@ -174,3 +174,10 @@ test('local Arabic subtitle files convert to safe WebVTT without external resour
  assert.equal(liveTimeshiftTarget(video,{...record,preview:true},'back'),null);
  assert.equal(liveTimeshiftRange({...video,currentTime:5},record),null);
  });
+
+test('subtitle language labels reflect actual advertised tracks',()=>{
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function subtitleTrackLabel('),b=app.indexOf('// Convert only bounded',a);
+ const label=new Function(app.slice(a,b)+';return subtitleTrackLabel')();
+ assert.equal(label('','ara',0),'العربية');assert.equal(label('eng','en-US',1),'الإنجليزية');assert.equal(label('SDH','ar',2),'العربية • SDH');assert.equal(label('','',2),'ترجمة 3');
+ assert.match(app,/لا توجد مسارات ترجمة في التشغيل الحالي/);
+});

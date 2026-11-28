@@ -353,7 +353,7 @@ function restoreView(route,preferred){
  },0)
 }
 function nativeNavIcon(kind){
- var icons={"home":"<path d=\"M3,10 L12,3 L21,10 M5,9 L5,21 L10,21 L10,14 L14,14 L14,21 L19,21 L19,9\"/>","live":"<path d=\"M4,5 L20,5 Q22,5 22,7 L22,17 Q22,19 20,19 L4,19 Q2,19 2,17 L2,7 Q2,5 4,5 M8,22 L16,22 M10,9 L15,12 L10,15 Z\"/>","movie":"<path d=\"M3,7 L21,7 L21,21 L3,21 Z M3,7 L3,3 L21,3 L21,7 M7,3 L5,7 M13,3 L11,7 M19,3 L17,7\"/>","series":"<path d=\"M3,9 L21,9 L21,21 L3,21 Z M5,5 L19,5 M7,1 L17,1\"/>","collections":"<path d=\"M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z\"/>","downloads":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","search":"<path d=\"M10,3 A7,7 0,1 0,10,17 A7,7 0,1 0,10,3 M15,15 L22,22\"/>","ai":"<path d=\"M11.5,2L13.8,8.2L20,10.5L13.8,12.8L11.5,19L9.2,12.8L3,10.5L9.2,8.2Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M19,16L19.9,18.1L22,19L19.9,19.9L19,22L18.1,19.9L16,19L18.1,18.1Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M4.5,2L5.1,3.4L6.5,4L5.1,4.6L4.5,6L3.9,4.6L2.5,4L3.9,3.4Z\" fill=\"currentColor\" stroke=\"none\"/>","favorites":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","settings":"<path d=\"M3,6 L21,6 M3,18 L21,18 M8,3 L8,9 M16,15 L16,21\"/>","refresh":"<path d=\"M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4\"/>"};
+ var icons={"home":"<path d=\"M3,10 L12,3 L21,10 M5,9 L5,21 L10,21 L10,14 L14,14 L14,21 L19,21 L19,9\"/>","live":"<path d=\"M4,5 L20,5 Q22,5 22,7 L22,17 Q22,19 20,19 L4,19 Q2,19 2,17 L2,7 Q2,5 4,5 M8,22 L16,22 M10,9 L15,12 L10,15 Z\"/>","movie":"<path d=\"M3,7 L21,7 L21,21 L3,21 Z M3,7 L3,3 L21,3 L21,7 M7,3 L5,7 M13,3 L11,7 M19,3 L17,7\"/>","series":"<path d=\"M3,9 L21,9 L21,21 L3,21 Z M5,5 L19,5 M7,1 L17,1\"/>","collections":"<path d=\"M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z\"/>","downloads":"<path d=\"M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5\"/>","search":"<path d=\"M10,3 A7,7 0,1 0,10,17 A7,7 0,1 0,10,3 M15,15 L22,22\"/>","ai":"<path d=\"M11.5,2L13.8,8.2L20,10.5L13.8,12.8L11.5,19L9.2,12.8L3,10.5L9.2,8.2Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M19,16L19.9,18.1L22,19L19.9,19.9L19,22L18.1,19.9L16,19L18.1,18.1Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M4.5,2L5.1,3.4L6.5,4L5.1,4.6L4.5,6L3.9,4.6L2.5,4L3.9,3.4Z\" fill=\"currentColor\" stroke=\"none\"/>","favorites":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","settings":"<path d=\"M3,6 L21,6 M3,18 L21,18 M8,3 L8,9 M16,15 L16,21\"/>","refresh":"<path d=\"M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4\"/>"};
  return '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+(icons[kind]||icons.home)+'</svg>'
 }
 function compactNativeHome(){
@@ -366,11 +366,11 @@ function nativeHomeHeader(){
  return '<header class="native-home-header"><div class="native-home-brand"><img src="/stream-icon.svg" alt=""><strong>BLOFY STREAM</strong></div>'+
  '<button type="button" class="native-home-icon" id="refresh-content" aria-label="تحديث المحتوى">'+nativeNavIcon('refresh')+'</button>'+
  [['search','البحث'],['ai','الذكاء الاصطناعي'],['settings','الإعدادات']].map(function(v){return '<button class="native-home-icon" type="button" data-go="'+v[0]+'" aria-label="'+v[1]+'">'+nativeNavIcon(v[0])+'</button>'}).join('')+'</header>'+
- '<div class="native-home-tabs">'+[['live','البث المباشر'],['movie','الأفلام'],['series','المسلسلات']].map(function(v){return '<button class="btn secondary" data-go="'+v[0]+'">'+v[1]+'</button>'}).join('')+'</div>'+
+
  '<div class="native-home-refresh" id="refresh-progress" role="status" aria-live="polite"></div>'
 }
 function navHtml(){
- if(compactNativeNavigation())return '<nav class="rail native-home-bottom" aria-label="التنقل">'+[['home','الرئيسية'],['live','البث المباشر'],['downloads','التنزيلات'],['collections','التصنيفات']].map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'">'+nativeNavIcon(v[0])+'<span>'+v[1]+'</span></button>'}).join('')+'</nav>';
+ if(compactNativeNavigation())return '<nav class="rail native-home-bottom" aria-label="التنقل">'+[['home','الرئيسية'],['live','البث المباشر'],['movie','الأفلام'],['series','المسلسلات'],['downloads','التنزيلات'],['collections','التصنيفات']].map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'">'+nativeNavIcon(v[0])+'<span>'+v[1]+'</span></button>'}).join('')+'</nav>';
  return '<aside class="rail native-tv-rail"><div class="brand"><img src="/stream-icon.svg" alt="BLOFY STREAM"></div>'+
  NAV.filter(function(v){return v[0]!=='favorites'}).map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+nativeNavIcon(v[0])+'</span><span>'+v[2]+'</span></button>'}).join('')+
  '</aside>'
@@ -515,10 +515,34 @@ function safeImg(pic,cls){
  return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" src="'+esc(pic)+'"'+
   (alternatives.length?' data-art-fallback="'+esc(JSON.stringify(alternatives))+'"':'')+'>':''
 }
+function arabicCategory(raw){
+ var label=String(raw||'').trim();
+ if(!label)return '';
+ var phrases=[
+ [/\bPERSIAN\s+SUB\s*\/\s*DUB\b/gi,'فارسي مترجم ومدبلج'],
+ [/\bMULTI[-\s]*SUBS?\b/gi,'ترجمات متعددة'],
+ [/\bDOLBY\s+AUDIO\b/gi,'صوت دولبي'],
+ [/\bTOP\s+MOVIES\b/gi,'أفضل الأفلام'],
+ [/\bTOP\s+KIDS\b/gi,'أفضل أفلام الأطفال'],
+ [/\bTOP\s+SERIES\b/gi,'أفضل المسلسلات'],
+ [/\bASIA\s+MOVIES\b/gi,'أفلام آسيوية'],
+ [/\bMOVIES\b/gi,'أفلام'],[/\bSERIES\b/gi,'مسلسلات'],[/\bKIDS\b/gi,'أطفال'],
+ [/\bBLU[-\s]*RAY\b/gi,'بلو راي'],[/\bACTION\b/gi,'أكشن'],[/\bCOMEDY\b/gi,'كوميديا'],
+ [/\bDRAMA\b/gi,'دراما'],[/\bHORROR\b/gi,'رعب'],[/\bROMANCE\b/gi,'رومانسي'],
+ [/\bDOCUMENTARY\b/gi,'وثائقي'],[/\bANIMATION\b/gi,'رسوم متحركة'],
+ [/\bTHRILLER\b/gi,'إثارة'],[/\bSPORTS\b/gi,'رياضة'],[/\bNEWS\b/gi,'أخبار'],
+ [/\bARABIC\b/gi,'عربي'],[/\bENGLISH\b/gi,'إنجليزي'],[/\bTURKISH\b/gi,'تركي'],
+ [/\bINDIAN\b/gi,'هندي'],[/\bKOREAN\b/gi,'كوري'],[/\bFRENCH\b/gi,'فرنسي'],
+ [/\bSUBBED\b/gi,'مترجم'],[/\bDUBBED\b/gi,'مدبلج'],[/\bFAMILY\b/gi,'عائلي'],
+ [/\bADVENTURE\b/gi,'مغامرات'],[/\bFANTASY\b/gi,'خيال'],[/\bSCI[-\s]*FI\b/gi,'خيال علمي']
+ ];
+ phrases.forEach(function(pair){label=label.replace(pair[0],pair[1])});
+ return label
+}
 function posterCategory(item,kind){
  var category=String(item&&item.category_id||''),rows=S.cats&&S.cats[kind]||[];
- for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return String(rows[i].category_name||'');
- return String(item&&item.category_name||item&&item.genre||'')
+ for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return arabicCategory(rows[i].category_name);
+ return arabicCategory(item&&item.category_name||item&&item.genre||'')
 }
 function refreshPosterCategories(kind){
  var cards=document.querySelectorAll('[data-details] .poster-category');
@@ -544,11 +568,11 @@ function home(){
   var film=(movies&&movies.items)||[],show=(series&&series.items)||[],combined=film.concat(show),candidate=combined.length?combined[S.heroIndex%combined.length]:null;
   var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art').replace('loading="lazy"','loading="eager" fetchpriority="high"')+'<div class="hero-shade"></div><div class="hero-copy">'+
   '<div class="hero-kicker">'+esc(candidate.series_id?'مسلسل جديد':'أحدث العناوين')+'</div><h2 class="hero-title">'+esc(title(candidate))+'</h2>'+
-  '<div class="hero-description">اكتشف أحدث ما أضيف إلى مكتبة BLOFY STREAM، مع تفاصيل ومواسم ومتابعة مشاهدة.</div>'+
+ 
   '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل والمشاهدة</button>'+
-  '<button class="btn secondary" data-go="movie">استكشف الأفلام</button></div>'+
+  '</div>'+
   '<div class="hero-dots">'+combined.slice(0,5).map(function(x,n){return '<span class="'+(n===S.heroIndex?'current':'')+'"></span>'}).join('')+'</div></div></div>':
-  '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2><div class="hero-description">قنوات وأفلام ومسلسلات باستخدام كود اشتراكك.</div></div></div>';
+  '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2></div></div>';
   var shortcuts='<div class="shelf"><div class="shelf-title"><h2>وصول سريع</h2></div><div class="story-row">'+
    '<button class="story" id="home-shortcut-live" data-go="live"><strong>◉ البث المباشر</strong><small>القنوات المفضلة والتصنيفات</small></button>'+
    '<button class="story" id="home-shortcut-movie" data-go="movie"><strong>▣ الأفلام</strong><small>الملصقات والتفاصيل</small></button>'+
@@ -620,7 +644,7 @@ function categoryRail(kind){
  var data=S.cats[kind]||[],cat=S.cat[kind]||'all';
  return '<aside class="cat-rail"><div class="pane-head"><strong>الفئات</strong><small>'+data.length+' تصنيف</small></div>'+
  '<div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
- data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(x.category_name||'تصنيف')+'</button>'}).join('')+
+ data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(arabicCategory(x.category_name)||'تصنيف')+'</button>'}).join('')+
  '</div></aside>'
 }
 function currentListing(){return S.loaded[keyOf(S.kind,S.cat[S.kind]||'all')]||{items:[],hasMore:false,nextOffset:0}}
@@ -1160,7 +1184,7 @@ function details(o){
   control.hidden=!needsPlotTranslation(plotSource);
   control.disabled=!!plotPending&&plotPending===plotSource;
   control.textContent=plotTranslation?(plotOriginal?'عرض الترجمة العربية':'عرض الوصف الأصلي'):(control.disabled?'جار الترجمة…':'ترجمة الوصف');
-  notice.textContent=control.disabled?'جار الترجمة بالذكاء الاصطناعي…':'';
+  notice.textContent='';
  }
  function translatePlot(){
   if(!detailCurrent()||!needsPlotTranslation(plotSource)||plotPending===plotSource)return;
@@ -1198,8 +1222,8 @@ function details(o){
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
   (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
-  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><h3 class="detail-section-title">القصة</h3><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
-  '<div class="detail-actions">'+buttons+'</div>'+(metadata?'<section class="detail-metadata"><h3 class="detail-section-title">معلومات المحتوى</h3><dl>'+metadata+'</dl></section>':'')+
+  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><div class="detail-actions">'+buttons+'</div><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
+  (metadata?'<details class="detail-metadata"><summary>معلومات المحتوى والممثلون</summary><dl>'+metadata+'</dl></details>':'')+
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
   document.getElementById('detail-translate').onclick=translatePlot;
@@ -1212,7 +1236,7 @@ function details(o){
  var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
  api('GET','/api/catalog?action='+endpoint+enc(id),null,function(st,data){
   if(!detailCurrent())return;
-  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;S.episodesSeriesId=id;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
+  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;S.episodesSeriesId=id;var p=document.getElementById('related-root');if(p)p.innerHTML=''}}
  })
 }
 function parseEpisodes(data){
@@ -1997,6 +2021,11 @@ function liveTimeshiftTarget(video,record,action){
  if(!Number.isFinite(target))return null;
  target=Math.max(range.start+0.1,Math.min(range.end-0.75,target));
  return Math.abs(target-range.at)>=0.5?target:null
+}
+function subtitleTrackLabel(label,language,index){
+ var code=String(language||'').toLowerCase().split(/[-_]/)[0],names={ar:'العربية',ara:'العربية',en:'الإنجليزية',eng:'الإنجليزية',fr:'الفرنسية',fra:'الفرنسية',fre:'الفرنسية',es:'الإسبانية',spa:'الإسبانية',fa:'الفارسية',fas:'الفارسية',per:'الفارسية',tr:'التركية',tur:'التركية',de:'الألمانية',deu:'الألمانية',ger:'الألمانية',hi:'الهندية',hin:'الهندية',ur:'الأردية',urd:'الأردية',ru:'الروسية',rus:'الروسية'};
+ var name=String(label||'').trim(),localized=names[code]||names[name.toLowerCase()]||'';
+ return localized&&(!name||names[name.toLowerCase()]||name.toLowerCase()===code)?localized:localized?localized+' • '+name:name||String(language||'')||('ترجمة '+(index+1))
 }
 // Convert only bounded plain-text timed cues. No external resources or markup.
 function localSubtitleVtt(raw){
@@ -4470,7 +4499,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -4478,6 +4507,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function stopCommentary(){
   commentaryEpoch++;
+  if(commentaryRetryTimer){clearTimeout(commentaryRetryTimer);commentaryRetryTimer=null}
   if(commentaryPictureSeek){clearTimeout(commentaryPictureSeek.timer);commentaryPictureSeek=null}
   if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}
   var old=commentary;commentary=null;
@@ -4519,13 +4549,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var active=commentary;
   commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
  });
- function startCommentary(track){
+ function startCommentary(track,retryAttempt){
+  retryAttempt=Number(retryAttempt)||0;
   if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
   if(Date.now()<commentaryRetryAfter){commentaryNotice('انتظر قليلاً ثم أعد المحاولة.');return}
   stopCommentary();commentaryNotice('جار تشغيل المعلق…');
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
-  function fail(){if(commentary!==record)return;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice('تعذر تشغيل المعلق؛ الصوت الأصلي مستمر. أعد المحاولة بعد 5 ثوانٍ.')}
+  function fail(){if(commentary!==record)return;var retry=record.hasPlayed&&retryAttempt<1;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice(retry?'جار استعادة المعلق…':'تعذر تشغيل المعلق؛ الصوت الأصلي مستمر. أعد المحاولة بعد 5 ثوانٍ.');if(retry){var epoch=commentaryEpoch;commentaryRetryTimer=setTimeout(function(){commentaryRetryTimer=null;if(commentaryEpoch===epoch&&S.playerView===state&&S.route==='player'&&!document.hidden&&!video.paused&&!video.seeking&&video.readyState>=2)startCommentary(track,retryAttempt+1)},5500)}}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
    clearTimeout(record.timer);record.timer=null;commentaryRetryAfter=0;record.audible=true;record.hasPlayed=true;video.muted=true;
@@ -4669,16 +4700,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   // HLS.js manages its own subtitle tracks. Native textTracks may include
   // duplicate generated tracks; prefer the HLS API for those tracks.
   for(var k=0;k<subs.length;k++)(function(track,index){
-   options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index&&engine.subtitleDisplay!==false,
+   options.push({name:subtitleTrackLabel(track.name,track.lang,index),selected:engine.subtitleTrack===index&&engine.subtitleDisplay!==false,
     select:function(){if(!S.play||S.play.engine!==engine)return;disableSubtitles();engine.subtitleTrack=index;engine.subtitleDisplay=true}})
   })(subs[k],k);
   for(var j=0;j<list.length;j++)(function(track,index){
    if(subs.length&&(!localSubtitle||track!==localSubtitle.element.track))return;
-   options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
+   options.push({name:subtitleTrackLabel(track.label,track.language,index),selected:track.mode==='showing',
     select:function(){disableSubtitles();track.mode='showing'}})
   })(list[j],j);
   if(!isLive&&window.FileReader&&window.URL&&URL.createObjectURL)options.push({name:'اختيار ملف ترجمة SRT / VTT',selected:false,select:localSubtitlePicker});
-  showPlayerChoices('الترجمة',options,this)
+  showPlayerChoices(subs.length||list.some(function(t){return !localSubtitle||t!==localSubtitle.element.track})?'الترجمة':'لا توجد مسارات ترجمة في التشغيل الحالي',options,this)
  };
  if(qualityButton)qualityButton.onclick=function(){
   // The native-like TV quality panel can explicitly switch H.264 source-copy

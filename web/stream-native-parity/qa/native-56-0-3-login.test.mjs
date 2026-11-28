@@ -97,11 +97,13 @@ test('saved login slots preserve the preceding account, switch only with verific
 });
 
  test('poster category labels match actual category IDs and full detail fields are retained',()=>{
- const a=app.indexOf('function posterCategory('),b=app.indexOf('function refreshPosterCategories(',a);
+ const a=app.indexOf('function arabicCategory('),b=app.indexOf('function refreshPosterCategories(',a);
  const category=new Function('S',app.slice(a,b)+';return posterCategory')({cats:{movie:[{category_id:'2',category_name:'دراما'}]}});
  assert.equal(category({category_id:2},'movie'),'دراما');
- assert.equal(category({category_id:9,genre:'Action'},'movie'),'Action');
+ assert.equal(category({category_id:9,genre:'Action'},'movie'),'أكشن');
  assert.equal(category({category_id:9},'movie'),'');
+ assert.equal(category({category_name:'TOP MOVIES 4K DOLBY AUDIO'},'movie'),'أفضل الأفلام 4K صوت دولبي');
+ assert.equal(category({category_name:'TOP KIDS BLURAY (MULTI-SUBS)'},'movie'),'أفضل أفلام الأطفال بلو راي (ترجمات متعددة)');
  for(const label of ['الممثلون','المخرج','التقييم','تاريخ الإصدار','المدة','الدولة','اللغة'])assert.ok(app.includes("field('"+label+"'"));
  const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
  assert.match(css,/\.detail-plot\{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none/);
