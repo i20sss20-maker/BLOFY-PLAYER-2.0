@@ -121,7 +121,7 @@ test('manual commentary picture timing preserves one active audio stream only fo
  const fakeAudio={readyState:4,play(){},pause(){},removeAttribute(){},load(){},remove(){}};
  const doc=Object.assign(document,{createElement:()=>fakeAudio});
  const start=app.indexOf('var commentary=null,commentaryEpoch='),end=app.indexOf('var audioButton=',start);
- const run=new Function('S','state','video','document','root','setTimeout','clearTimeout','enc','bufferedLiveSeekTarget',app.slice(start,end)+';return {start:startCommentary,adjust:adjustCommentaryPicture,active:()=>commentary}');
+ const run=new Function('S','state','video','document','root','setTimeout','clearTimeout','enc','bufferedLiveSeekTarget',app.slice(app.indexOf('function setLiveTimeshiftMode('),app.indexOf('function liveTimeshiftTarget('))+app.slice(start,end)+';return {start:startCommentary,adjust:adjustCommentaryPicture,active:()=>commentary}');
  const controls=run(S,state,video,doc,{appendChild(){}},fn=>{timers.set(++tick,fn);return tick},id=>timers.delete(id),encodeURIComponent,target);
  controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();assert.equal(video.muted,true);
  assert.equal(controls.adjust('back-one'),true);assert.equal(video.currentTime,14);
