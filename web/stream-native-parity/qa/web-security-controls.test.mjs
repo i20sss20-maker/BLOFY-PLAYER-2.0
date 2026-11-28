@@ -55,8 +55,8 @@ test('boot session retries 503 and later authenticates; only actual rejection pr
  const appSource=readFileSync('app.js','utf8');
  const a=appSource.indexOf('function bootSession('),b=appSource.indexOf('\nbootSession(0);',a);
  const state={route:'boot',userVerified:false},requests=[],scheduled=[],logins=[],routes=[];
- const boot=new Function('S','api','setTimeout','useProfile','navigate','warmDesktopHlsAfterAuth','checkCatalogVersion','login',appSource.slice(a,b)+';return bootSession')(
-  state,(method,path,body,cb)=>requests.push(cb),(fn,ms)=>scheduled.push({fn,ms}),()=>true,(route)=>routes.push(route),()=>{},()=>{},m=>logins.push(m));
+ const boot=new Function('S','api','setTimeout','useProfile','navigate','warmDesktopHlsAfterAuth','checkCatalogVersion','login','rememberOfflineGrant','offlineOnlyScreen',appSource.slice(a,b)+';return bootSession')(
+  state,(method,path,body,cb)=>requests.push(cb),(fn,ms)=>scheduled.push({fn,ms}),()=>true,(route)=>routes.push(route),()=>{},()=>{},m=>logins.push(m),()=>{},()=>false);
  boot(0);requests[0](503,{error:'session_unavailable'});assert.equal(logins.length,0);assert.equal(scheduled[0].ms,1000);
  scheduled.shift().fn();requests[1](200,{active:true,profileKey:'synthetic'});assert.deepEqual(routes,['home']);assert.equal(state.userVerified,true);
  state.userVerified=false;boot(0);requests[2](401,{});assert.equal(logins.length,1);
