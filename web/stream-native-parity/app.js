@@ -1625,14 +1625,31 @@ function checkCatalogVersion(){
   }else S.catalogVersionPending=null
  })
 }
+function pictureFitMode(value){return value==='zoom'?'cover':value==='fill'?'fill':'contain'}
 function settingsScreen(){
  shell('الإعدادات','<div class="customer-settings">'+
- '<section class="customer-setting-group"><h3>المحتوى</h3><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
+ '<section class="customer-setting-group"><h3>اشتراكي والمكتبة</h3><button class="customer-setting-row" id="subscription-status">اشتراكي <span>‹</span></button><p id="subscription-feedback" class="customer-setting-feedback" role="status" aria-live="polite"></p><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
+ '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button></section>'+
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
  '<p class="customer-version">BLOFY STREAM · 2026.11.28.56.0.3</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
+ var fitButton=document.getElementById('picture-fit'),fitLabel=document.getElementById('picture-fit-label'),fitOptions=['fit','zoom','fill'],fitLabels=['ملاءمة','تكبير','ملء'];
+ function updateFit(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));fitLabel.textContent=fitLabels[Math.max(0,index)]}
+ updateFit();fitButton.onclick=function(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));profileSave('pictureFit',fitOptions[(Math.max(0,index)+1)%3]);updateFit()};
+ document.getElementById('subscription-status').onclick=function(){
+  var button=this,notice=document.getElementById('subscription-feedback'),epoch=S.accountEpoch;button.disabled=true;notice.textContent='جار التحقق…';
+  api('GET','/api/session',null,function(st,data){
+   if(S.accountEpoch!==epoch||S.route!=='settings'||!notice.isConnected)return;
+   button.disabled=false;
+   if(st===200&&data&&data.active===true&&data.profileKey===S.profileKey){
+    var expiry=new Date(data.expiresAt),days=Number(data.daysRemaining);rememberOfflineGrant(S.profileKey,data.expiresAt);
+    notice.textContent='الاشتراك نشط'+(data.daysRemaining!=null&&Number.isFinite(days)?' • '+Math.max(0,days)+' يوم متبقي':'')+(data.expiresAt&&!isNaN(expiry.getTime())?' • ينتهي '+expiry.toLocaleDateString('ar-SA'):'')
+   }else if(st===401||st===403||st===200&&data&&data.active===false){clearOfflineGrant();notice.textContent='الاشتراك غير نشط. تحقق من التفعيل.'}
+   else notice.textContent='تعذر التحقق مؤقتًا، لم يتم إلغاء اشتراكك.'
+  })
+ };
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
   if(existing){existing.remove();trigger.focus();return}
@@ -1674,7 +1691,7 @@ function settingsScreen(){
  }
  document.getElementById('logout').onclick=function(){
   if(S.loggingOut)return;
-  S.loggingOut=true;
+  S.loggingOut=true;clearOfflineGrant();
   var button=document.getElementById('logout');if(button)button.disabled=true;
   // Close the video while the authenticated cookie is still valid. In-flight
   // stop requests otherwise arrive after logout and get a 401, leaking a
@@ -3287,6 +3304,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     visualOutageCount:0,visualOutageMs:0,longestVisualOutageMs:0,
     visualOutageByEngine:{hls:{count:0,ms:0},mpegts:{count:0,ms:0}},
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
+ video.style.objectFit=pictureFitMode(readJson(profileStorageKey('pictureFit'),'fit'));
  // The 20-minute acceptance uses existing decoded-frame and source health
  // observations. It never opens a new media, catalog or telemetry request.
  // Monotonic time avoids TV system-clock/date problems.
