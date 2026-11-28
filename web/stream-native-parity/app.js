@@ -673,9 +673,11 @@ function buildCatalog(kind,listing){
   '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
   '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
   '<p class="live-preview-quality" id="live-preview-quality" aria-live="polite">الدقة المعروضة: جار قراءة معلومات الفيديو…</p>'+
-  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
+  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" id="preview-audio-toggle" type="button" aria-label="صوت المعاينة">🔊 الصوت</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
+  var previewAudio=document.getElementById('preview-audio-toggle');
+  if(previewAudio)previewAudio.onclick=function(){var v=document.getElementById('live-video');if(!v)return;S.previewSound=v.muted;v.muted=!S.previewSound;v.defaultMuted=v.muted;this.textContent=v.muted?'🔇 الصوت':'🔊 الصوت';if(S.previewSound&&v.paused)try{var p=v.play();if(p&&p.catch)p.catch(function(){})}catch(e){}};
   var selected=findItem('live',S.selected)||source[0];
   if(selected)selectChannel(itemId(selected,'live'),true);
   // Arrow navigation on a TV changes the highlighted channel as it settles.
@@ -1000,8 +1002,8 @@ function beginPreview(item){
  }
  S.livePreview=id;
  if(box)box.textContent='جار تشغيل معاينة '+title(item)+' تلقائيًا…';
- video.muted=true;video.defaultMuted=true;
- video.setAttribute('muted','');
+ video.muted=S.previewSound===false;video.defaultMuted=video.muted;
+ if(video.muted)video.setAttribute('muted','');else video.removeAttribute('muted');
  video.autoplay=true;video.setAttribute('autoplay','');
  video.playsInline=true;video.controls=false;
  playHls(video,'live',id,'ts',0,box,true)
@@ -2657,7 +2659,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if('preservesPitch' in video)video.preservesPitch=true;
   if('webkitPreservesPitch' in video)video.webkitPreservesPitch=true
  }
- video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
+ video.muted=!!preview&&S.previewSound===false;video.defaultMuted=video.muted;video.autoplay=true;video.playsInline=true;video.controls=false;
+ if(preview&&video.removeAttribute&&!video.muted)video.removeAttribute('muted');
  function alive(){return S.play===record}
  function setCompatibility(force,automatic,forceUltra){
   var nextUltra=!!(force&&forceUltra);
@@ -3371,6 +3374,8 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
 function playerIcon(name){
  var p={
   audio:'<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 9a5 5 0 0 1 0 6M18 6a9 9 0 0 1 0 12"/>',
+  commentary:'<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',
+  timeshift:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2M3 4v5h5"/>',
   subtitles:'<rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M10 10H7.5a2 2 0 0 0 0 4H10m7-4h-2.5a2 2 0 0 0 0 4H17"/>',
   rewind:'<path d="m11 6-8 6 8 6V6Zm10 0-8 6 8 6V6Z"/>',
   forward:'<path d="m3 6 8 6-8 6V6Zm10 0 8 6-8 6V6Z"/>',
@@ -3385,7 +3390,7 @@ function playerIcon(name){
  return '<svg class="native-player-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">'+(p[name]||p.play)+'</svg>'
 }
 function playerControl(id,icon,label,primary){
- return '<button class="native-player-control'+(primary?' native-player-primary':'')+'" id="'+id+'" type="button" aria-label="'+label+'" title="'+label+'">'+playerIcon(icon)+'</button>'
+ return '<button class="native-player-control'+(primary?' native-player-primary':'')+((icon==='commentary'||icon==='timeshift')?' native-player-labeled':'')+'" id="'+id+'" type="button" aria-label="'+label+'" title="'+label+'">'+playerIcon(icon)+(icon==='commentary'?'<small>المعلقين</small>':icon==='timeshift'?'<small>TimeShift</small>':'')+'</button>'
 }
 
 function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
@@ -3474,7 +3479,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="mobile-player-action" type="button" id="mobile-player-timing" aria-label="تقديم وتأخير البث"><span aria-hidden="true">↶</span><small>توقيت البث</small></button>':'')+'</div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
- (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
+ (isLive?playerControl('player-commentary','commentary','المعلقين')+playerControl('player-timeshift','timeshift','TimeShift • تقديم وتأخير البث'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
