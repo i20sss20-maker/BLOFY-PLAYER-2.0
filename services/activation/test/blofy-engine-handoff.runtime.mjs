@@ -84,6 +84,23 @@ test('confirmed release transfers one source slot and lease to Linode',{timeout:
   assert.deepEqual(await ledger.markLeaseReady({...target,proof}),{ok:true,state:'ready',generation});
   assert.deepEqual(await ledger.markLeaseReady({...target,proof}),{ok:true,state:'ready',generation});
   assert.equal((await ingress.restoreLegacy()).reason,'engine_release_unconfirmed');
+  // A renewal racing with the stop fence either commits first and is
+  // included in the stored deadline, or is rejected after the fence.
+  const [racing,stopped]=await Promise.all([
+   ledger.claimWorkerLease({...target,fence}),
+   ledger.fenceLeaseRenewal(target)
+  ]);
+  assert.equal(stopped.ok,true);
+  assert.equal(stopped.state,'unknown');
+  assert.equal(stopped.renewalsBlocked,true);
+  assert.equal(stopped.providerReleaseConfirmed,false);
+  assert.ok(stopped.lastLeaseMayExpireAt>=renewed.lease.expiresAt);
+  if(racing.ok)assert.ok(stopped.lastLeaseMayExpireAt>=racing.lease.expiresAt);
+  assert.equal((await ledger.claimWorkerLease({...target,fence})).ok,false);
+  const again=await ledger.fenceLeaseRenewal(target);
+  assert.equal(again.lastLeaseMayExpireAt,stopped.lastLeaseMayExpireAt);
+  assert.equal((await ledger.reserve({...switched,requestId:randomUUID(),handoff:{fromReservationId:target.reservationId,fromEngineId:target.engineId,proof:capacity()}})).reason,'feed_occupied_or_uncertain');
+  assert.equal((await ingress.restoreLegacy()).reason,'engine_release_unconfirmed');
  }finally{await pool.end();}
 });
 
