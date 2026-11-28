@@ -2240,10 +2240,8 @@ function countVisualOutage(record,video,now){
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
 function liveExpiredSegmentRecovery(record,engine,video,now){
- setLiveTimeshiftMode(record,false);
- // HLS occasionally requests a sequence that has fallen off the live
- // playlist while the viewer catches up. Prefer an in-place live-edge
- // jump before tearing down a healthy source and FFmpeg decoder.
+ // An evicted fragment is a real recovery event, not a latency correction.
+ // Never rewind, and do not use Hls.js's implicit startLoad(-1) position.
  if(now-(record.expiredSegmentWindowAt||0)>30000){
   record.expiredSegmentWindowAt=now;record.expiredSegmentRecoveries=0
  }
@@ -2252,52 +2250,21 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
  record.expiredSegmentRecoveries=(record.expiredSegmentRecoveries||0)+1;
  if(record.expiredSegmentRecoveries>2)return 'restart';
  try{
-  if(!engine||typeof engine.startLoad!=='function'||typeof engine.stopLoad!=='function')
-   return 'restart';
-  engine.stopLoad();
-  var edge=Number(engine.liveSyncPosition);
-  var current=Number(video.currentTime);
-  if(video.readyState>=1&&Number.isFinite(edge)&&edge>0&&
-     (!Number.isFinite(current)||edge-current>2)){
-   video.currentTime=edge
+  if(!engine||typeof engine.startLoad!=='function'||typeof engine.stopLoad!=='function')return 'restart';
+  var edge=Number(engine.liveSyncPosition),current=Number(video.currentTime),ranges=video.seekable;
+  if(video.readyState<1||!Number.isFinite(current)||!Number.isFinite(edge)||edge<=current+0.5||!ranges||!ranges.length)return 'restart';
+  var valid=false;
+  for(var i=0;i<Math.min(ranges.length,32);i++){
+   var start=Number(ranges.start(i)),end=Number(ranges.end(i));
+   if(Number.isFinite(start)&&Number.isFinite(end)&&edge>=start&&edge<=end-0.1){valid=true;break}
   }
-  engine.startLoad(-1);
+  if(!valid)return 'restart';
+  engine.stopLoad();
+  setLiveTimeshiftMode(record,false);
+  video.currentTime=edge;
+  engine.startLoad(edge);
   return 'resync'
  }catch(e){return 'restart'}
-}
-/* A viewer can fall far behind even while the audio/video clocks continue.
- * With MSE Hls.js (not the native TV HLS engine), return to a validated live
- * edge after sustained lag, without restarting its shared source/encoder.
- * The 90-second cool-down protects decoders and slower Wi-Fi connections.
- */
-function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
- if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
-    record.reconnecting||Number(video.readyState)<2||record.userTimeshift===true||now<(record.localBufferSeekUntil||0)){
-  record.liveLagSince=0;return false
- }
- var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
- var gap=edge-at;
- if(!Number.isFinite(edge)||!Number.isFinite(at)||edge<=0||at<0||
-    !Number.isFinite(gap)||gap<16||gap>180){
-  record.liveLagSince=0;return false
- }
- var ranges=video.seekable;
- if(ranges&&ranges.length){
-  try{
-   var last=ranges.length-1,first=Number(ranges.start(last)),end=Number(ranges.end(last));
-   if(!Number.isFinite(first)||!Number.isFinite(end)||edge<first||edge>end+1){
-    record.liveLagSince=0;return false
-   }
-  }catch(e){record.liveLagSince=0;return false}
- }
- if(!record.liveLagSince){record.liveLagSince=now;return false}
- if(now-record.liveLagSince<8000)return false;
- if(record.lastLiveCatchupAt&&now-record.lastLiveCatchupAt<90000)return false;
- try{
-  video.currentTime=edge;
-  record.lastLiveCatchupAt=now;record.liveLagSince=0;
-  return true
- }catch(e){record.liveLagSince=0;return false}
 }
 function liveTransientRetryMs(attempt){
  // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
@@ -2870,13 +2837,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
-   // A healthy advancing picture must never skip content to catch up.
-   if(progress.advanced)record.liveLagSince=0;
-   if(!progress.advanced&&progress.idleMs>=6500&&liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
-    if(!preview)recordLiveIncident('live_catchup',now);
-    status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
-    return
-   }
+   // No latency-driven seeks: actual decoder stalls use the bounded recovery below.
    if(progress.advanced){clearRecoveredLiveLoading();return}
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
