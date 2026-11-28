@@ -141,7 +141,7 @@ function useProfile(id,legacy){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
  migrateLegacyProfile(id,legacy);
  var changed=S.profileKey!==id;
- if(changed){S.accountEpoch++;resetCatalogRefresh()}
+ if(changed){S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh()}
  S.profileKey=id;
  S.library=readJson(profileStorageKey('favorites'),{});
  S.watch=readJson(profileStorageKey('watch'),{});
@@ -204,7 +204,7 @@ function deviceKey(){
  return key
 }
 function login(message){
- S.accountEpoch++;resetCatalogRefresh();
+ S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh();
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.episodesSeriesId='';S.selectedSeason='';S.detailInfo=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
@@ -217,7 +217,7 @@ function login(message){
  '<form id="stream-login-form"><div id="login-code-fields"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
  '<input class="input" id="activation-code" placeholder="•••• ••••" maxlength="24" inputmode="numeric" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">'+
  '</div><div id="login-direct-fields" hidden></div><button class="btn native-login-submit" id="redeem" type="submit">ابدأ المشاهدة</button></form><div class="login-status" id="login-status" role="status" aria-live="polite">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
- '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>قائمة M3U خارجية</a></div></div>';
+ '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>مصادر Xtream وM3U الخارجية</a></div></div>';
  var form=document.getElementById('stream-login-form'),mode='code',directReady=false;
  var codeFields=document.getElementById('login-code-fields'),directFields=document.getElementById('login-direct-fields'),notice=document.getElementById('direct-login-notice');
  var modes={code:document.getElementById('login-mode-code'),xtream:document.getElementById('login-mode-xtream'),m3u:document.getElementById('login-mode-m3u')};
@@ -1211,9 +1211,14 @@ function requestWebDownload(kind,id,ext,name){
  if(!url){if(message)message.textContent='صيغة هذا الملف لا تدعم التنزيل المباشر على الويب.';return}
  if(!S.userVerified){if(message)message.textContent='فعّل اشتراكك أولًا.';return}
  var epoch=S.accountEpoch;
+ if(S.downloadPending){if(message)message.textContent='يوجد طلب تنزيل قيد التحقق، حاول بعد انتهائه.';return}
+ var pending={epoch:epoch,url:url},controller=typeof AbortController==='function'?new AbortController():null;
+ S.downloadPending=pending;
+ var timer=setTimeout(function(){if(S.downloadPending!==pending)return;S.downloadPending=null;if(controller)controller.abort();if(message&&epoch===S.accountEpoch)message.textContent='انتهت مهلة التحقق؛ حاول مرة أخرى.'},15000);
+ function finish(){clearTimeout(timer);if(S.downloadPending!==pending)return false;S.downloadPending=null;return epoch===S.accountEpoch&&S.userVerified}
  if(message)message.textContent='جار التحقق من صلاحية طلب التنزيل…';
- fetch(url,{method:'HEAD',credentials:'same-origin',cache:'no-store'}).then(function(res){
-  if(epoch!==S.accountEpoch||!S.userVerified)return;
+ fetch(url,{method:'HEAD',credentials:'same-origin',cache:'no-store',signal:controller?controller.signal:undefined}).then(function(res){
+  if(!finish())return;
   if(!res.ok){if(message)message.textContent=res.status===503?'التنزيلات غير مفعلة على هذا السيرفر حاليًا.':res.status===429?'التنزيلات مشغولة حاليًا، حاول لاحقًا.':'هذا الملف غير متوفر للتنزيل المباشر حاليًا.';return}
   var link=document.createElement('a');link.href=url;link.download='BLOFY-STREAM-'+kind+'-'+id+'.'+ext;
   document.body.appendChild(link);link.click();link.remove();
@@ -1222,7 +1227,7 @@ function requestWebDownload(kind,id,ext,name){
   profileSave('downloadRequests',rows.slice(0,40));
   if(message)message.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.';
   if(S.route==='downloads'){downloadsScreen();var status=document.getElementById('download-status');if(status)status.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.'}
- }).catch(function(){if(epoch===S.accountEpoch&&message)message.textContent='تعذر التحقق من التنزيل، حاول مرة أخرى.'})
+ }).catch(function(){if(finish()&&message)message.textContent='تعذر التحقق من التنزيل، حاول مرة أخرى.'})
 }
 function favoritesScreen(){
  shell('المفضلة','<div id="fav-root"></div>');var keys=Object.keys(S.library),html='';
