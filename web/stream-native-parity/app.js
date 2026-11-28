@@ -4419,10 +4419,17 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null;
- function commentaryNotice(message){
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0;
+ function commentaryNotice(message,retryTrack){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
+  if(retryTrack){
+   var retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='إعادة المحاولة';retry.disabled=true;
+   el.appendChild(document.createTextNode(' '));el.appendChild(retry);
+   commentaryNoticeTimer=setTimeout(function(){if(retry.isConnected)retry.disabled=false},Math.max(0,commentaryRetryAfter-Date.now()));
+   retry.onclick=function(){if(S.playerView===state&&S.route==='player'&&!document.hidden&&Date.now()>=commentaryRetryAfter){retry.disabled=true;startCommentary(retryTrack)}};
+   return
+  }
   commentaryNoticeTimer=setTimeout(function(){el.hidden=true;el.textContent=''},3500)
  }
  function stopCommentary(){
@@ -4469,14 +4476,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
  });
  function startCommentary(track){
-  stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
+  if(Date.now()<commentaryRetryAfter){commentaryNotice('انتظر قليلًا قبل إعادة تشغيل المعلق.',track);return}
+  stopCommentary();
+  commentaryNotice('جار تشغيل المعلق…');
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
-  function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
+  function fail(){if(commentary!==record)return;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice('تعذر تشغيل المعلق. الصوت الأصلي مستمر.',track)}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true;
+   clearTimeout(record.timer);record.timer=null;commentaryRetryAfter=0;record.audible=true;record.hasPlayed=true;video.muted=true;
    commentaryNotice('المعلق: '+String(track.label||'').slice(0,80))
   };
   audio.onerror=audio.onended=fail;
