@@ -34,9 +34,9 @@ test('download cancellation, per-account guard and file size validation are enfo
 function fixtureRoute(fetchImpl,enabled=true){
  const server=readFileSync('server.ts','utf8'),a=server.indexOf("if(p.startsWith('/api/download/')"),b=server.indexOf("if(p.indexOf('/api/media/')",a);
  assert.ok(a>=0&&b>a);
- const init=new Function('Bun','fetch','vodDownloadPath','downloadableResponse','attachmentFilename','externalAccountKey','ORIGIN','json','noCache',
- 'let activeVodDownloads=0;const MAX_VOD_DOWNLOADS=2,activeVodDownloadAccounts=new Map();return {count:()=>activeVodDownloads,handle:async(req,h)=>{const p=new URL(req.url).pathname,method=req.method;'+server.slice(a,b)+'return new Response(null,{status:404})}}');
- return init({env:{BLOFY_WEB_VOD_DOWNLOAD_ENABLED:enabled?'1':'0'}},fetchImpl,vodDownloadPath,downloadableResponse,attachmentFilename,x=>x,'https://fixture.invalid',(status,body,headers)=>new Response(JSON.stringify(body),{status,headers}),x=>x);
+ const init=new Function('Bun','fetch','vodDownloadPath','downloadableResponse','attachmentFilename','externalAccountKey','downloadAccountKey','ORIGIN','json','noCache',
+ 'let activeVodDownloads=0;const MAX_VOD_DOWNLOADS=2,activeVodDownloadAccounts=new Map(),activeVodDownloadTokens=new Map();return {count:()=>activeVodDownloads,cancel:owner=>activeVodDownloadTokens.get(owner)?.abort(),handle:async(req,h)=>{const p=new URL(req.url).pathname,method=req.method;'+server.slice(a,b)+'return new Response(null,{status:404})}}');
+ return init({env:{BLOFY_WEB_VOD_DOWNLOAD_ENABLED:enabled?'1':'0'}},fetchImpl,vodDownloadPath,downloadableResponse,attachmentFilename,x=>x,x=>x.replace(/-rotated$/,''),'https://fixture.invalid',(status,body,headers)=>new Response(JSON.stringify(body),{status,headers}),x=>x);
 }
 const fixtureRequest=(kind='movie',method='GET',signal)=>new Request('https://web.invalid/api/download/'+kind+'/123.mp4',{method,signal});
 const auth={Authorization:'Bearer fixture-one'};
@@ -73,8 +73,11 @@ test('download slots remain bounded and cancellation frees them without requesti
  const route=fixtureRoute(async()=>new Response(new ReadableStream({pull(){return new Promise(()=>{})},cancel(){cancelled++}}),{headers:{'content-type':'video/mp4','content-length':'10'}}));
  const first=await route.handle(fixtureRequest(),auth);
  assert.equal((await route.handle(fixtureRequest(),auth)).status,429);
+ assert.equal((await route.handle(fixtureRequest(),{Authorization:'Bearer fixture-one-rotated'})).status,429);
+ route.cancel('Bearer fixture-one-rotated');assert.equal(route.count(),1);
  const second=await route.handle(fixtureRequest(),{Authorization:'Bearer fixture-two'});
  assert.equal((await route.handle(fixtureRequest(),{Authorization:'Bearer fixture-three'})).status,429);
+ route.cancel(auth.Authorization);assert.equal(route.count(),1);
  await first.body.cancel();await second.body.cancel();assert.equal(route.count(),0);assert.equal(cancelled,2);
 });
 
