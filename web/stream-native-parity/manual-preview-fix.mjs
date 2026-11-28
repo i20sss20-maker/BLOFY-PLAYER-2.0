@@ -1014,3 +1014,53 @@ change("لا توجد مسارات ترجمة في التشغيل الحالي",
 change("function liveExpiredSegmentRecovery(record,engine,video,now){\n // HLS occasionally requests a sequence that has fallen off the live\n // playlist while the viewer catches up. Prefer an in-place live-edge\n // jump before tearing down a healthy source and FFmpeg decoder.\n if(now-(record.expiredSegmentWindowAt||0)>30000){\n  record.expiredSegmentWindowAt=now;record.expiredSegmentRecoveries=0\n }\n if(now-(record.lastExpiredSegmentAt||0)<3500)return 'cooling';\n record.lastExpiredSegmentAt=now;\n record.expiredSegmentRecoveries=(record.expiredSegmentRecoveries||0)+1;\n if(record.expiredSegmentRecoveries>2)return 'restart';\n try{\n  if(!engine||typeof engine.startLoad!=='function'||typeof engine.stopLoad!=='function')\n   return 'restart';\n  engine.stopLoad();\n  var edge=Number(engine.liveSyncPosition);\n  var current=Number(video.currentTime);\n  if(video.readyState>=1&&Number.isFinite(edge)&&edge>0&&\n     Number.isFinite(current)&&edge-current>2){\n   video.currentTime=edge\n  }\n  engine.startLoad(-1);\n  return 'resync'\n }catch(e){return 'restart'}\n}\n","function liveExpiredSegmentRecovery(record,engine,video,now){\n // A missing segment does not prove the picture stopped. Never jump or rewind\n // the playhead while the decoder still has healthy buffered frames.\n if(record.reconnecting||video.paused||video.seeking)return 'waiting';\n var last=Number(record.lastProgressAt||record.started||now);\n if(record.ready&&now-last<6500)return 'waiting';\n if(now-(record.lastExpiredSegmentAt||0)<3500)return 'cooling';\n record.lastExpiredSegmentAt=now;\n // Standard authenticated handoff releases this viewer's previous SID.\n return 'restart'\n}\n");
 change("     if(!preview)recordLiveIncident('live_edge_resync');\n     var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());\n     if(edgeAction==='restart')recoverConnection();\n     else if(edgeAction==='resync')status('تأخرت بعض مقاطع البث؛ جار الانتقال إلى البث المباشر…');","     var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());\n     if(edgeAction==='restart'){if(!preview)recordLiveIncident('source_error');recoverConnection()}");
 new Function(app);writeFileSync('app.js',app);
+
+
+ // Honor explicit upstream backoff on the same SID. Segment-not-ready
+ // may accompany worker retirement, so retain conservative recovery there.
+ // Keep that SID and the existing bounded Retry-After path. Unknown reasons
+ // retain the previous conservative recovery policy.
+change("function liveSessionLost(record,detail,code){",`function liveHlsFailureReason(detail){
+ try{
+  var n=detail&&detail.networkDetails;
+  return n&&typeof n.getResponseHeader==='function'?n.getResponseHeader('X-Blofy-Hls-Reason'):
+   n&&n.headers&&n.headers.get?n.headers.get('X-Blofy-Hls-Reason'):null
+ }catch(e){return null}
+}
+function liveSessionLost(record,detail,code){`);
+change(" return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))",` if(code===503&&liveHlsFailureReason(detail)==='hls_origin_backoff')return false;
+ return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))`);
+new Function(app);writeFileSync('app.js',app);
+
+
+ // Delayed HLS retries check the current viewer intent.
+change("function resumeLiveHlsNetwork(engine,manifest,record){",`function hlsDelayedRetryDecision(active,connected,paused,hidden,offline,external){
+ if(!active||!connected)return 'discard';
+ return liveRecoveryAllowed(paused,hidden,offline,external)?'resume':'defer'
+}
+function resumeLiveHlsNetwork(engine,manifest,record){`);
+change("   engine.on(window.Hls.Events.ERROR,function(event,detail){\n    if(!alive()||!detail)return;\n    var code=Number(detail.response&&detail.response.code||detail.networkDetails&&detail.networkDetails.status)||0;",`   function deferHlsRetry(timerName,delay,callback){
+    function run(){
+     record[timerName]=null;
+     var owner=!preview&&S.playerView;
+     var current=alive()&&(preview?S.route==='live'&&String(S.selected)===String(id):
+      S.route==='player'&&owner&&owner.video===video&&String(owner.id)===String(id));
+     var decision=hlsDelayedRetryDecision(current,video.isConnected,owner&&owner.userPaused,
+      document.hidden,navigator.onLine===false,owner&&owner.externalMode);
+     if(decision==='discard')return;
+     if(decision==='defer'){record[timerName]=setTimeout(run,3000);return}
+     callback()
+    }
+    record[timerName]=setTimeout(run,delay)
+   }
+   engine.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail)return;
+    var code=Number(detail.response&&detail.response.code||detail.networkDetails&&detail.networkDetails.status)||0;`);
+change("     record.originTimer=setTimeout(function(){\n      record.originTimer=null;\n      if(!alive()||!video.isConnected)return;\n      if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;\n      if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)||S.playerView.userPaused))return;\n      playHls(video,kind,id,extension,track,statusElement,preview,attempt>=4?0:attempt+1)\n     },delay);",`     deferHlsRetry('originTimer',delay,function(){
+      playHls(video,kind,id,extension,track,statusElement,preview,attempt>=4?0:attempt+1)
+     });`);
+for(const [timer,delay] of [['capacityTimer','delay'],['originTimer','delay'],['retryTimer','pause']]){
+ change("     record."+timer+"=setTimeout(function(){\n      record."+timer+"=null;\n      if(!alive())return;\n      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     },"+delay+");",
+  "     deferHlsRetry('"+timer+"',"+delay+",function(){\n      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     });");
+}
+new Function(app);writeFileSync('app.js',app);
