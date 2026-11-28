@@ -35,7 +35,7 @@ function multiCookieJson(status,body,cookies){const response=json(status,body);f
 function loginResponse(req,body,newToken,mode,oldAge=2592000){
  if(!SAVED_LOGIN)return json(200,body,{'Set-Cookie':'bv_session='+seal(newToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+oldAge});
  const old=token(req),previous=activeMode(req),cookies=[];
- if(old&&previous!==mode&&!savedToken(req,previous))cookies.push(sessionCookie('bv_saved_'+previous,seal(old),COOKIE_AGE));
+ if(old&&previous!==mode)cookies.push(sessionCookie('bv_saved_'+previous,seal(old),COOKIE_AGE));
  cookies.push(sessionCookie('bv_saved_'+mode,seal(newToken),COOKIE_AGE),sessionCookie('bv_session',seal(newToken),COOKIE_AGE),sessionCookie('bv_active_mode',mode,COOKIE_AGE));
  return multiCookieJson(200,body,cookies)
 }
