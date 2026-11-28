@@ -1171,3 +1171,19 @@ html[data-blofy-device="touch"] .native-home-header{flex-wrap:wrap;gap:4px}
  html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-panel{padding:6px}
  html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 }
+
+/* Stable Android 56.0.2 visual parity: same CinemaStyle colors, 72x44
+   logo, 20dp icons, 13sp sidebar labels, outlined rounded panel. */
+.app>.native-tv-rail{background:#10303b;border:1px solid #ffffff66;border-radius:16px;margin:14px 10px 14px 0;padding:12px 8px;width:150px}
+.app>.native-tv-rail .brand{margin:0 auto 18px;width:72px;height:44px;display:flex;align-items:center;justify-content:center}
+.app>.native-tv-rail .brand img{width:72px;height:44px;object-fit:contain}
+.app>.native-tv-rail .rail-link{font-size:13px;padding:0 10px;gap:9px;height:44px;min-height:44px;margin-bottom:7px;border-radius:12px;white-space:nowrap}
+.app>.native-tv-rail .rail-link .symbol{width:20px;display:flex;align-items:center;justify-content:center;color:#aacbd0}
+.app>.native-tv-rail .rail-link .symbol svg{width:20px;height:20px}
+.app>.native-tv-rail .rail-link.active{background:linear-gradient(140deg,#10303b,#09242e);border-color:#ffffff52;color:#46e4d0}
+.app>.native-tv-rail .rail-link.active .symbol{color:#46e4d0}
+@media(min-width:1000px){html[data-blofy-device="tv"] .app>.native-tv-rail{width:150px}}
+@media(max-width:730px){html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail{flex-basis:min(112px,32%);width:min(112px,32%)}}
+.detail-translation{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 12px}
+.detail-translation [hidden]{display:none!important}
+.detail-translation span{color:var(--muted);font-size:12px}
