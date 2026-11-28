@@ -670,7 +670,7 @@ change("   playerStatus('تعذر تأكيد إغلاق جلسة البث الس
 // focus on installed WebKit must not start a provider connection.
 change("function selectChannel(id,activate){","function selectChannel(id,activate,explicit){");
 change("if(selected)selectChannel(itemId(selected,'live'),true);","if(selected)selectChannel(itemId(selected,'live'),false,false);");
-change("selectChannel(S.selected,true)\n","selectChannel(S.selected,false,false)\n");
+change("selectChannel(S.selected,true)\n","selectChannel(S.selected,!!(S.play&&S.play.preview),!!(S.play&&S.play.preview))\n");
 change("if(ch){selectChannel(ch,true);return}","if(ch){selectChannel(ch,true,true);return}");
 change(" if(installedWebApp()){\n  if(desc)desc.textContent='اضغط المعاينة أو تشغيل القناة • لتوفير اتصال البث';\n  if(S.play&&S.play.preview&&String(S.play.id)!==String(id))stopPlayback(true);\n  return\n }",` if(installedWebApp()&&!explicit){
   if(desc)desc.textContent='اختر القناة لتشغيلها مباشرة';
