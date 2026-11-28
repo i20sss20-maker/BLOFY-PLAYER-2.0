@@ -32,6 +32,7 @@ class PlaybackSessionReleaseTest {
         var releases = 0
         var prepares = 0
         var playReady = false
+        var state = Player.STATE_IDLE
         var releaseError = false
         var throwOnRelease = false
         val player = Proxy.newProxyInstance(ExoPlayer::class.java.classLoader, arrayOf(ExoPlayer::class.java)) { _, method, args ->
@@ -39,7 +40,7 @@ class PlaybackSessionReleaseTest {
                 "addListener" -> { listener = args!![0] as Player.Listener; Unit }
                 "getCurrentMediaItem" -> MediaItem.fromUri("https://example.test/live/u/p/1.ts")
                 "getCurrentPosition" -> 0L
-                "getPlaybackState" -> Player.STATE_IDLE
+                "getPlaybackState" -> state
                 "getPlayWhenReady" -> playReady
                 "getVideoFormat" -> null
                 "prepare" -> { prepares++; Unit }
@@ -123,6 +124,44 @@ class PlaybackSessionReleaseTest {
             fake.playReady = false
             fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
             shadowOf(Looper.getMainLooper()).idleFor(1500, TimeUnit.MILLISECONDS)
+            assertEquals(1, fake.prepares)
+        } finally { session.release() }
+    }
+
+    private fun codeSession(fake: FakePlayer): BlofyPlaybackSession {
+        org.junit.Assume.assumeTrue(tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN)
+        return BlofyPlaybackSession(RuntimeEnvironment.getApplication(),
+            ProviderProfile(tv.blofy.player.core.identity.StreamCodeSession.providerId), "live",
+            playerFactory = { _, _ -> fake.player })
+    }
+
+    @Test fun codeLivePausedDuringEofBackoffCanResumeAfterTimerExpires() {
+        val fake = FakePlayer()
+        val session = codeSession(fake)
+        try {
+            session.play("https://example.test/live/u/p/1.ts")
+            fake.state = Player.STATE_ENDED
+            fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+            fake.playReady = false
+            fake.listener.onPlayWhenReadyChanged(false, 1)
+            shadowOf(Looper.getMainLooper()).idleFor(1000, TimeUnit.MILLISECONDS)
+            assertEquals(1, fake.prepares)
+            fake.playReady = true
+            fake.listener.onPlayWhenReadyChanged(true, 1)
+            shadowOf(Looper.getMainLooper()).idleFor(1000, TimeUnit.MILLISECONDS)
+            assertEquals(2, fake.prepares)
+        } finally { session.release() }
+    }
+
+    @Test fun codeLiveAlreadyRecoveredDoesNotReopenFromStaleEofTimer() {
+        val fake = FakePlayer()
+        val session = codeSession(fake)
+        try {
+            session.play("https://example.test/live/u/p/1.ts")
+            fake.state = Player.STATE_ENDED
+            fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+            fake.state = Player.STATE_READY
+            shadowOf(Looper.getMainLooper()).idleFor(1000, TimeUnit.MILLISECONDS)
             assertEquals(1, fake.prepares)
         } finally { session.release() }
     }
