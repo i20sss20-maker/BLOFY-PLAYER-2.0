@@ -48,3 +48,24 @@ test('retired SID reason is propagated by web gateway and recognized by native a
  assert.equal(evidence('live','index.m3u8',503,'arbitrary worker message',2).reason,'other');
  assert.match(app,/response\.status===404\|\|response\.status===503&&failure&&liveSessionTerminalReason\(failure\.error\)/);
 });
+
+
+test('clean live end recovers only active playback and detaches listener during handoff',()=>{
+ const start=app.indexOf('function liveCleanEndAllowed('),end=app.indexOf('function liveUnexpectedPause(',start);
+ const allowStart=app.indexOf('function liveRecoveryAllowed('),allowEnd=app.indexOf('function hlsDelayedRetryDecision(',allowStart);
+ assert.ok(start>=0&&end>start&&allowStart>=0&&allowEnd>allowStart);
+ const canRecover=new Function(app.slice(allowStart,allowEnd)+app.slice(start,end)+';return liveCleanEndAllowed')();
+ const record={kind:'live'},video={isConnected:true,ended:true,seeking:false};
+ assert.equal(canRecover(record,video,true,false,false,false,false),true);
+ assert.equal(canRecover({...record,reconnecting:true},video,true,false,false,false,false),false);
+ assert.equal(canRecover({kind:'movie'},video,true,false,false,false,false),false);
+ assert.equal(canRecover(record,{...video,ended:false},true,false,false,false,false),false);
+ assert.equal(canRecover(record,{...video,seeking:true},true,false,false,false,false),false);
+ assert.equal(canRecover(record,{...video,isConnected:false},true,false,false,false,false),false);
+ for(let i=0;i<5;i++){
+  const flags=[true,false,false,false,false];flags[i]=!flags[i];
+  assert.equal(canRecover(record,video,...flags),false);
+ }
+ assert.match(app,/video\.addEventListener\('ended',record\.cleanEndListener\)/);
+ assert.match(app,/old\.video\.removeEventListener\('ended',old\.cleanEndListener\)/);
+});
