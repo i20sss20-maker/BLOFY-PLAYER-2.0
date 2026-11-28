@@ -3479,10 +3479,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⏭</span><small>'+(isLive?'قناة تالية':nextEpisode?'الحلقة التالية':'+10 ثوانٍ')+'</small></button>'+
  '<button class="mobile-player-action" type="button" id="mobile-player-fullscreen" aria-label="ملء الشاشة">'+
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button>'+
- (isLive?'<button class="mobile-player-action" type="button" id="mobile-player-timing" aria-label="تقديم وتأخير البث"><span aria-hidden="true">↶</span><small>توقيت البث</small></button>':'')+'</div>'+
+ '</div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
- (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
+ (isLive?playerControl('player-commentary','audio','المعلقين'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -3495,7 +3495,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-live-buffer" type="button">توقيت البث</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4700,15 +4700,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     }
     if(commentarySeekTarget(active.audio,-1)!==null)list.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjust(-1)}});
     if(commentarySeekTarget(active.audio,1)!==null)list.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjust(1)}});
-    // Progressive live audio may not expose a seek range. Instead allow a
-    // deliberate one-second picture adjustment inside actual retained HLS bytes.
-    ['back-one','forward-one'].forEach(function(action){
-     if(bufferedLiveSeekTarget(video,S.play,action)===null)return;
-     list.push({name:action==='back-one'?'تأخير الصورة ثانية':'تقديم الصورة ثانية',selected:false,select:function(){
-      if(commentary!==active)return;
-      commentaryNotice(adjustCommentaryPicture(action)?'تم طلب ضبط توقيت الصورة':'ضبط التوقيت غير متاح الآن.')
-     }})
-    });
    }
    if(st!==200)commentaryNotice('تعذر جلب المعلقين الآن؛ الصوت الأصلي متاح.');
    else if(list.length===1)commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');
@@ -4719,33 +4710,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
  if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
  if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
- var bufferButton=document.getElementById('player-live-buffer'),timeshiftButton=document.getElementById('player-timeshift');
- function openLiveTiming(){
-  if(!isLive||S.playerView!==state||S.route!=='player')return;
-  var record=S.play,origin=this,options=[],range=null;
-  if(record&&record.video===video){
-   range=liveTimeshiftRange(video,record);
-   [['earliest','أقدم نقطة محفوظة'],['back-thirty','رجوع 30 ثانية'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['forward-thirty','تقديم 30 ثانية'],['latest','العودة للبث المباشر']].forEach(function(entry){
-    // Even at the live edge, allow the viewer to release manual timing.
-    if(liveTimeshiftTarget(video,record,entry[0])===null&&!(entry[0]==='latest'&&record.userTimeshift))return;
-    options.push({name:entry[1],selected:false,select:function(){
-     if(S.play!==record||S.playerView!==state||S.route!=='player')return;
-     var target=liveTimeshiftTarget(video,record,entry[0]);
-     if(target===null){
-      if(entry[0]==='latest'&&record.userTimeshift){setLiveTimeshiftMode(record,false);playerStatus('');return}
-      playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return
-     }
-     try{stopCommentary();setLiveTimeshiftMode(record,entry[0]!=='latest');record.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;playerStatus('')}
-     catch(e){setLiveTimeshiftMode(record,false);playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
-    }})
-   });
-  }
-  if(!options.length){playerStatus('انتظر حتى تتوفر ثوانٍ محفوظة من البث.');return}
-  showPlayerChoices('تقديم وتأخير البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
- }
- if(bufferButton)bufferButton.onclick=openLiveTiming;
- if(timeshiftButton)timeshiftButton.onclick=openLiveTiming;
- var mobileTiming=document.getElementById('mobile-player-timing');if(mobileTiming)mobileTiming.onclick=openLiveTiming;
  var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
  function clearLocalSubtitle(){
   subtitleGeneration++;
