@@ -21,6 +21,7 @@ import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.diagnostics.PlaybackFailureDetails
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.StreamDeviceCompatibility
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
@@ -54,6 +55,8 @@ class BlofyPlaybackSession(
     // STATE_ENDED without onPlayerError. Track bounded same-channel recovery.
     private var liveQuickEnds = 0
     private var liveEndRecoveryPending = false
+    private val codeLiveGateway = BuildConfig.CODE_ONLY_LOGIN &&
+        profile.providerKey == StreamCodeSession.providerId && contentKind.isLiveContent()
     private var liveRecoveryGeneration = 0
     private var seekRecoveryGeneration = 0
     private val fallbackState = PlaybackFallbackState()
@@ -86,7 +89,9 @@ class BlofyPlaybackSession(
                     // A live TS response that ends cleanly is still LIVE content:
                     // Media3 reports ENDED, not a network error, and would leave
                     // the TV stopped until the viewer manually reopens the channel.
-                    if (playbackState == Player.STATE_ENDED && contentKind.isLiveContent() &&
+                    if (codeLiveGateway) {
+                        if (playbackState == Player.STATE_ENDED) scheduleCodeLiveEndRecovery()
+                    } else if (playbackState == Player.STATE_ENDED && contentKind.isLiveContent() &&
                         playWhenReady && currentMediaItem != null && !liveEndRecoveryPending) {
                         val elapsed = (SystemClock.elapsedRealtime() - playStartedAtMs).coerceAtLeast(0L)
                         val plan = LiveCleanEndRecoveryPolicy.next(elapsed, liveQuickEnds)
@@ -107,6 +112,10 @@ class BlofyPlaybackSession(
                             }, plan.delayMs)
                         }
                     }
+                }
+
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (codeLiveGateway && playWhenReady) scheduleCodeLiveEndRecovery()
                 }
 
                 override fun onPositionDiscontinuity(
@@ -147,6 +156,10 @@ class BlofyPlaybackSession(
                 override fun onPlayerError(error: PlaybackException) {
                     // Never attribute a surface-release error to the source.
                     if (closing) return
+                    if (codeLiveGateway) {
+                        liveRecoveryGeneration++
+                        liveEndRecoveryPending = false
+                    }
                     metric?.let {
                         val details = PlaybackFailureDetails.describe(error,
                             phase = if (closing) "release" else "playback",
@@ -214,6 +227,32 @@ class BlofyPlaybackSession(
                 }
             })
         }
+
+    // Retire a scheduled recovery even when the viewer paused or playback
+    // recovered before the timer. An explicit resume can then recover EOF.
+    private fun scheduleCodeLiveEndRecovery() {
+        if (!codeLiveGateway || closing || !player.playWhenReady ||
+            player.playbackState != Player.STATE_ENDED || player.currentMediaItem == null ||
+            liveEndRecoveryPending) return
+        val elapsed = (SystemClock.elapsedRealtime() - playStartedAtMs).coerceAtLeast(0L)
+        val plan = LiveCleanEndRecoveryPolicy.next(elapsed, liveQuickEnds)
+        if (plan == null) {
+            val failedUrl = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+            if (failedUrl.isNotBlank()) onTerminalError?.invoke(failedUrl)
+            return
+        }
+        liveEndRecoveryPending = true
+        val generation = liveRecoveryGeneration
+        val item = player.currentMediaItem
+        retryHandler.postDelayed({
+            if (closing || generation != liveRecoveryGeneration) return@postDelayed
+            liveEndRecoveryPending = false
+            if (player.currentMediaItem != item || !player.playWhenReady ||
+                player.playbackState != Player.STATE_ENDED) return@postDelayed
+            liveQuickEnds = plan.quickEnds
+            retrySameUrl()
+        }, plan.delayMs)
+    }
 
     fun play(url: String, resumeMs: Long = 0L, fallbackUrl: String? = null, fallbackUrls: List<String> = emptyList()) {
         if (closing) return
