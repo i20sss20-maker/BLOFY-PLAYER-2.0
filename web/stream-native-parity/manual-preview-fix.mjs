@@ -880,7 +880,8 @@ function adaptLiveBuffer(record,engine,now,waiting,preview){
  // Update the existing engine's buffer and latency policy; do not seek or
  // mutate the source. HLS.js may apply some settings on later reloads.
  engine.config.maxBufferLength=profile.buffer;
- engine.config.liveMaxLatencyDurationCount=profile.maxLatency;
+ record.normalLiveMaxLatency=profile.maxLatency;
+ engine.config.liveMaxLatencyDurationCount=record.userTimeshift===true?Infinity:profile.maxLatency;
  engine.config.liveSyncDurationCount=profile.sync;
  return next
 }
