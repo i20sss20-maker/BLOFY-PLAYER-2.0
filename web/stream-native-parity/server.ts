@@ -1,4 +1,5 @@
 import {normalizeDirectEntry} from './direct-provider-entry.mjs';
+import {externalPlaylistOrigins} from './external-playlist-policy.mjs';
 import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 let activeVodDownloads=0;
 const activeVodDownloadAccounts=new Map();
@@ -13,6 +14,7 @@ import {audioWorkerHost} from './audio-worker-policy.mjs';
 import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
+const PLAYLIST_ORIGINS=Bun.env.BLOFY_WEB_EXTERNAL_PLAYLIST_QA==='1'?externalPlaylistOrigins(Bun.env.BLOFY_WEB_EXTERNAL_PLAYLIST_ORIGINS||''):[];
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
 const KEY=/^[a-f0-9]{64}$/i.test(KEY_HEX)?Buffer.from(KEY_HEX,'hex'):null;
 const CT='application/json; charset=utf-8';
@@ -130,6 +132,22 @@ if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='s
 }
 
 
+// Separate browser-only playlist surface. Never relax the subscriber app CSP
+// or send third-party playlist credentials to the activation/media backend.
+const playlistAssets={
+ '/playlist-preview':'playlist-preview.html','/playlist-preview.js':'playlist-preview.js',
+ '/playlist-preview.css':'playlist-preview.css','/approved-m3u-loader.mjs':'approved-m3u-loader.mjs',
+ '/approved-m3u-catalog.mjs':'approved-m3u-catalog.mjs'
+};
+if(p==='/playlist-preview-policy'||Object.hasOwn(playlistAssets,p)){
+ if(method!=='GET'||!PLAYLIST_ORIGINS.length||Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging')return json(404,{error:'not_found'});
+ if(p==='/playlist-preview-policy')return json(200,{origins:PLAYLIST_ORIGINS},{'Referrer-Policy':'no-referrer'});
+ const file=playlistAssets[p],asset=Bun.file(new URL('./'+file,import.meta.url));
+ if(!await asset.exists())return json(404,{error:'not_found'});
+ const mime=file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'application/javascript; charset=utf-8';
+ const allowed=PLAYLIST_ORIGINS.join(' ');
+ return new Response(asset,{headers:noCache({'Content-Type':mime,'Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' "+allowed+"; media-src 'self' blob: "+allowed+"; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"})});
+}
 const isNativeArabicFont=p==='/fonts/IBMPlexSansArabic-Regular.ttf'||p==='/fonts/IBMPlexSansArabic-SemiBold.ttf';
 if(method==='GET'&&(isNativeArabicFont||p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
  const file=p.slice(1);
@@ -219,7 +237,7 @@ if(p.startsWith('/external/live/')){
  }catch{cleanup();return json(502,{error:'external_connection_failed'})}
 }
 // Fixed first-party credential exchange; never fetch the supplied M3U URL.
-if(p==='/api/login-modes'&&method==='GET')return json(200,{direct:Bun.env.BLOFY_WEB_BOUND_LOGIN_QA==='1'});
+if(p==='/api/login-modes'&&method==='GET')return json(200,{direct:Bun.env.BLOFY_WEB_BOUND_LOGIN_QA==='1',external:PLAYLIST_ORIGINS.length>0});
 if(p==='/api/direct-login'&&method==='POST'){
  if(Bun.env.BLOFY_WEB_BOUND_LOGIN_QA!=='1')return json(503,{ok:false,error:'direct_login_unavailable'});
  if(u.search||!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type')||''))return json(400,{ok:false,error:'invalid_payload'});
