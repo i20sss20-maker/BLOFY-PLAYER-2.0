@@ -1977,6 +1977,14 @@ function stopPlayback(sendStop){
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
  if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
 }
+function releaseDetachedPlayerVideo(player,transport){
+ var video=player&&player.video;
+ if(!video||transport&&transport.video===video)return;
+ // Direct MP4 has no S.play record. Removing its DOM node alone does not
+ // guarantee decoding/audio stops, especially when advancing to another title.
+ video.onplaying=video.onwaiting=video.onstalled=video.onerror=video.onloadedmetadata=video.onended=null;
+ try{video.muted=true;video.pause();video.removeAttribute('src');video.load()}catch(e){}
+}
 function cleanupPlayer(){
  if(S.playerView){
   S.playerView.liveHlsHandoff=null;
@@ -2009,7 +2017,8 @@ function cleanupPlayer(){
   S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
-  if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen()
+  if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen();
+  releaseDetachedPlayerVideo(S.playerView,S.play)
  }
  stopPlayback(true)
 }
