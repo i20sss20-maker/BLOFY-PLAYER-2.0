@@ -72,3 +72,13 @@ test('return from external playback waits for both retirements before reopening 
  calls[2].cb(200);assert.equal(opened,1);assert.equal(state.userPaused,false);assert.equal(state.externalMode,false);
  assert.match(server,/if\(p==='\/api\/external\/stop'&&method==='POST'\)\{[\s\S]*?revokeExternal\(h.Authorization\)/);
 });
+
+test('dedicated commentator controls appear only on live and preserve original audio',()=>{
+ const app=readFileSync('app.js','utf8');
+ assert.ok(app.includes("(isLive?playerControl('player-commentary'"));
+ assert.ok(app.includes('(isLive?\'<button class="btn secondary" id="player-commentary-more"'));
+ assert.match(app,/function openCommentaryChoices\(origin\)/);
+ assert.match(app,/String\(state.id\)!==channel\|\|epoch!==commentaryEpoch/);
+ assert.match(app,/video\.muted=old\.originalMuted/);
+ assert.match(app,/commentarySeekTarget\(active\.audio,-1\)!==null/);
+});
