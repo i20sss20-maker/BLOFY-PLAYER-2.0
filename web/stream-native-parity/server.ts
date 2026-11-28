@@ -289,6 +289,22 @@ if(p==='/vendor/hls.min.js'&&method==='GET'){
 }
 
 const h=auth(req);if(!h)return json(401,{ok:false,error:'activation_required'});
+if(p==='/api/ai/translate'&&method==='POST'){
+ const input=await readBoundedJson(req,18000);if(!input.ok)return json(input.status,{ok:false,error:'invalid_request'});
+ const overview=typeof input.value?.overview==='string'?input.value.overview.trim():'';
+ if(!overview||overview.length>3900)return json(400,{ok:false,error:'invalid_overview'});
+ try{
+  const response=await fetch('https://blofy-ai-gateway-production.up.railway.app/v1/translate',{
+   method:'POST',redirect:'manual',headers:{'Content-Type':CT,'Authorization':h.Authorization,'Accept':'application/json','Cache-Control':'no-store'},
+   body:JSON.stringify({title:'',overview,locale:'ar'}),signal:AbortSignal.timeout(24000)
+  });
+  if(!response.ok){try{await response.body?.cancel()}catch{};return json([401,403,429].includes(response.status)?response.status:503,{ok:false,error:'translation_unavailable'})}
+  const data=await readBoundedJson(response,32000);
+  const translated=data.ok&&data.value?.ok===true&&typeof data.value.translatedOverview==='string'?data.value.translatedOverview.trim():'';
+  if(!translated||translated.length>5500||!/[\u0600-\u06ff]/.test(translated))return json(502,{ok:false,error:'invalid_translation'});
+  return json(200,{ok:true,translatedOverview:translated})
+ }catch{return json(503,{ok:false,error:'translation_unavailable'})}
+}
 if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
