@@ -1,9 +1,9 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
-import {createAudioSlots,audioContainer} from './audio-worker-policy.mjs';
+import {createAudioSlots,audioContainer,audioSlotLimit} from './audio-worker-policy.mjs';
 const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_AUDIO_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
-const slots=createAudioSlots(1);
+const slots=createAudioSlots(audioSlotLimit(Bun.env.BLOFY_AUDIO_MAX_JOBS));
 function json(status,body,extra={}){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...extra}})}
 function secureEquals(a,b){const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return /^[a-f0-9]{64}$/i.test(b)&&x.length===y.length&&timingSafeEqual(x,y)}
 // Exercise the actual transport-container to MP3 conversion, not just encoder presence.

@@ -23,7 +23,24 @@ const CT='application/json; charset=utf-8';
 function json(status,body,extra={}){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':CT,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...extra}})}
 function seal(token){if(!KEY)throw new Error('SESSION_KEY_MISSING');const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',KEY,iv);const encrypted=Buffer.concat([cipher.update(token,'utf8'),cipher.final()]);return Buffer.concat([iv,cipher.getAuthTag(),encrypted]).toString('base64url')}
 function unseal(s){try{if(!KEY||!s)return null;const v=Buffer.from(s,'base64url');if(v.length<30||v.length>500)return null;const c=createDecipheriv('aes-256-gcm',KEY,v.subarray(0,12));c.setAuthTag(v.subarray(12,28));return Buffer.concat([c.update(v.subarray(28)),c.final()]).toString('utf8')}catch{return null}}
-function token(req){const m=String(req.headers.get('cookie')||'').match(/(?:^|;\s*)bv_session=([^;]+)/);return m?unseal(m[1]):null}
+const SAVED_LOGIN=Bun.env.BLOFY_WEB_SAVED_LOGIN_QA==='1';
+const LOGIN_MODES=['code','xtream','m3u'];
+const COOKIE_AGE=34560000; // Browser maximum ~400 days; upstream entitlement still controls access.
+function readCookie(req,name){const row=String(req.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(name+'='));return row?row.slice(name.length+1):''}
+function token(req){return unseal(readCookie(req,'bv_session'))}
+function savedToken(req,mode){return LOGIN_MODES.includes(mode)?unseal(readCookie(req,'bv_saved_'+mode)):null}
+function activeMode(req){const mode=readCookie(req,'bv_active_mode');return LOGIN_MODES.includes(mode)?mode:'code'}
+function sessionCookie(name,value,age){return name+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+age}
+function multiCookieJson(status,body,cookies){const response=json(status,body);for(const cookie of cookies)response.headers.append('Set-Cookie',cookie);return response}
+function loginResponse(req,body,newToken,mode,oldAge=2592000){
+ if(!SAVED_LOGIN)return json(200,body,{'Set-Cookie':'bv_session='+seal(newToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+oldAge});
+ const old=token(req),previous=activeMode(req),cookies=[];
+ if(old&&previous!==mode)cookies.push(sessionCookie('bv_saved_'+previous,seal(old),COOKIE_AGE));
+ cookies.push(sessionCookie('bv_saved_'+mode,seal(newToken),COOKIE_AGE),sessionCookie('bv_session',seal(newToken),COOKIE_AGE),sessionCookie('bv_active_mode',mode,COOKIE_AGE));
+ return multiCookieJson(200,body,cookies)
+}
+function closeAccountMedia(t){if(!t)return;const download=activeVodDownloadTokens.get(externalAccountKey('Bearer '+t));if(download)download.abort();revokeExternal('Bearer '+t)}
+
 function auth(req){const t=token(req);return t?{'Authorization':'Bearer '+t,'Accept':'application/json','Cache-Control':'no-store'}:null}
 function boundedEncoderCount(value,max=100000){
  const n=Number(value);
@@ -184,7 +201,32 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 }
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
-if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const download=activeVodDownloadTokens.get(externalAccountKey('Bearer '+t));if(download)download.abort();}if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/logout'&&method==='POST'){
+ closeAccountMedia(token(req));
+ for(const mode of LOGIN_MODES)closeAccountMedia(savedToken(req,mode));
+ return multiCookieJson(200,{ok:true},['bv_session','bv_active_mode',...LOGIN_MODES.map(mode=>'bv_saved_'+mode)].map(name=>sessionCookie(name,'',0)))
+}
+if(p==='/api/saved-logins'&&method==='GET'){
+ if(!SAVED_LOGIN)return json(404,{error:'not_found'});
+ const current=token(req),active=activeMode(req);
+ return json(200,{active:current?active:null,modes:LOGIN_MODES.filter(mode=>!!savedToken(req,mode)||(mode===active&&!!current))})
+}
+if(p==='/api/saved-logins/switch'&&method==='POST'){
+ if(!SAVED_LOGIN)return json(404,{error:'not_found'});
+ if(!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type')||''))return json(400,{error:'invalid_payload'});
+ const input=await readBoundedJson(req,256);
+ if(!input.ok||!LOGIN_MODES.includes(input.value.mode))return json(400,{error:'invalid_payload'});
+ const mode=input.value.mode,old=token(req),candidate=savedToken(req,mode)||(mode===activeMode(req)?old:null);
+ if(!candidate)return json(404,{error:'saved_login_missing'});
+ try{
+  const check=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:{Authorization:'Bearer '+candidate,Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(10000)});
+  if(!check.ok){try{await check.body?.cancel()}catch{};return json(check.status===401||check.status===403?401:503,{error:'saved_session_unavailable'})}
+  const session=await check.json(),profileKey=stableAccountProfileKey(candidate,KEY);
+  if(!session.active||!profileKey)return json(401,{error:'saved_session_inactive'});
+  if(old&&old!==candidate)closeAccountMedia(old);
+  return loginResponse(req,{ok:true,profileKey,expiresAt:session.expiresAt??null,legacyProfileKey:legacyTokenProfileKey(candidate,KEY)},candidate,mode)
+ }catch{return json(503,{error:'saved_session_unavailable'})}
+}
 if(p==='/api/external/stop'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
  revokeExternal(h.Authorization);
@@ -240,7 +282,7 @@ if(p.startsWith('/external/live/')){
  }catch{cleanup();return json(502,{error:'external_connection_failed'})}
 }
 // Fixed first-party credential exchange; never fetch the supplied M3U URL.
-if(p==='/api/login-modes'&&method==='GET')return json(200,{direct:Bun.env.BLOFY_WEB_BOUND_LOGIN_QA==='1',external:PLAYLIST_ORIGINS.length>0});
+if(p==='/api/login-modes'&&method==='GET')return json(200,{direct:Bun.env.BLOFY_WEB_BOUND_LOGIN_QA==='1',external:PLAYLIST_ORIGINS.length>0,savedLogins:SAVED_LOGIN});
 if(p==='/api/direct-login'&&method==='POST'){
  if(Bun.env.BLOFY_WEB_BOUND_LOGIN_QA!=='1')return json(503,{ok:false,error:'direct_login_unavailable'});
  if(u.search||!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type')||''))return json(400,{ok:false,error:'invalid_payload'});
@@ -263,8 +305,8 @@ if(p==='/api/direct-login'&&method==='POST'){
   const session=await check.json();
   const profileKey=stableAccountProfileKey(v.accessToken,KEY),expiresAt=Number(session.expiresAt);
   if(!session.active||!profileKey||!Number.isFinite(expiresAt)||expiresAt<=Date.now())return json(401,{ok:false,error:'direct_login_unavailable'});
-  return json(200,{ok:true,expiresAt,profileKey,legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},
-   {'Set-Cookie':'bv_session='+seal(v.accessToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+Math.min(2592000,Math.floor((expiresAt-Date.now())/1000))});
+  if(SAVED_LOGIN&&token(req)!==v.accessToken)closeAccountMedia(token(req));
+  return loginResponse(req,{ok:true,expiresAt,profileKey,legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},v.accessToken,input.value.mode,Math.min(2592000,Math.floor((expiresAt-Date.now())/1000)));
  }catch{return json(503,{ok:false,error:'direct_login_unavailable'})}
 }
 if(p==='/api/redeem'&&method==='POST'){
@@ -274,8 +316,9 @@ if(p==='/api/redeem'&&method==='POST'){
  if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)||!/^[a-f0-9]{64}$/.test(key))return json(400,{error:'كود أو جهاز غير صالح'});
  try{const r=await fetch(ORIGIN+'/api/v1/stream/app/redeem',{method:'POST',headers:{'Content-Type':CT,'Accept':'application/json'},body:JSON.stringify({code,deviceKey:key}),redirect:'manual',signal:AbortSignal.timeout(20000)});
  let v={};try{v=await r.json()}catch{}if(!r.ok||!v.ok||typeof v.accessToken!=='string'||!/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(v.accessToken))return json(r.status===409?409:r.status===429?429:400,{ok:false,error:r.status===409?'الكود مستخدم أو مربوط بجهاز آخر':r.status===429?'محاولات كثيرة، حاول لاحقًا':'تعذّر تفعيل الكود'});
- return json(200,{ok:true,activatedAt:v.account?.activatedAt||null,expiresAt:v.account?.expiresAt||null,
-   profileKey:stableAccountProfileKey(v.accessToken,KEY),legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},{'Set-Cookie':'bv_session='+seal(v.accessToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000'});
+ if(SAVED_LOGIN&&token(req)!==v.accessToken)closeAccountMedia(token(req));
+ return loginResponse(req,{ok:true,activatedAt:v.account?.activatedAt||null,expiresAt:v.account?.expiresAt||null,
+   profileKey:stableAccountProfileKey(v.accessToken,KEY),legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},v.accessToken,'code');
  }catch(e){return json(502,{error:'تعذّر الاتصال بخادم التفعيل'})}
 }
 if(p==='/vendor/hls.min.js'&&method==='GET'){
@@ -304,6 +347,22 @@ if(p==='/api/ai/translate'&&method==='POST'){
   if(!translated||translated.length>5500||!/[\u0600-\u06ff]/.test(translated))return json(502,{ok:false,error:'invalid_translation'});
   return json(200,{ok:true,translatedOverview:translated})
  }catch{return json(503,{ok:false,error:'translation_unavailable'})}
+}
+if(p==='/api/ai/chat'&&method==='POST'){
+ const input=await readBoundedJson(req,22000);if(!input.ok)return json(input.status,{ok:false,error:'invalid_request'});
+ const turns=input.value?.messages;
+ if(!Array.isArray(turns)||!turns.length||turns.length>9||turns.at(-1)?.role!=='user'||turns.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.content!=='string'||!x.content.trim()||x.content.length>1600))return json(400,{ok:false,error:'invalid_chat'});
+ try{
+  const response=await fetch('https://blofy-ai-gateway-production.up.railway.app/v1/chat',{
+   method:'POST',redirect:'manual',headers:{'Content-Type':CT,'Authorization':h.Authorization,'Accept':'application/json','Cache-Control':'no-store'},
+   body:JSON.stringify({messages:turns.map(x=>({role:x.role,content:x.content})),locale:input.value.locale==='en'?'en':'ar'}),signal:AbortSignal.timeout(30000)
+  });
+  if(!response.ok){await response.body?.cancel();return json([401,403,429].includes(response.status)?response.status:503,{ok:false,error:'chat_unavailable'})}
+  const data=await readBoundedJson(response,24000);
+  const reply=data.ok&&data.value?.ok===true&&typeof data.value.reply==='string'?data.value.reply.trim().slice(0,3000):'';
+  if(!reply)return json(502,{ok:false,error:'invalid_chat_reply'});
+  return json(200,{ok:true,reply,suggestedTitles:(Array.isArray(data.value.suggestedTitles)?data.value.suggestedTitles:[]).filter(x=>typeof x==='string'&&x.trim().length>=2).slice(0,8).map(x=>x.trim().slice(0,105))})
+ }catch{return json(503,{ok:false,error:'chat_unavailable'})}
 }
 if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
@@ -584,7 +643,7 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
    if(!host||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
    // Default remains the deployed shared worker. Isolation is an explicit staging opt-in; no fallback opens a second source.
    const converted=await fetch(host+'/audio-compat/'+id,{headers:{Authorization:h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
-   if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:'audio_conversion_unavailable'})}
+   if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){console.warn('commentary_converter_rejected',{status:converted.status,hasBody:!!converted.body,worker:mode==='isolated'?'isolated':'shared'});try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:converted.status===429?'commentary_capacity_busy':'audio_conversion_unavailable'},converted.status===429?{'Retry-After':'5'}:{})}
    return new Response(converted.body,{headers:noCache({'Content-Type':'audio/mpeg','Accept-Ranges':'none'})});
   }
   if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/mp4'].includes(mime)){

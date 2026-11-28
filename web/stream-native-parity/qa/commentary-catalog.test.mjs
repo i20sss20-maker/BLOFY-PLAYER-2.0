@@ -49,7 +49,11 @@ test('external live handoff uses a single-use ticket and stops internal playback
  assert.match(server,/Math\.min\(now\+120000,accountExpiry\)/);
  assert.match(server,/if\(externalActive\.has\(ticket\.account\)/);
  assert.match(server,/randomBytes\(32\)\.toString\('base64url'\)/);
- assert.match(server,/if\(t\)revokeExternal\('Bearer '\+t\)/);
+ const cleanup=server.slice(server.indexOf('function closeAccountMedia('),server.indexOf('function auth('));
+ assert.match(cleanup,/if\(!t\)return;[\s\S]*revokeExternal\('Bearer '\+t\)/);
+ const logout=server.slice(server.indexOf("if(p==='/api/logout'"),server.indexOf("if(p==='/api/saved-logins'"));
+ assert.match(logout,/closeAccountMedia\(token\(req\)\)/);
+ assert.match(logout,/for\(const mode of LOGIN_MODES\)closeAccountMedia\(savedToken\(req,mode\)\)/);
  assert.match(app,/stopPlayback\(false\);\s*function issue\(\)/);
  assert.match(app,/api\('POST','\/api\/external\/live'/);
  assert.match(app,/if\(st===200\|\|st===404\)\{state.externalRetiringStop=null;state.directStopKey=null;issue\(\)\}/);
@@ -102,7 +106,8 @@ test('live timing only seeks actual retained bytes within one continuous playabl
  assert.equal(seek({...video,seeking:true},record,'back'),null);
  assert.equal(seek(video,record,'invalid'),null);
  assert.match(app,/now<\(record.localBufferSeekUntil\|\|0\)/);
- assert.match(app,/stopCommentary\(\);video.currentTime=target;record.localBufferSeekUntil=Date.now\(\)\+20000/);
+ assert.match(app,/stopCommentary\(\);record.userTimeshift=entry\[0\]!=='latest'/);
+ assert.match(app,/record.localBufferSeekUntil=Date.now\(\)\+20000;video.currentTime=target/);
 });
 
 test('manual commentary picture timing preserves one active audio stream only for a confirmed buffered seek',()=>{
@@ -155,3 +160,17 @@ test('local Arabic subtitle files convert to safe WebVTT without external resour
  assert.equal(convert('x'.repeat(2*1024*1024+1)),null);
  assert.match(app,/disposeSubtitles=clearLocalSubtitle/);assert.match(app,/URL.revokeObjectURL\(localSubtitle.url\)/);
 });
+
+ test('TimeShift can seek retained server segments beyond the locally buffered video',()=>{
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function liveTimeshiftRange('),b=app.indexOf('// Convert only bounded',a);
+ const {liveTimeshiftRange,liveTimeshiftTarget}=new Function(app.slice(a,b)+';return {liveTimeshiftRange,liveTimeshiftTarget}')();
+ const ranges=(a,b)=>({length:1,start:()=>a,end:()=>b});
+ const video={currentTime:55,seekable:ranges(0,60),buffered:ranges(50,60),readyState:3};
+ const record={hlsKey:'fixture',ready:true,engine:{latestLevelDetails:{live:true,fragmentStart:10,edge:60},liveSyncPosition:56}};
+ assert.equal(liveTimeshiftTarget(video,record,'back-thirty'),25);
+ assert.equal(liveTimeshiftTarget(video,record,'earliest'),10.25);
+ assert.equal(liveTimeshiftTarget(video,record,'latest'),56);
+ assert.equal(liveTimeshiftTarget(video,record,'forward-thirty'),59.25);
+ assert.equal(liveTimeshiftTarget(video,{...record,preview:true},'back'),null);
+ assert.equal(liveTimeshiftRange({...video,currentTime:5},record),null);
+ });

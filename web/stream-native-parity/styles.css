@@ -1189,3 +1189,15 @@ html[data-blofy-device="touch"] .native-home-header{flex-wrap:wrap;gap:4px}
 .detail-translation span{color:var(--muted);font-size:12px}
 
 .offline-filters{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.offline-filters .btn{flex:1 1 65px;padding:8px 6px;min-height:44px}.offline-filters .btn.active{color:#06161d;background:#46e4d0;border-color:#46e4d0}#offline-progress{width:100%;height:12px;accent-color:#46e4d0;margin:8px 0}#offline-progress[hidden],#offline-cancel[hidden],#offline-library[hidden]{display:none!important}
+
+/* Classic interface: enrich existing content cards and details only. */
+html[data-blofy-device] .poster-caption>.poster-category{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11px;line-height:1.4;margin-top:3px}
+html[data-blofy-device="tv"] .poster-grid .poster-caption,html[data-blofy-device="tv"] .search-result-grid .poster-caption{height:auto;min-height:62px}
+.detail-section-title{font-size:18px;font-weight:700;color:var(--white);margin:14px 0 5px}
+.detail-plot{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;overflow:visible;display:block;-webkit-line-clamp:unset}
+.detail-metadata{margin:20px 0;padding:14px 0;border-top:1px solid #ffffff26}
+.detail-metadata dl{margin:0;display:flex;flex-direction:column;gap:0}
+.detail-meta-row{display:flex;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid #ffffff12;font-size:14px;line-height:1.7}
+.detail-meta-row dt{flex:0 0 100px;color:var(--muted)}
+.detail-meta-row dd{flex:1;min-width:0;margin:0;white-space:normal;overflow-wrap:anywhere;color:var(--white)}
+@media(max-width:600px){.detail-meta-row{gap:8px}.detail-meta-row dt{flex-basis:76px}.detail-section-title{font-size:17px}}
