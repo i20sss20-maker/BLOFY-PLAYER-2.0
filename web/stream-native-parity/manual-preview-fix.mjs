@@ -1064,3 +1064,15 @@ for(const [timer,delay] of [['capacityTimer','delay'],['originTimer','delay'],['
   "     deferHlsRetry('"+timer+"',"+delay+",function(){\n      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     });");
 }
 new Function(app);writeFileSync('app.js',app);
+
+
+// Explicit retired-producer reason must renew the authenticated SID even if
+// startup failed before MANIFEST_PARSED. Keep quota and ordinary backoff on
+// the existing path; use the existing deferred, acknowledged STOP handoff.
+change(" if(!record.manifestParsed||!detail||!detail.fatal)return false;",` if(!detail)return false;
+ if(code===503&&['hls_source_finished','hls_session_closed','hls_source_stalled'].indexOf(liveHlsFailureReason(detail))>=0)return true;
+ if(!record.manifestParsed||!detail.fatal)return false;`);
+change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);",`    if(record.reconnecting)return;
+    if(!detail.fatal&&!liveSessionLost(record,detail,code))return;
+    diagnose('live','hls_error','video',0);`);
+new Function(app);writeFileSync('app.js',app);
