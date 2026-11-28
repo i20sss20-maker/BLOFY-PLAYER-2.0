@@ -99,7 +99,7 @@ function pruneExternalTickets(now=Date.now()){
 function revokeExternal(bearer){
  if(!bearer)return;
  const account=externalAccountKey(bearer);
- const download=activeVodDownloadAccounts.get(account);if(download)download.abort();
+
  externalIssueGate.revoke(account);
  for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
  const active=externalActive.get(account);if(active)active.abort()
@@ -162,7 +162,7 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 }
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
-if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const bearer='Bearer '+t;const download=activeVodDownloadAccounts.get(externalAccountKey(bearer));if(download)download.abort();revokeExternal('Bearer '+t);}return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
 if(p==='/api/external/stop'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
  revokeExternal(h.Authorization);
@@ -574,13 +574,16 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
   const length=upstream.headers.get('content-length');
   if(length&&/^[1-9][0-9]{0,14}$/.test(length))out['Content-Length']=length;
   reader=upstream.body.getReader();
+  const expected=out['Content-Length']?Number(out['Content-Length']):null;
+  let received=0;
   // Pull one chunk at a time (no entire movie buffered in Railway RAM).
   const stream=new ReadableStream({
    async pull(controller){
     try{
      const chunk=await reader.read();
      if(ctrl.signal.aborted){release();controller.error(new Error('download_cancelled'));return}
-     if(chunk.done){release();controller.close();return}
+     if(chunk.done){release();if(expected!==null&&received!==expected){controller.error(new Error('download_size_mismatch'));return}controller.close();return}
+     received+=chunk.value.byteLength;if(expected!==null&&received>expected){cancel();controller.error(new Error('download_size_mismatch'));return}
      controller.enqueue(chunk.value);
     }catch{release();controller.error(new Error('download_stream_interrupted'))}
    },
