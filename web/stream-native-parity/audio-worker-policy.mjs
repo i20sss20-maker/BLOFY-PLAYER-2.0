@@ -1,6 +1,10 @@
 // Audio-only admission is deliberately independent of the video encoder pool.
 // The default isolated pilot has ONE slot; do not scale without licensed-source tests.
+export function audioSlotLimit(value){
+ const n=Number(value);return Number.isSafeInteger(n)&&n>=1&&n<=4?n:1
+}
 export function createAudioSlots(limit=1){
+ limit=audioSlotLimit(limit);
  const active=new Set();let denied=0;
  return {
   acquire(key){
