@@ -16,7 +16,7 @@ test('downloads remain disabled by default and are not cached or claimed complet
  assert.ok(server.includes("Bun.env.BLOFY_WEB_VOD_DOWNLOAD_ENABLED!=='1'"));
  assert.ok(server.includes('MAX_VOD_DOWNLOADS=2'));
  assert.ok(server.includes('new ReadableStream'));
- assert.ok(app.includes('هذه القائمة تسجل طلبات التنزيل فقط'));
+ assert.ok(app.includes('الملفات المحفوظة بالكامل للمشاهدة دون إنترنت'));
  assert.ok(app.includes("method:'HEAD'"));
  assert.ok(sw.includes("SHELL.indexOf(url.pathname)<0"));
 });
@@ -113,4 +113,17 @@ test('touch browsers get a real save link after the asynchronous authorization c
  assert.equal(clicks,0);assert.equal(saved.length,0);assert.equal(link.href,'/api/download/movie/123.mp4');
  link.onclick({preventDefault(){throw Error('unexpected rejection')}});assert.equal(saved.length,1);
  S.accountEpoch++;let blocked=false;link.onclick({preventDefault(){blocked=true}});assert.equal(blocked,true);assert.equal(saved.length,1);
+});
+
+test('offline playback lease is limited to verified profile, 24 hours and subscription expiry',()=>{
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function offlineGrantValid('),b=app.indexOf('function offlineGrant()',a);
+ const valid=new Function(app.slice(a,b)+';return offlineGrantValid')();
+ const now=1700000000000,grant={profile:'a'.repeat(24),verifiedAt:now,until:now+86400000};
+ assert.equal(valid(grant,now+1000),true);assert.equal(valid(grant,now+86400000),false);
+ assert.equal(valid(grant,now-1),false);assert.equal(valid({...grant,until:now+86400001},now),false);
+ assert.equal(valid({...grant,profile:'other'},now),false);
+ assert.match(app,/written!==total/);assert.match(app,/saved.size!==total/);
+ assert.match(app,/if\(!committed&&folder&&fileName\)/);
+ assert.match(app,/navigator.onLine===false&&offlineOnlyScreen\(\)/);
+ assert.match(app,/URL.createObjectURL\(file.slice/);
 });
