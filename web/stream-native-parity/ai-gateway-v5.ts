@@ -390,7 +390,8 @@ async function chatAnswer(turns:ChatTurn[],locale:string):Promise<{reply:string,
   if(!GROQ_KEY.trim()||! /^[a-z0-9_./-]{5,90}$/i.test(GROQ_MODEL))throw Error("gateway_not_configured");
   const response=await fetch("https://api.groq.com/openai/v1/chat/completions",{
    method:"POST",redirect:"manual",signal:timeout(18000),headers:{"Content-Type":"application/json","Authorization":"Bearer "+GROQ_KEY},
-   body:JSON.stringify({model:GROQ_MODEL,messages:[{role:"system",content:system},...turns],temperature:0.3,max_completion_tokens:2400,response_format:{type:"json_object"},stream:false})
+   body:JSON.stringify({model:GROQ_MODEL,messages:[{role:"system",content:system},...turns],temperature:0.3,max_completion_tokens:2400,
+    ...(GROQ_MODEL.startsWith("openai/gpt-oss-")?{reasoning_effort:"low",response_format:{type:"json_schema",json_schema:{name:"blofy_chat",strict:true,schema:{type:"object",additionalProperties:false,properties:{reply:{type:"string"},suggestedTitles:{type:"array",items:{type:"string"}}},required:["reply","suggestedTitles"]}}}}:{response_format:{type:"json_object"}}),stream:false})
   });
   if(!response.ok){await response.body?.cancel();throw Error("chat_provider_failed")}
   const body=await response.json() as any;
