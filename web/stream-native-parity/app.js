@@ -515,10 +515,34 @@ function safeImg(pic,cls){
  return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" src="'+esc(pic)+'"'+
   (alternatives.length?' data-art-fallback="'+esc(JSON.stringify(alternatives))+'"':'')+'>':''
 }
+function arabicCategory(raw){
+ var label=String(raw||'').trim();
+ if(!label)return '';
+ var phrases=[
+ [/\bPERSIAN\s+SUB\s*\/\s*DUB\b/gi,'فارسي مترجم ومدبلج'],
+ [/\bMULTI[-\s]*SUBS?\b/gi,'ترجمات متعددة'],
+ [/\bDOLBY\s+AUDIO\b/gi,'صوت دولبي'],
+ [/\bTOP\s+MOVIES\b/gi,'أفضل الأفلام'],
+ [/\bTOP\s+KIDS\b/gi,'أفضل أفلام الأطفال'],
+ [/\bTOP\s+SERIES\b/gi,'أفضل المسلسلات'],
+ [/\bASIA\s+MOVIES\b/gi,'أفلام آسيوية'],
+ [/\bMOVIES\b/gi,'أفلام'],[/\bSERIES\b/gi,'مسلسلات'],[/\bKIDS\b/gi,'أطفال'],
+ [/\bBLU[-\s]*RAY\b/gi,'بلو راي'],[/\bACTION\b/gi,'أكشن'],[/\bCOMEDY\b/gi,'كوميديا'],
+ [/\bDRAMA\b/gi,'دراما'],[/\bHORROR\b/gi,'رعب'],[/\bROMANCE\b/gi,'رومانسي'],
+ [/\bDOCUMENTARY\b/gi,'وثائقي'],[/\bANIMATION\b/gi,'رسوم متحركة'],
+ [/\bTHRILLER\b/gi,'إثارة'],[/\bSPORTS\b/gi,'رياضة'],[/\bNEWS\b/gi,'أخبار'],
+ [/\bARABIC\b/gi,'عربي'],[/\bENGLISH\b/gi,'إنجليزي'],[/\bTURKISH\b/gi,'تركي'],
+ [/\bINDIAN\b/gi,'هندي'],[/\bKOREAN\b/gi,'كوري'],[/\bFRENCH\b/gi,'فرنسي'],
+ [/\bSUBBED\b/gi,'مترجم'],[/\bDUBBED\b/gi,'مدبلج'],[/\bFAMILY\b/gi,'عائلي'],
+ [/\bADVENTURE\b/gi,'مغامرات'],[/\bFANTASY\b/gi,'خيال'],[/\bSCI[-\s]*FI\b/gi,'خيال علمي']
+ ];
+ phrases.forEach(function(pair){label=label.replace(pair[0],pair[1])});
+ return label
+}
 function posterCategory(item,kind){
  var category=String(item&&item.category_id||''),rows=S.cats&&S.cats[kind]||[];
- for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return String(rows[i].category_name||'');
- return String(item&&item.category_name||item&&item.genre||'')
+ for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return arabicCategory(rows[i].category_name);
+ return arabicCategory(item&&item.category_name||item&&item.genre||'')
 }
 function refreshPosterCategories(kind){
  var cards=document.querySelectorAll('[data-details] .poster-category');
@@ -620,7 +644,7 @@ function categoryRail(kind){
  var data=S.cats[kind]||[],cat=S.cat[kind]||'all';
  return '<aside class="cat-rail"><div class="pane-head"><strong>الفئات</strong><small>'+data.length+' تصنيف</small></div>'+
  '<div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
- data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(x.category_name||'تصنيف')+'</button>'}).join('')+
+ data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(arabicCategory(x.category_name)||'تصنيف')+'</button>'}).join('')+
  '</div></aside>'
 }
 function currentListing(){return S.loaded[keyOf(S.kind,S.cat[S.kind]||'all')]||{items:[],hasMore:false,nextOffset:0}}
