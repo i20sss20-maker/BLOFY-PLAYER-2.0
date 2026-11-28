@@ -43,6 +43,11 @@ export function createLegacyIngress(pool,env=process.env,lifetime=gatewayHoldLif
  if(enabled)lifetime.register(retryQueue);
  const allow=()=>({ok:true,close:async()=>true});
  return async function enter(source,{unknownSource=false,background=false}={}){
+  // Optional source media may be paused entirely while diagnosing live playback.
+  // Reject before source lookup or hold creation, even when the gate is disabled.
+  // This does not cancel existing work or alter foreground admission.
+  if(background&&env.BLOFY_ENGINE_PAUSE_OPTIONAL_SOURCE_MEDIA==='1')
+   return {ok:false,reason:'background_source_busy'};
   const idleOnly=background&&env.BLOFY_ENGINE_IDLE_BACKGROUND_PROBES==='1';
   if(!enabled)return idleOnly?{ok:false,reason:'background_gate_disabled'}:allow();
   const finish=lifetime.begin();
