@@ -9,7 +9,7 @@ function section(start,end){
 }
 test('background recovery acquires source hold before relay grant and closes after body cancellation',()=>{
  const s=section('async function probeUnavailableMediaOnSameSource(key)','async function runDueUnavailableMedia');
- assert.match(s,/const ingress=await enterLegacyIngress\(row\.server_id\);\s*if\(!ingress\.ok\)return 'transient';/);
+ assert.match(s,/const ingress=await enterLegacyIngress\(row\.server_id,\{background:true\}\);\s*if\(!ingress\.ok\)\{\s*if\(ingress\.reason==='background_source_busy'\)console\.info\('BLOFY_BACKGROUND_MEDIA_DEFERRED'\);\s*return 'transient';\s*\}/);
  assert.ok(s.indexOf('await enterLegacyIngress')<s.indexOf('await issueStreamRelayGrant'));
  assert.ok(s.lastIndexOf('await ingress.close()')>s.lastIndexOf('await response?.body?.cancel()'));
 });
