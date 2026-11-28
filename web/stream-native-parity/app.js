@@ -1665,6 +1665,7 @@ function cleanupPlayer(){
   S.playerView.liveHlsHandoff=null;
   clearVodBufferNotice(S.playerView);
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
+  if(S.playerView.disposeSubtitles)S.playerView.disposeSubtitles();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
@@ -1734,6 +1735,27 @@ function bufferedLiveSeekTarget(video,record,action){
  if(action==='forward'||action==='forward-ten')target=Math.min(target,end-0.75);
  if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target;
  return null
+}
+// Convert only bounded plain-text timed cues. No external resources or markup.
+function localSubtitleVtt(raw){
+ if(typeof raw!=='string'||raw.length>2*1024*1024)return null;
+ var blocks=raw.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').trim().split(/\n[ \t]*\n/),cues=[];
+ function stamp(value){
+  var m=/^(?:(\d{1,3}):)?([0-5]\d):([0-5]\d)[,.](\d{3})$/.exec(value);
+  if(!m)return null;
+  var h=Number(m[1]||0);return {ms:((h*60+Number(m[2]))*60+Number(m[3]))*1000+Number(m[4]),text:('00'+h).slice(-Math.max(2,String(h).length))+':'+m[2]+':'+m[3]+'.'+m[4]}
+ }
+ for(var i=0;i<blocks.length&&cues.length<20000;i++){
+  var lines=blocks[i].split('\n'),timing=-1;
+  if(/^WEBVTT(?:\s|$)|^(?:NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0]))continue;
+  for(var j=0;j<Math.min(2,lines.length);j++)if(lines[j].indexOf('-->')>=0){timing=j;break}
+  if(timing<0)continue;
+  var match=/^(\S+)\s+-->\s+(\S+)(?:\s.*)?$/.exec(lines[timing].trim());if(!match)continue;
+  var start=stamp(match[1]),end=stamp(match[2]);if(!start||!end||end.ms<=start.ms)continue;
+  var body=lines.slice(timing+1).join('\n').replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim();
+  if(body)cues.push(start.text+' --> '+end.text+'\n'+body)
+ }
+ return cues.length?'WEBVTT\n\n'+cues.join('\n\n')+'\n':null
 }
 function simpleLiveStatus(message,error){
  if(error||!message)return message;
@@ -4331,29 +4353,62 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(!options.length){playerStatus('لا يتوفر جزء قابل للرجوع داخل ذاكرة المشغل الآن.');return}
   showPlayerChoices('ذاكرة البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
  };
- var subtitleButton=document.getElementById('player-subtitles');
+ var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
+ function clearLocalSubtitle(){
+  subtitleGeneration++;
+  if(!localSubtitle)return;
+  try{localSubtitle.element.track.mode='disabled';localSubtitle.element.remove();URL.revokeObjectURL(localSubtitle.url)}catch(e){}
+  localSubtitle=null
+ }
+ state.disposeSubtitles=clearLocalSubtitle;
+ function disableSubtitles(){
+  var activeEngine=S.play&&S.play.engine;
+  if(activeEngine&&activeEngine.subtitleTracks&&activeEngine.subtitleTracks.length){try{activeEngine.subtitleDisplay=false;activeEngine.subtitleTrack=-1}catch(e){}}
+  var native=video.textTracks;
+  if(native)for(var n=0;n<native.length;n++)if(native[n].kind==='subtitles'||native[n].kind==='captions')native[n].mode='disabled'
+ }
+ function localSubtitlePicker(){
+  if(isLive||S.playerView!==state||S.route!=='player'||!window.FileReader||!window.URL||!URL.createObjectURL)return;
+  var input=document.createElement('input');input.type='file';input.accept='.srt,.vtt,text/vtt,application/x-subrip';input.hidden=true;
+  var generation=++subtitleGeneration;
+  input.onchange=function(){
+   var file=input.files&&input.files[0];input.remove();
+   if(!file||generation!==subtitleGeneration||S.playerView!==state)return;
+   if(!/\.(srt|vtt)$/i.test(file.name)||file.size<1||file.size>2*1024*1024){playerStatus('اختر ملف SRT أو VTT بحجم لا يتجاوز 2 ميغابايت.');return}
+   var reader=new FileReader();
+   reader.onload=function(){
+    if(generation!==subtitleGeneration||S.playerView!==state||S.route!=='player')return;
+    var vtt=localSubtitleVtt(String(reader.result||''));if(!vtt){playerStatus('ملف الترجمة غير صالح.');return}
+    clearLocalSubtitle();disableSubtitles();
+    var url=URL.createObjectURL(new Blob([vtt],{type:'text/vtt;charset=utf-8'})),track=document.createElement('track');
+    track.kind='subtitles';track.label='ترجمة من الجهاز';track.srclang='ar';track.src=url;
+    localSubtitle={element:track,url:url};var chosen=localSubtitle;
+    track.onload=function(){if(localSubtitle===chosen&&S.playerView===state)try{track.track.mode='showing'}catch(e){}};
+    track.onerror=function(){if(localSubtitle===chosen){clearLocalSubtitle();playerStatus('تعذر قراءة ملف الترجمة.')}};
+    video.appendChild(track);try{track.track.mode='showing'}catch(e){}
+   };
+   reader.onerror=function(){if(generation===subtitleGeneration&&S.playerView===state)playerStatus('تعذر قراءة ملف الترجمة.')};
+   reader.readAsText(file,'UTF-8')
+  };
+  input.oncancel=function(){input.remove()};root.appendChild(input);
+  try{input.click()}catch(e){input.remove();playerStatus('المتصفح لا يدعم اختيار ملف الترجمة.')}
+ }
  if(subtitleButton)subtitleButton.onclick=function(){
-  var engine=S.play&&S.play.engine,list=[],native=video.textTracks;
-  if(native&&native.length){
-   for(var i=0;i<native.length;i++)if(native[i].kind==='subtitles'||native[i].kind==='captions')list.push(native[i]);
-  }
-  var options=[];
-  if(list.length){
-   options.push({name:'إيقاف الترجمة',selected:list.every(function(track){return track.mode!=='showing'}),
-    select:function(){for(var n=0;n<list.length;n++)list[n].mode='disabled';playerStatus('تم إيقاف الترجمة')}})
-   for(var j=0;j<list.length;j++)(function(track,index){
-    options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
-     select:function(){for(var n=0;n<list.length;n++)list[n].mode=n===index?'showing':'disabled';playerStatus('تم اختيار الترجمة')}})
-   })(list[j],j)
-  }else if(engine&&engine.subtitleTracks&&engine.subtitleTracks.length){
-   var subs=engine.subtitleTracks;
-   options.push({name:'إيقاف الترجمة',selected:engine.subtitleTrack===-1,
-    select:function(){engine.subtitleDisplay=false;engine.subtitleTrack=-1;playerStatus('تم إيقاف الترجمة')}})
-   for(var k=0;k<subs.length;k++)(function(track,index){
-    options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index,
-     select:function(){engine.subtitleDisplay=true;engine.subtitleTrack=index;playerStatus('تم اختيار الترجمة')}})
-   })(subs[k],k)
-  }
+  var engine=S.play&&S.play.engine,native=video.textTracks,list=[],subs=engine&&engine.subtitleTracks||[];
+  if(native)for(var i=0;i<native.length;i++)if(native[i].kind==='subtitles'||native[i].kind==='captions')list.push(native[i]);
+  var options=[{name:'إيقاف الترجمة',selected:(!subs.length||engine.subtitleTrack===-1)&&list.every(function(track){return track.mode!=='showing'}),select:disableSubtitles}];
+  // HLS.js manages its own subtitle tracks. Native textTracks may include
+  // duplicate generated tracks; prefer the HLS API for those tracks.
+  for(var k=0;k<subs.length;k++)(function(track,index){
+   options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index&&engine.subtitleDisplay!==false,
+    select:function(){if(!S.play||S.play.engine!==engine)return;disableSubtitles();engine.subtitleTrack=index;engine.subtitleDisplay=true}})
+  })(subs[k],k);
+  for(var j=0;j<list.length;j++)(function(track,index){
+   if(subs.length&&(!localSubtitle||track!==localSubtitle.element.track))return;
+   options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
+    select:function(){disableSubtitles();track.mode='showing'}})
+  })(list[j],j);
+  if(!isLive&&window.FileReader&&window.URL&&URL.createObjectURL)options.push({name:'اختيار ملف ترجمة SRT / VTT',selected:false,select:localSubtitlePicker});
   showPlayerChoices('الترجمة',options,this)
  };
  if(qualityButton)qualityButton.onclick=function(){
