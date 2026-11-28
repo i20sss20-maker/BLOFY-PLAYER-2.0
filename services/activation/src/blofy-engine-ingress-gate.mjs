@@ -14,6 +14,7 @@ export async function ensureEngineIngressGate(db){
  // Durable relay ownership is separate from the leased-worker gate.
  // Null/disabled leaves the existing production relay path unchanged.
  await db.query("ALTER TABLE blofy_engine_ingress_gate ADD COLUMN IF NOT EXISTS relay_owner text");
+ await db.query("ALTER TABLE blofy_engine_ingress_gate ADD COLUMN IF NOT EXISTS relay_next_owner text");
  await db.query("ALTER TABLE blofy_engine_legacy_holds ADD COLUMN IF NOT EXISTS relay_engine text");
 
 }
@@ -67,6 +68,38 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
     return r.rowCount===1?{ok:true}:denied('hold_not_owned');
    });
   },
+  // Persist the intended destination before any drain. Compare-and-set under
+  // the shared source lock prevents competing controllers choosing a new owner.
+  async readRelayOwnerState(){return tx(async(c,row)=>{
+   if(!row)return denied('gate_missing');
+   const {rows:[n]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+   return {ok:true,mode:row.mode,owner:row.relay_owner??null,nextOwner:row.relay_next_owner??null,
+     epoch:new Date(row.updated_at).getTime(),openHolds:n.n};
+  })},
+  async beginRelayDrain({expectedOwner=null,nextOwner}={}){
+   if(![null,'hostbrr','linode'].includes(expectedOwner)||!['hostbrr','linode'].includes(nextOwner)||expectedOwner===nextOwner)
+    return denied('invalid_relay_transition');
+   return tx(async(c,row)=>{
+    if(row?.mode!=='legacy'||(row.relay_owner??null)!==expectedOwner||row.relay_next_owner)
+      return denied('relay_transition_conflict');
+    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+    if(feed&&feed.state!=='released')return denied('reservation_unresolved');
+    const {rows:[updated]}=await c.query("UPDATE blofy_engine_ingress_gate SET mode='draining',relay_next_owner=$2,updated_at=clock_timestamp() WHERE source_id=$1 RETURNING updated_at",[sourceId,nextOwner]);
+    return {ok:true,mode:'draining',owner:expectedOwner,nextOwner,epoch:new Date(updated.updated_at).getTime()};
+   });
+  },
+  async cancelRelayDrain({expectedOwner,nextOwner,epoch}={}){
+   if(!['hostbrr','linode'].includes(expectedOwner)||!['hostbrr','linode'].includes(nextOwner)||!Number.isSafeInteger(epoch))
+    return denied('invalid_relay_transition');
+   return tx(async(c,row)=>{
+    if(row?.mode!=='draining'||row.relay_owner!==expectedOwner||row.relay_next_owner!==nextOwner||new Date(row.updated_at).getTime()!==epoch)
+      return denied('relay_transition_conflict');
+    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+    if(feed&&feed.state!=='released')return denied('reservation_unresolved');
+    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',relay_next_owner=NULL,updated_at=clock_timestamp() WHERE source_id=$1",[sourceId]);
+    return {ok:true,mode:'legacy',relayOwner:expectedOwner};
+   });
+  },
   // Internal orchestration only. Change the selected portable relay under
   // the same source lock as all admissions. A health failure alone is never
   // evidence of release. No external endpoint is allowed to supply proof.
@@ -74,7 +107,7 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    if(![null,'hostbrr','linode'].includes(expectedOwner)||!['hostbrr','linode'].includes(nextOwner)||expectedOwner===nextOwner)
     return denied('invalid_relay_transition');
    return tx(async(c,row)=>{
-    if(row?.mode!=='draining'||(row.relay_owner??null)!==expectedOwner)
+    if(row?.mode!=='draining'||(row.relay_owner??null)!==expectedOwner||row.relay_next_owner!==nextOwner)
      return denied('relay_transition_conflict');
     const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
     const now=new Date(time.now).getTime(),drainStartedAt=new Date(row.updated_at).getTime();
@@ -89,7 +122,7 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
     if(n.n!==0)return denied('legacy_holds_open');
     const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
     if(feed&&feed.state!=='released')return denied('reservation_unresolved');
-    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',relay_owner=$2,reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId,nextOwner]);
+    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',relay_owner=$2,relay_next_owner=NULL,reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId,nextOwner]);
     return {ok:true,mode:'legacy',relayOwner:nextOwner};
    });
   },
@@ -109,14 +142,14 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    return r.rowCount===1?{ok:true}:denied('hold_conflict');
   })},
   async beginDrain(){return tx(async(c,row)=>{
-   if(row?.mode!=='legacy')return denied('not_legacy');
+   if(row?.mode!=='legacy'||row.relay_owner||row.relay_next_owner)return denied('not_legacy');
    await c.query("UPDATE blofy_engine_ingress_gate SET mode='draining',updated_at=now() WHERE source_id=$1",[sourceId]);
    return {ok:true,mode:'draining'};
   })},
   // Abort an incomplete drain only before an engine has taken ownership.
   // A pending or unknown reservation must first be reconciled independently.
   async cancelDrain({expectedDrainStartedAt}={}){return tx(async(c,row)=>{
-   if(row?.mode!=='draining')return denied('not_draining');
+   if(row?.mode!=='draining'||row.relay_next_owner)return denied('not_draining');
    if(expectedDrainStartedAt!==undefined&&(!Number.isSafeInteger(expectedDrainStartedAt)||new Date(row.updated_at).getTime()!==expectedDrainStartedAt))return denied('drain_epoch_changed');
    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
    if(feed&&feed.state!=='released')return denied('reservation_unresolved');
@@ -141,7 +174,7 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
   // Never promote based on registered holds alone. Coverage and independent
   // provider observation are required from the trusted cutover orchestrator.
   async promote({reservationId,engineId,proof,legacyHoldsToReconcile=null}={}){return tx(async(c,row)=>{
-   if(row?.mode!=='draining'||!valid(reservationId)||!['hostbrr','linode'].includes(engineId))return denied('not_draining');
+   if(row?.mode!=='draining'||row.relay_next_owner||row.relay_owner||!valid(reservationId)||!['hostbrr','linode'].includes(engineId))return denied('not_draining');
    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
    const now=new Date(time.now).getTime();
    if(proof?.sourceId!==sourceId||proof?.authoritative!==true||proof.scope!=='all_paths'||proof.activeConnections!==0||proof.maxConnections!==1||!Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)return denied('external_fence_unconfirmed');
