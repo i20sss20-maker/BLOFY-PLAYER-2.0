@@ -52,3 +52,27 @@ test('relay holds are authenticated, scoped, atomic and cannot mutate mode',asyn
  assert.equal((await call({operation:'close',holdId})).code,200);
  assert.equal(open.size,0);
 });
+
+test('owned relay mode rejects old shared credential and standby admission',async()=>{
+ const cfg={...env,BLOFY_RELAY_ENGINE_OWNERSHIP:'1',BLOFY_HOSTBRR_RELAY_HOLD_TOKEN:'h'.repeat(40),BLOFY_LINODE_RELAY_HOLD_TOKEN:'l'.repeat(40)};
+ const calls=[];
+ const pool={async query(){return {rows:[{id:sourceId,enabled:true,publish_catalog:true,quota:'1',restreamer:'false'}]}},async connect(){return {release(){},async query(sql,args){
+  calls.push({sql,args});
+  if(sql.startsWith('SELECT *'))return {rows:[{mode:'legacy',relay_owner:'hostbrr'}]};
+  if(sql.startsWith('INSERT INTO blofy_engine_legacy_holds'))return {rowCount:1};
+  if(sql.startsWith('UPDATE blofy_engine_legacy_holds'))return {rowCount:args[2]==='hostbrr'?1:0};
+  return {rows:[]};
+ }}}};
+ const handle=createRelayHoldEndpoint(pool,cfg);
+ async function call(token,operation='enter',h=handle){
+  const req=Readable.from([Buffer.from(JSON.stringify({operation,holdId}))]);req.method='POST';req.headers={authorization:'Bearer '+token,'content-type':'application/json'};
+  let status;await h(req,{writeHead(code){status=code},end(){}});return status;
+ }
+ assert.equal(await call(cfg.BLOFY_STREAM_RELAY_SHARED_TOKEN),403);
+ assert.equal(await call(cfg.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN,'enter',createRelayHoldEndpoint(pool,{...cfg,BLOFY_LINODE_RELAY_HOLD_TOKEN:cfg.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN})),403);
+ assert.equal(await call(cfg.BLOFY_LINODE_RELAY_HOLD_TOKEN),409);
+ assert.equal(await call(cfg.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN),200);
+ assert.equal(await call(cfg.BLOFY_LINODE_RELAY_HOLD_TOKEN,'close'),409);
+ assert.equal(await call(cfg.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN,'close'),200);
+ assert.deepEqual(calls.filter(x=>x.sql.startsWith('INSERT INTO')).map(x=>x.args),[[sourceId,holdId,'hostbrr']]);
+});
