@@ -17,3 +17,13 @@ for(const [name,code] of [['startHls','hls_storage_unavailable'],['startVod','vo
  assert.deepEqual(result,{result:{error:code,status:503},active:0});
  });
 }
+
+test('full VOD allocates a unique directory before publishing its session',()=>{
+ const start=source.indexOf('async function fullVodRequest(');
+ const end=source.indexOf('touchHls(session);',start);
+ const prefix=source.slice(start,end);
+ assert.ok(start>=0&&end>start);
+ assert.ok(prefix.includes("key+'-'+randomBytes(6).toString('hex')"));
+ assert.ok(prefix.includes("catch{return hlsError(503,'vod_storage_unavailable',2)}"));
+ assert.ok(prefix.indexOf('mkdirSync(dir')<prefix.indexOf('hlsSessions.set(key,session)'));
+});
