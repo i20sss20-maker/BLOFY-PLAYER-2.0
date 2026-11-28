@@ -106,3 +106,18 @@ test('saved login slots preserve the preceding account, switch only with verific
  const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
  assert.match(css,/\.detail-plot\{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none/);
 });
+
+ test('AI chat keeps account isolation and limits conversation input and output',()=>{
+ const a=app.indexOf('function aiScreen('),b=app.indexOf('function resetCatalogRefresh(',a),chat=app.slice(a,b);
+ assert.match(chat,/\.slice\(-9\)/);
+ assert.match(chat,/api\('POST','\/api\/ai\/chat'/);
+ assert.match(chat,/token!==S.aiToken/);
+ assert.match(chat,/S.aiToken\+\+;S.aiBusy=false;S.aiTurns=\[\]/);
+ const server=readFileSync(new URL('../server.ts',import.meta.url),'utf8');
+ const route=server.slice(server.indexOf("if(p==='/api/ai/chat'"),server.indexOf("if(p==='/api/ai/interpret'"));
+ assert.match(route,/turns.length>9/);
+ assert.match(route,/x.content.length>1600/);
+ assert.match(route,/Authorization:h.Authorization/);
+ assert.match(route,/redirect:'manual'/);
+ assert.match(route,/slice\(0,3000\)/);
+});
