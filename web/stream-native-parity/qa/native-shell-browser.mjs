@@ -83,7 +83,10 @@ try{
   assert.equal(await page.locator('.native-home-bottom [data-go="series"]').count(),1);
   assert.equal(await page.locator('.native-home-tabs').count(),0);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
+  const portraitPhone=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);
+  assert.ok(navBox&&workspaceBox,'navigation and workspace exist');
+  if(portraitPhone){assert.ok(navBox.y>=workspaceBox.y+workspaceBox.height-2&&navBox.height<=90,'phone navigation belongs below full-width content')}
+  else assert.ok(navBox.x>=workspaceBox.x+workspaceBox.width-2,'larger screen navigation belongs on the right');}
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
@@ -93,7 +96,10 @@ try{
   assert.equal(await page.locator('.native-home-bottom [data-go="series"]').count(),1);
   assert.equal(await page.locator('.native-home-tabs').count(),0);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
+  const portraitPhone=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);
+  assert.ok(navBox&&workspaceBox,'navigation and workspace exist');
+  if(portraitPhone){assert.ok(navBox.y>=workspaceBox.y+workspaceBox.height-2&&navBox.height<=90,'phone navigation belongs below full-width content')}
+  else assert.ok(navBox.x>=workspaceBox.x+workspaceBox.width-2,'larger screen navigation belongs on the right');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
   await page.locator('.native-home-header [data-go="settings"]').click();
