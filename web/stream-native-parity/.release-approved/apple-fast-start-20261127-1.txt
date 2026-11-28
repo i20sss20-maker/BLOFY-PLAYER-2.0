@@ -1,0 +1,1 @@
+WEB 2026.11.27.1 — Apple native HLS, shell cache update, bounded STOP retry and reduced initial HLS targets. Candidate f7add6c5a9ead573f988af122cc32239e62db336. Build must pass full Docker QA before serving. Real Apple and channel performance unverified. Rollback aae76f78c3dcadaabe77e299ec9891971f829638.
