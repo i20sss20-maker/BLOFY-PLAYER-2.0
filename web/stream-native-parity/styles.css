@@ -1201,3 +1201,11 @@ html[data-blofy-device="tv"] .poster-grid .poster-caption,html[data-blofy-device
 .detail-meta-row dt{flex:0 0 100px;color:var(--muted)}
 .detail-meta-row dd{flex:1;min-width:0;margin:0;white-space:normal;overflow-wrap:anywhere;color:var(--white)}
 @media(max-width:600px){.detail-meta-row{gap:8px}.detail-meta-row dt{flex-basis:76px}.detail-section-title{font-size:17px}}
+
+/* Keep the classic player readable: one control dock, optional guide and diagnostics. */
+.native-stream-hud .mobile-player-actions,.native-stream-hud .native-player-eyebrow,.native-stream-hud .native-player-hint,.native-stream-hud #player-source-mode{display:none!important}
+.native-stream-hud .player-live-guide:not(.phone-guide-open){display:none!important}
+.native-stream-hud .player-live-guide.phone-guide-open{display:block;max-height:100px;overflow:auto}
+.native-stream-hud .native-player-dock{max-width:100%;overflow-x:auto;flex-wrap:nowrap}
+.detail-metadata summary{cursor:pointer;font-weight:600;padding:6px 0;color:var(--soft)}
+.poster-caption .poster-category{white-space:normal;overflow-wrap:anywhere;line-height:1.5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
