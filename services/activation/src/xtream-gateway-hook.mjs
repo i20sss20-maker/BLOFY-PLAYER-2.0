@@ -1458,6 +1458,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           providerMaxConcurrentFeeds:row.source_reported_max_connections
         })
       });
+      // An authenticated relay obtains its own source admission on ticket
+      // redemption. End the gateway grant before attaching this viewer.
+      if(process.env.BLOFY_ENGINE_RELAY_HOLDS==='1'&&isConfiguredRelayTicket(destination)){
+        if(!await ingress.close())return text(res,503,'Source temporarily unavailable','text/plain; charset=utf-8',{'retry-after':'5'});
+      }
       observe('shared_grant'); // capability issued, not proven playback
       return await proxySharedLiveTicket(req,res,destination,observe);
     }catch{

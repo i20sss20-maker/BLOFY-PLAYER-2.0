@@ -1,7 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createLegacyCleanupQueue} from '../src/blofy-engine-legacy-ingress.mjs';
+import {createGatewayHoldLifetime,createLegacyCleanupQueue} from '../src/blofy-engine-legacy-ingress.mjs';
 const make=options=>createLegacyCleanupQueue({intervalMs:60000,...options});
+test('HTTP shutdown waits for an admitted request and its database close retry',async()=>{
+ const lifetime=createGatewayHoldLifetime();
+ const finish=lifetime.begin();
+ const queue=make({attempt:op=>op()});
+ lifetime.register(queue);
+ let calls=0;
+ try{
+  const receipt=lifetime.drain(3000);
+  assert.equal(lifetime.begin(),null);
+  assert.equal(await queue.submit('ending',async()=>++calls===2),false);
+  finish();
+  assert.deepEqual(await receipt,{complete:true,active:0,pending:0,overflow:0});
+  assert.equal(calls,2);
+ }finally{queue.stop()}
+});
+test('a timeout does not settle a live hold or authorize another admission',async()=>{
+ const lifetime=createGatewayHoldLifetime(),finish=lifetime.begin();
+ assert.deepEqual(await lifetime.drain(0),{complete:false,active:1,pending:0,overflow:0});
+ assert.equal(lifetime.begin(),null);
+ finish();
+});
 test('explicit failed close is retried without releasing any other hold',async()=>{
  let calls=0;
  const q=make({attempt:op=>op()});
