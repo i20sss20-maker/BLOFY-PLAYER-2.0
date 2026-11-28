@@ -1317,3 +1317,7 @@ html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bott
   min-height:44px;padding:3px 1px;font-size:10px;gap:2px
  }
 }
+
+/* Animate content only, never translate the viewport-sized shell on touch.
+   A moving shell can put the bottom navigation below the visible screen. */
+html[data-blofy-device="touch"] .app.screen-appear{animation:none;transform:none;opacity:1}
