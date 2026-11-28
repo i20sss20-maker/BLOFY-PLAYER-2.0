@@ -151,3 +151,75 @@ test('auto capacity grows only with measured headroom and retreats without killi
  assert.equal(limit(3,3,.2,.3,6,gb),3);
  assert.equal(limit(12,12,.1,.1,24,gb),12);
 });
+
+
+test('cancelled upstream startup holds its worker slot until the fetch settles',async()=>{
+ const a=source.indexOf('function stopHls('),b=source.indexOf('const nap=',a);
+ const c=source.indexOf('async function startHls('),d=source.indexOf('/* Preview-only fan-out',c);
+ let rejectFetch;
+ const map=new Map(),removed=[];
+ const ctx={active:0,MAX_JOBS:2,hlsSessions:map,hlsRoot:'/synthetic',join:(...p)=>p.join('/'),
+  randomBytes:()=>({toString:()=> 'nonce'}),mkdirSync(){},rmSync:p=>removed.push(p),
+  liveSourceIdentity:()=> 'test',touchHls(){},hardTTL:10000,AbortController,
+  recordLiveSourceFailure(){},noteEncoderCapacityDenied(){},retireLiveSid(){},
+  BASE:'http://synthetic/',fetch:()=>new Promise((resolve,reject)=>{rejectFetch=reject}),
+  setTimeout:()=>({unref(){}}),clearTimeout(){},console:{info(){}}};
+ const api=vm.runInNewContext(source.slice(a,b)+source.slice(c,d)+';({startHls,stopHls})',ctx);
+ const pending=api.startHls({bearer:'synthetic',kind:'live',id:'1',ext:'ts',track:0,key:'a'});
+ assert.equal(ctx.active,1);
+ api.stopHls(map.get('a'),'viewer_stopped');
+ assert.equal(ctx.active,1,'aborting a pending fetch does not free its slot early');
+ assert.equal(removed.length,0);
+ rejectFetch(Error('cancelled'));
+ assert.equal((await pending).status,502);
+ assert.equal(ctx.active,0);
+ assert.equal(removed.length,1);
+});
+test('speculative VOD reserves one local job for foreground playback',()=>{
+ const a=source.indexOf('function canPrefetchVod('),b=source.indexOf('function scheduleFullVodPrefetch(',a);
+ const can=vm.runInNewContext(source.slice(a,b)+';canPrefetchVod');
+ assert.equal(can(0,2),true);assert.equal(can(1,2),false);
+ assert.equal(can(1,3),true);assert.equal(can(2,3),false);
+ assert.equal(can(-1,3),false);
+ assert.match(source,/next\*FULL_SEGMENT_SECONDS>=session.duration\|\|!canPrefetchVod/);
+ assert.match(source,/session.exitCode!==0\|\|session.error\|\|!canPrefetchVod\(active,MAX_JOBS\)\)return/);
+});
+
+
+test('independent live viewers retain reservations during another viewer cancellation',async()=>{
+ const a=source.indexOf('function stopHls('),b=source.indexOf('const nap=',a);
+ const c=source.indexOf('async function startHls('),d=source.indexOf('/* Preview-only fan-out',c);
+ const pending=new Map(),sessions=new Map(),removed=[];
+ const ctx={active:0,MAX_JOBS:2,hlsSessions:sessions,hlsRoot:'/synthetic',join:(...p)=>p.join('/'),
+  randomBytes:()=>({toString:()=> 'nonce'}),mkdirSync(){},rmSync:p=>removed.push(p),
+  liveSourceIdentity:()=> 'test',touchHls(){},hardTTL:10000,AbortController,
+  recordLiveSourceFailure(){},noteEncoderCapacityDenied(){},retireLiveSid(){},
+  BASE:'http://synthetic/',fetch:(url,opts)=>new Promise((resolve,reject)=>pending.set(opts.headers.Authorization,reject)),
+  setTimeout:()=>({unref(){}}),clearTimeout(){},console:{info(){}}};
+ const api=vm.runInNewContext(source.slice(a,b)+source.slice(c,d)+';({startHls,stopHls})',ctx);
+ const args=(key,id)=>({bearer:key,kind:'live',id,ext:'ts',track:0,key});
+ const first=api.startHls(args('first','1'));
+ const second=api.startHls(args('second','2'));
+ const survivor=sessions.get('first');
+ api.stopHls(sessions.get('second'),'viewer_stopped');
+ assert.equal(ctx.active,2);
+ assert.equal(survivor.stopped,false);
+ assert.equal(survivor.abort.signal.aborted,false);
+ assert.equal((await api.startHls(args('third','3'))).status,429);
+ assert.equal(pending.has('third'),false);
+ pending.get('second')(Error('cancelled'));
+ await second;
+ assert.equal(ctx.active,1);
+ assert.equal(sessions.get('first'),survivor);
+ assert.equal(removed.length,1);
+ const third=api.startHls(args('third','3'));
+ assert.equal(ctx.active,2);
+ assert.equal(survivor.abort.signal.aborted,false);
+ api.stopHls(survivor,'viewer_stopped');
+ api.stopHls(sessions.get('third'),'viewer_stopped');
+ pending.get('first')(Error('cancelled'));
+ pending.get('third')(Error('cancelled'));
+ await Promise.all([first,third]);
+ assert.equal(ctx.active,0);
+ assert.equal(removed.length,3);
+});

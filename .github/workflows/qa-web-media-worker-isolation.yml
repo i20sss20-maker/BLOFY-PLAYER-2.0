@@ -1,0 +1,22 @@
+name: QA web media worker isolation
+on:
+  pull_request:
+    paths:
+      - 'web/stream-native-parity/media-worker.ts'
+      - 'web/stream-native-parity/media-ended-drain-fix.mjs'
+      - 'web/stream-native-parity/qa/live-finished-drain.test.mjs'
+      - 'web/stream-native-parity/Dockerfile.media'
+      - '.github/workflows/qa-web-media-worker-isolation.yml'
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build media worker and execute mandatory regression tests
+        working-directory: web/stream-native-parity
+        run: docker build --file Dockerfile.media --tag blofy-media-qa .
+      - name: Repeat worker regression tests without network
+        run: docker run --rm --network none --entrypoint bun blofy-media-qa test /app/qa/live-finished-drain.test.mjs
