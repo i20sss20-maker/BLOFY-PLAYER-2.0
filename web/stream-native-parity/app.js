@@ -1615,7 +1615,16 @@ function searchNow(q,token){
  }
  for(var i=0;i<kinds.length;i++)load(kinds[i],0)
 }
-function aiTitleKey(s){return String(s||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')}
+function aiTitleKey(s){
+ var name=String(s||'').toLowerCase();
+ if(typeof name.normalize==='function')name=name.normalize('NFKD');
+ name=name.replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ة/g,'ه').replace(/[٠-٩]/g,function(c){return String(c.charCodeAt(0)-1632)}).replace(/[۰-۹]/g,function(c){return String(c.charCodeAt(0)-1776)});
+ // Property escapes are not parseable in some legacy TV engines.
+ // Construct dynamically and fall back to broad Unicode letter ranges.
+ var separators;
+ try{separators=new RegExp('[^\\p{L}\\p{N}]+','gu')}catch(e){separators=/[^0-9a-z\u00c0-\u024f\u0370-\u052f\u0620-\u063f\u0641-\u064a\u066e-\u06d3\u06fa-\u06fc\u0750-\u077f\u08a0-\u08c9\u0900-\u1fff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+/g}
+ return name.replace(separators,' ').trim().replace(/\s+/g,' ')
+}
 function verifyAiTitles(names,token,done){
  var tasks=[],matches=[],seen={},cursor=0,epoch=S.accountEpoch;
  (names||[]).filter(function(x){return typeof x==='string'&&x.trim().length>=2}).slice(0,4).forEach(function(name){['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})});
