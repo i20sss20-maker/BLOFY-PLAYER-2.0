@@ -1,6 +1,6 @@
 import {test} from 'bun:test';
 import assert from 'node:assert/strict';
-import {loadApprovedM3u} from '../approved-m3u-loader.mjs';
+import {loadApprovedM3u,approvedXtreamPlaylistUrl} from '../approved-m3u-loader.mjs';
 const url='https://provider.example/catalog.m3u?token=fixture',approvedOrigins=['https://provider.example'];
 test('browser playlist loader fetches approved catalog with no cookies, referrer or redirects',async()=>{
  let count=0;
@@ -17,4 +17,12 @@ test('unapproved origin is denied before fetching and oversized responses fail c
  await assert.rejects(loadApprovedM3u(url,{approvedOrigins,fetchImpl:async()=>new Response('x',{headers:{'content-length':'99999999'}})}),/playlist_too_large/);
  const controller=new AbortController();controller.abort();
  await assert.rejects(loadApprovedM3u(url,{approvedOrigins,signal:controller.signal,fetchImpl:async()=>{throw Error('unexpected')}}),/playlist_aborted/);
+});
+
+test('external Xtream uses approved HTTPS export and correctly encodes credentials',()=>{
+ const target=new URL(approvedXtreamPlaylistUrl({host:'https://provider.example',username:'a&b',password:'p+q'},approvedOrigins));
+ assert.equal(target.origin,'https://provider.example');assert.equal(target.pathname,'/get.php');
+ assert.equal(target.searchParams.get('username'),'a&b');assert.equal(target.searchParams.get('password'),'p+q');
+ assert.equal(target.searchParams.get('output'),'m3u8');
+ for(const host of ['https://evil.example','http://provider.example','https://provider.example/admin','https://provider.example/?a=1','https://user:pass@provider.example'])assert.throws(()=>approvedXtreamPlaylistUrl({host,username:'a',password:'b'},approvedOrigins));
 });
