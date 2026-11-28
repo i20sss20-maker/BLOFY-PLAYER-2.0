@@ -39,3 +39,20 @@ test('direct sign-in uses fixed first-party session exchange, not external netwo
  assert.match(server,/HttpOnly; Secure; SameSite=Strict/);
  assert.match(login,/S.aiBusy=false;S.aiToken\+\+/);
 });
+
+test('movie and series descriptions use Arabic AI translation without replacing existing Arabic descriptions',()=>{
+ const a=app.indexOf('function needsPlotTranslation('),b=app.indexOf('function details(',a);
+ const needs=new Function(app.slice(a,b)+';return needsPlotTranslation')();
+ assert.equal(needs('A detective searches for his missing brother.'),true);
+ assert.equal(needs('探偵が行方不明の兄を探す'),true);
+ assert.equal(needs('يبحث المحقق عن أخيه المفقود في المدينة.'),false);
+ assert.equal(needs('x'.repeat(3901)),false);
+ const detail=app.slice(b,app.indexOf('function parseEpisodes(',b));
+ assert.match(detail,/generation!==plotGeneration\|\|plotSource!==source/);
+ assert.match(detail,/if\(extra&&needsPlotTranslation\(plotSource\)/);
+ assert.match(detail,/field.textContent=plotTranslation/);
+ assert.match(detail,/api\('POST','\/api\/ai\/translate'/);
+ const server=readFileSync(new URL('../server.ts',import.meta.url),'utf8');
+ assert.match(server,/blofy-ai-gateway-production\.up\.railway\.app\/v1\/translate/);
+ assert.match(server,/JSON.stringify\(\{title:'',overview,locale:'ar'\}\)/);
+});
