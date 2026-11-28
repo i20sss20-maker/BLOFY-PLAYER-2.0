@@ -721,23 +721,7 @@ change("function beginPreview(item){\n if(S.autoPreviewTimer)", "function beginP
 change("'<div class=\"catalog\">'+categoryRail(kind)+","'<div class=\"catalog live-catalog\">'+categoryRail(kind)+");
 
 
- // Native phone home: three content tabs at top, four essential bottom
- // destinations. Use the existing favorite library, not a fake download UI.
-change("function navHtml(){",`function phoneHomeNavigation(){
- var entries=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['favorites','♡','المفضلة'],['collections','▦','التصنيفات']];
- return '<aside class="rail phone-bottom-nav" aria-label="التنقل">'+entries.map(function(v){
-  return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol" aria-hidden="true">'+v[1]+'</span><span>'+v[2]+'</span></button>'
- }).join('')+'</aside>'
-}
-function phoneHomeTabs(){
- return '<nav class="phone-content-tabs" aria-label="أقسام المحتوى"><button class="btn secondary" data-go="live">البث المباشر</button><button class="btn secondary" data-go="movie">الأفلام</button><button class="btn secondary" data-go="series">المسلسلات</button></nav>'
-}
-function navHtml(){
- if(phoneLiveLayout())return phoneHomeNavigation();`);
-change("'<div class=\"toolbar\"><h1>'+esc(pageTitle)+'</h1><div class=\"row\">'+",`'<div class="toolbar"><h1>'+esc(phoneLiveLayout()&&S.route==='home'?'BLOFY STREAM':pageTitle)+'</h1><div class="row">'+
- (phoneLiveLayout()&&S.route==='home'?'<button class="btn secondary phone-header-action" data-go="ai" aria-label="الذكاء الاصطناعي">✧</button><button class="btn secondary phone-header-action" data-go="settings" aria-label="الإعدادات">⚙</button>':'')+`);
-change("'<div id=\"screen\">'+markup+'</div></main></div>';","(phoneLiveLayout()&&S.route==='home'?phoneHomeTabs():'')+'<div id=\"screen\">'+markup+'</div></main></div>';");
-change("target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;","target.innerHTML=hero+(phoneLiveLayout()?'':shortcuts)+watch+shelfMovies+shelfSeries;");
+ // Native Home navigation now lives in app.js; avoid overwriting it during build.
 change("var hadScreen=!!target.querySelector('.story-row');","var hadScreen=!!target.querySelector('.home-hero');");
 change("var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-panel');","var panel=phoneLiveLayout()?document.getElementById('workspace'):document.querySelector(kind==='live'?'#channel-list':'.poster-panel');");
 
