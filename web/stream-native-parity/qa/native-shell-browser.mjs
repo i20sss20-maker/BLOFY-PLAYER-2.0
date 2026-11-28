@@ -28,7 +28,7 @@ try{
    const p=u.pathname;
    if(!p.startsWith('/api/'))return route.continue();
    const respond=(status,data)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
-   if(p==='/api/session')return respond(401,{active:false});
+   if(p==='/api/session')return requests.length?respond(200,{active:true,profileKey:'a'.repeat(24),expiresAt:Date.now()+3600000,daysRemaining:1}):respond(401,{active:false});
    if(p==='/api/login-modes')return respond(200,{direct:mode!=='code'});
    if(p==='/api/redeem'||p==='/api/direct-login'){
     const input=request.postDataJSON();requests.push({p,input});
@@ -70,6 +70,16 @@ try{
   assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
+  await page.locator('.native-home-header [data-go="settings"]').click();
+  await page.locator('#subscription-status').click();
+  await page.waitForFunction(()=>document.getElementById('subscription-feedback')?.textContent.includes('الاشتراك نشط'));
+  assert.equal(await page.locator('#picture-fit-label').textContent(),'ملاءمة');
+  await page.locator('#picture-fit').click();
+  assert.equal(await page.locator('#picture-fit-label').textContent(),'تكبير');
+  await page.locator('[data-back]').first().click();
+  await page.locator('.native-home-header [data-go="settings"]').click();
+  assert.equal(await page.locator('#picture-fit-label').textContent(),'تكبير');
+  await page.locator('[data-back]').first().click();
   await page.locator('.native-home-header [data-go="ai"]').click();
   assert.equal(await page.locator('.rail').count(),0);
   await page.locator('#ai-text').fill('اختبار');
@@ -118,7 +128,7 @@ try{
  browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
  const offline=await browser.newContext({serviceWorkers:'allow'});
  const offPage=await offline.newPage(),profile='c'.repeat(24),expiresAt=Date.now()+3600000;
- let activated=false,mediaCalls=0;
+ let activated=false,mediaCalls=0,translationCalls=0;
  await offline.route('**/*',async route=>{
   const u=new URL(route.request().url());
   if(u.origin!==origin)return route.abort();
@@ -133,7 +143,8 @@ try{
   if(p==='/api/redeem'){activated=true;return respond(200,{ok:true,profileKey:profile,expiresAt})}
   if(p==='/api/login-modes')return respond(200,{direct:false});
   if(p==='/api/page')return respond(200,{items:u.searchParams.get('kind')==='movie'?[{stream_id:123,name:'Offline fixture',container_extension:'mp4'}]:[],total:1,hasMore:false,nextOffset:null});
-  if(p==='/api/catalog'&&u.searchParams.get('action')==='get_vod_info')return respond(200,{info:{plot:'وصف تجريبي للفيلم'}});
+  if(p==='/api/catalog'&&u.searchParams.get('action')==='get_vod_info')return respond(200,{info:{plot:'A synthetic film description.'}});
+  if(p==='/api/ai/translate'){translationCalls++;assert.equal(route.request().postDataJSON().overview,'A synthetic film description.');return respond(200,{ok:true,translatedOverview:'وصف تجريبي للفيلم'});}
   return respond(200,[]);
  });
  await offPage.goto(origin);
@@ -142,6 +153,12 @@ try{
  await offPage.locator('.rail-link[data-go="downloads"]').waitFor();
  await offPage.locator('[data-details="movie:123"]').first().click();
  await offPage.locator('[data-download="movie:123"]').waitFor();
+ await offPage.waitForFunction(()=>document.getElementById('detail-plot-text')?.textContent==='وصف تجريبي للفيلم');
+ await offPage.locator('#detail-translate').click();
+ assert.equal(await offPage.locator('#detail-plot-text').textContent(),'A synthetic film description.');
+ await offPage.locator('#detail-translate').click();
+ assert.equal(await offPage.locator('#detail-plot-text').textContent(),'وصف تجريبي للفيلم');
+ assert.equal(translationCalls,1);
  await offPage.evaluate(async()=>{await navigator.serviceWorker.ready});
  await offPage.locator('[data-download="movie:123"]').click();
  await offPage.getByText('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.',{exact:true}).waitFor();
