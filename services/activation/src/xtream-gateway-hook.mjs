@@ -78,6 +78,7 @@ import {createDatabaseUnifiedRedeemer,handleUnifiedCodeHttp} from './stream-unif
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {loginBoundStreamAccount} from './stream-web-bound-login.mjs';
+import {createXtreamWebToken,verifyXtreamWebToken} from './stream-web-xtream-token.mjs';
 import {createStreamCodeXtreamLink} from './xtream-code-dual-link.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
@@ -602,6 +603,22 @@ async function checkAccountXtreamCompatibility(id) {
   });
 }
 
+// Independent Xtream web sessions must never acquire STREAM-only features
+// (e.g. protected commentator audio) merely by passing a credential check.
+function xtreamWebBearerRoute(req){
+ try{
+  const path=new URL(req.url,'https://blofyplayer.com').pathname;
+  return (req.method==='GET'&&path==='/api/v1/stream/app/session')||
+   ((req.method==='GET'||req.method==='POST')&&['/player_api.php','/panel_api.php'].includes(path))||
+   ((req.method==='GET'||req.method==='HEAD')&&/^\/api\/v1\/stream\/media\/(live|movie|series)\/[0-9]+(?:\.[A-Za-z0-9]{1,8})?$/.test(path));
+ }catch{return false}
+}
+async function readXtreamWebVoucher(accountId){
+ const rows=(await pool.query(`SELECT account_id,code_channel,dual_access_enabled,code_hash,redeemed_device_hash,
+  redeemed_at,expires_at,revoked_at FROM blofy_xtream_gateway_duration_codes WHERE account_id=$1 LIMIT 2`,[accountId])).rows;
+ if(rows.length>1)throw Error('ambiguous_xtream_voucher');
+ return rows[0]||null;
+}
 async function authenticateAppBearer(req){
   const token=bearerFromRequest(req),parsed=parseStreamAppToken(token);
   if(!parsed)return null;
@@ -615,7 +632,12 @@ async function authenticateAppBearer(req){
       AND a.expires_at IS NOT NULL AND a.expires_at>NOW()
       AND c.expires_at IS NOT NULL AND c.expires_at>NOW()
     LIMIT 1`,[parsed.accountId])).rows[0];
-  if(!row||!verifyStreamAppToken(token,row,KEY_HEX))return null;
+  if(!row||!verifyStreamAppToken(token,row,KEY_HEX)){
+    if(process.env.BLOFY_STREAM_WEB_XTREAM_LOGIN_QA!=='1'||!xtreamWebBearerRoute(req))return null;
+    const account=(await pool.query('SELECT * FROM blofy_xtream_gateway_accounts WHERE id=$1 AND enabled=TRUE',[parsed.accountId])).rows[0];
+    if(!account)return null;
+    return verifyXtreamWebToken(token,account,await readXtreamWebVoucher(account.id),KEY_HEX);
+  }
   // Never authorize a session beyond the original voucher deadline. Admin
   // extensions still work because they explicitly extend voucher + account
   // together. This cap applies even if the account deadline was mistakenly
@@ -2944,7 +2966,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           for await(const chunk of req){const bytes=Buffer.from(chunk);size+=bytes.length;if(size>4096)return json(res,413,{ok:false,error:'direct_login_unavailable'},headers);chunks.push(bytes)}
           const input=JSON.parse(Buffer.concat(chunks).toString('utf8'));
           if(!input||typeof input!=='object'||Array.isArray(input))return json(res,400,{ok:false,error:'direct_login_unavailable'},headers);
-          const result=await loginBoundStreamAccount(input,{
+          let result=await loginBoundStreamAccount(input,{
             keyHex:KEY_HEX,authenticate:(username,password)=>authenticate(username,password,{touch:false}),
             findVoucher:async(accountId,proof)=>{
               const rows=(await pool.query(`SELECT account_id,code_hash,redeemed_device_hash,redeemed_at,expires_at,revoked_at
@@ -2953,6 +2975,15 @@ http.createServer = function withBlofyXtreamGateway(listener) {
               return rows.length===1&&rows[0].redeemed_device_hash===proof?rows[0]:null;
             }
           });
+          if(!result.ok&&process.env.BLOFY_STREAM_WEB_XTREAM_LOGIN_QA==='1'&&
+             typeof input.username==='string'&&input.username.length<=256&&typeof input.password==='string'&&input.password.length<=256&&
+             typeof input.deviceKey==='string'&&/^[a-f0-9]{64}$/.test(input.deviceKey)){
+            const account=await authenticate(input.username,input.password,{touch:false});
+            if(account){
+              const session=createXtreamWebToken(account,await readXtreamWebVoucher(account.id),KEY_HEX);
+              if(session)result={ok:true,...session};
+            }
+          }
           return json(res,result.ok?200:401,result,headers);
         }catch{return json(res,503,{ok:false,error:'direct_login_unavailable'},headers)}
       }
