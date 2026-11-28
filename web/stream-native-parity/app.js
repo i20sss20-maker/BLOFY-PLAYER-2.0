@@ -203,6 +203,14 @@ function deviceKey(){
  try{localStorage.setItem('blofy_stream_web_device_v1',key)}catch(e){}
  return key
 }
+var savedLoginEnabled=false,accountSwitching=false;
+function reloadSavedLogin(){
+ try{localStorage.setItem('blofy-account-switch-notice',String(Date.now()))}catch(e){}
+ window.location.reload()
+}
+window.addEventListener('storage',function(e){
+ if(e.key==='blofy-account-switch-notice'&&e.newValue)window.location.reload()
+});
 function login(message){
  clearOfflineGrant();
  S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh();
@@ -218,7 +226,7 @@ function login(message){
  '<form id="stream-login-form"><div id="login-code-fields"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
  '<input class="input" id="activation-code" placeholder="•••• ••••" maxlength="24" inputmode="numeric" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">'+
  '</div><div id="login-direct-fields" hidden></div><button class="btn native-login-submit" id="redeem" type="submit">ابدأ المشاهدة</button></form><div class="login-status" id="login-status" role="status" aria-live="polite">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
- '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>مصادر Xtream وM3U الخارجية</a></div></div>';
+ '<div id="saved-login-slots" hidden></div><p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>مصادر Xtream وM3U الخارجية</a></div></div>';
  var form=document.getElementById('stream-login-form'),mode='code',directReady=false;
  var codeFields=document.getElementById('login-code-fields'),directFields=document.getElementById('login-direct-fields'),notice=document.getElementById('direct-login-notice');
  var modes={code:document.getElementById('login-mode-code'),xtream:document.getElementById('login-mode-xtream'),m3u:document.getElementById('login-mode-m3u')};
@@ -249,12 +257,32 @@ function login(message){
   btn.disabled=true;updateModeButtons(true);setStatus('جار التحقق من الاشتراك…');
   api('POST','/api/direct-login',payload,function(st,r){
    btn.disabled=false;updateModeButtons(false);
+   if(st===200&&r.ok&&savedLoginEnabled){reloadSavedLogin();return}
    if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth();return}
    setStatus(st===429?'محاولات كثيرة. جرّب لاحقًا.':st===400?'تحقق من رابط أو بيانات BLOFY.':st===401?'تحقق من الاشتراك، أو استخدم كود التفعيل الأصلي إن كان مرتبطًا بجهاز.':'الدخول غير متاح حاليًا. حاول لاحقًا.',true)
   })
  };
  api('GET','/api/login-modes',null,function(st,v){
   if(S.route!=='login'||!form.isConnected)return;
+  if(st===200&&v.savedLogins===true){
+   savedLoginEnabled=true;
+   api('GET','/api/saved-logins',null,function(status,data){
+    if(S.route!=='login'||!form.isConnected||status!==200||!data||!Array.isArray(data.modes))return;
+    var slot=document.getElementById('saved-login-slots'),labels={code:'الكود',xtream:'اكستريم',m3u:'M3U'};
+    var keys=data.modes.filter(function(k){return Object.prototype.hasOwnProperty.call(labels,k)});
+    if(!keys.length)return;
+    slot.hidden=false;slot.innerHTML='<p>اشتراكات محفوظة</p>'+keys.map(function(k){return '<button type="button" class="btn secondary" data-saved-mode="'+k+'">'+labels[k]+(data.active===k?' • الحالي':'')+'</button> '}).join('');
+    slot.onclick=function(e){
+     var target=e.target,k=target.getAttribute('data-saved-mode'),btn=document.getElementById('redeem');
+     if(!k||!btn||btn.disabled)return;
+     btn.disabled=true;updateModeButtons(true);setStatus('جار التحقق من الاشتراك المحفوظ…');
+     api('POST','/api/saved-logins/switch',{mode:k},function(st,r){
+      if(st===200&&r&&r.ok){reloadSavedLogin();return}
+      btn.disabled=false;updateModeButtons(false);setStatus(st===401?'انتهت صلاحية الجلسة المحفوظة. سجل دخول هذا الاشتراك مجددًا.':'تعذر التبديل مؤقتًا، اشتراكاتك محفوظة.',true)
+     })
+    }
+   })
+  }
   if(st===200&&v.external===true){var external=document.getElementById('external-playlist-entry');if(external)external.hidden=false}
   if(st===200&&v.direct===true){directReady=true;notice.textContent='دخول اشتراكات BLOFY المؤهلة؛ الروابط الخارجية غير مدعومة هنا.';updateModeButtons(false)}
  });
@@ -267,6 +295,7 @@ function redeem(){
  btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
+  if(st===200&&r.ok&&savedLoginEnabled){reloadSavedLogin();return}
   if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth()}
    else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
@@ -324,7 +353,7 @@ function restoreView(route,preferred){
  },0)
 }
 function nativeNavIcon(kind){
- var icons={"home":"<path d=\"M3,10 L12,3 L21,10 M5,9 L5,21 L10,21 L10,14 L14,14 L14,21 L19,21 L19,9\"/>","live":"<path d=\"M4,5 L20,5 Q22,5 22,7 L22,17 Q22,19 20,19 L4,19 Q2,19 2,17 L2,7 Q2,5 4,5 M8,22 L16,22 M10,9 L15,12 L10,15 Z\"/>","movie":"<path d=\"M3,7 L21,7 L21,21 L3,21 Z M3,7 L3,3 L21,3 L21,7 M7,3 L5,7 M13,3 L11,7 M19,3 L17,7\"/>","series":"<path d=\"M3,9 L21,9 L21,21 L3,21 Z M5,5 L19,5 M7,1 L17,1\"/>","collections":"<path d=\"M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z\"/>","downloads":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","search":"<path d=\"M10,3 A7,7 0,1 0,10,17 A7,7 0,1 0,10,3 M15,15 L22,22\"/>","ai":"<path d=\"M11.5,2L13.8,8.2L20,10.5L13.8,12.8L11.5,19L9.2,12.8L3,10.5L9.2,8.2Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M19,16L19.9,18.1L22,19L19.9,19.9L19,22L18.1,19.9L16,19L18.1,18.1Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M4.5,2L5.1,3.4L6.5,4L5.1,4.6L4.5,6L3.9,4.6L2.5,4L3.9,3.4Z\" fill=\"currentColor\" stroke=\"none\"/>","favorites":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","settings":"<path d=\"M3,6 L21,6 M3,18 L21,18 M8,3 L8,9 M16,15 L16,21\"/>","refresh":"<path d=\"M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4\"/>"};
+ var icons={"home":"<path d=\"M3,10 L12,3 L21,10 M5,9 L5,21 L10,21 L10,14 L14,14 L14,21 L19,21 L19,9\"/>","live":"<path d=\"M4,5 L20,5 Q22,5 22,7 L22,17 Q22,19 20,19 L4,19 Q2,19 2,17 L2,7 Q2,5 4,5 M8,22 L16,22 M10,9 L15,12 L10,15 Z\"/>","movie":"<path d=\"M3,7 L21,7 L21,21 L3,21 Z M3,7 L3,3 L21,3 L21,7 M7,3 L5,7 M13,3 L11,7 M19,3 L17,7\"/>","series":"<path d=\"M3,9 L21,9 L21,21 L3,21 Z M5,5 L19,5 M7,1 L17,1\"/>","collections":"<path d=\"M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z\"/>","downloads":"<path d=\"M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5\"/>","search":"<path d=\"M10,3 A7,7 0,1 0,10,17 A7,7 0,1 0,10,3 M15,15 L22,22\"/>","ai":"<path d=\"M11.5,2L13.8,8.2L20,10.5L13.8,12.8L11.5,19L9.2,12.8L3,10.5L9.2,8.2Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M19,16L19.9,18.1L22,19L19.9,19.9L19,22L18.1,19.9L16,19L18.1,18.1Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M4.5,2L5.1,3.4L6.5,4L5.1,4.6L4.5,6L3.9,4.6L2.5,4L3.9,3.4Z\" fill=\"currentColor\" stroke=\"none\"/>","favorites":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","settings":"<path d=\"M3,6 L21,6 M3,18 L21,18 M8,3 L8,9 M16,15 L16,21\"/>","refresh":"<path d=\"M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4\"/>"};
  return '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+(icons[kind]||icons.home)+'</svg>'
 }
 function compactNativeHome(){
@@ -490,7 +519,7 @@ function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
  '<span class="poster-art">'+safeImg(item)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
- '<span class="poster-caption"><strong>'+esc(name)+'</strong><span>'+(percent>3&&percent<95?'متابعة • '+percent+'٪':'BLOFY STREAM')+'</span></span></button>'
+ '<span class="poster-caption"><strong>'+esc(name)+'</strong>'+(percent>3&&percent<95?'<span>متابعة • '+percent+'٪</span>':'')+'</span></button>'
 }
 function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).map(function(x){return posterCard(x,kind)}).join('')+'</div>'}
 function home(){
@@ -501,8 +530,8 @@ function home(){
   var film=(movies&&movies.items)||[],show=(series&&series.items)||[],combined=film.concat(show),candidate=combined.length?combined[S.heroIndex%combined.length]:null;
   var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art').replace('loading="lazy"','loading="eager" fetchpriority="high"')+'<div class="hero-shade"></div><div class="hero-copy">'+
   '<div class="hero-kicker">'+esc(candidate.series_id?'مسلسل جديد':'أحدث العناوين')+'</div><h2 class="hero-title">'+esc(title(candidate))+'</h2>'+
-  '<div class="hero-description">اكتشف أحدث ما أضيف إلى مكتبة BLOFY STREAM، مع تفاصيل ومواسم ومتابعة مشاهدة.</div>'+
-  '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل والمشاهدة</button>'+
+  ''+
+  '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل</button>'+
   '<button class="btn secondary" data-go="movie">استكشف الأفلام</button></div>'+
   '<div class="hero-dots">'+combined.slice(0,5).map(function(x,n){return '<span class="'+(n===S.heroIndex?'current':'')+'"></span>'}).join('')+'</div></div></div>':
   '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2><div class="hero-description">قنوات وأفلام ومسلسلات باستخدام كود اشتراكك.</div></div></div>';
@@ -574,7 +603,7 @@ function catalog(kind){
 function categoryRail(kind){
  var data=S.cats[kind]||[],cat=S.cat[kind]||'all';
  return '<aside class="cat-rail"><div class="pane-head"><strong>الفئات</strong><small>'+data.length+' تصنيف</small></div>'+
- '<div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
+ '<div class="category-filter"><input class="input category-filter-input" type="search" placeholder="بحث في الفئات" aria-label="بحث في الفئات" autocomplete="off"></div><div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
  data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(x.category_name||'تصنيف')+'</button>'}).join('')+
  '</div></aside>'
 }
@@ -583,7 +612,7 @@ function buildCatalog(kind,listing){
  var host=document.getElementById('catalog-root');if(!host)return;var source=listing.items||[];
  if(host.querySelector('.catalog'))rememberView();
  if(kind==='live'){
-  host.innerHTML='<div class="catalog">'+categoryRail(kind)+
+  host.innerHTML='<div class="catalog live-catalog">'+categoryRail(kind)+
   '<section class="channels"><div class="pane-head"><strong>القنوات</strong><small>'+source.length+' قناة محمّلة</small></div>'+
   '<div class="pane-scroll" id="channel-list">'+source.map(function(x){var id=itemId(x,kind),pic=art(x);return '<button class="channel-item '+(S.selected===id?'selected':'')+'" data-channel="'+esc(id)+'">'+
   (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
@@ -1092,6 +1121,10 @@ function saveResume(kind,id,pos,duration,ready){
 function needsPlotTranslation(value){
  var text=typeof value==='string'?value.trim():'';
  if(text.length<4||text.length>3900)return false;
+ // Persian/Urdu share Arabic script; repeated non-Arabic letters or Persian words distinguish them.
+ var persianLetters=(text.match(/[\u067e\u0686\u0698\u06af\u06a9\u06cc]/g)||[]).length;
+ var persianWords=(text.match(/(?:^|[\s،؛.!؟])(?:این|برای|است|می‌شود|میشود|خواهد|که|را|در)(?=$|[\s،؛.!؟])/g)||[]).length;
+ if(persianLetters>=3||persianLetters>=1&&persianWords>=2||persianWords>=4)return true;
  var arabic=(text.match(/[\u0621-\u064a\u066e-\u06d3]/g)||[]).length;
  var latin=(text.match(/[a-zA-Z]/g)||[]).length;
  return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
@@ -1191,15 +1224,15 @@ function episodesScreen(opts){
   var rail=keys.map(function(x){return '<button class="cat-item '+(x===S.selectedSeason?'selected':'')+'" data-season="'+esc(x)+'">الموسم '+esc(x)+'</button>'}).join('');
   var html='<div class="episode-layout"><aside class="cat-rail season-rail"><div class="pane-head"><strong>المواسم</strong></div><div class="pane-scroll">'+rail+'</div></aside>'+
   '<section class="episode-list">'+chosen.map(function(x,i){
-   var eid=String(x.id||''),name=x.title||'الحلقة '+(x.episode_num||i+1),extension=x.container_extension||'mp4';
+   var eid=String(x.id||''),episodeNumber=x.episode_num||i+1,name=x.title||'الحلقة '+episodeNumber,extension=x.container_extension||'mp4';
    var w=getResume('series',eid),pct=w&&w.duration?Math.round(w.position/w.duration*100):0;
-   return '<button class="episode-row" data-watch="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'" data-from="'+(w&&w.position>30?Math.round(w.position):0)+'">'+
-   '<span class="episode-art">'+(art(x.info)||art(x)||art(item)?safeImg(art(x.info)||art(x)||art(item),'episode-cover'):'')+'<span class="episode-placeholder">▤</span>'+'</span><span class="episode-copy"><strong class="episode-name">الحلقة '+esc(x.episode_num||i+1)+' — '+esc(name)+'</strong>'+
+   return '<div class="episode-card"><button class="episode-row" data-watch="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'" data-from="'+(w&&w.position>30?Math.round(w.position):0)+'">'+
+   '<span class="episode-art">'+(art(x.info)||art(x)||art(item)?safeImg(art(x.info)||art(x)||art(item),'episode-cover'):'')+'<span class="episode-placeholder">▤</span>'+'</span><span class="episode-copy"><strong class="episode-name">الحلقة '+esc(episodeNumber)+'</strong>'+
    '<span class="episode-meta">الموسم '+esc(S.selectedSeason)+
    (x.info&&x.info.duration||x.duration?' • '+esc(String(x.info&&x.info.duration||x.duration).slice(0,30)):'')+
-   (pct?' • متابعة '+pct+'٪':' • اضغط للمشاهدة')+'</span>'+
+   (pct?' • متابعة '+pct+'٪':'')+'</span>'+
    (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'+
-   '<button class="btn secondary episode-download" type="button" data-download="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'">↓ تنزيل الحلقة</button>'
+   '<button class="btn secondary episode-download" type="button" data-download="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'" aria-label="تنزيل الحلقة '+esc(episodeNumber)+'" title="تنزيل الحلقة">'+nativeNavIcon('downloads')+'</button></div>'
   }).join('')+'</section></div>';
   document.getElementById('episodes-root').innerHTML=html;restoreView('episodes');
  }
@@ -1295,8 +1328,14 @@ function offlineOnlyScreen(){
  drawOfflineDownloads(grant.profile,true);return true
 }
 async function saveOfflineDownload(kind,id,ext,name){
- if(!S.userVerified||!offlineSupported()){offlineMessage('التنزيل داخل التطبيق غير مدعوم في هذا المتصفح.');return}
- if(String(ext).toLowerCase()!=='mp4'||!webDownloadPath(kind,id,ext)){offlineMessage('المشاهدة دون إنترنت تدعم ملفات MP4 المتوافقة مع جهازك حاليًا.');return}
+ if(!S.userVerified){offlineMessage('فعّل اشتراكك أولًا.');return}
+ if(!offlineSupported()||String(ext).toLowerCase()!=='mp4'){
+  offlineMessage('هذا الملف لا يدعم المشاهدة دون إنترنت داخل BLOFY على جهازك.');
+  var msg=document.getElementById('offline-status')||document.getElementById('web-download-message');
+  if(msg&&webDownloadPath(kind,id,ext)){var save=document.createElement('button');save.type='button';save.className='btn secondary';save.textContent='حفظ الملف على الجهاز';save.onclick=function(){save.disabled=true;requestWebDownload(kind,id,ext,name)};msg.appendChild(document.createTextNode(' '));msg.appendChild(save)}
+  return
+ }
+ if(!webDownloadPath(kind,id,ext)){offlineMessage('صيغة الملف غير مدعومة.');return}
  if(offlineTransfer){offlineMessage('يوجد تنزيل جارٍ.');return}
  var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl,name:String(name||'فيديو').slice(0,160),pct:0};offlineTransfer=task;
  var folder=null,fileName='',writer=null,reader=null,committed=false;
@@ -1343,7 +1382,7 @@ function downloadsScreen(){
 }
 function requestWebDownload(kind,id,ext,name){
  var url=webDownloadPath(kind,id,ext);
- var message=document.getElementById('download-status')||document.getElementById('web-download-message');
+ var message=document.getElementById('download-status')||document.getElementById('offline-status')||document.getElementById('web-download-message');
  if(!message){message=document.createElement('div');message.id='web-download-message';message.className='info';message.setAttribute('role','status');
   var target=document.querySelector('#detail-root .detail-actions,.downloads-page,.episode-list');
   if(target)target.insertAdjacentElement('afterend',message);
@@ -1497,7 +1536,7 @@ function searchNow(q,token){
 function aiScreen(){
  S.route='ai';
  shell('مساعد BLOFY الذكي','<section class="ai-chat-screen" aria-label="محادثة مساعد BLOFY">'+
-  '<div class="ai-note">المساعد يستخدم خدمة BLOFY نفسها الموجودة في تطبيق Android. الاقتراحات تُعرض كبحث داخل مكتبتك، وليست روابط لمحتوى غير متحقق.</div>'+
+  ''+
   '<div class="ai-thread" id="ai-thread" role="log" aria-live="polite"></div>'+
   '<div class="ai-prompts" id="ai-prompts"><button class="chip" data-ai-prompt="اقترح أفلام أكشن">أفلام أكشن</button>'+
   '<button class="chip" data-ai-prompt="رشح لي مسلسل كوميدي">مسلسلات كوميدية</button>'+
@@ -1631,9 +1670,25 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>اشتراكي والمكتبة</h3><button class="customer-setting-row" id="subscription-status">اشتراكي <span>‹</span></button><p id="subscription-feedback" class="customer-setting-feedback" role="status" aria-live="polite"></p><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button></section>'+
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
- '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
+ '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row" id="switch-saved-login" hidden>تبديل الاشتراك <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
  '<p class="customer-version">BLOFY STREAM · 2026.11.28.56.0.3</p></div>');
+ var switchButton=document.getElementById('switch-saved-login');
+ api('GET','/api/login-modes',null,function(st,data){
+  if(st!==200||!data||data.savedLogins!==true||!switchButton.isConnected)return;
+  savedLoginEnabled=true;switchButton.hidden=false;
+  document.getElementById('logout').innerHTML='تسجيل الخروج من جميع الاشتراكات <span>‹</span>';
+ });
+ switchButton.onclick=function(){
+  if(accountSwitching)return;
+  accountSwitching=true;switchButton.disabled=true;
+  cleanupPlayer();var deadline=Date.now()+3500;
+  function openSwitch(){
+   if(pendingMediaStops>0&&Date.now()<deadline){setTimeout(openSwitch,100);return}
+   accountSwitching=false;login('اختر اشتراكًا محفوظًا أو أضف اشتراكًا جديدًا. اشتراكك السابق يبقى محفوظًا.');
+  }
+  openSwitch()
+ };
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  var fitButton=document.getElementById('picture-fit'),fitLabel=document.getElementById('picture-fit-label'),fitOptions=['fit','zoom','fill'],fitLabels=['ملاءمة','تكبير','ملء'];
  function updateFit(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));fitLabel.textContent=fitLabels[Math.max(0,index)]}
@@ -1700,7 +1755,7 @@ function settingsScreen(){
   var deadline=Date.now()+3500;
   function finishLogout(){
    if(pendingMediaStops>0&&Date.now()<deadline){setTimeout(finishLogout,100);return}
-   api('POST','/api/logout',{},function(){S.loggingOut=false;login('تم تسجيل الخروج')})
+   api('POST','/api/logout',{},function(st){S.loggingOut=false;if(savedLoginEnabled){if(st===200){reloadSavedLogin();return}if(button)button.disabled=false;setStatus('تعذر تسجيل الخروج، حاول مرة أخرى.',true);return}login('تم تسجيل الخروج')})
   }
   finishLogout()
  }
@@ -3937,10 +3992,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var copyMode=!!(S.play&&S.play.video===video&&S.play.videoMode==='source_copy');
   var src=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
   var srcH=src?Number(src.split('x')[1])||0:0;
-  el.textContent='المعروض '+w+'×'+h+' • '+grade+
-   (src?' • المصدر '+src:(copyMode&&h<690?' • المصدر نفسه SD':''))+
-   (srcH>=690&&h<690?' • تحويل خفّض الدقة':'');
-  el.title='دقة الصورة التي يعرضها المتصفح، وليس جودة المصدر المعلنة';
+  el.textContent=grade+' • '+w+'×'+h;
+  el.setAttribute('aria-label','الدقة المعروضة '+w+'×'+h+(src?'، المصدر '+src:''));
+  el.title='دقة العرض الفعلية '+w+'×'+h+(src?' • المصدر '+src:'')+(srcH>h?' • وضع التوافق خفّض الدقة':'');
   el.hidden=false
  }
  video.addEventListener('loadedmetadata',refreshVideoResolution);
@@ -4365,10 +4419,17 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null;
- function commentaryNotice(message){
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0;
+ function commentaryNotice(message,retryTrack){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
+  if(retryTrack){
+   var retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.textContent='إعادة المحاولة';retry.disabled=true;
+   el.appendChild(document.createTextNode(' '));el.appendChild(retry);
+   commentaryNoticeTimer=setTimeout(function(){if(retry.isConnected)retry.disabled=false},Math.max(0,commentaryRetryAfter-Date.now()));
+   retry.onclick=function(){if(S.playerView===state&&S.route==='player'&&!document.hidden&&Date.now()>=commentaryRetryAfter){retry.disabled=true;startCommentary(retryTrack)}};
+   return
+  }
   commentaryNoticeTimer=setTimeout(function(){el.hidden=true;el.textContent=''},3500)
  }
  function stopCommentary(){
@@ -4415,14 +4476,16 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
  });
  function startCommentary(track){
-  stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
+  if(Date.now()<commentaryRetryAfter){commentaryNotice('انتظر قليلًا قبل إعادة تشغيل المعلق.',track);return}
+  stopCommentary();
+  commentaryNotice('جار تشغيل المعلق…');
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
-  function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
+  function fail(){if(commentary!==record)return;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice('تعذر تشغيل المعلق. الصوت الأصلي مستمر.',track)}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true;
+   clearTimeout(record.timer);record.timer=null;commentaryRetryAfter=0;record.audible=true;record.hasPlayed=true;video.muted=true;
    commentaryNotice('المعلق: '+String(track.label||'').slice(0,80))
   };
   audio.onerror=audio.onended=fail;
@@ -4852,7 +4915,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(!el)return;
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var guide=document.querySelector('.player-live-guide');
-   if(phoneLiveLayout()&&(!guide||!guide.classList.contains('phone-guide-open')))return;
+   if(!guide||!guide.classList.contains('phone-guide-open'))return;
    var cached=S.epgCache[String(id)],fresh=cached&&Date.now()-cached.time<300000;
    if(fresh)el.innerHTML=cached.html;
    else{
@@ -5103,6 +5166,11 @@ document.addEventListener('focusin',function(e){
 document.addEventListener('focusout',function(e){
  if(e.target&&e.target.classList)e.target.classList.remove('remote-focus')
 },true);
+document.addEventListener('input',function(event){
+ var input=event.target;if(!input||!input.classList||!input.classList.contains('category-filter-input'))return;
+ var rail=input.closest('.cat-rail');if(!rail)return;var q=String(input.value||'').trim().toLowerCase(),rows=rail.querySelectorAll('[data-cat]');
+ for(var i=0;i<rows.length;i++)rows[i].hidden=!!q&&rows[i].textContent.toLowerCase().indexOf(q)<0;
+},false);
 document.addEventListener('click',clickHandler,false);
 document.addEventListener('keydown',directional,false);
 function persistPlaybackCheckpoint(){

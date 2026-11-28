@@ -1189,3 +1189,108 @@ html[data-blofy-device="touch"] .native-home-header{flex-wrap:wrap;gap:4px}
 .detail-translation span{color:var(--muted);font-size:12px}
 
 .offline-filters{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.offline-filters .btn{flex:1 1 65px;padding:8px 6px;min-height:44px}.offline-filters .btn.active{color:#06161d;background:#46e4d0;border-color:#46e4d0}#offline-progress{width:100%;height:12px;accent-color:#46e4d0;margin:8px 0}#offline-progress[hidden],#offline-cancel[hidden],#offline-library[hidden]{display:none!important}
+
+
+/* STREAM installed-app visual refresh: touch layouts scale by actual available space.
+   Keep TV focus and all existing player handlers; do not alter playback transport. */
+:root{--app-surface:#102a34;--app-edge:#ffffff18;--app-accent:#46e4d0}
+.app .poster{border-color:var(--app-edge);border-radius:12px}
+.app .poster-caption{height:auto;min-height:0;padding:8px 9px 10px}
+.app .poster-caption strong{display:block;white-space:normal;overflow:hidden;line-height:1.45;max-height:2.9em;font-size:14px}
+.app .poster-caption span{margin-top:4px}
+.app .poster-panel-header small,.app .sort-bar>.muted{display:none}
+.app .poster-panel-header{padding:4px 0 12px}
+.app .detail-body{min-width:0}
+.app .detail-title{font-size:clamp(23px,3vw,38px);line-height:1.3;overflow-wrap:anywhere}
+.app .detail-plot{font-size:16px;line-height:1.85;max-width:76ch}
+.app .detail-actions{gap:8px;flex-wrap:wrap}
+.app .episode-list{min-width:0}
+.app .episode-card{display:flex;align-items:center;gap:8px;border:1px solid var(--app-edge);background:var(--app-surface);border-radius:13px;margin:8px 0;padding:7px}
+.app .episode-card .episode-row{flex:1;min-width:0;margin:0;padding:4px;border:0;background:transparent}
+.app .episode-card .episode-download{flex:none;margin:0;min-width:44px;width:44px;height:44px;padding:0;display:flex;align-items:center;justify-content:center}
+.app .episode-card .episode-name{font-size:16px;line-height:1.4}
+.app .episode-card .episode-art{width:112px;max-width:32%;height:auto;aspect-ratio:16/9;flex:none}
+.app .customer-settings{max-width:720px}
+.app .customer-setting-group{border-color:var(--app-edge);border-radius:14px}
+.app .customer-setting-row{min-height:50px;font-size:16px}
+#saved-login-slots:not([hidden]){display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;justify-content:center}
+#saved-login-slots p{width:100%;margin:0;font-size:13px;color:var(--soft)}
+/* One primary dock, rather than two competing control strips. */
+html[data-blofy-device] .native-stream-hud .mobile-player-actions{display:none!important}
+html[data-blofy-device] .native-stream-hud .player-live-guide:not(.phone-guide-open){display:none}
+html[data-blofy-device] .native-stream-hud .player-live-guide.phone-guide-open{display:block;max-height:100px;overflow:auto}
+html[data-blofy-device] .native-stream-hud .native-player-eyebrow{display:none}
+html[data-blofy-device] .native-stream-hud .player-title{font-size:clamp(16px,2vw,24px);line-height:1.4}
+html[data-blofy-device] .native-stream-hud .native-player-dock{max-width:680px;width:100%;box-sizing:border-box;overflow-x:auto;justify-content:center;gap:5px;margin-inline:auto}
+html[data-blofy-device] .native-stream-hud .native-player-control{flex-shrink:0}
+html[data-blofy-device] .native-stream-hud .player-resolution-badge{font-size:11px}
+html[data-blofy-device="touch"] .app .workspace{box-sizing:border-box;min-width:0;padding-top:max(8px,env(safe-area-inset-top,0px));padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+html[data-blofy-device="touch"] .input{font-size:16px}
+html[data-blofy-device="touch"] .native-home-header{flex-wrap:nowrap}
+html[data-blofy-device="touch"] .native-home-brand strong{white-space:nowrap;font-size:12px}
+html[data-blofy-device="touch"] .native-home-brand img{width:36px;height:36px}
+html[data-blofy-device="touch"] .native-home-icon{width:44px;height:44px}
+html[data-blofy-device="touch"] .native-home-tabs .btn{height:44px;border-radius:10px}
+html[data-blofy-device="touch"] .native-stream-hud{padding-inline:max(12px,env(safe-area-inset-left,0px));padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+@media (max-width:600px) and (orientation:portrait){
+ html[data-blofy-device="touch"] .app.native-compact-navigation{flex-direction:column;height:100vh;height:100dvh}
+ html[data-blofy-device="touch"] .app.native-compact-navigation>.workspace{order:0;width:100%;height:auto;flex:1 1 0;min-height:0;padding:env(safe-area-inset-top,0px) 12px 12px}
+ html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bottom{order:1;flex:0 0 auto;width:100%;height:auto;min-height:60px;flex-direction:row;gap:3px;padding:4px 6px calc(4px + env(safe-area-inset-bottom,0px));border:0;border-top:1px solid var(--app-edge);overflow:visible}
+ html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bottom .rail-link{flex:1 1 0;width:auto;height:52px;min-height:52px;font-size:11px}
+ html[data-blofy-device="touch"] .native-home-brand strong{font-size:11px}
+ html[data-blofy-device="touch"] .native-home-brand img{width:32px}
+ html[data-blofy-device="touch"] .native-home-icon{width:40px}
+ html[data-blofy-device="touch"] .home-hero{height:245px;border-radius:14px;margin:5px 0 16px}
+ html[data-blofy-device="touch"] .hero-copy{max-width:100%;padding:16px}
+ html[data-blofy-device="touch"] .hero-title{font-size:22px;line-height:1.3;max-height:2.6em;overflow:hidden}
+ html[data-blofy-device="touch"] .hero-actions .btn{min-height:44px;font-size:12px;padding:8px 10px}
+ html[data-blofy-device="touch"] .h-scroll .poster{width:126px;flex-basis:126px}
+ html[data-blofy-device="touch"] .h-scroll .poster-art{height:180px}
+ html[data-blofy-device="touch"] .shelf-title h2{font-size:19px}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.live-catalog,
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters{display:flex;flex-direction:column;height:auto;min-height:0;overflow:visible;gap:10px}
+ html[data-blofy-device="touch"] .app.catalog-app .workspace{overflow-y:auto;overflow-x:hidden;padding:env(safe-area-inset-top,0px) 12px max(14px,env(safe-area-inset-bottom,0px))}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail{order:0;flex:none;width:100%;height:auto;min-height:0;border:0;background:transparent}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail .pane-head{display:none}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail .pane-scroll{display:flex;gap:6px;flex:none;overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:none;padding:2px 0 6px}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-item{flex:none;width:auto;max-width:210px;min-height:44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--app-edge);border-radius:10px;padding:8px 12px;font-size:13px}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .preview{order:1;width:100%;height:auto;min-height:0;flex:none}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .preview-video-wrap{height:auto;aspect-ratio:16/9;min-height:0}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .preview-controls{padding:10px}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .preview-controls #live-desc{display:none}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .preview-controls .epg-panel{max-height:88px;overflow:auto}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .channels,
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .poster-panel{order:2;width:100%;height:auto;max-height:none;min-height:0;flex:none;overflow:visible}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .channels .pane-scroll{height:auto;max-height:65vh;overflow-y:auto}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-panel{padding:6px;border:0;background:transparent}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ html[data-blofy-device="touch"] .app .detail-content{display:flex;flex-direction:column;margin-top:-40px;gap:10px;padding:0 6px 20px;align-items:center}
+ html[data-blofy-device="touch"] .app .detail-poster{width:106px;max-width:40%;height:auto;aspect-ratio:2/3;align-self:flex-start}
+ html[data-blofy-device="touch"] .app .detail-body{width:100%;text-align:right}
+ html[data-blofy-device="touch"] .app .detail-title{font-size:23px}
+ html[data-blofy-device="touch"] .app .detail-plot{font-size:15px}
+ html[data-blofy-device="touch"] .app .detail-actions .btn{flex:1 1 96px;min-height:44px}
+ html[data-blofy-device="touch"] .app .episode-layout{flex-direction:column;gap:8px;min-height:0}
+ html[data-blofy-device="touch"] .app .season-rail{width:100%;height:auto;min-height:0;flex:none}
+ html[data-blofy-device="touch"] .app .season-rail .pane-head{display:none}
+ html[data-blofy-device="touch"] .app .season-rail .pane-scroll{display:flex;overflow-x:auto;max-height:none}
+ html[data-blofy-device="touch"] .app .season-rail .cat-item{width:auto;flex:none;padding:8px 14px;min-height:44px}
+ html[data-blofy-device="touch"] .app .episode-card .episode-art{width:88px}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-dock{justify-content:flex-start;max-width:100%;padding:3px}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-control{width:44px;min-width:44px;height:44px}
+ html[data-blofy-device="touch"] .native-stream-hud .native-player-topline button{font-size:12px;padding-inline:8px;min-height:44px}
+ html[data-blofy-device="touch"] .native-stream-hud .player-title{font-size:16px}
+}
+@media(max-width:360px){html[data-blofy-device="touch"] .native-home-brand strong{display:none}}
+@media(display-mode:standalone){html[data-blofy-device="touch"] .app{height:100vh;height:100dvh}html[data-blofy-device="touch"] .login-screen{padding-top:max(18px,env(safe-area-inset-top,0px));padding-bottom:max(18px,env(safe-area-inset-bottom,0px));overflow-y:auto}}
+
+/* Category search handles hundreds of groups without scrolling the entire rail. */
+.category-filter{padding:8px 10px;flex:none}
+.category-filter .input{width:100%;min-width:0;min-height:42px;font-size:14px;padding:8px 10px;box-sizing:border-box;border-radius:9px;margin:0}
+.cat-rail .cat-item[hidden]{display:none!important}
+#web-download-message{margin:10px 0;font-size:14px;line-height:1.6}
+#web-download-message .btn{margin:6px 0}
+@media(max-width:600px) and (orientation:portrait){html[data-blofy-device="touch"] .app.catalog-app .catalog .category-filter{padding:0 0 6px}html[data-blofy-device="touch"] .category-filter .input{font-size:16px}}
+
+/* Phone playback opens directly, so do not reserve space for an inactive decoder. */
+@media(max-width:730px), (max-height:540px) and (orientation:landscape){html[data-blofy-device="touch"] .app.catalog-app .catalog.live-catalog .preview{display:none!important}}

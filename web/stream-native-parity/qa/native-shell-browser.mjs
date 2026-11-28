@@ -34,8 +34,17 @@ try{
     const input=request.postDataJSON();requests.push({p,input});
     return respond(200,{ok:true,profileKey:'a'.repeat(24),expiresAt:Date.now()+3600000});
    }
-   if(p==='/api/page')return respond(200,{items:[],total:0,hasMore:false,nextOffset:null});
-   if(p==='/api/catalog')return respond(200,[]);
+   if(p==='/api/page'){
+    const kind=u.searchParams.get('kind'),items=kind==='movie'?[{stream_id:123,name:'Fixture movie',container_extension:'mp4'}]:kind==='series'?[{series_id:321,name:'Fixture series'}]:kind==='live'?[{stream_id:456,name:'Fixture live'}]:[];
+    return respond(200,{items,total:items.length,hasMore:false,nextOffset:null})
+   }
+   if(p==='/api/catalog'){
+    const action=u.searchParams.get('action');
+    if(action&&action.endsWith('_categories'))return respond(200,[{category_id:'1',category_name:'رياضة'},{category_id:'2',category_name:'دراما'}]);
+    if(action==='get_series_info')return respond(200,{info:{plot:'وصف عربي'},episodes:{'1':[{id:'789',title:'Fixture series episode one',episode_num:1,container_extension:'mp4'}]}});
+    if(action==='get_vod_info')return respond(200,{info:{plot:'وصف عربي للفيلم'}});
+    return respond(200,[])
+   }
    if(p==='/api/ai/interpret')return respond(200,{ok:true,reply:'نتيجة اختبار محلية',suggestedTitles:['Fixture']});
    return respond(404,{error:'synthetic_route_not_configured'});
   });
@@ -60,14 +69,50 @@ try{
   if(mode==='code')assert.equal(requests[0].input.code,'12345678');else assert.equal(requests[0].input.mode,mode);
   assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
+  const narrow=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);assert.ok(navBox&&workspaceBox&&(narrow?navBox.y>=workspaceBox.y+workspaceBox.height-2:navBox.x>=workspaceBox.x+workspaceBox.width-2),'responsive navigation must stay outside the content');}
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'phone layout must not overflow horizontally');
+  assert.equal(await page.locator('.native-home-bottom').locator('[data-go="downloads"] svg').count(),1);
+  if(mode==='code'){
+   // Populated screens: cover the real layout rather than only empty Home.
+   await page.locator('.native-home-tabs [data-go="movie"]').click();
+   await page.locator('.poster-grid [data-details="movie:123"]').waitFor();
+   await page.locator('.category-filter-input').fill('دراما');
+   assert.equal(await page.locator('.cat-item[data-cat="movie:1"]').isVisible(),false);
+   assert.equal(await page.locator('.cat-item[data-cat="movie:2"]').isVisible(),true);
+   await page.locator('.category-filter-input').fill('');
+   await page.locator('.poster-grid [data-details="movie:123"]').click();
+   await page.locator('#detail-plot-text').waitFor();
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.locator('[data-back]').first().click();
+   await page.locator('.catalog-home').click();
+   await page.locator('.native-home-tabs [data-go="series"]').click();
+   await page.locator('.poster-grid [data-details="series:321"]').click();
+   await page.locator('[data-episodes="321"]').first().click();
+   await page.locator('.episode-card [data-watch="series:789"]').waitFor();
+   assert.equal(await page.locator('.episode-name').first().textContent(),'الحلقة 1');
+   assert.ok(await page.locator('.episode-card [data-download="series:789"]').isVisible());
+   await page.locator('[data-back]').first().click();
+   await page.locator('[data-back]').first().click();
+   await page.locator('.catalog-home').click();
+   await page.locator('.native-home-tabs [data-go="live"]').click();
+   await page.locator('[data-channel="456"]').waitFor();
+   const phone=await page.evaluate(()=>matchMedia('(max-width:730px), (max-height:540px) and (orientation:landscape)').matches);
+   if(phone)assert.equal(await page.locator('.preview').isVisible(),false);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.locator('.catalog-home').click();
+   const vp=page.viewportSize();
+   await page.setViewportSize({width:vp.height,height:vp.width});
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.setViewportSize(vp);
+   console.log('BLOFY_POPULATED_LAYOUT_PASS',name,device);
+  }
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
   await page.locator('.downloads-page').waitFor();
   assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
+  const narrow=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);assert.ok(navBox&&workspaceBox&&(narrow?navBox.y>=workspaceBox.y+workspaceBox.height-2:navBox.x>=workspaceBox.x+workspaceBox.width-2),'responsive navigation must stay outside the content');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
   await page.locator('.native-home-header [data-go="settings"]').click();
@@ -124,6 +169,80 @@ try{
  assert.deepEqual(failures,[]);
  console.log('BLOFY_TV_REMOTE_SYNTHETIC_PASS 720p directional keys, login, navigation and back');
  await tv.close();await browser.close();
+ // Saved subscriptions: synthetic independent account identities, one active at a time.
+ browser=await chromium.launch({headless:true,...(process.env.BLOFY_QA_BUNDLED_CHROMIUM==='1'?{}:{channel:'chrome'})});
+ const accounts=await browser.newContext({...devices['iPhone 13'],serviceWorkers:'block'});
+ const savedPage=await accounts.newPage(),savedErrors=[],savedModes=new Set(),loginCalls=[];
+ const profiles={code:'d'.repeat(24),xtream:'e'.repeat(24),m3u:'f'.repeat(24)};
+ let activeMode=null,failSwitch=false;
+ savedPage.on('pageerror',e=>savedErrors.push(e.message));
+ await accounts.route('**/*',async route=>{
+  const request=route.request(),u=new URL(request.url());
+  if(u.origin!==origin)return route.abort();
+  const p=u.pathname;
+  if(!p.startsWith('/api/'))return route.continue();
+  const respond=(status,data)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+  const session=()=>({ok:true,active:true,profileKey:profiles[activeMode],expiresAt:Date.now()+3600000,daysRemaining:1});
+  if(p==='/api/session')return activeMode?respond(200,session()):respond(401,{active:false});
+  if(p==='/api/login-modes')return respond(200,{direct:true,savedLogins:true});
+  if(p==='/api/saved-logins')return respond(200,{active:activeMode,modes:[...savedModes]});
+  if(p==='/api/redeem'||p==='/api/direct-login'){
+   const input=request.postDataJSON();activeMode=p==='/api/redeem'?'code':input.mode;
+   loginCalls.push(activeMode);savedModes.add(activeMode);return respond(200,session());
+  }
+  if(p==='/api/saved-logins/switch'){
+   const mode=request.postDataJSON().mode;
+   if(failSwitch)return respond(503,{error:'saved_session_unavailable'});
+   if(!savedModes.has(mode))return respond(404,{error:'saved_login_missing'});
+   activeMode=mode;return respond(200,session());
+  }
+  if(p==='/api/logout'){activeMode=null;savedModes.clear();return respond(200,{ok:true})}
+  if(p==='/api/page')return respond(200,{items:[],total:0,hasMore:false,nextOffset:null});
+  if(p==='/api/catalog')return respond(200,[]);
+  return respond(404,{error:'synthetic_route_not_configured'});
+ });
+ const savedHome=()=>savedPage.locator('.native-home-header').waitFor();
+ const savedSettings=async()=>{await savedHome();await savedPage.locator('.native-home-header [data-go="settings"]').click();};
+ const chooser=async()=>{await savedSettings();await savedPage.locator('#switch-saved-login').click();await savedPage.locator('#saved-login-slots').waitFor()};
+ await savedPage.goto(origin);
+ await savedPage.waitForFunction(()=>!document.getElementById('login-mode-xtream')?.disabled);
+ await savedPage.locator('#activation-code').fill('12345678');
+ await savedPage.locator('#redeem').click();await savedHome();
+ await savedSettings();await savedPage.locator('#picture-fit').click();
+ assert.equal(await savedPage.locator('#picture-fit-label').textContent(),'تكبير');
+ await savedPage.locator('#switch-saved-login').click();
+ await savedPage.locator('[data-saved-mode="code"]').waitFor();
+ await savedPage.locator('#login-mode-xtream').click();
+ await savedPage.locator('#provider-username').fill('fixture-user');
+ await savedPage.locator('#provider-password').fill('fixture-secret');
+ await savedPage.locator('#redeem').click();await savedHome();
+ await savedSettings();
+ assert.equal(await savedPage.locator('#picture-fit-label').textContent(),'ملاءمة');
+ await savedPage.locator('#switch-saved-login').click();
+ await savedPage.locator('[data-saved-mode="code"]').waitFor();
+ failSwitch=true;await savedPage.locator('[data-saved-mode="code"]').click();
+ await savedPage.waitForFunction(()=>document.getElementById('login-status')?.textContent.includes('تعذر التبديل'));
+ assert.equal(activeMode,'xtream');failSwitch=false;
+ await savedPage.locator('[data-saved-mode="code"]').click();await savedHome();
+ await savedPage.reload();await savedSettings();
+ assert.equal(await savedPage.locator('#picture-fit-label').textContent(),'تكبير');
+ await savedPage.locator('#switch-saved-login').click();
+ await savedPage.locator('[data-saved-mode="xtream"]').waitFor();
+ await savedPage.locator('#login-mode-m3u').click();
+ await savedPage.locator('#provider-url').fill('https://x.blofyplayer.com/get.php?username=fixture-user&password=fixture-secret');
+ await savedPage.locator('#redeem').click();await savedHome();
+ await chooser();await savedPage.locator('[data-saved-mode="xtream"]').click();await savedHome();
+ assert.deepEqual(loginCalls,['code','xtream','m3u']);
+ assert.equal(activeMode,'xtream');
+ const storage=await savedPage.evaluate(()=>JSON.stringify(localStorage));
+ assert.ok(!storage.includes('fixture-secret')&&!storage.includes('fixture-user')&&!storage.includes('12345678'));
+ await savedSettings();await savedPage.locator('#logout').click();
+ await savedPage.locator('#activation-code').waitFor();
+ await savedPage.reload();await savedPage.locator('#activation-code').waitFor();
+ assert.equal(savedModes.size,0);assert.equal(activeMode,null);
+ assert.deepEqual(savedErrors,[]);
+ console.log('BLOFY_SAVED_LOGIN_SYNTHETIC_PASS three independent modes, reload, settings isolation, failed switch and explicit logout');
+ await accounts.close();await browser.close();browser=null;
  // Chrome is installed in browser QA and supports native H.264/AAC MP4 decoding.
  browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
  const offline=await browser.newContext({serviceWorkers:'allow'});

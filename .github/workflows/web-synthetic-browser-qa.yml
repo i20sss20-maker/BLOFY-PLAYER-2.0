@@ -21,7 +21,7 @@ jobs:
       - name: Install pinned browser and engine packages
         run: |
           npm install --ignore-scripts --no-audit --no-fund
-          npx playwright install --with-deps chrome
+          npx playwright install --with-deps chrome webkit
       - name: Generate local test channels
         run: |
           set -euo pipefail
@@ -37,4 +37,4 @@ jobs:
         run: |
           node manual-preview-fix.mjs
           node qa/synthetic-browser-playback.mjs qa-fixtures
-          node qa/native-shell-browser.mjs
+          BLOFY_QA_WEBKIT=1 node qa/native-shell-browser.mjs

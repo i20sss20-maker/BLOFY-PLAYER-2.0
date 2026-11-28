@@ -49,7 +49,11 @@ test('external live handoff uses a single-use ticket and stops internal playback
  assert.match(server,/Math\.min\(now\+120000,accountExpiry\)/);
  assert.match(server,/if\(externalActive\.has\(ticket\.account\)/);
  assert.match(server,/randomBytes\(32\)\.toString\('base64url'\)/);
- assert.match(server,/if\(t\)revokeExternal\('Bearer '\+t\)/);
+ const cleanup=server.slice(server.indexOf('function closeAccountMedia('),server.indexOf('function auth('));
+ assert.match(cleanup,/if\(!t\)return;[\s\S]*revokeExternal\('Bearer '\+t\)/);
+ const logout=server.slice(server.indexOf("if(p==='/api/logout'"),server.indexOf("if(p==='/api/saved-logins'"));
+ assert.match(logout,/closeAccountMedia\(token\(req\)\)/);
+ assert.match(logout,/for\(const mode of LOGIN_MODES\)closeAccountMedia\(savedToken\(req,mode\)\)/);
  assert.match(app,/stopPlayback\(false\);\s*function issue\(\)/);
  assert.match(app,/api\('POST','\/api\/external\/live'/);
  assert.match(app,/if\(st===200\|\|st===404\)\{state.externalRetiringStop=null;state.directStopKey=null;issue\(\)\}/);
@@ -127,6 +131,9 @@ test('manual commentary picture timing preserves one active audio stream only fo
  video.buffered=ranges([[8,8.5]]);assert.equal(controls.adjust('back-one'),false);assert.ok(controls.active());
  video.buffered=ranges([[5,25]]);assert.equal(controls.adjust('forward-one'),true);
  const timeout=[...timers.values()].at(-1);timeout();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+ controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();
+ fakeAudio.onerror();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+ controls.start({id:'anis-fixture',label:'Fixture'});assert.equal(controls.active(),null,'immediate retry must not reopen audio');
 });
 
 test('live retained range reports only playable seconds and never crosses holes',()=>{

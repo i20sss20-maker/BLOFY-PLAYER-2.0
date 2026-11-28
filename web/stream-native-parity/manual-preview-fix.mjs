@@ -669,8 +669,8 @@ change("   playerStatus('تعذر تأكيد إغلاق جلسة البث الس
 // Explicit channel selection starts the muted preview immediately; passive
 // focus on installed WebKit must not start a provider connection.
 change("function selectChannel(id,activate){","function selectChannel(id,activate,explicit){");
-change("if(selected)selectChannel(itemId(selected,'live'),true);","if(selected)selectChannel(itemId(selected,'live'),true,true);");
-change("selectChannel(S.selected,true)\n","selectChannel(S.selected,true,true)\n");
+change("if(selected)selectChannel(itemId(selected,'live'),true);","if(selected)selectChannel(itemId(selected,'live'),false,false);");
+change("selectChannel(S.selected,true)\n","selectChannel(S.selected,!!(S.play&&S.play.preview),!!(S.play&&S.play.preview))\n");
 change("if(ch){selectChannel(ch,true);return}","if(ch){selectChannel(ch,true,true);return}");
 change(" if(installedWebApp()){\n  if(desc)desc.textContent='اضغط المعاينة أو تشغيل القناة • لتوفير اتصال البث';\n  if(S.play&&S.play.preview&&String(S.play.id)!==String(id))stopPlayback(true);\n  return\n }",` if(installedWebApp()&&!explicit){
   if(desc)desc.textContent='اختر القناة لتشغيلها مباشرة';
@@ -718,7 +718,7 @@ change("if(ch){selectChannel(ch,true,true);return}",`if(ch){
   return
  }`);
 change("function beginPreview(item){\n if(S.autoPreviewTimer)", "function beginPreview(item){\n if(phoneLiveLayout())return;\n if(S.autoPreviewTimer)");
-change("'<div class=\"catalog\">'+categoryRail(kind)+","'<div class=\"catalog live-catalog\">'+categoryRail(kind)+");
+// The live catalog class is now present in the source app.js.
 
 
  // Native Home navigation now lives in app.js; avoid overwriting it during build.

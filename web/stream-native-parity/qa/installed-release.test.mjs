@@ -74,7 +74,7 @@ test('live loading status remains stable while actionable errors remain visible'
  assert.match(app,/record\.quietWaitTimer=null;if\(alive\(\)&&record\.bufferSince/);
  assert.match(app,/cachedInfo\?Promise\.resolve\(cachedInfo\):fetch\(manifest/);
  assert.match(app,/record\.admissionVideoInfo=\{mode:response\.headers/);
- assert.match(app,/phoneLiveLayout\(\)&&\(!guide\|\|!guide\.classList\.contains\('phone-guide-open'\)\)\)return/);
+ assert.match(app,/if\(!guide\|\|!guide\.classList\.contains\('phone-guide-open'\)\)return/);
 });
 
 test('customer settings exposes essential actions only, not engineering reports',()=>{
@@ -256,8 +256,8 @@ test('series metadata never leaks across titles or accounts during delayed respo
  const S={route:'detail',item:{kind:'series',id:'1',data:items['1']},accountEpoch:1,episodes:null,episodesSeriesId:'',selectedSeason:''};
  let root;
  const document={getElementById:()=>root};
- const render=new Function('S','document','findItem','navigate','shell','title','loading','api','enc','parseEpisodes','esc','getResume','art','safeImg','restoreView',app.slice(a,b)+';return episodesScreen')(
- S,document,(_,id)=>items[id],()=>{},()=>{root={innerHTML:''};roots.push(root)},item=>item.name,()=>'',(m,path,body,cb)=>calls.push({path,cb}),encodeURIComponent,data=>Object.entries(data.episodes).flatMap(([season,eps])=>eps.map(ep=>({...ep,__season:season}))),String,()=>null,()=>'',()=>'',()=>{});
+ const render=new Function('S','document','findItem','navigate','shell','title','loading','api','enc','parseEpisodes','esc','getResume','art','safeImg','restoreView','nativeNavIcon',app.slice(a,b)+';return episodesScreen')(
+ S,document,(_,id)=>items[id],()=>{},()=>{root={innerHTML:''};roots.push(root)},item=>item.name,()=>'',(m,path,body,cb)=>calls.push({path,cb}),encodeURIComponent,data=>Object.entries(data.episodes).flatMap(([season,eps])=>eps.map(ep=>({...ep,__season:season}))),String,()=>null,()=>'',()=>'',()=>{},()=>'<svg></svg>');
  render({id:'1'});render({id:'2'});
  const first={episodes:{'1':[{id:'10',title:'OLD',episode_num:1}]}},second={episodes:{'2':[{id:'20',title:'NEW',episode_num:1}]}};
  calls[1].cb(200,second);assert.equal(S.episodesSeriesId,'2');assert.match(root.innerHTML,/NEW/);
