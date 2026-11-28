@@ -46,6 +46,7 @@ test('movie and series descriptions use Arabic AI translation without replacing 
  assert.equal(needs('A detective searches for his missing brother.'),true);
  assert.equal(needs('探偵が行方不明の兄を探す'),true);
  assert.equal(needs('يبحث المحقق عن أخيه المفقود في المدينة.'),false);
+ assert.equal(needs('این فیلم افسانه یک قهرمان را روایت میکند که برای نجات مردمش تلاش میکند.'),true);
  assert.equal(needs('x'.repeat(3901)),false);
  const detail=app.slice(b,app.indexOf('function parseEpisodes(',b));
  assert.match(detail,/generation!==plotGeneration\|\|plotSource!==source/);
@@ -93,4 +94,15 @@ test('saved login slots preserve the preceding account, switch only with verific
  assert.match(server,/\['bv_session','bv_active_mode',\.\.\.LOGIN_MODES\.map/);
  assert.match(app,/reloadSavedLogin\(\)/);
  assert.match(app,/id="switch-saved-login"/);
+});
+
+ test('poster category labels match actual category IDs and full detail fields are retained',()=>{
+ const a=app.indexOf('function posterCategory('),b=app.indexOf('function refreshPosterCategories(',a);
+ const category=new Function('S',app.slice(a,b)+';return posterCategory')({cats:{movie:[{category_id:'2',category_name:'دراما'}]}});
+ assert.equal(category({category_id:2},'movie'),'دراما');
+ assert.equal(category({category_id:9,genre:'Action'},'movie'),'Action');
+ assert.equal(category({category_id:9},'movie'),'');
+ for(const label of ['الممثلون','المخرج','التقييم','تاريخ الإصدار','المدة','الدولة','اللغة'])assert.ok(app.includes("field('"+label+"'"));
+ const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+ assert.match(css,/\.detail-plot\{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none/);
 });
