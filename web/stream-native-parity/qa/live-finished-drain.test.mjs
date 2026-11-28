@@ -129,9 +129,25 @@ test('source channel quota refusal is not an origin outage',async()=>{
 
 
 test('web worker allows a configured third job but never an unbounded limit',()=>{
- const begin=source.indexOf('function mediaJobLimit('),end=source.indexOf('const MAX_JOBS=',begin);
+ const begin=source.indexOf('function mediaJobLimit('),end=source.indexOf('const AUTO_MEDIA_JOBS=',begin);
  assert.ok(begin>=0&&end>begin);
  const limit=vm.runInNewContext(source.slice(begin,end)+';mediaJobLimit');
  assert.equal(limit(undefined),2);assert.equal(limit('2'),2);assert.equal(limit('3'),3);
  for(const invalid of ['0','1','4','150','NaN','2.5'])assert.equal(limit(invalid),2);
+});
+
+
+test('auto capacity grows only with measured headroom and retreats without killing active jobs',()=>{
+ const begin=source.indexOf('function resourceJobLimit('),end=source.indexOf('function containerResources(',begin);
+ assert.ok(begin>=0&&end>begin);
+ const limit=vm.runInNewContext(source.slice(begin,end)+';resourceJobLimit');
+ const gb=24*1024**3;
+ assert.equal(limit(3,3,.2,.3,24,gb),4);
+ assert.equal(limit(4,1,.2,.3,24,gb),4);
+ assert.equal(limit(4,4,.6,.3,24,gb),4);
+ assert.equal(limit(6,6,.85,.3,24,gb),5);
+ assert.equal(limit(6,6,.2,.85,24,gb),5);
+ assert.equal(limit(5,5,.2,.2,NaN,gb),3);
+ assert.equal(limit(3,3,.2,.3,6,gb),3);
+ assert.equal(limit(12,12,.1,.1,24,gb),12);
 });
