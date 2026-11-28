@@ -67,6 +67,32 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
     return r.rowCount===1?{ok:true}:denied('hold_not_owned');
    });
   },
+  // Internal orchestration only. Change the selected portable relay under
+  // the same source lock as all admissions. A health failure alone is never
+  // evidence of release. No external endpoint is allowed to supply proof.
+  async commitRelayOwner({expectedOwner=null,nextOwner,proof}={}){
+   if(![null,'hostbrr','linode'].includes(expectedOwner)||!['hostbrr','linode'].includes(nextOwner)||expectedOwner===nextOwner)
+    return denied('invalid_relay_transition');
+   return tx(async(c,row)=>{
+    if(row?.mode!=='draining'||(row.relay_owner??null)!==expectedOwner)
+     return denied('relay_transition_conflict');
+    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
+    const now=new Date(time.now).getTime(),drainStartedAt=new Date(row.updated_at).getTime();
+    if(proof?.sourceId!==sourceId||proof?.previousOwner!==expectedOwner||
+       proof?.authoritative!==true||proof?.scope!=='all_paths'||
+       proof?.activeConnections!==0||proof?.maxConnections!==1||
+       !Number.isSafeInteger(proof.observedAt)||!Number.isSafeInteger(drainStartedAt)||
+       proof.drainStartedAt!==drainStartedAt||proof.observedAt<drainStartedAt||
+       proof.observedAt<now-10000||proof.observedAt>now+2000)
+      return denied('external_fence_unconfirmed');
+    const {rows:[n]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(n.n!==0)return denied('legacy_holds_open');
+    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+    if(feed&&feed.state!=='released')return denied('reservation_unresolved');
+    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',relay_owner=$2,reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId,nextOwner]);
+    return {ok:true,mode:'legacy',relayOwner:nextOwner};
+   });
+  },
   async closeLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
    const r=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=COALESCE(closed_at,now()) WHERE source_id=$1 AND hold_id=$2',[sourceId,holdId]);
