@@ -1222,3 +1222,9 @@ html[data-blofy-device="tv"] .poster-grid .poster-caption,html[data-blofy-device
 .native-stream-hud .native-player-dock{gap:5px;padding:5px 7px;border-radius:16px}
 .native-stream-hud .native-player-control{width:44px;height:44px;min-height:44px;flex:0 0 44px;border-radius:11px;padding:9px}
 .native-stream-hud .native-player-control.native-player-primary{flex:0 0 60px;width:60px}
+
+/* Keep the two independent live controls identifiable even on TV screens. */
+.native-stream-hud .native-player-control.native-player-labeled{flex:0 0 66px;width:66px;height:52px;min-height:52px;flex-direction:column;gap:2px;padding:4px 5px}
+.native-player-control.native-player-labeled .native-player-icon{width:23px;height:23px;flex:none}
+.native-player-control.native-player-labeled small{font-size:10px;white-space:nowrap;line-height:1.1;color:inherit}
+@media(max-width:540px){html[data-blofy-device="touch"] .native-stream-hud .native-player-control.native-player-labeled{flex:0 0 56px;width:56px;min-height:46px;height:46px;padding:3px}.native-player-control.native-player-labeled small{font-size:9px}}
