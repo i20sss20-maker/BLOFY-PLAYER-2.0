@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createXtreamWebToken,verifyXtreamWebToken,eligibleXtreamWebAccount} from '../src/stream-web-xtream-token.mjs';
@@ -18,4 +19,14 @@ test('password rotation, account disable, expiration and voucher reclassificatio
  for(const v of [{...voucher,code_channel:'app'},{...voucher,dual_access_enabled:true},{...voucher,redeemed_device_hash:'d'.repeat(64)},{...voucher,revoked_at:'2026-11-27'},{...voucher,expires_at:'2026-11-27'}])assert.equal(eligibleXtreamWebAccount(account,v,now),null);
  assert.equal(verifyXtreamWebToken(token,account,null,key,now),null);
  assert.equal(verifyXtreamWebToken(token,account,voucher,'f'.repeat(64),now),null);
+});
+
+test('independent web capability is route scoped and opt-in',()=>{
+ const source=readFileSync(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const a=source.indexOf('function xtreamWebBearerRoute('),b=source.indexOf('async function readXtreamWebVoucher(',a);
+ const route=new Function(source.slice(a,b)+';return xtreamWebBearerRoute')();
+ for(const path of ['/api/v1/stream/app/session','/player_api.php?action=get_live_streams','/api/v1/stream/media/live/123.ts','/api/v1/stream/media/movie/123.mp4','/api/v1/stream/media/series/456.mkv'])assert.equal(route({url:path,method:'GET'}),true);
+ for(const path of ['/api/v1/stream/audio/catalog','/api/v1/stream/media/audio/anis-max-1','/api/v1/admin/xtream-gateway/codes','/api/v1/stream/app/redeem','/api/v1/stream/app/session/extra'])assert.equal(route({url:path,method:'GET'}),false);
+ assert.equal(route({url:'/api/v1/stream/media/live/123.ts',method:'POST'}),false);
+ assert.match(source,/BLOFY_STREAM_WEB_XTREAM_LOGIN_QA!=='1'\|\|!xtreamWebBearerRoute\(req\)/);
 });
