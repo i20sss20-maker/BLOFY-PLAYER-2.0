@@ -130,16 +130,20 @@ try{
   if(p==='/api/session')return respond(activated?200:401,activated?{ok:true,active:true,profileKey:profile,expiresAt}:{active:false});
   if(p==='/api/redeem'){activated=true;return respond(200,{ok:true,profileKey:profile,expiresAt})}
   if(p==='/api/login-modes')return respond(200,{direct:false});
-  if(p==='/api/page')return respond(200,{items:[],total:0,hasMore:false,nextOffset:null});
+  if(p==='/api/page')return respond(200,{items:u.searchParams.get('kind')==='movie'?[{stream_id:123,name:'Offline fixture',container_extension:'mp4'}]:[],total:1,hasMore:false,nextOffset:null});
+  if(p==='/api/catalog'&&u.searchParams.get('action')==='get_vod_info')return respond(200,{info:{plot:'وصف تجريبي للفيلم'}});
   return respond(200,[]);
  });
  await offPage.goto(origin);
  await offPage.locator('#activation-code').fill('12345678');
  await offPage.locator('#redeem').click();
  await offPage.locator('.rail-link[data-go="downloads"]').waitFor();
+ await offPage.locator('[data-details="movie:123"]').first().click();
+ await offPage.locator('[data-download="movie:123"]').waitFor();
+ await offPage.evaluate(async()=>{await navigator.serviceWorker.ready});
+ await offPage.locator('[data-download="movie:123"]').click();
+ await offPage.getByText('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.',{exact:true}).waitFor();
  await offPage.locator('.rail-link[data-go="downloads"]').click();
- await offPage.locator('.downloads-page').waitFor();
- await offPage.evaluate(async()=>{await navigator.serviceWorker.ready;await saveOfflineDownload('movie','123','mp4','Offline fixture')});
  await offPage.getByText('Offline fixture',{exact:true}).waitFor();
  assert.equal(mediaCalls,1);
  await offPage.waitForFunction(()=>!!navigator.serviceWorker.controller);
