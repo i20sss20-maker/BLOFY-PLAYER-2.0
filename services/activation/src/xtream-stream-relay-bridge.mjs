@@ -1,15 +1,22 @@
+import {assertMediaProbeAllowed} from './linode-maintenance-ingress.mjs';
 // BLOFY PLAYER stays the authoritative account, source and catalog control
 // plane. STREAM only receives a 45-second opaque capability over a pinned
 // HTTPS service-to-service origin. Default OFF and allowlisted BY account UUID.
 const HOST='blofy-stream-api-production.up.railway.app';
+const externalOrigins=new Set(['https://media2.blofyplayer.com','https://media.blofyplayer.com']);
 const RESOURCE=/^\/relay\/[0-9a-f]{48}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function relayConfiguration(env=process.env){
-  const origin=String(env.BLOFY_STREAM_RELAY_ORIGIN||'').trim();
+  // Catalog, account, manifest and other control-plane calls retain the
+  // original Railway origin. Move the media broker independently.
+  const override=String(env.BLOFY_STREAM_RELAY_MEDIA_ORIGIN||'').trim();
+  const origin=override||String(env.BLOFY_STREAM_RELAY_ORIGIN||'').trim();
   const token=String(env.BLOFY_STREAM_RELAY_SHARED_TOKEN||'');
   const ids=String(env.BLOFY_STREAM_RELAY_CANARY_ACCOUNT_IDS||'')
     .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));
-  const valid=origin==='https://'+HOST && token.length>=32;
+  const pinned=origin==='https://'+HOST||
+    (env.BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER==='1'&&externalOrigins.has(origin));
+  const valid=pinned&&token.length>=32;
   return {origin:valid?origin:'',token:valid?token:'',canaryIds:new Set(ids),
     enabled:valid&&env.BLOFY_STREAM_RELAY_ENABLED==='1'};
 }
@@ -20,6 +27,12 @@ export function relayEligible({accountId,kind,extension},env=process.env){
   // No HLS manifest redirection until every segment has independent auth.
   if(kind==='live'&&String(extension||'').toLowerCase()!=='ts')return false;
   return true;
+}
+export function isConfiguredRelayTicket(value,env=process.env){
+  try{
+    const u=new URL(value),cfg=relayConfiguration(env);
+    return !!cfg.origin&&u.origin===cfg.origin&&RESOURCE.test(u.pathname)&&!u.search&&!u.hash&&!u.username&&!u.password;
+  }catch{return false}
 }
 async function remoteRelayRequest(path,{method='GET',body,env=process.env,
   fetchImpl=fetch,timeoutMs=6000}={}){
@@ -39,7 +52,8 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
     throw new Error('stream_bridge_denied');
   }
   // Safe bounded response parser; never trust arbitrarily large foreign JSON.
-  if(Number(response.headers.get('content-length')||0)>2048){
+  const maxBytes=path==='/internal/relay-health'?8192:2048;
+  if(Number(response.headers.get('content-length')||0)>maxBytes){
     await response.body?.cancel().catch(()=>{});
     throw new Error('stream_bridge_bad_response');
   }
@@ -50,7 +64,7 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
       const item=await reader.read();
       if(item.done){done=true;break;}
       size+=item.value?.byteLength||0;
-      if(size>2048)throw new Error('stream_bridge_bad_response');
+      if(size>maxBytes)throw new Error('stream_bridge_bad_response');
       chunks.push(item.value);
     }
     return JSON.parse(Buffer.concat(chunks.map(x=>Buffer.from(x))).toString('utf8'));
@@ -64,6 +78,7 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
   requireSharedLive=false,licensedCdnRedirect=false,
   licensedSourceId='',providerMaxConcurrentFeeds=null},{
   env=process.env,fetchImpl=fetch}={}){
+  assertMediaProbeAllowed(env);
   if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
     throw new Error('stream_bridge_invalid_media');
   const result=await remoteRelayRequest('/internal/relay-grants',{
@@ -92,7 +107,7 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
   // PER viewer when the isolated media plane has fanout disabled.
   if(requireSharedLive===true&&(sharedLive!==true||result.sharedLiveGranted!==true))
     throw new Error('stream_shared_live_not_granted');
-  return 'https://'+HOST+result.path;
+  return relayConfiguration(env).origin+result.path;
 }
 export async function licensedLiveFanoutHealth({env=process.env,fetchImpl=fetch}={}){
   try{

@@ -8,6 +8,10 @@ import {createFeedProofTransport} from '../../src/blofy-live-feed-proof-transpor
 import {createBoundedPilotPermit} from '../../src/blofy-bounded-pilot-permit.mjs';
 import {createReadyProofRead} from '../../src/blofy-engine-ready-proof-read.mjs';
 import {signAuthorityRead} from '../../src/blofy-engine-authority-read.mjs';
+import {createLeaseClaimClient} from '../../src/blofy-engine-lease-claim.mjs';
+import {createMultiLeasePoll} from '../../src/blofy-multifeed-lease-poll.mjs';
+import {createMultiFeedProofTransport} from '../../src/blofy-multifeed-proof-transport.mjs';
+import {verifyWorkerStatus} from '../../src/blofy-engine-status-response.mjs';
 if(process.env.BLOFY_DURABLE_STATUS_ENABLED!=='1')throw Error('disabled');
 const root='/data/control';
 if(!existsSync('/data')||!statSync('/data').isDirectory())throw Error('persistent_volume_required');
@@ -31,40 +35,83 @@ const db=new DatabaseSync(root+'/status.sqlite');
 db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=3000;');
 const transport=createDurableStatusTransport(db,{controllerKey,workerKeys});
 const pilot=createBoundedPilotPermit(db,{controllerKey,workerKeys});
-// Inert transport until the authoritative source fence and ledger are connected.
-const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:false});
+// Explicit opt-in. Portal owns the independent source-fence decision and
+// committed lease sequence; this service keeps the signing key.
+const remoteLeaseEnabled=process.env.BLOFY_ENGINE_REMOTE_LEASE_ISSUANCE==='1';
+const claimCommittedLease=createLeaseClaimClient({controllerKey,enabled:remoteLeaseEnabled});
+const liveLeasePoll=createLiveLeasePoll({db,controllerKey,workerKeys,enabled:remoteLeaseEnabled,readCommittedReservation,claimCommittedLease});
+const multiControlEnabled=process.env.BLOFY_ENGINE_MULTIFEED_CONTROL==='1';
+const workerBundlePath='/control/multifeed/worker-bundle';
+const workerBundle=multiControlEnabled?readFileSync(new URL('../multifeed-worker.tar.gz',import.meta.url)):null;
+const bundleReads=new Map();
+const multiLeasePoll=createMultiLeasePoll({db,controllerKey,workerKeys,enabled:multiControlEnabled});
+async function readCommittedReservation(engineId){
+ const s=await readAuthority();
+ const reservation=s.reservation;
+ return s.mode==='engine'&&s.gateReservationMatches===true&&s.registeredLegacyHolds===0&&
+   reservation?.sourceId===s.sourceId&&reservation?.engineId===engineId?reservation:null;
+}
+const multiFeedProof=createMultiFeedProofTransport({db,workerKeys,enabled:multiControlEnabled,
+ readReservations:async engineId=>{
+  const reservation=await readCommittedReservation(engineId);
+  return reservation?[reservation]:[];
+ }});
 // Proof collection reads committed production state, never grants a lease.
 const feedProof=createFeedProofTransport({db,workerKeys,enabled:process.env.BLOFY_ENGINE_FEED_PROOF_READ==='1',readReservation:async engineId=>{
- try{const s=await readAuthority();return s.mode==='engine'&&s.gateReservationMatches===true&&s.registeredLegacyHolds===0&&s.reservation?.sourceId===s.sourceId&&s.reservation?.engineId===engineId?s.reservation:null;}catch{return null}
+ try{return await readCommittedReservation(engineId);}catch{return null}
 }});
 // Read-only production link; no worker activation or source requests.
-async function readAuthority(){
-  const r=await fetch('https://blofy-activation-portal-production.up.railway.app/internal/engine-authority-read',{method:'POST',redirect:'error',signal:AbortSignal.timeout(4000),headers:{'content-type':'application/json'},body:JSON.stringify(signAuthorityRead(controllerKey))});
+async function readAuthority({probeProvider=false}={}){
+  const r=await fetch('https://blofy-activation-portal-production.up.railway.app/internal/engine-authority-read',{method:'POST',redirect:'error',signal:AbortSignal.timeout(probeProvider?14000:4000),headers:{'content-type':'application/json'},body:JSON.stringify(signAuthorityRead(controllerKey,Date.now(),{probeProvider}))});
   if(r.status!==200){await r.body?.cancel().catch(()=>{});throw Error('authority_unavailable')}
   const reader=r.body?.getReader();if(!reader)throw Error('authority_body_missing');
   let size=0,parts=[];
   try{for(;;){const c=await reader.read();if(c.done)break;size+=c.value.byteLength;if(size>2048)throw Error('authority_body_too_large');parts.push(Buffer.from(c.value));}}
   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
   const s=JSON.parse(Buffer.concat(parts).toString('utf8'));
-  if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>5000)throw Error('authority_invalid');
+  if(s.ok!==true||!['legacy','draining','engine','unknown'].includes(s.mode)||!Number.isSafeInteger(s.registeredLegacyHolds)||s.registeredLegacyHolds<0||s.allPathsFenced!==false||!Number.isSafeInteger(s.observedAt)||Math.abs(Date.now()-s.observedAt)>(probeProvider?15000:5000))throw Error('authority_invalid');
   return s;
 }
 const authorityProbe=async()=>{
  try{
   const s=await readAuthority();
-  console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,registeredLegacyHolds:s.registeredLegacyHolds,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
+  console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:true,mode:s.mode,reportedMaxConnections:s.reportedMaxConnections??null,registeredLegacyHolds:s.registeredLegacyHolds,legacyHoldAgesSeconds:s.legacyHoldAgesSeconds??null,reservationState:s.reservation?.state??null,allPathsFenced:false,customerTrafficChanged:false}));
  }catch{console.log('BLOFY_ENGINE_AUTHORITY_LINK '+JSON.stringify({ok:false,customerTrafficChanged:false}));}
 };
 if(process.env.BLOFY_ENGINE_AUTHORITY_PROBE==='1'){
  const first=setTimeout(()=>void authorityProbe(),5000);first.unref();
  const periodic=setInterval(()=>void authorityProbe(),60000);periodic.unref();
+ const provider=setTimeout(async()=>{
+  try{
+   const s=await readAuthority({probeProvider:true});
+   const p=s.providerAccount;
+   const ok=Number.isSafeInteger(p?.activeConnections)&&p.activeConnections>=0&&
+     Number.isSafeInteger(p.maxConnections)&&p.maxConnections>=0&&
+     Number.isSafeInteger(p.observedAt)&&Math.abs(Date.now()-p.observedAt)<=5000;
+   console.log('BLOFY_XTREAM_PROVIDER_ACCOUNT '+JSON.stringify(ok?{ok,activeConnections:p.activeConnections,
+    maxConnections:p.maxConnections,reportedMaxConnections:s.reportedMaxConnections,mode:s.mode,
+    registeredLegacyHolds:s.registeredLegacyHolds,providerMediaRequests:0}: {ok:false,providerMediaRequests:0}));
+  }catch{console.log('BLOFY_XTREAM_PROVIDER_ACCOUNT '+JSON.stringify({ok:false,providerMediaRequests:0}));}
+ },25000);provider.unref();
 }
 const readyRead=createReadyProofRead({secret:process.env.BLOFY_ENGINE_READY_READ_SECRET,controllerKey,enabled:process.env.BLOFY_ENGINE_READY_READ==='1',readProof:async identity=>{
  const s=await readAuthority();
- if(s.mode!=='engine'||s.gateReservationMatches!==true||s.registeredLegacyHolds!==0||s.reservation?.state!=='ready'||!['sourceId','channelId','engineId','reservationId','generation'].every(k=>s.reservation[k]===identity[k]))return null;
+ // The authenticated orchestrator needs proof while the feed is still
+ // pending, otherwise pending -> ready would require a proof it cannot read.
+ // Viewer grants remain separately conditional on committed ready state.
+ if(s.mode!=='engine'||s.gateReservationMatches!==true||s.registeredLegacyHolds!==0||
+    !['pending','ready'].includes(s.reservation?.state)||
+    !['sourceId','channelId','engineId','reservationId'].every(k=>s.reservation[k]===identity[k]))return null;
+ const generation=s.reservation.reservationId.replaceAll('-','');
+ if(identity.generation!==generation||(s.reservation.state==='ready'&&s.reservation.generation!==generation))return null;
  return feedProof.read(identity);
 }});
 const logged=new Map();
+const multiRoutes=new Map([
+ ['/control/multifeed/lease/poll',multiLeasePoll],
+ ['/control/multifeed/feed-proof/poll',multiFeedProof.poll],
+ ['/control/multifeed/feed-proof/complete',multiFeedProof.complete]
+]);
 const reply=(res,code,body)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body));};
 const server=createServer(async(req,res)=>{
  try{
@@ -75,10 +122,21 @@ const server=createServer(async(req,res)=>{
    res.writeHead(200,{'content-type':'text/plain; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-length':body.length});return res.end(body);
   }
   if(req.method==='GET'&&req.url==='/healthz'){db.prepare('SELECT 1').get();return reply(res,200,{ok:true,mode:'status-only'});}
-  if(req.method!=='POST'||!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete','/control/feed-proof/read'].includes(req.url))return reply(res,404,{ok:false});
+  const multiRoute=multiControlEnabled?multiRoutes.get(req.url):undefined;
+  const bundleRequest=multiControlEnabled&&req.url===workerBundlePath;
+  if(req.method!=='POST'||(!multiRoute&&!bundleRequest&&!['/control/status/poll','/control/status/complete','/control/pilot/poll','/control/lease/poll','/control/feed-proof/poll','/control/feed-proof/complete','/control/feed-proof/read'].includes(req.url)))return reply(res,404,{ok:false});
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))return reply(res,415,{ok:false});
   let n=0;const chunks=[];for await(const c of req){n+=c.length;if(n>4096){req.destroy();return;}chunks.push(c);}
   const e=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  if(bundleRequest){
+   const status=e?.status,engineId=status?.engineId,now=Date.now();
+   if(!Object.hasOwn(workerKeys,engineId)||!verifyWorkerStatus(e,{publicKey:workerKeys[engineId],engineId,challenge:status.challenge,now}))return reply(res,403,{ok:false});
+   if((bundleReads.get(engineId)??0)>now-2000)return reply(res,429,{ok:false});
+   bundleReads.set(engineId,now);
+   res.writeHead(200,{'content-type':'application/gzip','cache-control':'no-store','x-content-type-options':'nosniff','content-length':workerBundle.length});
+   return res.end(workerBundle);
+  }
+  if(multiRoute){const r=await multiRoute(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/read'){const r=await readyRead(e,req.headers.authorization);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/poll'){const r=await feedProof.poll(e);return reply(res,r.code,r.body);}
   if(req.url==='/control/feed-proof/complete'){const r=await feedProof.complete(e);return reply(res,r.code,r.body);}

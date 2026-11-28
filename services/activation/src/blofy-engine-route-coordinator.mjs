@@ -32,7 +32,10 @@ export function createEngineRouteCoordinator({claims,ledger,readSnapshot,start,r
    }
    if(plan.action==='request_reservation'){
     if(typeof start!=='function')return finish(hold('start_unavailable'));
-    const r=await start({request,engineId:plan.engineId});
+    const handoff=feed.state==='released'&&evidence.sourceIngressMode==='engine'?{
+     fromReservationId:feed.reservationId,fromEngineId:feed.engineId,proof:evidence.capacity
+    }:null;
+    const r=await start({request,engineId:plan.engineId,...handoff&&{handoff}});
     if(r?.ok!==true||r.action!=='feed_ready'||r.sourceId!==request.sourceId||r.channelId!==request.channelId||r.engineId!==plan.engineId)return finish(hold('start_unconfirmed'));
     // Attaching viewers is a separate authorized, atomic operation.
     return finish({ok:true,action:'feed_ready',engineId:r.engineId,reservationId:r.reservationId});

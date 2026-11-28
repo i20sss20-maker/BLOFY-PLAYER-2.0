@@ -39,8 +39,18 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
   })},
   async closeLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
-   const r=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=now() WHERE source_id=$1 AND hold_id=$2 AND NOT closed',[sourceId,holdId]);
-   return r.rowCount===1?{ok:true}:denied('hold_not_open');
+   const r=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=COALESCE(closed_at,now()) WHERE source_id=$1 AND hold_id=$2',[sourceId,holdId]);
+   return r.rowCount===1?{ok:true}:denied('hold_not_found');
+  })},
+  // Used only when the caller never opened upstream because enter was not
+  // acknowledged. Keep a tombstone even if the delayed enter has yet to arrive.
+  async abandonLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
+   if(!row)return denied('gate_missing');
+   const r=await c.query(`INSERT INTO blofy_engine_legacy_holds(source_id,hold_id,closed,closed_at)
+    VALUES($1,$2,true,now()) ON CONFLICT(hold_id) DO UPDATE
+    SET closed=true,closed_at=COALESCE(blofy_engine_legacy_holds.closed_at,EXCLUDED.closed_at)
+    WHERE blofy_engine_legacy_holds.source_id=EXCLUDED.source_id`,[sourceId,holdId]);
+   return r.rowCount===1?{ok:true}:denied('hold_conflict');
   })},
   async beginDrain(){return tx(async(c,row)=>{
    if(row?.mode!=='legacy')return denied('not_legacy');
@@ -49,8 +59,9 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
   })},
   // Abort an incomplete drain only before an engine has taken ownership.
   // A pending or unknown reservation must first be reconciled independently.
-  async cancelDrain(){return tx(async(c,row)=>{
+  async cancelDrain({expectedDrainStartedAt}={}){return tx(async(c,row)=>{
    if(row?.mode!=='draining')return denied('not_draining');
+   if(expectedDrainStartedAt!==undefined&&(!Number.isSafeInteger(expectedDrainStartedAt)||new Date(row.updated_at).getTime()!==expectedDrainStartedAt))return denied('drain_epoch_changed');
    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
    if(feed&&feed.state!=='released')return denied('reservation_unresolved');
    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
@@ -61,24 +72,43 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
    return {ok:true,mode:row.mode,observedAt:new Date(time.now).getTime()};
   })},
-  async readDrain(){return tx(async(c,row)=>{
+  async readDrain({includeOpenHoldIds=false}={}){return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
+   if(includeOpenHoldIds&&row.mode==='draining'){
+    const {rows}=await c.query('SELECT hold_id FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed ORDER BY hold_id',[sourceId]);
+    return {ok:true,mode:row.mode,registeredLegacyHolds:rows.length,allPathsDrained:false,
+     drainStartedAt:new Date(row.updated_at).getTime(),openHoldIds:rows.map(hold=>hold.hold_id)};
+   }
    const {rows:[r]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
    return {ok:true,mode:row.mode,registeredLegacyHolds:r.n,allPathsDrained:false};
   })},
   // Never promote based on registered holds alone. Coverage and independent
   // provider observation are required from the trusted cutover orchestrator.
-  async promote({reservationId,engineId,proof}={}){return tx(async(c,row)=>{
+  async promote({reservationId,engineId,proof,legacyHoldsToReconcile=null}={}){return tx(async(c,row)=>{
    if(row?.mode!=='draining'||!valid(reservationId)||!['hostbrr','linode'].includes(engineId))return denied('not_draining');
    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
    const now=new Date(time.now).getTime();
    if(proof?.sourceId!==sourceId||proof?.authoritative!==true||proof.scope!=='all_paths'||proof.activeConnections!==0||proof.maxConnections!==1||!Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)return denied('external_fence_unconfirmed');
    const {rows:[n]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
-   if(n.n!==0)return denied('legacy_holds_open');
+   if(n.n!==0){
+    // Historical holds lack owner metadata. Recover only an exact set from
+    // the current drain, after a trusted observer fenced every path and
+    // observed zero provider sockets. Keep existing rows for audit.
+    if(!Array.isArray(legacyHoldsToReconcile)||legacyHoldsToReconcile.length!==n.n||
+       !legacyHoldsToReconcile.every(valid)||new Set(legacyHoldsToReconcile).size!==n.n||
+       proof.drainStartedAt!==new Date(row.updated_at).getTime()||proof.observedAt<proof.drainStartedAt)
+     return denied('legacy_holds_open');
+    const {rows:[matched]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed AND hold_id=ANY($2::uuid[])',[sourceId,legacyHoldsToReconcile]);
+    if(matched.n!==n.n)return denied('legacy_hold_snapshot_changed');
+   }
    const {rows:[feed]}=await c.query('SELECT * FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
    if(!feed||feed.state!=='pending'||feed.reservation_id!==reservationId||feed.engine_id!==engineId)return denied('reservation_mismatch');
+   if(n.n!==0){
+    const closed=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=clock_timestamp() WHERE source_id=$1 AND NOT closed AND hold_id=ANY($2::uuid[])',[sourceId,legacyHoldsToReconcile]);
+    if(closed.rowCount!==n.n)throw Error('legacy_hold_snapshot_changed');
+   }
    await c.query("UPDATE blofy_engine_ingress_gate SET mode='engine',reservation_id=$2,engine_id=$3,updated_at=now() WHERE source_id=$1",[sourceId,reservationId,engineId]);
-   return {ok:true,mode:'engine'};
+   return n.n===0?{ok:true,mode:'engine'}:{ok:true,mode:'engine',reconciledLegacyHolds:n.n};
   })},
   async readFence(identity){return tx(async(c,row)=>{
    if(row?.mode!=='engine'||identity?.sourceId!==sourceId||row.reservation_id!==identity.reservationId||row.engine_id!==identity.engineId)return null;

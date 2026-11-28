@@ -45,24 +45,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
   }catch(e){try{await c.query('ROLLBACK');}catch{}throw e;}
   finally{c.release();}
  }
- return {
-  // Internal locked snapshot, not an admission decision. reserve/attach/transition
-  // must recheck state under the same source lock after the planner returns.
-  async readRoutingState({sourceId}={}){
-   if(!enabled(sourceId))return null;
-   return tx(sourceId,async(c,row)=>{
-    if(!row)return {sourceId,state:'empty'};
-    if(!engineAllowed(row.engine_id))return null;
-    return {sourceId,state:row.state,engineId:row.engine_id,
-     channelId:row.channel_id,reservationId:row.reservation_id,generation:row.generation,
-     // Only the trusted transition writes released; timestamps alone never do.
-     releaseConfirmed:row.state==='released'};
-   });
-  },
-  // Issue only while holding the SAME source lock as reserve and transition.
-  // A caller must supply a separately enforced source-wide ingress fence;
-  // a maintenance flag, heartbeat, or provider zero alone is not that proof.
-  async issueWorkerLease({sourceId,reservationId,engineId,channelId,fence,signingKey}={}){
+ async function commitWorkerLease({sourceId,reservationId,engineId,channelId,fence}={},encode){
    if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||
       !uuid.test(reservationId??'')||!channel.test(channelId??''))return blocked('lease_disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
@@ -82,10 +65,59 @@ export function createLinodeFeedLedger(pool,env=process.env){
     if(holds.n!==0)return blocked('lease_legacy_holds_open');
     const sequence=Number(row.worker_lease_sequence)+1;
     if(!Number.isSafeInteger(sequence)||sequence<1)return blocked('lease_sequence_invalid');
-    const lease=signLiveLease({version:1,sourceId,reservationId,channelId,engineId,sequence,
-      issuedAt:now,expiresAt:Math.min(now+60000,fence.expiresAt)},signingKey,now);
+    const claims={version:1,sourceId,reservationId,channelId,engineId,sequence,
+      issuedAt:now,expiresAt:Math.min(now+60000,fence.expiresAt)};
+    const lease=encode(claims,now);
     await c.query('UPDATE blofy_linode_feed_ledger SET worker_lease_sequence=$2 WHERE source_id=$1',[sourceId,sequence]);
     return {ok:true,...lease};
+   });
+ }
+ return {
+  // Internal locked snapshot, not an admission decision. reserve/attach/transition
+  // must recheck state under the same source lock after the planner returns.
+  async readRoutingState({sourceId}={}){
+   if(!enabled(sourceId))return null;
+   return tx(sourceId,async(c,row)=>{
+    if(!row)return {sourceId,state:'empty'};
+    if(!engineAllowed(row.engine_id))return null;
+    return {sourceId,state:row.state,engineId:row.engine_id,
+     channelId:row.channel_id,reservationId:row.reservation_id,generation:row.generation,
+     // Only the trusted transition writes released; timestamps alone never do.
+     releaseConfirmed:row.state==='released'};
+   });
+  },
+  // Issue only while holding the SAME source lock as reserve and transition.
+  // A caller must supply a separately enforced source-wide ingress fence;
+  // a maintenance flag, heartbeat, or provider zero alone is not that proof.
+  async issueWorkerLease(input={}){
+   return commitWorkerLease(input,(claims,now)=>signLiveLease(claims,input.signingKey,now));
+  },
+  // For a future authenticated private authority link: reserve the exact
+  // sequence under the PostgreSQL lock without exporting the controller key.
+  // The caller must be trusted and must independently verify the fence.
+  // No HTTP route or automatic lease issuance is enabled by this method.
+  async claimWorkerLease(input={}){
+   return commitWorkerLease(input,claims=>({lease:claims}));
+  },
+  // Commit readiness only from a verified controller proof, under the same
+  // lock used for lease issuance. The supplied proof must have been
+  // cryptographically verified by the private proof reader before this call.
+  async markLeaseReady({sourceId,reservationId,engineId,channelId,proof}={}){
+   if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||!uuid.test(reservationId??'')||!channel.test(channelId??''))return blocked('ready_disabled_or_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||!['pending','ready'].includes(row.state)||row.reservation_id!==reservationId||row.engine_id!==engineId||row.channel_id!==channelId||Number(row.worker_lease_sequence)<1)return blocked('ready_reservation_mismatch');
+    const generation=reservationId.replaceAll('-','');
+    if(row.state==='ready'&&row.generation!==generation)return blocked('ready_generation_mismatch');
+    const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(clock.now).getTime();
+    if(proof?.sourceId!==sourceId||proof.reservationId!==reservationId||proof.engineId!==engineId||proof.channelId!==channelId||proof.generation!==generation||
+       !Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000||!Number.isSafeInteger(proof.lastSegment)||proof.lastSegment<0)return blocked('ready_proof_unconfirmed');
+    const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(gate?.mode!=='engine'||gate.reservation_id!==reservationId||gate.engine_id!==engineId)return blocked('ready_ingress_gate_closed');
+    const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(holds.n!==0)return blocked('ready_legacy_holds_open');
+    if(row.state==='pending')await c.query("UPDATE blofy_linode_feed_ledger SET state='ready',generation=$2,updated_at=now() WHERE source_id=$1",[sourceId,generation]);
+    return {ok:true,state:'ready',generation};
    });
   },
   // Trusted internal lookup only. This cannot authorize playback or open a
@@ -102,13 +134,57 @@ export function createLinodeFeedLedger(pool,env=process.env){
       requestId:row.request_id};
    });
   },
-  async reserve({sourceId,channelId,requestId,engineId='linode'}={}){
+  async reserve({sourceId,channelId,requestId,engineId='linode',handoff=null,initialDrain=null}={}){
    if(!enabled(sourceId)||!engineAllowed(engineId)||typeof channelId!=='string'||!channel.test(channelId)||typeof requestId!=='string'||!uuid.test(requestId)||requestId!==requestId.toLowerCase())return blocked('disabled_or_invalid');
    return tx(sourceId,async(c,row)=>{
+    if(initialDrain&&handoff)return blocked('conflicting_cutover_modes');
+    let gate;
+    if(initialDrain||handoff||(env.BLOFY_ENGINE_RENEWABLE_LEASE==='1'&&row?.state==='released')){
+     const {rows:[current]}=await c.query('SELECT mode,reservation_id,engine_id,updated_at FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+     gate=current;
+    }
+    const gateOwnsRow=gate?.mode==='engine'&&row&&gate.reservation_id===row.reservation_id&&gate.engine_id===row.engine_id;
     if(row&&row.state!=='released'){
      if(row.request_id===requestId&&row.channel_id===channelId&&row.state!=='unknown'&&row.engine_id===engineId)
-      return {ok:true,action:'existing',reservationId:row.reservation_id,state:row.state};
+      return (!handoff&&!initialDrain)||gateOwnsRow?{ok:true,action:'existing',reservationId:row.reservation_id,state:row.state}:blocked('handoff_gate_mismatch');
      return blocked('feed_occupied_or_uncertain');
+    }
+    // Replace a demonstrably released engine reservation without reopening
+    // legacy ingress. Neither a missed heartbeat nor a provider count alone
+    // can transfer ownership.
+    // Atomic initial cutover: no pending reservation can be stranded if the
+    // drain evidence fails. The proof must come from the trusted orchestrator,
+    // never a public request or an inference from old hold ages.
+    let reconcileIds=null;
+    if(initialDrain){
+     if(gate?.mode!=='draining')return blocked('initial_drain_not_active');
+     const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+     const now=new Date(clock.now).getTime(),started=new Date(gate.updated_at).getTime();
+     const {proof,openHoldIds}=initialDrain;
+     if(proof?.sourceId!==sourceId||proof.authoritative!==true||proof.scope!=='all_paths'||
+        proof.activeConnections!==0||proof.maxConnections!==1||!Number.isSafeInteger(proof.observedAt)||
+        proof.observedAt<now-10000||proof.observedAt>now+2000||
+        !Number.isSafeInteger(started)||proof.drainStartedAt!==started||proof.observedAt<started)
+       return blocked('initial_drain_unconfirmed');
+     if(!Array.isArray(openHoldIds)||!openHoldIds.every(x=>typeof x==='string'&&uuid.test(x)&&x===x.toLowerCase())||
+        new Set(openHoldIds).size!==openHoldIds.length)return blocked('initial_drain_hold_snapshot_invalid');
+     const {rows:holds}=await c.query('SELECT hold_id FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed ORDER BY hold_id',[sourceId]);
+     const actual=holds.map(x=>x.hold_id);
+     if(actual.length!==openHoldIds.length||actual.some(x=>!openHoldIds.includes(x)))return blocked('initial_drain_hold_snapshot_changed');
+     reconcileIds=openHoldIds;
+    }else if(handoff){
+     if(!gateOwnsRow||row.state!=='released'||row.reservation_id!==handoff.fromReservationId||
+        row.engine_id!==handoff.fromEngineId)return blocked('handoff_gate_mismatch');
+     const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+     const now=new Date(clock.now).getTime();
+     const {proof}=handoff;
+     if(proof?.sourceId!==sourceId||proof.authoritative!==true||proof.scope!=='all_paths'||
+        proof.activeConnections!==0||proof.maxConnections!==1||!Number.isSafeInteger(proof.observedAt)||
+        proof.observedAt<now-10000||proof.observedAt>now+2000)return blocked('handoff_capacity_unconfirmed');
+     const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+     if(holds.n!==0)return blocked('handoff_legacy_holds_open');
+    }else if(gate?.mode==='engine'||gate?.mode==='unknown'){
+     return blocked('handoff_required');
     }
     // Each installed worker currently has one systemd source runtime.
     // A source lock alone cannot prevent two different source reservations
@@ -128,7 +204,39 @@ export function createLinodeFeedLedger(pool,env=process.env){
      ON CONFLICT(source_id) DO UPDATE SET channel_id=EXCLUDED.channel_id,
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
      state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,worker_lease_sequence=0,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
+    if(initialDrain){
+     const closed=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=clock_timestamp() WHERE source_id=$1 AND NOT closed AND hold_id=ANY($2::uuid[])',[sourceId,reconcileIds]);
+     if(closed.rowCount!==reconcileIds.length)throw Error('initial_drain_hold_snapshot_changed');
+     await c.query("UPDATE blofy_engine_ingress_gate SET mode='engine',reservation_id=$2,engine_id=$3,updated_at=now() WHERE source_id=$1",[sourceId,reservationId,engineId]);
+    }else if(handoff){
+     await c.query("UPDATE blofy_engine_ingress_gate SET reservation_id=$2,engine_id=$3,updated_at=now() WHERE source_id=$1",[sourceId,reservationId,engineId]);
+    }
     return {ok:true,action:'start_once',reservationId,state:'pending'};
+   });
+  },
+  // Safe rollback for an initial reservation that has NEVER received a lease.
+  // The orchestrator must independently verify that there is no worker or
+  // provider connection and that the lease is the exclusive path to startup.
+  // This operation cannot retire a ready feed or an issued/uncertain lease.
+  async rollbackUnissuedInitial({sourceId,reservationId,engineId,proof}={}){
+   if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||!uuid.test(reservationId??''))return blocked('rollback_disabled_or_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||row.reservation_id!==reservationId||row.engine_id!==engineId||row.state!=='pending'||
+       row.generation!==null||Number(row.worker_lease_sequence)!==0)return blocked('rollback_reservation_not_unissued');
+    const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(gate?.mode!=='engine'||gate.reservation_id!==reservationId||gate.engine_id!==engineId)return blocked('rollback_gate_mismatch');
+    const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(clock.now).getTime();
+    if(proof?.sourceId!==sourceId||proof.reservationId!==reservationId||proof.engineId!==engineId||
+       proof.authoritative!==true||proof.scope!=='all_paths'||proof.activeConnections!==0||
+       proof.exclusiveLeaseStartup!==true||proof.workerStopped!==true||
+       !Number.isSafeInteger(proof.observedAt)||proof.observedAt<now-10000||proof.observedAt>now+2000)
+      return blocked('rollback_release_unconfirmed');
+    const {rows:[holds]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(holds.n!==0)return blocked('rollback_legacy_holds_open');
+    await c.query("UPDATE blofy_linode_feed_ledger SET state='released',generation=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
+    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
+    return {ok:true,mode:'legacy',state:'released'};
    });
   },
   // Only authenticated server-owned input, not public request bodies.

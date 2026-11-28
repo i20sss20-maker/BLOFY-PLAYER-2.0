@@ -1,4 +1,5 @@
 import { databaseOptions, observeIdleDatabaseErrors } from './database-options.mjs';
+import {gatewayHoldLifetime} from './blofy-engine-legacy-ingress.mjs';
 import { withDatabaseStartRetry } from './startup-db-retry.mjs';
 import http from 'node:http';
 import {configureHostbrrWorkerHeartbeat,receiveHostbrrWorkerHeartbeat} from './hostbrr-worker-heartbeat.mjs';
@@ -1227,8 +1228,14 @@ async function start() {
   server.listen(PORT, '0.0.0.0', () => console.log(`BLOFY activation service listening on :${PORT}`));
 }
 
-async function shutdown() {
+let shuttingDown=false;
+function shutdown() {
+  if(shuttingDown)return;
+  shuttingDown=true;
+  gatewayHoldLifetime.retire();
   server.close(async () => {
+    const receipt=await gatewayHoldLifetime.drain();
+    console.info('BLOFY_GATEWAY_HOLD_SHUTDOWN',JSON.stringify(receipt));
     await pool.end();
     process.exit(0);
   });

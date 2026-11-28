@@ -10,7 +10,7 @@ import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,
   from './xtream-live-ts-recovery.mjs';
 import {summarizeXtreamLiveStability} from './xtream-live-stability-summary.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
-import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
+import {ensureXtreamAdminReady,getXtreamStudioBranding,readEngineProviderAccount} from './xtream-admin-hook.mjs';
 import {
   assertPublicXtreamUrl,
   decryptXtreamSecret,
@@ -51,7 +51,7 @@ import {createLinodeFeedLedger} from './linode-feed-ledger.mjs';
 import {createRelayFenceEndpoint} from './blofy-engine-relay-fence-endpoint.mjs';
 import {createRelayHoldEndpoint} from './blofy-engine-relay-hold-endpoint.mjs';
 import {createAuthorityReadEndpoint,ensureAuthorityReadSchema} from './blofy-engine-authority-read.mjs';
-import {prepareEngineSchema,resolveApprovedEngineSource} from './blofy-engine-schema-preflight.mjs';
+import {prepareEngineSchema,resolveApprovedEngineSource,resolveEngineIngressSource} from './blofy-engine-schema-preflight.mjs';
 import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
@@ -99,7 +99,7 @@ import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs'
 import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
   unsealXtreamHlsTicket,refreshExpiredXtreamHlsTicket} from './xtream-hls-playback.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
-import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {relayEligible,issueStreamRelayGrant,isConfiguredRelayTicket} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,permittedLicensedLiveProduction,
   createFirstAccountSharedLiveTestPilot,authorizedLiveTrialQuota} from './xtream-licensed-live-fanout-policy.mjs';
 import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
@@ -152,7 +152,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const enterLegacyIngress=createLegacyIngress(pool);
 const relayFenceEndpoint=createRelayFenceEndpoint(pool);
 const relayHoldEndpoint=createRelayHoldEndpoint(pool);
-const authorityReadEndpoint=createAuthorityReadEndpoint(pool);
+const authorityReadEndpoint=createAuthorityReadEndpoint(pool,{readProviderAccount:readEngineProviderAccount});
 const distributorCatalog=createDistributorCustomerCatalog({
   pool,enabled:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY==='1',
   distributorAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_IDS||'',
@@ -1143,6 +1143,8 @@ async function probeUnavailableMediaOnSameSource(key){
  if(!shouldUseIndependentSourceMedia({
   sourceId:key.serverId,kind:key.kind,extension:ext
  }))return 'transient';
+ const ingress=await enterLegacyIngress(row.server_id);
+ if(!ingress.ok)return 'transient';
  let response,reader;
  try{
   const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
@@ -1167,6 +1169,7 @@ async function probeUnavailableMediaOnSameSource(key){
  finally{
   if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
   else {try{await response?.body?.cancel()}catch{}}
+  await ingress.close();
  }
 }
 async function runDueUnavailableMedia({sourceId=null}={}){
@@ -1279,9 +1282,7 @@ async function proxySharedLiveTicket(req,res,destination,observe){
   let timer=null,response=null;
   try{
     const target=new URL(destination);
-    if(target.origin!=='https://blofy-stream-api-production.up.railway.app'||
-      !/^\/relay\/[a-f0-9]{48}$/.test(target.pathname)||target.search||target.hash||
-      target.username||target.password)throw Error('shared_live_ticket_invalid');
+    if(!isConfiguredRelayTicket(target))throw Error('shared_live_ticket_invalid');
     if(req.aborted||res.destroyed)return;
     timer=setTimeout(cancel,20000);timer.unref?.();
     response=await fetch(target,{method:'GET',redirect:'manual',
@@ -1457,6 +1458,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           providerMaxConcurrentFeeds:row.source_reported_max_connections
         })
       });
+      // An authenticated relay obtains its own source admission on ticket
+      // redemption. End the gateway grant before attaching this viewer.
+      if(process.env.BLOFY_ENGINE_RELAY_HOLDS==='1'&&isConfiguredRelayTicket(destination)){
+        if(!await ingress.close())return text(res,503,'Source temporarily unavailable','text/plain; charset=utf-8',{'retry-after':'5'});
+      }
       observe('shared_grant'); // capability issued, not proven playback
       return await proxySharedLiveTicket(req,res,destination,observe);
     }catch{
@@ -2351,6 +2357,7 @@ async function handlePrivateContentHubSource(req,res,url){
   if(hubActiveRange)return json(res,429,{ok:false,
    code:'content_hub_source_range_busy'});
   hubActiveRange=true;
+  let ingress;
   try{
    const gatewayId=Number(episodeProbe[1]);
    if(!Number.isSafeInteger(gatewayId))return json(res,400,{
@@ -2363,6 +2370,8 @@ async function handlePrivateContentHubSource(req,res,url){
       String(row.series_source_id||'').length<1||
       String(row.container_extension||'').toLowerCase()!==candidate.extension)
     return json(res,409,{ok:false,code:'content_hub_episode_source_changed'});
+   ingress=await enterLegacyIngress(row.server_id);
+   if(!ingress.ok)return json(res,503,{ok:false,code:'source_ingress_fenced'},{'retry-after':'5'});
    const urlSource=mediaUpstreamUrl(row,'series',row.source_episode_id,
      candidate.extension);
    const result=await probePrivateEpisodeRange({
@@ -2375,7 +2384,7 @@ async function handlePrivateContentHubSource(req,res,url){
    code:'content_hub_episode_probe_unavailable',
    providerMediaRequests:0,automaticDownload:false,
    stored:false,customerCutover:false})}
-  finally{hubActiveRange=false}
+  finally{try{if(ingress?.ok)await ingress.close()}finally{hubActiveRange=false}}
  }
  if(url.pathname==='/internal/blofy-content-hub/episodes/candidates'){
   if(url.search)return json(res,400,{ok:false,
@@ -2452,8 +2461,11 @@ async function handlePrivateContentHubSource(req,res,url){
  const onClose=()=>abort.abort();
  req.once('aborted',onClose);
  res.once('close',()=>{if(!res.writableEnded)abort.abort()});
- let upstream;
+ let upstream,ingress;
  try{
+  ingress=await enterLegacyIngress(row.server_id);
+  if(!ingress.ok)return json(res,503,{ok:false,code:'source_ingress_fenced'},{'retry-after':'5'});
+  if(abort.signal.aborted||req.aborted||res.destroyed)return;
   const upstreamUrl=mediaUpstreamUrl(row,isEpisode?'series':'movie',
     isEpisode?row.source_episode_id:row.source_id,
     String(row.container_extension).toLowerCase());
@@ -2496,7 +2508,7 @@ async function handlePrivateContentHubSource(req,res,url){
   req.off('aborted',onClose);
   if(upstream?.body&&!upstream.body.locked)
    await upstream.body.cancel().catch(()=>{});
-  hubActiveRange=false;
+  try{if(ingress?.ok)await ingress.close()}finally{hubActiveRange=false}
  }
 }
 
@@ -2509,7 +2521,7 @@ async function probeGatewayMedia(kind,itemId){
   itemProbeAt=now;
   itemProbeRunning=true;
   const started=Date.now();
-  let reader,response;
+  let reader,response,ingress;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),10000);
   try{
@@ -2517,6 +2529,9 @@ async function probeGatewayMedia(kind,itemId){
       ?await episodeByGatewayId(itemId)
       :await gatewayItemById(kind==='live'?'live':'movie',itemId);
     if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
+    ingress=await enterLegacyIngress(row.server_id);
+    if(!ingress.ok)return{ok:false,kind,itemId,httpStatus:null,reason:'source_ingress_fenced',elapsedMs:Date.now()-started};
+    if(controller.signal.aborted)return{ok:false,kind,itemId,httpStatus:null,reason:'timeout',elapsedMs:Date.now()-started};
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
     const upstream=mediaUpstreamUrl(row,kind,sourceId,ext);
@@ -2582,7 +2597,7 @@ async function probeGatewayMedia(kind,itemId){
     controller.abort();
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
     else if(response?.body){try{await response.body.cancel()}catch{}}
-    itemProbeRunning=false;
+    try{if(ingress?.ok)await ingress.close()}finally{itemProbeRunning=false}
   }
 }
 
@@ -2813,7 +2828,7 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
 if(process.env.BLOFY_ENGINE_SCHEMA_PREPARE==='1'){
  const prepare=setTimeout(()=>{
   void ensureReady().then(async()=>{
-   const sourceId=await resolveApprovedEngineSource(pool);
+   const sourceId=await resolveEngineIngressSource(pool);
    const result=await prepareEngineSchema(pool,{sourceId});
    if(result.ok&&process.env.BLOFY_ENGINE_AUTHORITY_READ==='1')await ensureAuthorityReadSchema(pool);
    console.info('BLOFY_ENGINE_SCHEMA_PREFLIGHT',JSON.stringify({...result,customerTrafficChanged:false,sourceMediaRequests:0}));
