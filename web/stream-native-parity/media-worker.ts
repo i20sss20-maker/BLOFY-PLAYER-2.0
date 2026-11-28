@@ -392,14 +392,15 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
  if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped)){
   noteEncoderCapacityDenied();return {error:'ultra_capacity',status:429}
  }
- active++;
  // One unique directory per decoder instance; a retired FFmpeg process
  // cannot overwrite a fresh channel playlist while it is shutting down.
  const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+ // A failed directory allocation must not consume an encoder slot.
+ try{mkdirSync(dir,{recursive:true})}catch{return {error:'hls_storage_unavailable',status:503}}
+ active++;
  const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true,
   sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});
  touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
  session.hardTimer.unref?.();
@@ -788,11 +789,13 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
    stopHls(s,'legacy_position_changed')
  }
  if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {status:429,error:'vod_capacity'}}
+ const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+ // Isolate retiring encoders from same-key replacements.
+ try{mkdirSync(dir,{recursive:true})}catch{return {error:'vod_storage_unavailable',status:503}}
  active++;
- const abort=new AbortController(),dir=join(hlsRoot,key);
  const session={key,vod:true,kind,id,ext,track,start,bearer,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});touchHls(session);
+ touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);
  session.hardTimer.unref?.();
  try{
@@ -1058,7 +1061,8 @@ async function fullVodRequest(req,url){
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  let session=hlsSessions.get(key);
  if(!session){
-  const dir=join(hlsRoot,key);mkdirSync(dir,{recursive:true});
+  const dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+  try{mkdirSync(dir,{recursive:true})}catch{return hlsError(503,'vod_storage_unavailable',2)}
   session={key,vod:true,fullVod:true,kind,id,ext,track,duration,bearer,dir,abort:new AbortController(),
    proc:null,chunkStart:-1,stopped:false,released:true,finished:true,exitCode:0,lastAccess:Date.now()};
   hlsSessions.set(key,session);
