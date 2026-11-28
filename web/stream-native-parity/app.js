@@ -1696,7 +1696,7 @@ function commentarySeekTarget(audio,delta){
 }
 // Local HLS buffer only. This does not advertise server-side DVR or
 // TimeShift: the source may remove old segments at any moment.
-function bufferedLiveSeekTarget(video,record,action){
+function bufferedLiveRange(video,record){
  if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
  var at=Number(video.currentTime),seekable=video.seekable,buffered=video.buffered;
  if(!Number.isFinite(at)||!seekable||!buffered)return null;
@@ -1707,12 +1707,18 @@ function bufferedLiveSeekTarget(video,record,action){
    for(var j=0;j<Math.min(buffered.length,32);j++){
     var start=Math.max(ss,buffered.start(j)),end=Math.min(se,buffered.end(j));
     if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
-    var target=action==='back'?at-5:action==='forward'?at+5:action==='back-one'?at-1:action==='forward-one'?at+1:action==='latest'?end-0.75:NaN;
-    if(action==='forward')target=Math.min(target,end-0.75);
-    if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target
+    return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
    }
   }
  }catch(e){}
+ return null
+}
+function bufferedLiveSeekTarget(video,record,action){
+ var range=bufferedLiveRange(video,record);if(!range)return null;
+ var start=range.start,end=range.end,at=range.at;
+ var target=action==='back'?at-5:action==='forward'?at+5:action==='back-one'?at-1:action==='forward-one'?at+1:action==='back-ten'?at-10:action==='forward-ten'?at+10:action==='earliest'?start+0.25:action==='latest'?end-0.75:NaN;
+ if(action==='forward'||action==='forward-ten')target=Math.min(target,end-0.75);
+ if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target;
  return null
 }
 function simpleLiveStatus(message,error){
@@ -4295,9 +4301,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var bufferButton=document.getElementById('player-live-buffer');
  if(bufferButton)bufferButton.onclick=function(){
   if(!isLive||S.playerView!==state||S.route!=='player')return;
-  var record=S.play,origin=this,options=[];
+  var record=S.play,origin=this,options=[],range=null;
   if(record&&record.video===video){
-   [['back','رجوع 5 ثوانٍ'],['forward','تقديم 5 ثوانٍ'],['latest','أحدث نقطة محفوظة']].forEach(function(entry){
+   range=bufferedLiveRange(video,record);
+   [['earliest','أقدم نقطة محفوظة'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['latest','أحدث نقطة محفوظة']].forEach(function(entry){
     if(bufferedLiveSeekTarget(video,record,entry[0])===null)return;
     options.push({name:entry[1],selected:false,select:function(){
      if(S.play!==record||S.playerView!==state||S.route!=='player')return;
@@ -4308,7 +4315,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    });
   }
   if(!options.length){playerStatus('لا يتوفر جزء قابل للرجوع داخل ذاكرة المشغل الآن.');return}
-  showPlayerChoices('التوقيت داخل الجزء المحفوظ',options,origin)
+  showPlayerChoices('ذاكرة البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
  };
  var subtitleButton=document.getElementById('player-subtitles');
  if(subtitleButton)subtitleButton.onclick=function(){
