@@ -277,7 +277,8 @@ function stopHls(session,reason){
   },()=>{
    clearTimeout(killTimer);cleanup()
   });
- }else cleanup();
+ }else if(!session.startPending)cleanup();
+ // A cancelled startup still owns its slot until its async source probe settles.
  if(reason!=='idle_timeout'&&reason!=='session_expired')console.info('VIDAA_HLS_SESSION_END',{kind:session.kind,reason})
 }
 function releaseHls(session){if(!session.released){session.released=true;active=Math.max(0,active-1)}}
@@ -447,7 +448,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
  try{mkdirSync(dir,{recursive:true})}catch{return {error:'hls_storage_unavailable',status:503}}
  active++;
  const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true,
-  sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
+  startPending:true,sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
  hlsSessions.set(key,session);
  touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
@@ -561,6 +562,15 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
   }).catch(()=>{session.finished=true;session.error='process_crashed';stopHls(session,session.error)});
   return {session};
  }catch(err){stopHls(session,'fetch_or_spawn_error');return {error:'hls_start_failed',status:502}}
+ finally{
+  session.startPending=false;
+  // Only cancelled pre-spawn starts are released here. Running encoders
+  // remain owned by their process exit handler, as before.
+  if(session.stopped&&!session.proc){
+   releaseHls(session);
+   try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+  }
+ }
 }
 
 /* Preview-only fan-out with per-bearer authorization boundaries. Each viewer
@@ -966,11 +976,16 @@ function pruneFullVod(session,near){
   }
  }catch{}
 }
+function canPrefetchVod(used,limit){
+ // Speculative work may not take the last slot; explicit VOD requests
+ // retain normal admission and may still use it. No active job is evicted.
+ return Number.isSafeInteger(used)&&Number.isSafeInteger(limit)&&used>=0&&limit>=2&&used<limit-1
+}
 function scheduleFullVodPrefetch(session,finishedChunk){
  const next=finishedChunk+FULL_CHUNK_SEGMENTS;
  if(session.stopped||session.prefetchNext!==next||!session.finished||
   session.chunkStart!==finishedChunk||session.exitCode!==0||session.error||
-  next*FULL_SEGMENT_SECONDS>=session.duration||active>=MAX_JOBS||
+  next*FULL_SEGMENT_SECONDS>=session.duration||!canPrefetchVod(active,MAX_JOBS)||
   session.prefetchScheduled===next)return false;
  // Avoid speculative source opens while the current encoder is still writing.
  // Trigger at most one adjacent chunk. The viewer must have requested
@@ -982,7 +997,7 @@ function scheduleFullVodPrefetch(session,finishedChunk){
   if(session.prefetchScheduled!==next)return;
   session.prefetchScheduled=null;
   if(session.stopped||session.chunkStart!==finishedChunk||!session.finished||
-   session.exitCode!==0||session.error||active>=MAX_JOBS)return;
+   session.exitCode!==0||session.error||!canPrefetchVod(active,MAX_JOBS))return;
   const started=fullVodChunk(session,next);
   if(started.error)console.warn('BLOFY_FULL_VOD_PREFETCH_SKIPPED',{kind:session.kind,reason:started.error});
   else console.info('BLOFY_FULL_VOD_PREFETCH',{kind:session.kind,first:next})
