@@ -444,7 +444,10 @@ async function publicWebAnswer(query:string):Promise<{reply:string,suggestedTitl
  if(!response.ok){await response.body?.cancel();console.warn("BLOFY_AI_WEB_STATUS",response.status);throw Error("web_provider_failed")}
  const data=await response.json() as any;
  const message=data?.choices?.[0]?.message,sources=browserSources(message),reply=typeof message?.content==="string"?message.content.trim():"";
- if(!reply||!sources.length)throw Error("web_sources_missing");
+ if(!reply||!sources.length){
+  if(Bun.env.BLOFY_AI_BOOT_PROBE==="web-v7")console.info("BLOFY_AI_WEB_SHAPE",JSON.stringify({messageKeys:Object.keys(message||{}),annotationTypes:(message?.annotations||[]).map((x:any)=>x?.type),toolShapes:(Array.isArray(message?.executed_tools)?message.executed_tools:[]).map((t:any)=>({keys:Object.keys(t||{}),type:t?.type,searchKeys:Object.keys(t?.search_results||{}),resultKeys:Object.keys(t?.search_results?.results?.[0]||{})})),replyLength:reply.length}));
+  throw Error("web_sources_missing")
+ }
  return {reply:reply.slice(0,1900)+"\n\nالمصادر:\n"+sources.slice(0,3).map((x,i)=>(i+1)+". "+x.title+" — "+x.url).join("\n"),suggestedTitles:[]};
 }
 if(Bun.env.BLOFY_AI_BOOT_PROBE==="web-v7"){
