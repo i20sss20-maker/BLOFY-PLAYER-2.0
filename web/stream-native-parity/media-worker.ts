@@ -1029,7 +1029,6 @@ async function fullVodRequest(req,url){
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  let session=hlsSessions.get(key);
  if(!session){
-  if(file!=='index.m3u8')return json(410,{error:'vod_session_expired'});
   const dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
   // A stopped encoder may still be draining while the same SID restarts.
   // Its cleanup must never remove the replacement's segment directory.
