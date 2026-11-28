@@ -104,3 +104,27 @@ test('live timing only seeks actual retained bytes within one continuous playabl
  assert.match(app,/now<\(record.localBufferSeekUntil\|\|0\)/);
  assert.match(app,/stopCommentary\(\);video.currentTime=target;record.localBufferSeekUntil=Date.now\(\)\+20000/);
 });
+
+test('manual commentary picture timing preserves one active audio stream only for a confirmed buffered seek',()=>{
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function bufferedLiveSeekTarget('),b=app.indexOf('function simpleLiveStatus(',a);
+ const target=new Function(app.slice(a,b)+';return bufferedLiveSeekTarget')();
+ const ranges=rows=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
+ const events={},timers=new Map();let tick=0;
+ const video={currentTime:15,readyState:4,seeking:false,ended:false,paused:false,muted:false,seekable:ranges([[0,30]]),buffered:ranges([[5,25]]),addEventListener:(name,fn)=>events[name]=fn};
+ const state={},transport={hlsKey:'fixture',ready:true,video},S={route:'player',playerView:state,play:transport};
+ const document={hidden:false,getElementById:()=>null,addEventListener(){},removeEventListener(){}};
+ const fakeAudio={readyState:4,play(){},pause(){},removeAttribute(){},load(){},remove(){}};
+ const doc=Object.assign(document,{createElement:()=>fakeAudio});
+ const start=app.indexOf('var commentary=null,commentaryEpoch='),end=app.indexOf('var audioButton=',start);
+ const run=new Function('S','state','video','document','root','setTimeout','clearTimeout','enc','bufferedLiveSeekTarget',app.slice(start,end)+';return {start:startCommentary,adjust:adjustCommentaryPicture,active:()=>commentary}');
+ const controls=run(S,state,video,doc,{appendChild(){}},fn=>{timers.set(++tick,fn);return tick},id=>timers.delete(id),encodeURIComponent,target);
+ controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();assert.equal(video.muted,true);
+ assert.equal(controls.adjust('back-one'),true);assert.equal(video.currentTime,14);
+ events.seeking();assert.ok(controls.active());events.seeked();assert.ok(controls.active());assert.equal(video.muted,true);
+ assert.equal(controls.adjust('forward-one'),true);assert.equal(video.currentTime,15);
+ video.currentTime=8;events.seeking();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+ controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();
+ video.buffered=ranges([[8,8.5]]);assert.equal(controls.adjust('back-one'),false);assert.ok(controls.active());
+ video.buffered=ranges([[5,25]]);assert.equal(controls.adjust('forward-one'),true);
+ const timeout=[...timers.values()].at(-1);timeout();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+});
