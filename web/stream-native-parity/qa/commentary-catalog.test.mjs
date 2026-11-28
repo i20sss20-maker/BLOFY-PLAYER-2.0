@@ -85,7 +85,7 @@ test('dedicated commentator controls appear only on live and preserve original a
 
 test('live timing only seeks actual retained bytes within one continuous playable range',()=>{
  const app=readFileSync('app.js','utf8');
- const a=app.indexOf('function bufferedLiveSeekTarget('),b=app.indexOf('function simpleLiveStatus(',a);
+ const a=app.indexOf('function bufferedLiveRange('),b=app.indexOf('function simpleLiveStatus(',a);
  assert.ok(a>=0&&b>a);
  const seek=new Function(app.slice(a,b)+';return bufferedLiveSeekTarget')();
  const ranges=(rows)=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
@@ -106,7 +106,7 @@ test('live timing only seeks actual retained bytes within one continuous playabl
 });
 
 test('manual commentary picture timing preserves one active audio stream only for a confirmed buffered seek',()=>{
- const app=readFileSync('app.js','utf8'),a=app.indexOf('function bufferedLiveSeekTarget('),b=app.indexOf('function simpleLiveStatus(',a);
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function bufferedLiveRange('),b=app.indexOf('function simpleLiveStatus(',a);
  const target=new Function(app.slice(a,b)+';return bufferedLiveSeekTarget')();
  const ranges=rows=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
  const events={},timers=new Map();let tick=0;
@@ -127,4 +127,20 @@ test('manual commentary picture timing preserves one active audio stream only fo
  video.buffered=ranges([[8,8.5]]);assert.equal(controls.adjust('back-one'),false);assert.ok(controls.active());
  video.buffered=ranges([[5,25]]);assert.equal(controls.adjust('forward-one'),true);
  const timeout=[...timers.values()].at(-1);timeout();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+});
+
+test('live retained range reports only playable seconds and never crosses holes',()=>{
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function bufferedLiveRange('),b=app.indexOf('function simpleLiveStatus(',a);
+ const {range,target}=new Function(app.slice(a,b)+';return {range:bufferedLiveRange,target:bufferedLiveSeekTarget}')();
+ const ranges=rows=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
+ const video={currentTime:16,readyState:4,seekable:ranges([[0,40]]),buffered:ranges([[4,30]])};
+ const record={ready:true,hlsKey:'fixture'};
+ assert.deepEqual(range(video,record),{start:4,end:30,at:16,behind:11,ahead:13});
+ assert.equal(target(video,record,'back-ten'),6);assert.equal(target(video,record,'forward-ten'),26);
+ assert.equal(target(video,record,'earliest'),4.25);assert.equal(target(video,record,'latest'),29.25);
+ video.buffered=ranges([[4,12],[14,19],[22,30]]);
+ assert.equal(target(video,record,'back-ten'),null);
+ assert.equal(target(video,record,'forward-ten'),18.25);
+ assert.equal(target(video,record,'earliest'),14.25);
+ assert.equal(range(video,{...record,reconnecting:true}),null);
 });
