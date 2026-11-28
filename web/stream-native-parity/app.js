@@ -1548,10 +1548,10 @@ function searchScreen(){
  };
  setSearchKind(S.searchKind);
  renderRecent();
- document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
+ document.getElementById('search-input').oninput=function(e){if(e&&e.isComposing)return;var q=this.value.trim().slice(0,75);cancelSearch();
  if(q.length<2){cancelSearch();document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
- S.searchTimer=setTimeout(function(){searchNow(q,token)},260)
+ S.searchTimer=setTimeout(function(){S.searchTimer=null;searchNow(q,token)},400)
  };
  document.getElementById('search-input').focus();
  if(S.aiSearchTitle){
@@ -1561,10 +1561,11 @@ function searchScreen(){
  }
 }
 function searchNow(q,token){
+ if(token!==S.searchToken||S.route!=='search')return;
  var old=S.searchRequests||[];S.searchRequests=[];
  for(var j=0;j<old.length;j++)try{old[j].abort()}catch(e){}
  var kinds=S.searchKind==='all'?['live','movie','series']:[S.searchKind],
- responses={live:[],movie:[],series:[]},pending=kinds.length,failed=0;
+ responses={live:[],movie:[],series:[]},pending=kinds.length,failed=0,more={};
  // Keep only the current search results, not every result ever browsed.
  ['live','movie','series'].forEach(function(k){delete S.loaded[keyOf(k,'search')]});
  function draw(){
@@ -1573,23 +1574,32 @@ function searchNow(q,token){
   if(!output||!status)return;
   var count=0,html=kinds.map(function(kind){
    var cards=responses[kind];count+=cards.length;
-   return cards.map(function(item){return posterCard(item,kind)}).join('')
+   return cards.map(function(item){return posterCard(item,kind)}).join('')+(more[kind]?'<button class="btn secondary search-more" data-search-more="'+kind+'">المزيد من '+(kind==='movie'?'الأفلام':kind==='series'?'المسلسلات':'القنوات')+'</button>':'')
   }).join('');
   output.innerHTML=html||(pending===0?'<div class="empty-state">'+(failed?'تعذر البحث في بعض الأقسام، حاول مرة أخرى.':'لم يتم العثور على نتائج لهذا البحث.')+'</div>':'');
+  var buttons=output.querySelectorAll?output.querySelectorAll('[data-search-more]'):[];
+  for(var i=0;i<buttons.length;i++)buttons[i].onclick=function(){var k=this.getAttribute('data-search-more'),offset=more[k];if(!offset)return;delete more[k];pending++;draw();load(k,offset)};
   status.textContent=(count?'تم العثور على '+count+' نتيجة':pending?'جار البحث':failed?'تعذر البحث':'لا توجد نتائج')+(pending?' • استكمال باقي المكتبة…':failed&&count?' • تعذر البحث في بعض الأقسام':'')
  }
- for(var i=0;i<kinds.length;i++)(function(k){
-  var xhr=pageRequest(k,'all',0,20,function(st,p){
+ function score(item){
+  var query=aiTitleKey(q),words=query.split(' '),names=[item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en,item.title_ar,item.title_en].map(aiTitleKey),best=0;
+  names.forEach(function(name){if(name===query)best=Math.max(best,1000);else if(name.indexOf(query+' ')===0)best=Math.max(best,800);else if((' '+name+' ').indexOf(' '+query+' ')>=0)best=Math.max(best,650);else if(name.indexOf(query)>=0)best=Math.max(best,500);else if(words.every(function(w){return name.indexOf(w)>=0}))best=Math.max(best,300)});
+  return best
+ }
+ function load(k,offset){
+  var xhr=pageRequest(k,'all',offset,48,function(st,p){
    if(token!==S.searchToken||S.route!=='search')return;
    pending--;
    if(st===200&&p){
-    responses[k]=p.items.slice(0,20);
+    responses[k]=responses[k].concat(p.items.slice(0,48)).sort(function(a,b){return score(b)-score(a)});
+    if(p.hasMore&&Number(p.nextOffset)>offset&&responses[k].length<192)more[k]=Number(p.nextOffset);
     S.loaded[keyOf(k,'search')]={items:responses[k]};
    }else failed++;
    draw()
   },q);
   if(xhr)S.searchRequests.push(xhr)
- })(kinds[i])
+ }
+ for(var i=0;i<kinds.length;i++)load(kinds[i],0)
 }
 function aiTitleKey(s){return String(s||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')}
 function verifyAiTitles(names,token,done){
