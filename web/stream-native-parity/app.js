@@ -204,6 +204,7 @@ function deviceKey(){
  return key
 }
 function login(message){
+ clearOfflineGrant();
  S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh();
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
@@ -248,7 +249,7 @@ function login(message){
   btn.disabled=true;updateModeButtons(true);setStatus('جار التحقق من الاشتراك…');
   api('POST','/api/direct-login',payload,function(st,r){
    btn.disabled=false;updateModeButtons(false);
-   if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();return}
+   if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth();return}
    setStatus(st===429?'محاولات كثيرة. جرّب لاحقًا.':st===400?'تحقق من رابط أو بيانات BLOFY.':st===401?'تحقق من الاشتراك، أو استخدم كود التفعيل الأصلي إن كان مرتبطًا بجهاز.':'الدخول غير متاح حاليًا. حاول لاحقًا.',true)
   })
  };
@@ -266,7 +267,7 @@ function redeem(){
  btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
-  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth()}
+  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth()}
    else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
  })
@@ -372,6 +373,7 @@ function pushBrowserStep(route,opts){
  }catch(e){}
 }
 function navigate(route,opts,replace){
+ if(S.route==='downloads'||S.route==='offline')closeOfflineVideo();
  if(S.route==='search'&&route!=='search')cancelSearch();
  if(route!==S.route)rememberView();
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
@@ -1221,18 +1223,115 @@ function webDownloadHistory(){
     Number.isFinite(Number(row.at))&&String(row.name||'').length<200
  }).slice(0,40):[]
 }
+// User-initiated, account-scoped offline media, separate from the shell cache.
+// OPFS writes stream directly to disk; no full movie held in JavaScript RAM.
+var OFFLINE_GRANT_KEY='blofy_offline_grant_v1',OFFLINE_MAX_BYTES=2*1024*1024*1024,offlineTransfer=null,offlineVideoUrl='',offlinePlaybackTimer=null;
+function offlineGrantValid(grant,now){
+ return !!grant&&/^[a-f0-9]{24}$/.test(grant.profile||'')&&Number.isFinite(grant.verifiedAt)&&Number.isFinite(grant.until)&&now>=grant.verifiedAt&&now<grant.until&&grant.until-grant.verifiedAt<=86400000
+}
+function offlineGrant(){
+ var grant=readJson(OFFLINE_GRANT_KEY,null);return offlineGrantValid(grant,Date.now())?grant:null
+}
+function rememberOfflineGrant(profile,expiry){
+ var end=typeof expiry==='number'?expiry:Date.parse(String(expiry||'')),now=Date.now();
+ if(/^[a-f0-9]{24}$/.test(profile||'')&&Number.isFinite(end)&&end>now)writeJson(OFFLINE_GRANT_KEY,{profile:profile,verifiedAt:now,until:Math.min(end,now+86400000)})
+}
+function clearOfflineGrant(){try{localStorage.removeItem(OFFLINE_GRANT_KEY)}catch(e){}if(offlineTransfer)offlineTransfer.ctrl.abort();closeOfflineVideo()}
+function offlineSupported(){return !!(navigator.storage&&navigator.storage.getDirectory&&window.AbortController&&window.URL&&URL.createObjectURL&&window.ReadableStream)}
+function offlineRows(profile){
+ var rows=readJson('blofy_web_offline_v1:'+profile,[]);
+ return Array.isArray(rows)?rows.filter(function(row){return row&&/^(movie|series)-[1-9][0-9]{0,14}-[a-f0-9]{24}\.mp4$/.test(row.file)&&Number.isSafeInteger(row.size)&&row.size>0&&row.size<=OFFLINE_MAX_BYTES&&typeof row.name==='string'}).slice(0,20):[]
+}
+async function offlineFolder(profile){
+ if(!/^[a-f0-9]{24}$/.test(profile)||!offlineSupported())throw Error('unsupported');
+ var root=await navigator.storage.getDirectory(),base=await root.getDirectoryHandle('blofy-offline-v1',{create:true});
+ return base.getDirectoryHandle(profile,{create:true})
+}
+function offlineMessage(text){
+ var el=document.getElementById('offline-status')||document.getElementById('web-download-message');
+ if(!el){el=document.createElement('div');el.id='web-download-message';el.className='info';var target=document.querySelector('#detail-root .detail-actions,.episode-list,#screen');if(target)target.appendChild(el)}
+ if(el)el.textContent=text
+}
+function closeOfflineVideo(){
+ if(offlinePlaybackTimer){clearInterval(offlinePlaybackTimer);offlinePlaybackTimer=null}
+ var video=document.getElementById('offline-video');if(video)try{video.pause();video.removeAttribute('src');video.load()}catch(e){}
+ if(offlineVideoUrl){URL.revokeObjectURL(offlineVideoUrl);offlineVideoUrl=''}
+}
+function drawOfflineDownloads(profile,standalone){
+ closeOfflineVideo();
+ var root=document.getElementById('offline-library');if(!root)return;
+ var rows=offlineRows(profile);
+ root.innerHTML=rows.length?rows.map(function(row,index){return '<div class="download-row"><strong>'+esc(row.name)+'</strong><span>'+Math.round(row.size/1048576)+' MB • محفوظ</span><button class="btn" data-offline-play="'+index+'">▶ مشاهدة</button><button class="btn secondary" data-offline-delete="'+index+'">حذف</button></div>'}).join(''):'<div class="empty-state">لا توجد ملفات مكتملة. نزّل فيلم MP4 أو حلقة أثناء اتصالك بالإنترنت.</div>';
+ root.onclick=async function(event){
+  var node=event.target.closest&&event.target.closest('[data-offline-play],[data-offline-delete]');if(!node||!root.contains(node))return;
+  var grant=offlineGrant(),row=rows[Number(node.getAttribute(node.hasAttribute('data-offline-play')?'data-offline-play':'data-offline-delete'))];
+  if(!row||!grant||grant.profile!==profile){offlineMessage('اتصل بالإنترنت للتحقق من اشتراكك.');return}
+  try{
+   var folder=await offlineFolder(profile);
+   if(node.hasAttribute('data-offline-delete')){
+    await folder.removeEntry(row.file);localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(offlineRows(profile).filter(function(x){return x.file!==row.file})));drawOfflineDownloads(profile,standalone);return
+   }
+   var file=await (await folder.getFileHandle(row.file)).getFile();
+   if(file.size!==row.size)throw Error('incomplete');
+   if(!root.isConnected||!offlineGrant()||offlineGrant().profile!==profile)return;
+   closeOfflineVideo();var player=document.getElementById('offline-player');
+   if(!player)return;
+   player.innerHTML='<video id="offline-video" controls playsinline preload="metadata" style="width:100%;max-height:65vh;background:#000"></video>';
+   var video=document.getElementById('offline-video');
+   offlineVideoUrl=URL.createObjectURL(file.slice(0,file.size,'video/mp4'));video.src=offlineVideoUrl;
+   video.onerror=function(){offlineMessage('هذا الملف غير مدعوم في متصفح جهازك.')};
+   offlinePlaybackTimer=setInterval(function(){var current=offlineGrant();if(!current||current.profile!==profile||!video.isConnected){closeOfflineVideo();offlineMessage('اتصل بالإنترنت لتجديد صلاحية المشاهدة.')}},1000);
+   var play=video.play();if(play&&play.catch)play.catch(function(){})
+  }catch(e){offlineMessage('تعذر فتح الملف المحفوظ. قد تكون مساحة التخزين حُذفت من المتصفح.')}
+ }
+}
+function offlineOnlyScreen(){
+ var grant=offlineGrant();if(!grant||!offlineSupported())return false;
+ S.route='offline';S.userVerified=false;
+ app.innerHTML='<main class="workspace"><h1>BLOFY STREAM</h1><h2>التنزيلات • بدون إنترنت</h2><div id="offline-status" role="status"></div><div id="offline-player"></div><div id="offline-library"></div><button class="btn secondary" id="offline-reconnect">التحقق من الاتصال</button></main>';
+ document.getElementById('offline-reconnect').onclick=function(){closeOfflineVideo();S.route='boot';bootSession(0)};
+ drawOfflineDownloads(grant.profile,true);return true
+}
+async function saveOfflineDownload(kind,id,ext,name){
+ if(!S.userVerified||!offlineSupported()){offlineMessage('التنزيل داخل التطبيق غير مدعوم في هذا المتصفح.');return}
+ if(String(ext).toLowerCase()!=='mp4'||!webDownloadPath(kind,id,ext)){offlineMessage('المشاهدة دون إنترنت تدعم ملفات MP4 المتوافقة مع جهازك حاليًا.');return}
+ if(offlineTransfer){offlineMessage('يوجد تنزيل جارٍ.');return}
+ var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl};offlineTransfer=task;
+ var folder=null,fileName='',writer=null,reader=null,committed=false;
+ function current(){return S.userVerified&&S.accountEpoch===epoch&&S.profileKey===profile&&!ctrl.signal.aborted}
+ function check(){if(!current())throw Error('cancelled')}
+ try{
+  offlineMessage('جار التحقق من الاشتراك…');
+  var session=await fetch('/api/session',{credentials:'same-origin',cache:'no-store',signal:ctrl.signal});
+  if(!session.ok)throw Error('auth');var info=await session.json();check();
+  if(info.active!==true||info.profileKey!==profile)throw Error('auth');
+  rememberOfflineGrant(profile,info.expiresAt);if(!offlineGrant())throw Error('auth');
+  if(offlineRows(profile).length>=20)throw Error('quota');
+  folder=await offlineFolder(profile);check();
+  var nonce=new Uint8Array(12);crypto.getRandomValues(nonce);
+  fileName=kind+'-'+id+'-'+Array.from(nonce,function(x){return ('0'+x.toString(16)).slice(-2)}).join('')+'.mp4';
+  var response=await fetch(webDownloadPath(kind,id,ext),{credentials:'same-origin',cache:'no-store',signal:ctrl.signal});check();
+  if(response.status!==200||!response.body||!response.headers.get('content-disposition')||!/^attachment;/i.test(response.headers.get('content-disposition')))throw Error('source');
+  var total=Number(response.headers.get('content-length'));
+  if(!Number.isSafeInteger(total)||total<1||total>OFFLINE_MAX_BYTES)throw Error('size');
+  if(navigator.storage.estimate){var estimate=await navigator.storage.estimate();if(Number.isFinite(estimate.quota)&&Number.isFinite(estimate.usage)&&estimate.quota-estimate.usage<total+1048576)throw Error('quota')}
+  var handle=await folder.getFileHandle(fileName,{create:true});
+  writer=await handle.createWritable();reader=response.body.getReader();
+  var written=0,last=-1;
+  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;offlineMessage('جار التنزيل داخل BLOFY STREAM • '+pct+'٪')}}
+  check();if(written!==total)throw Error('size');await writer.close();writer=null;
+  var saved=await handle.getFile();check();if(saved.size!==total)throw Error('size');
+  var rows=offlineRows(profile);rows.unshift({file:fileName,size:total,name:String(name||'فيديو').slice(0,160)});
+  localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(rows.slice(0,20)));committed=true;
+  offlineMessage('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.');
+  if(S.route==='downloads')drawOfflineDownloads(profile,false)
+ }catch(e){offlineMessage(e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
+ finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null}
+}
 function downloadsScreen(){
- shell('التنزيلات','<section class="downloads-page"><h2>التنزيلات</h2>'+
- '<p class="small muted">تنزيل الأفلام والحلقات المسموح بها إلى الجهاز من المتصفح. الملفات التي يبدأ تنزيلها تُدار من قائمة تنزيلات جهازك، وليست محفوظة داخل تطبيق الويب.</p>'+
- '<p class="small muted">هذه القائمة تسجل طلبات التنزيل فقط، ولا تؤكد اكتمال حفظ الملف أو تشغيله دون إنترنت.</p>'+
- '<div id="download-status" role="status" aria-live="polite"></div><div id="downloads-history"></div></section>');
- var rows=webDownloadHistory(),root=document.getElementById('downloads-history');
- if(root)root.innerHTML=rows.length?rows.map(function(x){
-  return '<div class="download-row"><strong>'+esc(x.name||'ملف')+'</strong><span>'+
-   (x.kind==='movie'?'فيلم':'حلقة')+' • '+esc(new Date(Number(x.at)).toLocaleString('ar-SA'))+
-   ' • طلب تنزيل</span><button class="btn secondary" type="button" data-download="'+esc(x.kind)+':'+esc(x.id)+'" data-ext="'+esc(x.ext)+'" data-name="'+esc(x.name)+'">↓ محاولة التنزيل مجددًا</button></div>'
- }).join(''):'<div class="empty-state">ما بدأت أي تنزيلات بعد. افتح تفاصيل فيلم أو اختر حلقة لعرض زر التنزيل.</div>';
- restoreView('downloads')
+ shell('التنزيلات','<section class="downloads-page"><h2>التنزيلات</h2><p class="small muted">الملفات المحفوظة بالكامل للمشاهدة دون إنترنت. يتطلب تجديد صلاحية المشاهدة اتصالًا مرة كل 24 ساعة.</p><div id="offline-status" role="status" aria-live="polite"></div><div id="offline-player"></div><div id="offline-library"></div><button class="btn secondary" id="offline-cancel">إلغاء التنزيل الجاري</button></section>');
+ document.getElementById('offline-cancel').onclick=function(){if(offlineTransfer)offlineTransfer.ctrl.abort()};
+ drawOfflineDownloads(S.profileKey,false);restoreView('downloads')
 }
 function requestWebDownload(kind,id,ext,name){
  var url=webDownloadPath(kind,id,ext);
@@ -4783,7 +4882,7 @@ function clickHandler(event){
  var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload')&&!node.getAttribute('data-download'))node=node.parentNode;
  if(!node||node===document.body)return;
  var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
- var download=node.getAttribute('data-download');if(download){var parts=download.split(':');requestWebDownload(parts[0],parts[1],node.getAttribute('data-ext'),node.getAttribute('data-name'));return}
+ var download=node.getAttribute('data-download');if(download){var parts=download.split(':');saveOfflineDownload(parts[0],parts[1],node.getAttribute('data-ext'),node.getAttribute('data-name'));return}
  if(node.hasAttribute('data-back')){back();return}
  if(go){if(go!==S.route)navigate(go);return}
  if(cat){var parts=cat.split(':'),kind=parts[0];
@@ -5019,9 +5118,10 @@ document.addEventListener('visibilitychange',function(){
 });
 try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
 function bootSession(attempt){
+ if(navigator.onLine===false&&offlineOnlyScreen())return;
  api('GET','/api/session',null,function(st,data){
   if(S.route!=='boot'||S.userVerified)return;
-  if(st===200&&data.active&&useProfile(data.profileKey,data.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000);return}
+  if(st===200&&data.active&&useProfile(data.profileKey,data.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(data.profileKey,data.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000);return}
   if(st===401||st===403||(st===200&&data.active===false)){login('أدخل كود اشتراك BLOFY STREAM للتفعيل');return}
   if(attempt<3){setTimeout(function(){if(S.route==='boot'&&!S.userVerified)bootSession(attempt+1)},[1000,2500,5000][attempt]);return}
   app.innerHTML='<div class="login-screen"><div class="login-panel"><div class="login-brand">BLOFY<small>STREAM</small></div><p>تعذر الاتصال مؤقتًا. لم يتم إلغاء اشتراكك.</p><button class="btn" id="retry-session">إعادة المحاولة</button></div></div>';
