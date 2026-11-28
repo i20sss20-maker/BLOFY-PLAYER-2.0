@@ -1283,3 +1283,11 @@ html[data-blofy-device="touch"] .native-stream-hud{padding-inline:max(12px,env(s
 }
 @media(max-width:360px){html[data-blofy-device="touch"] .native-home-brand strong{display:none}}
 @media(display-mode:standalone){html[data-blofy-device="touch"] .app{height:100vh;height:100dvh}html[data-blofy-device="touch"] .login-screen{padding-top:max(18px,env(safe-area-inset-top,0px));padding-bottom:max(18px,env(safe-area-inset-bottom,0px));overflow-y:auto}}
+
+/* Category search handles hundreds of groups without scrolling the entire rail. */
+.category-filter{padding:8px 10px;flex:none}
+.category-filter .input{width:100%;min-width:0;min-height:42px;font-size:14px;padding:8px 10px;box-sizing:border-box;border-radius:9px;margin:0}
+.cat-rail .cat-item[hidden]{display:none!important}
+#web-download-message{margin:10px 0;font-size:14px;line-height:1.6}
+#web-download-message .btn{margin:6px 0}
+@media(max-width:600px) and (orientation:portrait){html[data-blofy-device="touch"] .app.catalog-app .catalog .category-filter{padding:0 0 6px}html[data-blofy-device="touch"] .category-filter .input{font-size:16px}}
