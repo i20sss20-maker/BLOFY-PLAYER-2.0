@@ -77,6 +77,7 @@ import {createStreamConnectPairing} from './stream-connect-pairing.mjs';
 import {createDatabaseUnifiedRedeemer,handleUnifiedCodeHttp} from './stream-unified-code-redeem.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
+import {loginBoundStreamAccount} from './stream-web-bound-login.mjs';
 import {createStreamCodeXtreamLink} from './xtream-code-dual-link.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
@@ -2928,6 +2929,32 @@ http.createServer = function withBlofyXtreamGateway(listener) {
               redeemPaid:(code,origin,deviceKey)=>streamCodes.redeem(code,origin,{deviceKey,appOnly:true})});
           }
         });
+      }
+      // Credential sign-in pilot: read-only, existing device-bound entitlement.
+      // Default OFF; no subscription creation, migration, or device rebind.
+      if(url.pathname==='/api/v1/stream/app/web-bound-login'){
+        const headers={'cache-control':'no-store, private','referrer-policy':'no-referrer','pragma':'no-cache'};
+        if(process.env.BLOFY_STREAM_WEB_BOUND_LOGIN_QA!=='1')return json(res,503,{ok:false,error:'direct_login_unavailable'},headers);
+        if(req.method!=='POST'||url.search||!/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))return json(res,400,{ok:false,error:'direct_login_unavailable'},headers);
+        const rate=streamCodeLimiter.consume(requestClientKey(req)),global=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!rate.allowed||!global.allowed)return json(res,429,{ok:false,error:'direct_login_rate_limited'},{...headers,'retry-after':String(Math.max(rate.retryAfterSeconds||1,global.retryAfterSeconds||1))});
+        try{
+          if(Number(req.headers['content-length']||0)>4096){req.resume();return json(res,413,{ok:false,error:'direct_login_unavailable'},headers)}
+          const chunks=[];let size=0;
+          for await(const chunk of req){const bytes=Buffer.from(chunk);size+=bytes.length;if(size>4096)return json(res,413,{ok:false,error:'direct_login_unavailable'},headers);chunks.push(bytes)}
+          const input=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          if(!input||typeof input!=='object'||Array.isArray(input))return json(res,400,{ok:false,error:'direct_login_unavailable'},headers);
+          const result=await loginBoundStreamAccount(input,{
+            keyHex:KEY_HEX,authenticate:(username,password)=>authenticate(username,password,{touch:false}),
+            findVoucher:async(accountId,proof)=>{
+              const rows=(await pool.query(`SELECT account_id,code_hash,redeemed_device_hash,redeemed_at,expires_at,revoked_at
+                FROM blofy_xtream_gateway_duration_codes WHERE account_id=$1 AND redeemed_device_hash=$2
+                AND redeemed_at IS NOT NULL AND revoked_at IS NULL AND expires_at>NOW() LIMIT 2`,[accountId,proof])).rows;
+              return rows.length===1?rows[0]:null;
+            }
+          });
+          return json(res,result.ok?200:401,result,headers);
+        }catch{return json(res,503,{ok:false,error:'direct_login_unavailable'},headers)}
       }
       if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem' ||
           url.pathname === '/api/v1/stream/app/redeem')) {
