@@ -1,9 +1,9 @@
 import {loadApprovedM3u} from './approved-m3u-loader.mjs';
 const $=id=>document.getElementById(id);
 const form=$('playlist-form'),video=$('playlist-video'),status=$('playlist-status'),group=$('playlist-group'),query=$('playlist-query'),items=$('playlist-items'),more=$('playlist-more');
-let catalog=[],shown=0,engine=null,request=null,epoch=0,policy=[];
+let catalog=[],shown=0,engine=null,request=null,epoch=0,playEpoch=0,policy=[];
 function notice(text){status.textContent=text}
-function stop(){if(engine){try{engine.destroy()}catch{}engine=null}video.pause();video.removeAttribute('src');video.load();video.hidden=true}
+function stop(){playEpoch++;video.onerror=video.onplaying=null;if(engine){try{engine.destroy()}catch{}engine=null}video.pause();video.removeAttribute('src');video.load();video.hidden=true}
 function clear(){epoch++;if(request)request.abort();request=null;stop();catalog=[];shown=0;items.replaceChildren();group.replaceChildren();query.value='';$('playlist-url').value='';$('playlist-controls').hidden=true;more.hidden=true;$('playlist-load').disabled=false}
 function options(){group.replaceChildren();group.add(new Option('الكل',''));const names=Array.from(new Set(catalog.map(x=>x.group).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'ar'));for(const name of names)group.add(new Option(name,name))}
 function render(reset){
@@ -16,10 +16,11 @@ function render(reset){
 function play(item){
  if(!catalog.includes(item))return;
  stop();video.hidden=false;notice('جار التشغيل…');
- const generation=epoch;
- function failed(){if(generation!==epoch)return;stop();notice('تعذر تشغيل هذا المصدر في المتصفح. تحقق من دعم HTTPS وCORS والترميز.')}
+ const generation=epoch,playGeneration=playEpoch;
+ function current(){return generation===epoch&&playGeneration===playEpoch}
+ function failed(){if(!current())return;stop();notice('تعذر تشغيل هذا المصدر في المتصفح. تحقق من دعم HTTPS وCORS والترميز.')}
  video.onerror=failed;
- video.onplaying=()=>{if(generation===epoch)notice(item.name)};
+ video.onplaying=()=>{if(current())notice(item.name)};
  const url=new URL(item.url);
  if(!policy.includes(url.origin)){failed();return}
  // HLS.js requests are additionally restricted by CSP to approved origins.
@@ -28,9 +29,9 @@ function play(item){
   const allowed=new Set(policy);
   engine=new window.Hls({enableWorker:true,xhrSetup(xhr,target){try{if(!allowed.has(new URL(target).origin))throw Error('origin_denied');xhr.withCredentials=false}catch{ xhr.abort();throw Error('origin_denied') }}});
   engine.on(window.Hls.Events.ERROR,(_,event)=>{if(event.fatal)failed()});
-  engine.on(window.Hls.Events.MANIFEST_PARSED,()=>video.play().catch(()=>notice('اضغط تشغيل لبدء المشاهدة.')));
+  engine.on(window.Hls.Events.MANIFEST_PARSED,()=>{if(current())video.play().catch(()=>{if(current())notice('اضغط تشغيل لبدء المشاهدة.')})});
   engine.loadSource(item.url);engine.attachMedia(video);
- }else{video.src=item.url;video.play().catch(()=>notice('اضغط تشغيل لبدء المشاهدة.'))}
+ }else{video.src=item.url;video.play().catch(()=>{if(current())notice('اضغط تشغيل لبدء المشاهدة.')})}
 }
 form.addEventListener('submit',async e=>{
  e.preventDefault();const raw=$('playlist-url').value.trim();if(!raw||!policy.length)return;
