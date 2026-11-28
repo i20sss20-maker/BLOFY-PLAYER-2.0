@@ -37,3 +37,52 @@ test('no unverified transition or premature commit',async()=>{
 test('restarted coordinator resumes persisted drain without selecting a new destination',async()=>{
  const f=fixture({mode:'draining'});assert.equal((await f.run()).owner,'linode');assert.ok(!f.calls.includes('begin'));
 });
+
+test('destination fails during drain: do not commit even with release proof',async()=>{
+ const f=fixture();let reads=0;const original=f.opts.readHealth;
+ f.opts.readHealth=async()=>{
+   const health=await original();
+   if(++reads>1)health.linode={...health.linode,ok:false};
+   return health;
+ };
+ assert.equal((await createRelayHandoffCoordinator(f.opts)()).reason,'destination_unavailable');
+ assert.ok(f.calls.includes('observe'));assert.ok(!f.calls.includes('commit'));
+ assert.equal(f.state().mode,'draining');
+});
+test('expired release proof after slow health verification cannot commit',async()=>{
+ const f=fixture();let at=now,reads=0;const original=f.opts.readHealth;
+ f.opts.clock=()=>at;
+ f.opts.readHealth=async()=>{
+   const health=await original();
+   if(++reads>1){at+=11000;health.linode.observedAt=at}
+   return health;
+ };
+ assert.equal((await createRelayHandoffCoordinator(f.opts)()).reason,'provider_release_unconfirmed');
+ assert.ok(!f.calls.includes('commit'));
+});
+test('destination health recovers and persisted drain can safely resume',async()=>{
+ const f=fixture();let reads=0;const original=f.opts.readHealth;
+ f.opts.readHealth=async()=>{
+   const health=await original();
+   if(++reads===2)health.linode={...health.linode,ok:false};
+   return health;
+ };
+ const run=createRelayHandoffCoordinator(f.opts);
+ assert.equal((await run()).reason,'destination_unavailable');
+ assert.equal((await run()).owner,'linode');
+ assert.equal(f.calls.filter(x=>x==='begin').length,1);
+ assert.equal(f.calls.filter(x=>x==='commit').length,1);
+});
+
+test('tracked health requires 30 seconds of continuous observations before drain',async()=>{
+ const f=fixture();let at=now;
+ f.opts.trackHealthContinuity=true;f.opts.clock=()=>at;
+ f.opts.readHealth=async()=>({hostbrr:{ok:false,observedAt:at},linode:{ok:true,observedAt:at}});
+ f.opts.observeProviderRelease=async i=>({...i,authoritative:true,scope:'all_paths',activeConnections:0,maxConnections:1,observedAt:at});
+ const run=createRelayHandoffCoordinator(f.opts);
+ for(let i=0;i<6;i++){
+  assert.equal((await run()).reason,'no_stable_transition');at+=5000;
+ }
+ assert.equal((await run()).owner,'linode');
+ assert.equal(f.calls.filter(x=>x==='begin').length,1);
+});

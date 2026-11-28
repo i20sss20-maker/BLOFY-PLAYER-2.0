@@ -72,7 +72,9 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
     throw new Error('stream_bridge_denied');
   }
   // Safe bounded response parser; never trust arbitrarily large foreign JSON.
-  const maxBytes=path==='/internal/relay-health'?8192:2048;
+  // Portable relays expose bounded per-feed and reconnect diagnostics.
+  // A healthy busy relay can exceed 8 KiB; retain a hard health-only cap.
+  const maxBytes=path==='/internal/relay-health'?128*1024:2048;
   if(Number(response.headers.get('content-length')||0)>maxBytes){
     await response.body?.cancel().catch(()=>{});
     throw new Error('stream_bridge_bad_response');

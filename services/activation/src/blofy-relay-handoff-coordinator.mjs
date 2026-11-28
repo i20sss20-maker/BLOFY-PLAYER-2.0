@@ -1,11 +1,14 @@
 // Internal only. The trusted adapters must fence every source path, stop
 // the prior owner's upstream sockets, and independently observe the provider.
 // An HTTP health failure or an empty local hold count is NOT release proof.
+import {createRelayHealthTracker} from './blofy-relay-health-tracker.mjs';
 const hold=reason=>({ok:false,action:'hold',reason});
 const validOwner=x=>x==='hostbrr'||x==='linode';
 export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
  readHealth,verifyCoverage,stopPreviousOwner,observeProviderRelease,clock=Date.now,
- failoverAfterMs=30000,failbackAfterMs=300000}={}){
+ failoverAfterMs=30000,failbackAfterMs=300000,trackHealthContinuity=false}={}){
+ const tracker=trackHealthContinuity?createRelayHealthTracker({clock}):null;
+ const sampleHealth=async()=>{const snapshot=await readHealth();return tracker?tracker.observe(snapshot):snapshot};
  let busy=false;
  return async function tick(){
   if(!enabled)return hold('disabled');
@@ -19,10 +22,13 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
    if(await verifyCoverage({sourceId,phase:'preflight'})!==true)return hold('coverage_unconfirmed');
    const state=await gate.readRelayOwnerState();
    if(!state?.ok||!['legacy','draining'].includes(state.mode))return hold('owner_state_unavailable');
-   const health=await readHealth();
+   const health=await sampleHealth();
    const now=clock();
-   const fresh=h=>Number.isSafeInteger(h?.observedAt)&&h.observedAt>=now-10000&&h.observedAt<=now+2000;
-   const stable=(id,ok,ms)=>{const h=health?.[id];return fresh(h)&&h.ok===ok&&Number.isSafeInteger(h.since)&&h.since<=h.observedAt&&h.observedAt-h.since>=ms};
+   const stable=(id,ok,ms,snapshot=health,at=now)=>{
+    const h=snapshot?.[id];
+    return Number.isSafeInteger(h?.observedAt)&&h.observedAt>=at-10000&&h.observedAt<=at+2000&&
+      h.ok===ok&&Number.isSafeInteger(h.since)&&h.since<=h.observedAt&&h.observedAt-h.since>=ms;
+   };
    let transition=state;
    if(state.mode==='legacy'){
     // Bootstrap is deliberately operator-controlled, not an automatic outage.
@@ -39,7 +45,7 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
      return hold('transition_unconfirmed');
    const identity=Object.freeze({sourceId,previousOwner:transition.owner,
      nextOwner:transition.nextOwner,drainStartedAt:transition.epoch});
-   if(!stable(identity.nextOwner,true,failoverAfterMs))return hold('destination_unavailable');
+   if(!stable(identity.nextOwner,true,failoverAfterMs,health,clock()))return hold('destination_unavailable');
    // Repeated calls must be safe: adapter stops only the recorded prior owner
    // for this exact epoch, never the proposed destination.
    if(await stopPreviousOwner(identity)!==true)return hold('stop_unconfirmed');
@@ -54,6 +60,14 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
      proof.drainStartedAt!==identity.drainStartedAt||proof.authoritative!==true||
      proof.scope!=='all_paths'||proof.activeConnections!==0||proof.maxConnections!==1||
      !Number.isSafeInteger(proof.observedAt)||proof.observedAt<identity.drainStartedAt)
+      return hold('provider_release_unconfirmed');
+   // Stopping the old owner and observing provider release can take time.
+   // Do not commit a destination using the pre-drain health snapshot.
+   const finalHealth=await sampleHealth();
+   const commitAt=clock();
+   if(!stable(identity.nextOwner,true,failoverAfterMs,finalHealth,commitAt))
+      return hold('destination_unavailable');
+   if(proof.observedAt<commitAt-10000||proof.observedAt>commitAt+2000)
       return hold('provider_release_unconfirmed');
    // The gate revalidates freshness, holds, intent and the worker ledger
    // atomically. An ambiguous commit must be re-read, never forced.

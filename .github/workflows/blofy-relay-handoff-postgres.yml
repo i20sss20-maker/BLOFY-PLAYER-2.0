@@ -1,0 +1,43 @@
+name: BLOFY relay handoff PostgreSQL QA
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/blofy-engine-*.mjs'
+      - 'services/activation/src/blofy-relay-*.mjs'
+      - 'services/activation/src/xtream-stream-relay-bridge.mjs'
+      - 'services/activation/test/blofy-relay-*.test.mjs'
+      - '.github/workflows/blofy-relay-handoff-postgres.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: blofy_handoff_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d blofy_handoff_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies
+        working-directory: services/activation
+        run: npm ci
+      - name: Verify durable relay ownership against real PostgreSQL
+        working-directory: services/activation
+        env:
+          BLOFY_TEST_DISPOSABLE_PG_URL: postgresql://qa:local_test_only@127.0.0.1:5432/blofy_handoff_test
+        run: node --test test/blofy-relay-handoff-postgres.test.mjs test/blofy-relay-handoff-coordinator.test.mjs test/blofy-relay-health-tracker.test.mjs

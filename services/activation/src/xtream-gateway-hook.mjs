@@ -1177,8 +1177,11 @@ async function probeUnavailableMediaOnSameSource(key){
  if(!shouldUseIndependentSourceMedia({
   sourceId:key.serverId,kind:key.kind,extension:ext
  }))return 'transient';
- const ingress=await enterLegacyIngress(row.server_id);
- if(!ingress.ok)return 'transient';
+ const ingress=await enterLegacyIngress(row.server_id,{background:true});
+ if(!ingress.ok){
+  if(ingress.reason==='background_source_busy')console.info('BLOFY_BACKGROUND_MEDIA_DEFERRED');
+  return 'transient';
+ }
  let response,reader;
  try{
   const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
@@ -2415,8 +2418,8 @@ async function handlePrivateContentHubSource(req,res,url){
       String(row.series_source_id||'').length<1||
       String(row.container_extension||'').toLowerCase()!==candidate.extension)
     return json(res,409,{ok:false,code:'content_hub_episode_source_changed'});
-   ingress=await enterLegacyIngress(row.server_id);
-   if(!ingress.ok)return json(res,503,{ok:false,code:'source_ingress_fenced'},{'retry-after':'5'});
+   ingress=await enterLegacyIngress(row.server_id,{background:true});
+   if(!ingress.ok)return json(res,503,{ok:false,code:ingress.reason==='background_source_busy'?'background_source_busy':'source_ingress_fenced'},{'retry-after':'5'});
    const urlSource=mediaUpstreamUrl(row,'series',row.source_episode_id,
      candidate.extension);
    const result=await probePrivateEpisodeRange({
@@ -2508,8 +2511,8 @@ async function handlePrivateContentHubSource(req,res,url){
  res.once('close',()=>{if(!res.writableEnded)abort.abort()});
  let upstream,ingress;
  try{
-  ingress=await enterLegacyIngress(row.server_id);
-  if(!ingress.ok)return json(res,503,{ok:false,code:'source_ingress_fenced'},{'retry-after':'5'});
+  ingress=await enterLegacyIngress(row.server_id,{background:true});
+  if(!ingress.ok)return json(res,503,{ok:false,code:ingress.reason==='background_source_busy'?'background_source_busy':'source_ingress_fenced'},{'retry-after':'5'});
   if(abort.signal.aborted||req.aborted||res.destroyed)return;
   const upstreamUrl=mediaUpstreamUrl(row,isEpisode?'series':'movie',
     isEpisode?row.source_episode_id:row.source_id,
@@ -2574,8 +2577,8 @@ async function probeGatewayMedia(kind,itemId){
       ?await episodeByGatewayId(itemId)
       :await gatewayItemById(kind==='live'?'live':'movie',itemId);
     if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
-    ingress=await enterLegacyIngress(row.server_id);
-    if(!ingress.ok)return{ok:false,kind,itemId,httpStatus:null,reason:'source_ingress_fenced',elapsedMs:Date.now()-started};
+    ingress=await enterLegacyIngress(row.server_id,{background:true});
+    if(!ingress.ok)return{ok:false,kind,itemId,httpStatus:null,reason:ingress.reason==='background_source_busy'?'background_source_busy':'source_ingress_fenced',elapsedMs:Date.now()-started};
     if(controller.signal.aborted)return{ok:false,kind,itemId,httpStatus:null,reason:'timeout',elapsedMs:Date.now()-started};
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
