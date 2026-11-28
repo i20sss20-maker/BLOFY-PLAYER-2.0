@@ -40,3 +40,22 @@ test('successful empty search completes with no results rather than loading fore
 
 test('exact title ranks above incidental partial matches',()=>{const f=fixture();f.search('The Matrix');f.calls[1].cb(200,{items:[{id:1,name:'The Matrix Reloaded'},{id:2,name:'The Matrix'},{id:3,name:'Making the Matrix'}]});assert.equal(f.S.loaded['movie:search'].items[0].id,2)});
 test('stale debounced search cannot abort current requests',()=>{const f=fixture();f.search('current');f.S.searchToken++;f.search('new');assert.equal(f.calls.length,6);});
+
+test('AI verifies only exact titles with bounded parallel work, deduplicates and distinguishes source errors',()=>{
+ const S={aiToken:1,accountEpoch:1,loaded:{}},calls=[],timers=new Map();let tick=0,result;
+ const ctx=vm.createContext({S,keyOf:(k,c)=>k+':'+c,itemId:x=>String(x.id),title:x=>x.name,
+  setTimeout:fn=>{timers.set(++tick,fn);return tick},clearTimeout:id=>timers.delete(id),
+  pageRequest:(kind,cat,offset,limit,cb,q)=>{const req={kind,q,cb,abort(){}};calls.push(req);return req}});
+ vm.runInContext(snippet,ctx);
+ ctx.verifyAiTitles(['Fixture','Fixture','Unknown'],1,(matches,failed)=>result={matches,failed});
+ assert.equal(calls.length,2);
+ calls[0].cb(200,{items:[{id:123,name:'Fixture 2024'}]});
+ calls[1].cb(200,{items:[]});
+ assert.equal(calls.length,4);
+ calls[2].cb(503,null);
+ calls[3].cb(200,{items:[{id:456,name:'Unknown extra'}]});
+ assert.equal(result.matches.length,1);
+ assert.equal(result.matches[0].id,'123');
+ assert.equal(result.failed,true);
+ assert.equal(timers.size,0);
+});
