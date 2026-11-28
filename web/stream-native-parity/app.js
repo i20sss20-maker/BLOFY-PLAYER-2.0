@@ -1087,20 +1087,52 @@ function saveResume(kind,id,pos,duration,ready){
  }
  profileSave('watch',S.watch)
 }
+function needsPlotTranslation(value){
+ var text=typeof value==='string'?value.trim():'';
+ if(text.length<4||text.length>3900)return false;
+ var arabic=(text.match(/[\u0621-\u064a\u066e-\u06d3]/g)||[]).length;
+ var latin=(text.match(/[a-zA-Z]/g)||[]).length;
+ return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
+}
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
  if(!item){navigate(k,{},true);return}
  if(k==='series'&&S.episodesSeriesId!==id){S.episodes=null;S.episodesSeriesId='';S.selectedSeason=''}
  S.item={kind:k,id:id,data:item};S.kind=k;S.route='detail';
  shell(title(item),'<div id="detail-root">'+loading('تفاصيل المحتوى')+'</div>');
- var detailRoot=document.getElementById('detail-root'),detailEpoch=S.accountEpoch;
+ var detailRoot=document.getElementById('detail-root'),detailEpoch=S.accountEpoch,plotSource='',plotTranslation='',plotPending='',plotAttempted='',plotOriginal=false,plotGeneration=0;
  function detailCurrent(){return S.accountEpoch===detailEpoch&&S.route==='detail'&&S.item&&S.item.kind===k&&S.item.id===id&&document.getElementById('detail-root')===detailRoot}
+ function renderPlotTranslation(){
+  if(!detailCurrent())return;
+  var field=document.getElementById('detail-plot-text'),control=document.getElementById('detail-translate'),notice=document.getElementById('detail-translate-status');
+  if(!field||!control||!notice)return;
+  field.textContent=plotTranslation&&!plotOriginal?plotTranslation:plotSource;
+  control.hidden=!needsPlotTranslation(plotSource);
+  control.disabled=!!plotPending&&plotPending===plotSource;
+  control.textContent=plotTranslation?(plotOriginal?'عرض الترجمة العربية':'عرض الوصف الأصلي'):(control.disabled?'جار الترجمة…':'ترجمة الوصف');
+  notice.textContent=control.disabled?'جار الترجمة بالذكاء الاصطناعي…':'';
+ }
+ function translatePlot(){
+  if(!detailCurrent()||!needsPlotTranslation(plotSource)||plotPending===plotSource)return;
+  if(plotTranslation){plotOriginal=!plotOriginal;renderPlotTranslation();return}
+  var source=plotSource,generation=++plotGeneration;
+  plotAttempted=source;plotPending=source;renderPlotTranslation();
+  api('POST','/api/ai/translate',{overview:source},function(st,data){
+   if(!detailCurrent()||generation!==plotGeneration||plotSource!==source)return;
+   plotPending='';
+   if(st===200&&data&&data.ok===true&&typeof data.translatedOverview==='string'&&data.translatedOverview.trim()){plotTranslation=data.translatedOverview;plotOriginal=false}
+   renderPlotTranslation();
+   var notice=document.getElementById('detail-translate-status');
+   if(!plotTranslation&&notice)notice.textContent=st===429?'الترجمة مشغولة مؤقتًا، حاول لاحقًا.':'تعذرت الترجمة، يمكنك إعادة المحاولة.';
+  });
+ }
  function show(extra){
   if(!detailCurrent())return;
   var info=(extra&&extra.info)||{};
   if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
   var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
-  var plot=info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM';
+  var plot=String(info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM');
+  if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation='';plotPending='';plotAttempted='';plotOriginal=false}
   var gen=info.genre||info.genres||'',year=info.releaseDate||info.release_date||item.release_date||'',rating=info.rating||item.rating||'';
   var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
@@ -1114,10 +1146,13 @@ function details(o){
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
   (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
-  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot">'+esc(plot)+'</p>'+
+  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
   '<div class="detail-actions">'+buttons+'</div>'+
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
+  document.getElementById('detail-translate').onclick=translatePlot;
+  renderPlotTranslation();
+  if(extra&&needsPlotTranslation(plotSource)&&plotAttempted!==plotSource&&!plotTranslation)translatePlot();
   restoreView('detail');
   if(savedFocus&&S.keyboardMode){var target=findFocus(savedFocus);if(target)try{target.focus({preventScroll:true})}catch(e){target.focus()}}
  }
