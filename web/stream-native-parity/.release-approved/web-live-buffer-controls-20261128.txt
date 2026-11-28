@@ -1,0 +1,3 @@
+Operator requested activation of the web timing controls.
+Validated candidate 90728364e0cad761122e3fd7dd7e29f800e60e12; isolated Railway deployment 2c8a4f3e-63f3-4ba7-8bf1-5126ce254b52 SUCCESS; 162 automated tests passed, including actual buffer range and discontinuity checks; synthetic TV and external playlist browser QA passed.
+Scope: local buffered live time controls only. No changes to streaming servers, authentication, subscriptions, or VOD routing. No server DVR capability is claimed. Existing download enablement preserved. Prior production e3af2e3f735cb52140ceb06a8930b889d817e1b5 retained for rollback.

@@ -1,0 +1,3 @@
+Operator explicitly requested activation of tested features in chat.
+Validated code a66701dc06cc1609e088ea15ecb3559de5b7da65; isolated deployment 2cccaf2f-dc29-404d-9bd3-5fc33db358db SUCCESS, 161 automated tests passed.
+Publish guarded manual commentator picture timing and download safeguards. Enable only bounded authenticated VOD file delivery (max two concurrent globally and one per stable account); no source bypass, no credential changes. Previous production 6a59760c4080132a5aea109b8a836084040c017d retained for rollback. Full server DVR/TimeShift and direct/external account login remain gated pending independent end-to-end checks.

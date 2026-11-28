@@ -1047,3 +1047,145 @@ html[data-blofy-device="tv"] .search-result-grid .poster-art img{z-index:1}
  .poster-grid .poster-art .no-poster,.search-result-grid .poster-art .no-poster{position:absolute;left:8px;right:8px;top:35%;max-height:60%;overflow:hidden}
  .poster-grid .poster-art img,.search-result-grid .poster-art img{z-index:1}
 }
+
+
+/* 56.0.3 native code-login parity: scoped to entry screen, never playback. */
+.login-screen.native-login-screen{padding:32px 25px}
+.login-panel.native-stream-login{box-sizing:border-box;width:620px;max-width:100%;padding:26px 38px 30px;border:1px solid #327f89;border-radius:26px;background:linear-gradient(135deg,#143e4c,#0b2a36,#071c26);text-align:center}
+.native-stream-login .native-login-brand{font-size:28px;letter-spacing:.045em;color:#fff;line-height:1.25}
+.native-stream-login .native-login-brand:before{width:172px;height:108px;margin:0 auto 6px}
+.native-stream-login .native-login-tagline{margin:12px 0 10px;font-size:15px;color:#b2f2e7}
+.native-login-divider{height:1px;width:215px;max-width:100%;margin:0 auto 23px;background:linear-gradient(90deg,transparent,#46e4d0,transparent)}
+.native-login-modes{display:flex;gap:6px;margin-bottom:15px;align-items:stretch}
+.native-login-mode{flex:1 1 0;min-width:0;min-height:48px;border:1px solid #327f89;border-radius:14px;color:#e7fffa;background:#0a3340;font:inherit;font-size:14px;font-weight:700}
+.native-login-mode.active,.native-stream-login .native-login-submit{background:linear-gradient(90deg,#1baeae,#44f1c2);color:#052933;border:1px solid #46e4d0;font-weight:700}
+.native-login-mode:disabled{opacity:.55;cursor:not-allowed}
+.native-login-title{display:block;font-size:18px;font-weight:700;margin-bottom:12px;color:#fff}
+.native-stream-login #activation-code{box-sizing:border-box;height:68px;border-radius:16px;border:1px solid #327f89;background:#071c26;color:#fff;letter-spacing:.21em;font-size:24px;margin:0;text-align:center}
+.native-stream-login #activation-code::placeholder{color:#8cb7bd}
+.native-stream-login .native-login-submit{width:100%;height:64px;border-radius:16px;font-size:18px;margin-top:17px}
+.native-stream-login button:focus,.native-stream-login input:focus{outline:2px solid #e8fff9;outline-offset:2px}
+.native-stream-login button{transition:transform 95ms ease}
+.native-stream-login button:not(:disabled):focus{transform:scale(1.023)}
+.native-stream-login #login-status{margin:19px 8px 7px;font-size:13.5px;line-height:1.6;overflow-wrap:break-word}
+.native-stream-login .native-login-secure{margin:0;font-size:11.5px;color:#b2f2e7}
+.native-stream-login .native-login-unavailable{margin:12px 0 0;font-size:12px;color:#b2f2e7}
+@media(max-width:510px){.login-panel.native-stream-login{padding:26px 22px 30px;width:100%}.native-stream-login .native-login-brand{font-size:28px}.native-stream-login .native-login-modes{gap:4px}}
+html[data-blofy-device="tv"] .native-stream-login .native-login-brand{font-size:34px}
+html[data-blofy-device="tv"] .native-stream-login #activation-code{height:75px;font-size:27px}
+html[data-blofy-device="tv"] .native-stream-login .native-login-submit{font-size:20px}
+@media(prefers-reduced-motion:reduce){.native-stream-login button{transition:none}}
+
+
+/* Signed STREAM compact Home: 52px header/tabs and 60px navigation. */
+.native-home-header{display:flex;align-items:center;gap:4px;min-height:52px;padding:0 2px}
+.native-home-brand{display:flex;align-items:center;gap:5px;flex:1;min-width:0}
+.native-home-brand img{width:48px;height:44px;object-fit:contain;flex:none}
+.native-home-brand strong{font-size:12px;line-height:1.25;overflow-wrap:break-word}
+.native-home-icon{height:48px;width:44px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:12px;color:var(--soft);padding:0}
+.native-home-tabs{display:flex;align-items:center;gap:8px;min-height:52px;padding:2px 0}
+.native-home-tabs .btn{min-width:0;flex:1;height:48px;font-size:13px;padding:0 4px}
+.native-home-refresh{color:var(--soft);font-size:12px;line-height:1.5}
+.native-home-refresh:empty{display:none}
+html[data-blofy-device="touch"] .native-compact-home{display:flex;flex-direction:column;height:100vh;height:100dvh}
+html[data-blofy-device="touch"] .native-compact-home .workspace{order:0;flex:1 1 0;width:100%;min-height:0;padding:env(safe-area-inset-top,0px) 12px 16px}
+html[data-blofy-device="touch"] .native-compact-home .native-home-bottom{order:1;display:flex;flex-direction:row;width:100%;height:auto;min-height:60px;flex:none;gap:3px;padding:3px 8px calc(3px + env(safe-area-inset-bottom,0px));border:0;border-top:1px solid #ffffff22;background:#10303b}
+html[data-blofy-device="touch"] .native-home-bottom .rail-link{flex:1 1 0;min-width:0;max-width:none;height:54px;min-height:54px;display:flex;flex-direction:column;justify-content:center;gap:4px;font-size:10px;margin:0;padding:3px;text-align:center}
+.native-home-bottom .rail-link.active{color:#46e4d0;background:transparent;border-color:transparent}
+.native-compact-home .story-row{display:flex;flex-wrap:nowrap;overflow-x:auto}
+.native-compact-home .story{flex:0 0 132px;min-height:76px}
+.downloads-page{max-width:900px;margin:0 auto}.downloads-page h2{margin-top:0}
+.download-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #327f89;border-radius:14px;padding:14px;margin:12px 0;background:#10303b}
+.download-row strong{flex:1;min-width:100px;overflow-wrap:break-word}
+.download-row span{font-size:12px;color:var(--muted)}
+.episode-download{margin:0 0 10px;min-height:44px}
+#download-status:not(:empty){padding:10px;color:var(--soft)}
+@media(max-width:360px){.native-home-brand img{width:34px}.native-home-icon{width:38px}.native-home-brand strong{font-size:11px}}
+
+/* Exact local Arabic typeface used by native STREAM, no third-party CDN. */
+@font-face{font-family:"BLOFY Plex Arabic";src:url("/fonts/IBMPlexSansArabic-Regular.ttf") format("truetype");font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"BLOFY Plex Arabic";src:url("/fonts/IBMPlexSansArabic-SemiBold.ttf") format("truetype");font-style:normal;font-weight:700;font-display:swap}
+html,body,button,input,select,textarea{font-family:"BLOFY Plex Arabic","Geeza Pro",Tahoma,Arial,sans-serif}
+.native-home-brand strong,.native-login-brand,.brand{font-family:system-ui,"Segoe UI",Arial,sans-serif}
+
+.native-stream-login #login-code-fields[hidden],.native-stream-login #login-direct-fields[hidden]{display:none!important}
+.native-stream-login #login-direct-fields:not([hidden]){display:flex;flex-direction:column;gap:8px}
+.native-stream-login #login-direct-fields .native-login-title{font-size:14px;margin:0;text-align:start}
+.native-stream-login #login-direct-fields .input{width:100%;min-height:44px;box-sizing:border-box;font-size:15px;text-align:start}
+
+/* Native compact navigation remains visible in the four main touch sections. */
+html[data-blofy-device="touch"] .native-compact-navigation,html[data-blofy-device="touch"] .native-touch-detail{display:flex;flex-direction:column;height:100vh;height:100dvh}
+html[data-blofy-device="touch"] .native-compact-navigation .workspace,html[data-blofy-device="touch"] .native-touch-detail .workspace{order:0;flex:1 1 0;width:100%;min-height:0;padding:env(safe-area-inset-top,0px) 12px 16px}
+html[data-blofy-device="touch"] .native-compact-navigation .native-home-bottom{order:1;display:flex;flex-direction:row;width:100%;height:auto;min-height:60px;flex:none;gap:3px;padding:3px 8px calc(3px + env(safe-area-inset-bottom,0px));border:0;border-top:1px solid #ffffff22;background:#10303b}
+html[data-blofy-device="touch"] .native-touch-detail .toolbar{flex-wrap:wrap;gap:8px}
+html[data-blofy-device="touch"] .native-touch-detail .toolbar h1{min-width:0;overflow-wrap:break-word;font-size:19px}
+
+/* Restore the requested native right-side navigation and category list.
+   Keep independent scrolling and enough touch space on phones. */
+html[data-blofy-device="touch"] .app.native-compact-navigation{
+ display:flex;flex-direction:row;direction:rtl;overflow:hidden
+}
+html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bottom{
+ order:0;flex:0 0 clamp(74px,18vw,150px);width:clamp(74px,18vw,150px);
+ height:100%;min-height:0;max-height:none;display:flex;flex-direction:column;
+ justify-content:flex-start;align-items:stretch;gap:8px;padding:12px 5px;
+ border:0;border-left:1px solid #ffffff22;overflow-y:auto;overflow-x:hidden
+}
+html[data-blofy-device="touch"] .app.native-compact-navigation>.native-home-bottom .rail-link{
+ flex:0 0 auto;min-height:56px;height:auto;width:100%;display:flex;flex-direction:column;
+ justify-content:center;gap:4px;padding:6px 2px;margin:0;font-size:11px;
+ white-space:normal;line-height:1.4;text-align:center
+}
+html[data-blofy-device="touch"] .app.native-compact-navigation>.workspace{
+ order:1;flex:1 1 0;width:auto;min-width:0;height:100%;padding-inline:8px
+}
+html[data-blofy-device="touch"] .native-home-header{flex-wrap:wrap;gap:4px}
+@media (max-width:730px), (max-height:540px) and (orientation:landscape){
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.live-catalog,
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters{
+  display:flex;flex-direction:row;direction:rtl;align-items:stretch;gap:6px;
+  height:calc(100vh - 100px);height:calc(100dvh - 100px);min-height:220px;overflow:hidden
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail{
+  display:flex;flex-direction:column;flex:0 0 clamp(88px,29%,175px);
+  width:clamp(88px,29%,175px);min-width:0;height:100%;overflow:hidden;
+  background:#10303b;border:1px solid #ffffff22;border-radius:12px
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail .pane-head{
+  display:block;padding:7px;font-size:12px
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail .pane-scroll{
+  display:block;flex:1 1 0;min-height:0;max-height:none;height:auto;padding:0;overflow-y:auto;overflow-x:hidden
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-item{
+  display:block;width:100%;min-height:44px;white-space:normal;overflow-wrap:anywhere;
+  text-align:right;line-height:1.4;font-size:12px;padding:8px 6px
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .channels,
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .poster-panel{
+  flex:1 1 0;width:auto;min-width:0;height:100%;max-height:none;overflow:auto
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog .channels .pane-scroll{
+  flex:1 1 0;min-height:0;max-height:none;overflow-y:auto
+ }
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-panel{padding:6px}
+ html[data-blofy-device="touch"] .app.catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+}
+
+/* Stable Android 56.0.2 visual parity: same CinemaStyle colors, 72x44
+   logo, 20dp icons, 13sp sidebar labels, outlined rounded panel. */
+.app>.native-tv-rail{background:#10303b;border:1px solid #ffffff66;border-radius:16px;margin:14px 10px 14px 0;padding:12px 8px;width:150px}
+.app>.native-tv-rail .brand{margin:0 auto 18px;width:72px;height:44px;display:flex;align-items:center;justify-content:center}
+.app>.native-tv-rail .brand img{width:72px;height:44px;object-fit:contain}
+.app>.native-tv-rail .rail-link{font-size:13px;padding:0 10px;gap:9px;height:44px;min-height:44px;margin-bottom:7px;border-radius:12px;white-space:nowrap}
+.app>.native-tv-rail .rail-link .symbol{width:20px;display:flex;align-items:center;justify-content:center;color:#aacbd0}
+.app>.native-tv-rail .rail-link .symbol svg{width:20px;height:20px}
+.app>.native-tv-rail .rail-link.active{background:linear-gradient(140deg,#10303b,#09242e);border-color:#ffffff52;color:#46e4d0}
+.app>.native-tv-rail .rail-link.active .symbol{color:#46e4d0}
+@media(min-width:1000px){html[data-blofy-device="tv"] .app>.native-tv-rail{width:150px}}
+@media(max-width:730px){html[data-blofy-device="touch"] .app.catalog-app .catalog .cat-rail{flex-basis:min(112px,32%);width:min(112px,32%)}}
+.detail-translation{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 12px}
+.detail-translation [hidden]{display:none!important}
+.detail-translation span{color:var(--muted);font-size:12px}
+
+.offline-filters{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.offline-filters .btn{flex:1 1 65px;padding:8px 6px;min-height:44px}.offline-filters .btn.active{color:#06161d;background:#46e4d0;border-color:#46e4d0}#offline-progress{width:100%;height:12px;accent-color:#46e4d0;margin:8px 0}#offline-progress[hidden],#offline-cancel[hidden],#offline-library[hidden]{display:none!important}

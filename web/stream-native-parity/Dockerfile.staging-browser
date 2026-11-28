@@ -1,0 +1,40 @@
+# QA-only build. Browser dependencies do not ship in the runtime image.
+FROM mcr.microsoft.com/playwright:v1.56.1-noble AS browserqa
+WORKDIR /qa
+COPY package.json ./
+RUN npm install --ignore-scripts --no-audit --no-fund && npx playwright install chrome
+COPY index.html app.js styles.css stream-icon.svg manifest.webmanifest profile-transfer.js playback-acceptance.js manual-preview-fix.mjs sw.js ./
+COPY playlist-preview.html playlist-preview.js playlist-preview.css approved-m3u-loader.mjs approved-m3u-catalog.mjs ./
+COPY qa/native-shell-browser.mjs qa/synthetic-browser-playback.mjs qa/external-playlist-browser.mjs ./qa/
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN for color in red blue; do mkdir -p qa-fixtures/$color && ffmpeg -hide_banner -loglevel error -f lavfi -i "color=c=$color:s=640x360:r=25" -f lavfi -i 'sine=frequency=440:sample_rate=48000' -t 12 -c:v libx264 -pix_fmt yuv420p -g 50 -sc_threshold 0 -c:a aac -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename "qa-fixtures/$color/seg-%03d.ts" "qa-fixtures/$color/index.m3u8" || exit 1; done
+RUN ffmpeg -hide_banner -loglevel error -i qa-fixtures/red/index.m3u8 -t 4 -c copy -movflags +faststart qa-fixtures/offline.mp4
+RUN node manual-preview-fix.mjs && BLOFY_QA_BUNDLED_CHROMIUM=1 BLOFY_QA_WEBKIT=1 node qa/native-shell-browser.mjs && node qa/synthetic-browser-playback.mjs qa-fixtures && node qa/external-playlist-browser.mjs && touch /qa/native-browser-passed
+FROM oven/bun:1-debian
+WORKDIR /app
+COPY package.json /app/package.json
+RUN bun install --production --no-save
+COPY server.ts approved-m3u-catalog.mjs approved-m3u-loader.mjs external-playlist-policy.mjs playlist-preview.html playlist-preview.js playlist-preview.css direct-provider-entry.mjs vod-download-policy.mjs ops-dashboard.html ops-dashboard.js catalog-flights.mjs audio-worker-policy.mjs web-security-controls.mjs commentary-catalog.mjs web-profile-key.mjs catalog-page-cache.mjs catalog-array-reader.mjs index.html app.js profile-transfer.js playback-acceptance.js styles.css manifest.webmanifest stream-icon.svg apple-touch-icon.png icon-192.png icon-512.png sw.js /app/
+COPY fonts/ /app/fonts/
+COPY manual-preview-fix.mjs /app/
+RUN bun run ./manual-preview-fix.mjs
+COPY poster-recovery.test.mjs catalog-refresh.test.mjs catalog-array-reader.test.mjs search-memory.test.mjs category-cache.test.mjs pagination-progress.test.mjs live-manifest-retry.test.mjs /app/
+RUN bun test ./poster-recovery.test.mjs ./catalog-refresh.test.mjs ./catalog-array-reader.test.mjs ./search-memory.test.mjs ./category-cache.test.mjs ./pagination-progress.test.mjs ./live-manifest-retry.test.mjs
+COPY qa/live-audio-picture-progress.test.mjs qa/local-engine-qoe.test.mjs qa/visual-outage-qoe.test.mjs qa/fast-start-first-picture.test.mjs qa/logout-media-stop.test.mjs /app/qa/
+RUN bun test ./qa/live-audio-picture-progress.test.mjs ./qa/local-engine-qoe.test.mjs ./qa/visual-outage-qoe.test.mjs ./qa/fast-start-first-picture.test.mjs ./qa/logout-media-stop.test.mjs
+COPY Dockerfile /app/Dockerfile
+COPY qa/playback-acceptance.test.mjs /app/qa/
+RUN bun test ./qa/playback-acceptance.test.mjs
+COPY qa/pwa-shell-assets.test.mjs qa/installed-release.test.mjs /app/qa/
+RUN bun test ./qa/pwa-shell-assets.test.mjs ./qa/installed-release.test.mjs
+COPY qa/commentary-catalog.test.mjs qa/web-security-controls.test.mjs qa/audio-worker-policy.test.mjs qa/catalog-flights.test.mjs qa/control-plane-burst.test.mjs /app/qa/
+RUN bun test ./qa/commentary-catalog.test.mjs ./qa/web-security-controls.test.mjs ./qa/audio-worker-policy.test.mjs ./qa/catalog-flights.test.mjs ./qa/control-plane-burst.test.mjs
+COPY qa/native-56-0-3-login.test.mjs qa/native-vod-download.test.mjs qa/direct-provider-entry.test.mjs qa/approved-m3u-catalog.test.mjs qa/approved-m3u-loader.test.mjs qa/external-playlist-policy.test.mjs /app/qa/
+RUN bun test ./qa/native-56-0-3-login.test.mjs ./qa/native-vod-download.test.mjs ./qa/direct-provider-entry.test.mjs ./qa/approved-m3u-catalog.test.mjs ./qa/approved-m3u-loader.test.mjs ./qa/external-playlist-policy.test.mjs
+COPY audio-worker.ts /app/
+RUN bun build audio-worker.ts --target=bun --outfile=/tmp/audio-worker-check.js && rm /tmp/audio-worker-check.js
+ENV PORT=8080
+EXPOSE 8080
+COPY --from=browserqa /qa/native-browser-passed /app/native-browser-passed
+USER bun
+CMD ["bun","run","/app/server.ts"]

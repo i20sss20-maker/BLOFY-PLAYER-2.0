@@ -25,7 +25,7 @@ const server=createServer((req,res)=>{
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 let browser;
 try{
- browser=await chromium.launch({channel:'chrome',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
+ browser=await chromium.launch({...(process.env.BLOFY_QA_BUNDLED_CHROMIUM==='1'?{}:{channel:'chrome'}),headless:true,args:['--autoplay-policy=no-user-gesture-required']});
  const page=await browser.newPage();
  page.on('console',m=>console.log('browser:',m.text()));
  page.on('pageerror',e=>console.error('browser error:',e.message));

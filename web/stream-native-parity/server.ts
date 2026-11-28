@@ -1,3 +1,10 @@
+import {normalizeDirectEntry} from './direct-provider-entry.mjs';
+import {externalPlaylistOrigins} from './external-playlist-policy.mjs';
+import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
+let activeVodDownloads=0;
+const activeVodDownloadAccounts=new Map();
+const activeVodDownloadTokens=new Map();
+const MAX_VOD_DOWNLOADS=2;
 import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual } from 'node:crypto';
@@ -8,6 +15,8 @@ import {audioWorkerHost} from './audio-worker-policy.mjs';
 import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
+const SYNTHETIC_PROJECT=Bun.env.RAILWAY_PROJECT_ID==='9501c37d-dd0c-44b5-90c6-5cb170d4e689';
+const PLAYLIST_ORIGINS=Bun.env.BLOFY_WEB_EXTERNAL_PLAYLIST_QA==='1'?externalPlaylistOrigins(Bun.env.BLOFY_WEB_EXTERNAL_PLAYLIST_ORIGINS||''):[];
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
 const KEY=/^[a-f0-9]{64}$/i.test(KEY_HEX)?Buffer.from(KEY_HEX,'hex'):null;
 const CT='application/json; charset=utf-8';
@@ -88,6 +97,7 @@ setInterval(()=>{
   console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify(window))
  }
 },60000).unref?.();
+function downloadAccountKey(bearer){return typeof bearer==='string'&&bearer.startsWith('Bearer ')?stableAccountProfileKey(bearer.slice(7),KEY):null}
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
 function pruneExternalTickets(now=Date.now()){
  for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
@@ -95,6 +105,7 @@ function pruneExternalTickets(now=Date.now()){
 function revokeExternal(bearer){
  if(!bearer)return;
  const account=externalAccountKey(bearer);
+
  externalIssueGate.revoke(account);
  for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
  const active=externalActive.get(account);if(active)active.abort()
@@ -114,7 +125,7 @@ if(p==='/internal/ops'){
 
 // Staging may exercise packaging and private worker readiness, but must not
 // use production subscriptions, origins, catalog requests, or media sessions.
-if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'){
+if(SYNTHETIC_PROJECT||Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging'){
  if(p==='/health'&&method==='GET'){
   const host=audioWorkerHost('isolated');let audioReady=false;
   try{const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(3000)});const v=await r.json();audioReady=r.ok&&v.ok===true&&v.service==='blofy-stream-web-audio'}catch{}
@@ -124,12 +135,31 @@ if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'){
 }
 
 
-if(method==='GET'&&(p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
+// Separate browser-only playlist surface. Never relax the subscriber app CSP
+// or send third-party playlist credentials to the activation/media backend.
+const playlistAssets={
+ '/playlist-preview':'playlist-preview.html','/playlist-preview.js':'playlist-preview.js',
+ '/playlist-preview.css':'playlist-preview.css','/approved-m3u-loader.mjs':'approved-m3u-loader.mjs',
+ '/approved-m3u-catalog.mjs':'approved-m3u-catalog.mjs'
+};
+if(p==='/playlist-preview-policy'||Object.hasOwn(playlistAssets,p)){
+ if(method!=='GET'||!PLAYLIST_ORIGINS.length||Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||SYNTHETIC_PROJECT||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging')return json(404,{error:'not_found'});
+ if(p==='/playlist-preview-policy')return json(200,{origins:PLAYLIST_ORIGINS},{'Referrer-Policy':'no-referrer'});
+ const file=playlistAssets[p],asset=Bun.file(new URL('./'+file,import.meta.url));
+ if(!await asset.exists())return json(404,{error:'not_found'});
+ const mime=file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'application/javascript; charset=utf-8';
+ const allowed=PLAYLIST_ORIGINS.join(' ');
+ return new Response(asset,{headers:noCache({'Content-Type':mime,'Referrer-Policy':'no-referrer','X-Robots-Tag':'noindex, nofollow','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' "+allowed+"; media-src 'self' blob: "+allowed+"; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"})});
+}
+const isNativeArabicFont=p==='/fonts/IBMPlexSansArabic-Regular.ttf'||p==='/fonts/IBMPlexSansArabic-SemiBold.ttf';
+if(method==='GET'&&(isNativeArabicFont||p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/styles.css'||p==='/manifest.webmanifest'||p==='/stream-icon.svg'||p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png'||p==='/sw.js')){
  const file=p.slice(1);
- const mime=p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':(p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png')?'image/png':'application/manifest+json; charset=utf-8';
+ const mime=isNativeArabicFont?'font/ttf':p==='/app.js'||p==='/profile-transfer.js'||p==='/playback-acceptance.js'||p==='/sw.js'?'application/javascript; charset=utf-8':p==='/styles.css'?'text/css; charset=utf-8':p==='/stream-icon.svg'?'image/svg+xml':(p==='/apple-touch-icon.png'||p==='/icon-192.png'||p==='/icon-512.png')?'image/png':'application/manifest+json; charset=utf-8';
  const asset=Bun.file(new URL('./'+file,import.meta.url));
  if(!await asset.exists())return json(404,{error:'static_asset_missing'});
- return new Response(asset,{headers:noCache({'Content-Type':mime,...(p==='/sw.js'?{'Service-Worker-Allowed':'/'}:{})})});
+ const headers=noCache({'Content-Type':mime,...(p==='/sw.js'?{'Service-Worker-Allowed':'/'}:{})});
+ if(isNativeArabicFont)headers['Cache-Control']='public,max-age=604800';
+ return new Response(asset,{headers});
 }
 if(p==='/'&&method==='GET')return new Response(HTML,{status:200,headers:noCache({'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"})});
 
@@ -154,7 +184,7 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 }
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
-if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const download=activeVodDownloadTokens.get(externalAccountKey('Bearer '+t));if(download)download.abort();}if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
 if(p==='/api/external/stop'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
  revokeExternal(h.Authorization);
@@ -209,6 +239,34 @@ if(p.startsWith('/external/live/')){
   }),{headers:noCache({'Content-Type':'video/mp2t','Accept-Ranges':'none'})});
  }catch{cleanup();return json(502,{error:'external_connection_failed'})}
 }
+// Fixed first-party credential exchange; never fetch the supplied M3U URL.
+if(p==='/api/login-modes'&&method==='GET')return json(200,{direct:Bun.env.BLOFY_WEB_BOUND_LOGIN_QA==='1',external:PLAYLIST_ORIGINS.length>0});
+if(p==='/api/direct-login'&&method==='POST'){
+ if(Bun.env.BLOFY_WEB_BOUND_LOGIN_QA!=='1')return json(503,{ok:false,error:'direct_login_unavailable'});
+ if(u.search||!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type')||''))return json(400,{ok:false,error:'invalid_payload'});
+ const input=await readBoundedJson(req,4096);if(!input.ok)return json(input.status,{ok:false,error:'invalid_payload'});
+ const key=input.value.deviceKey;
+ if(typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key))return json(400,{ok:false,error:'invalid_payload'});
+ let entry;try{entry=normalizeDirectEntry(input.value)}catch{return json(400,{ok:false,error:'invalid_provider_entry'})}
+ try{
+  const response=await fetch(ORIGIN+'/api/v1/stream/app/web-bound-login',{
+   method:'POST',headers:{'Content-Type':CT,Accept:'application/json'},
+   body:JSON.stringify({username:entry.username,password:entry.password,deviceKey:key}),
+   redirect:'manual',signal:AbortSignal.timeout(15000)
+  });
+  if(!response.ok){try{await response.body?.cancel()}catch{};return json(response.status===429?429:response.status===401?401:503,{ok:false,error:'direct_login_unavailable'})}
+  const v=await response.json();
+  if(v?.ok!==true||typeof v.accessToken!=='string'||!/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(v.accessToken))return json(503,{ok:false,error:'direct_login_unavailable'});
+  // Do not accept a token that cannot already access the existing account.
+  const check=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:{Authorization:'Bearer '+v.accessToken,Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(10000)});
+  if(!check.ok){try{await check.body?.cancel()}catch{};return json(503,{ok:false,error:'direct_login_unavailable'})}
+  const session=await check.json();
+  const profileKey=stableAccountProfileKey(v.accessToken,KEY),expiresAt=Number(session.expiresAt);
+  if(!session.active||!profileKey||!Number.isFinite(expiresAt)||expiresAt<=Date.now())return json(401,{ok:false,error:'direct_login_unavailable'});
+  return json(200,{ok:true,expiresAt,profileKey,legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},
+   {'Set-Cookie':'bv_session='+seal(v.accessToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+Math.min(2592000,Math.floor((expiresAt-Date.now())/1000))});
+ }catch{return json(503,{ok:false,error:'direct_login_unavailable'})}
+}
 if(p==='/api/redeem'&&method==='POST'){
  const inputResult=await readBoundedJson(req,2048);if(!inputResult.ok)return json(inputResult.status,{error:'invalid_payload'});
  const input=inputResult.value;
@@ -231,6 +289,22 @@ if(p==='/vendor/hls.min.js'&&method==='GET'){
 }
 
 const h=auth(req);if(!h)return json(401,{ok:false,error:'activation_required'});
+if(p==='/api/ai/translate'&&method==='POST'){
+ const input=await readBoundedJson(req,18000);if(!input.ok)return json(input.status,{ok:false,error:'invalid_request'});
+ const overview=typeof input.value?.overview==='string'?input.value.overview.trim():'';
+ if(!overview||overview.length>3900)return json(400,{ok:false,error:'invalid_overview'});
+ try{
+  const response=await fetch('https://blofy-ai-gateway-production.up.railway.app/v1/translate',{
+   method:'POST',redirect:'manual',headers:{'Content-Type':CT,'Authorization':h.Authorization,'Accept':'application/json','Cache-Control':'no-store'},
+   body:JSON.stringify({title:'',overview,locale:'ar'}),signal:AbortSignal.timeout(24000)
+  });
+  if(!response.ok){try{await response.body?.cancel()}catch{};return json([401,403,429].includes(response.status)?response.status:503,{ok:false,error:'translation_unavailable'})}
+  const data=await readBoundedJson(response,32000);
+  const translated=data.ok&&data.value?.ok===true&&typeof data.value.translatedOverview==='string'?data.value.translatedOverview.trim():'';
+  if(!translated||translated.length>5500||!/[\u0600-\u06ff]/.test(translated))return json(502,{ok:false,error:'invalid_translation'});
+  return json(200,{ok:true,translatedOverview:translated})
+ }catch{return json(503,{ok:false,error:'translation_unavailable'})}
+}
 if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
@@ -519,6 +593,77 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
   }
   return new Response(r.body,{headers:noCache({'Content-Type':mime,'Accept-Ranges':'none'})});
  }catch{return json(503,{error:'commentary_unavailable'})}
+}
+// File downloads are isolated from live and normal VOD playback.
+// A browser writes the streamed bytes to its own download manager;
+// it cannot be treated as a completed offline library item here.
+if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
+ if(!h)return json(401,{error:'activation_required'});
+ if(Bun.env.BLOFY_WEB_VOD_DOWNLOAD_ENABLED!=='1')
+  return json(503,{error:'downloads_not_enabled'});
+ const match=/^\/api\/download\/(movie|series)\/([1-9][0-9]{0,14})\.(mp4|mkv|avi|mov|ts)$/.exec(p);
+ if(!match||vodDownloadPath(match[1],match[2],match[3])!==p)
+  return json(400,{error:'invalid_download_path'});
+ const accountKey=downloadAccountKey(h.Authorization),ownerKey=externalAccountKey(h.Authorization);
+ if(!accountKey)return json(401,{error:'invalid_session'});
+ if(activeVodDownloads>=MAX_VOD_DOWNLOADS||activeVodDownloadAccounts.has(accountKey))
+  return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
+ // Provider HEAD may fail or consume a licensed provider slot. Probe only
+ // the authenticated, local feature gate; do not claim this proves that
+ // the remote movie file is available or complete.
+ if(method==='HEAD')return new Response(null,{status:200,headers:noCache({'Accept-Ranges':'none'})});
+ const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
+ const ctrl=new AbortController();
+ let released=false,reader=null,headerTimer=null,deadline=null;
+ const release=()=>{if(released)return;released=true;clearTimeout(deadline);clearTimeout(headerTimer);activeVodDownloads=Math.max(0,activeVodDownloads-1);if(activeVodDownloadAccounts.get(accountKey)===ctrl)activeVodDownloadAccounts.delete(accountKey);if(activeVodDownloadTokens.get(ownerKey)===ctrl)activeVodDownloadTokens.delete(ownerKey);req.signal.removeEventListener('abort',cancel);ctrl.signal.removeEventListener('abort',cancelReader)};
+ const cancelReader=()=>{try{if(reader)Promise.resolve(reader.cancel()).catch(()=>{})}catch{}release()};
+ const cancel=()=>ctrl.abort();
+ activeVodDownloads++;activeVodDownloadAccounts.set(accountKey,ctrl);activeVodDownloadTokens.set(ownerKey,ctrl);
+ ctrl.signal.addEventListener('abort',cancelReader,{once:true});
+ req.signal.addEventListener('abort',cancel,{once:true});
+ headerTimer=setTimeout(cancel,20000);deadline=setTimeout(cancel,30*60*1000);
+ if(req.signal.aborted){cancel();return json(499,{error:'download_cancelled'})}
+ try{
+  const upstream=await fetch(target,{
+   method,headers:{Authorization:h.Authorization,Accept:'application/octet-stream,video/*;q=0.9','accept-encoding':'identity'},
+   redirect:'manual',signal:ctrl.signal
+  });
+  clearTimeout(headerTimer);
+  if(ctrl.signal.aborted){try{await upstream.body?.cancel()}catch{}release();return json(499,{error:'download_cancelled'})}
+  if(!downloadableResponse(upstream.status,upstream.headers.get('content-type'))||!upstream.body||upstream.headers.has('content-range')){
+   try{await upstream.body?.cancel()}catch{}
+   release();
+   return json(upstream.status===401||upstream.status===403?403:upstream.status===404?404:502,
+     {error:'download_source_unavailable'});
+  }
+  const out=noCache({'Content-Type':'application/octet-stream',
+    'Content-Disposition':'attachment; filename="'+attachmentFilename(match[1],match[2],match[3])+'"',
+    'X-Content-Type-Options':'nosniff','Accept-Ranges':'none'});
+  const length=upstream.headers.get('content-length'),encoding=upstream.headers.get('content-encoding');
+  // A completed transfer must contain the exact advertised number of bytes.
+  // Unknown-size or compressed responses cannot prove a complete raw file.
+  if(!length||!/^[1-9][0-9]{0,14}$/.test(length)||(encoding&&encoding.toLowerCase()!=='identity')){
+   try{await upstream.body.cancel()}catch{}release();return json(502,{error:'download_size_unverified'});
+  }
+  out['Content-Length']=length;
+  reader=upstream.body.getReader();
+  const expected=out['Content-Length']?Number(out['Content-Length']):null;
+  let received=0;
+  // Pull one chunk at a time (no entire movie buffered in Railway RAM).
+  const stream=new ReadableStream({
+   async pull(controller){
+    try{
+     const chunk=await reader.read();
+     if(ctrl.signal.aborted){release();controller.error(new Error('download_cancelled'));return}
+     if(chunk.done){release();if(expected!==null&&received!==expected){controller.error(new Error('download_size_mismatch'));return}controller.close();return}
+     received+=chunk.value.byteLength;if(expected!==null&&received>expected){cancel();controller.error(new Error('download_size_mismatch'));return}
+     controller.enqueue(chunk.value);
+    }catch{release();controller.error(new Error('download_stream_interrupted'))}
+   },
+   async cancel(){cancel();release()}
+  });
+  return new Response(stream,{status:200,headers:out});
+ }catch{release();return json(502,{error:'download_source_unreachable'})}
 }
 if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
  const m=p.match(/^\/api\/media\/(live|movie|series)\/([0-9]{1,15})\.(ts|m3u8|mp4|mkv|avi|mov)$/i);if(!m)return json(400,{error:'invalid_media_path'});

@@ -38,14 +38,16 @@ test('native phone list never starts preview; wide explicit selection still work
  assert.ok(readFileSync('styles.css','utf8').includes('.live-catalog .preview{display:none}'));
 });
 
-test('phone navigation keeps content tabs and four primary destinations',()=>{
- const a=app.indexOf('function phoneHomeNavigation('),b=app.indexOf('function navHtml(',a);
- const result=new Function('S',app.slice(a,b)+';return {bottom:phoneHomeNavigation(),tabs:phoneHomeTabs()}')({route:'home'});
+test('phone navigation mirrors signed STREAM entry destinations and controls',()=>{
+ const a=app.indexOf('function nativeNavIcon('),b=app.indexOf('function shell(',a);
+ const result=new Function('S','document',app.slice(a,b)+';return {bottom:navHtml(),header:nativeHomeHeader()}')({route:'home'},{documentElement:{getAttribute:()=> 'touch'}});
  assert.equal((result.bottom.match(/data-go=/g)||[]).length,4);
- assert.equal((result.tabs.match(/data-go=/g)||[]).length,3);
- assert.match(result.bottom,/data-go="favorites"/);
- assert.match(result.tabs,/data-go="movie"/);
- assert.match(result.tabs,/data-go="series"/);
+ assert.match(result.bottom,/data-go="downloads"/);
+ assert.match(result.header,/data-go="movie"/);
+ assert.match(result.header,/data-go="series"/);
+ assert.match(result.header,/data-go="ai"/);
+ assert.match(result.header,/data-go="search"/);
+ assert.match(result.header,/id="refresh-content"/);
  assert.match(app,/phoneLiveLayout\(\)\?document.getElementById\('workspace'\)/);
 });
 
@@ -246,4 +248,26 @@ test('source quota denial is distinguished from transient network failure',()=>{
  assert.equal(denied(null),false);
  assert.match(app,/failure\.error==='live_source_channel_limit'\)\{showSourceQuota\(\);return\}/);
  assert.match(app,/code===503&&liveSourceQuotaRejected\(detail\)/);
+});
+
+test('series metadata never leaks across titles or accounts during delayed responses',()=>{
+ const a=app.indexOf('function episodesScreen('),b=app.indexOf('/* Web downloads:',a);
+ const calls=[],roots=[],items={'1':{name:'One'},'2':{name:'Two'}};
+ const S={route:'detail',item:{kind:'series',id:'1',data:items['1']},accountEpoch:1,episodes:null,episodesSeriesId:'',selectedSeason:''};
+ let root;
+ const document={getElementById:()=>root};
+ const render=new Function('S','document','findItem','navigate','shell','title','loading','api','enc','parseEpisodes','esc','getResume','art','safeImg','restoreView',app.slice(a,b)+';return episodesScreen')(
+ S,document,(_,id)=>items[id],()=>{},()=>{root={innerHTML:''};roots.push(root)},item=>item.name,()=>'',(m,path,body,cb)=>calls.push({path,cb}),encodeURIComponent,data=>Object.entries(data.episodes).flatMap(([season,eps])=>eps.map(ep=>({...ep,__season:season}))),String,()=>null,()=>'',()=>'',()=>{});
+ render({id:'1'});render({id:'2'});
+ const first={episodes:{'1':[{id:'10',title:'OLD',episode_num:1}]}},second={episodes:{'2':[{id:'20',title:'NEW',episode_num:1}]}};
+ calls[1].cb(200,second);assert.equal(S.episodesSeriesId,'2');assert.match(root.innerHTML,/NEW/);
+ calls[0].cb(200,first);assert.equal(S.episodesSeriesId,'2');assert.doesNotMatch(root.innerHTML,/OLD/);
+ render({id:'1'});const previousRoot=root;S.accountEpoch++;render({id:'1'});
+ calls[2].cb(503,{});assert.equal(previousRoot.innerHTML,'');assert.equal(root.innerHTML,'');
+ calls[3].cb(200,first);assert.match(root.innerHTML,/OLD/);assert.equal(S.episodesSeriesId,'1');
+ S.route='home';calls[3].cb(503,{});assert.doesNotMatch(root.innerHTML,/إعادة المحاولة/);
+});
+test('detail metadata uses both account epoch and exact screen identity',()=>{
+ assert.match(app,/function detailCurrent\(\)\{return S.accountEpoch===detailEpoch&&S.route==='detail'&&S.item&&S.item.kind===k&&S.item.id===id&&document.getElementById\('detail-root'\)===detailRoot/);
+ assert.match(app,/if\(S.episodesSeriesId===id&&S.episodes&&S.episodes.episodes\)finish/);
 });

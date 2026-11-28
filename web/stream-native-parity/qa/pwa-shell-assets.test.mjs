@@ -19,7 +19,7 @@ test('all PWA icons exist in actual runtime image and PNG dimensions match the d
  assert.match(html,/rel="apple-touch-icon"/);
 });
 test('PWA shell refresh keeps authenticated APIs and media out of cache',()=>{
- assert.match(sw,/blofy-stream-shell-v19/);
+ assert.match(sw,/blofy-stream-shell-v20/);
  const paths=JSON.parse(sw.match(/const SHELL=(\[[^\n]+\]);/)[1].replaceAll("'",'"'));
  for(const path of paths){
   assert.ok(!/^\/(?:api|vendor)\//.test(path));
@@ -31,6 +31,17 @@ test('PWA shell refresh keeps authenticated APIs and media out of cache',()=>{
 
 test('fresh app navigation versions all shell scripts and styles',()=>{
  for(const asset of ['styles.css','profile-transfer.js','playback-acceptance.js','app.js']){
-  assert.ok(html.includes('/'+asset+'?v=2026.11.27.1'));
+  assert.ok(html.includes('/'+asset+'?v=2026.11.28.56.0.3'));
  }
+});
+
+test('native Arabic fonts are packaged and served locally',()=>{
+ const css=readFileSync('styles.css','utf8'),server=readFileSync('server.ts','utf8'),docker=readFileSync('Dockerfile','utf8');
+ for(const name of ['IBMPlexSansArabic-Regular.ttf','IBMPlexSansArabic-SemiBold.ttf']){
+  assert.ok(existsSync('fonts/'+name));
+  assert.ok(css.includes('/fonts/'+name));
+  assert.ok(server.includes('/fonts/'+name));
+  assert.equal(readFileSync('fonts/'+name).subarray(0,4).toString('hex'),'00010000');
+ }
+ assert.ok(docker.includes('COPY fonts/ /app/fonts/'));
 });

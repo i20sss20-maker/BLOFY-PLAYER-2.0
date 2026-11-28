@@ -109,7 +109,7 @@ function updateInstallGuide(){
  feedback.textContent=state.mode==='installed'?'':state.message
 }
 
-var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
+var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['downloads','↓','التنزيلات'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
 function profileStorageKey(name){return 'blofy_web_profile_v1:'+S.profileKey+':'+name}
@@ -141,7 +141,7 @@ function useProfile(id,legacy){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
  migrateLegacyProfile(id,legacy);
  var changed=S.profileKey!==id;
- if(changed){S.accountEpoch++;resetCatalogRefresh()}
+ if(changed){S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh()}
  S.profileKey=id;
  S.library=readJson(profileStorageKey('favorites'),{});
  S.watch=readJson(profileStorageKey('watch'),{});
@@ -152,7 +152,7 @@ function useProfile(id,legacy){
  if(changed){
   if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
   S.epgToken++;S.epgCache={};
-  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.episodesSeriesId='';S.selectedSeason='';S.detailInfo=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
   S.selected=null;S.livePreview=null;S.listingInflight={};S.catsInflight={}
  }
  return true
@@ -204,30 +204,70 @@ function deviceKey(){
  return key
 }
 function login(message){
- S.accountEpoch++;resetCatalogRefresh();
+ clearOfflineGrant();
+ S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh();
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
- S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+ S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.episodesSeriesId='';S.selectedSeason='';S.detailInfo=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
  S.epgToken++;S.epgCache={};
- app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
- '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
- '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
- '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
- '</div></div>';
- var button=document.getElementById('redeem');
- button.onclick=redeem;
- document.getElementById('activation-code').onkeydown=function(e){if((e.keyCode||e.which)===13)redeem()};
- setTimeout(function(){(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
+ app.innerHTML='<div class="login-screen screen-appear native-login-screen"><div class="login-panel native-stream-login">'+
+ '<div class="login-brand native-login-brand">BLOFY STREAM</div><p class="native-login-tagline">البث المباشر والأفلام والمسلسلات</p><div class="native-login-divider" aria-hidden="true"></div>'+
+ '<div class="native-login-modes" role="group" aria-label="طريقة الدخول"><button class="native-login-mode active" type="button" id="login-mode-code" aria-pressed="true">الكود</button><button class="native-login-mode" type="button" id="login-mode-xtream" aria-pressed="false" disabled aria-describedby="direct-login-notice">اكستريم</button><button class="native-login-mode" type="button" id="login-mode-m3u" aria-pressed="false" disabled aria-describedby="direct-login-notice">M3U</button></div>'+
+ '<form id="stream-login-form"><div id="login-code-fields"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
+ '<input class="input" id="activation-code" placeholder="•••• ••••" maxlength="24" inputmode="numeric" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">'+
+ '</div><div id="login-direct-fields" hidden></div><button class="btn native-login-submit" id="redeem" type="submit">ابدأ المشاهدة</button></form><div class="login-status" id="login-status" role="status" aria-live="polite">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
+ '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>مصادر Xtream وM3U الخارجية</a></div></div>';
+ var form=document.getElementById('stream-login-form'),mode='code',directReady=false;
+ var codeFields=document.getElementById('login-code-fields'),directFields=document.getElementById('login-direct-fields'),notice=document.getElementById('direct-login-notice');
+ var modes={code:document.getElementById('login-mode-code'),xtream:document.getElementById('login-mode-xtream'),m3u:document.getElementById('login-mode-m3u')};
+ function updateModeButtons(busy){
+  Object.keys(modes).forEach(function(k){modes[k].disabled=!!busy||(k!=='code'&&!directReady);modes[k].setAttribute('aria-pressed',String(k===mode));modes[k].classList.toggle('active',k===mode)})
+ }
+ function selectMode(k){
+  if(!modes[k]||modes[k].disabled||document.getElementById('redeem').disabled)return;
+  mode=k;codeFields.hidden=k!=='code';directFields.hidden=k==='code';
+  directFields.innerHTML=k==='xtream'?'<label class="native-login-title" for="provider-host">الهوست</label><input class="input" id="provider-host" value="https://x.blofyplayer.com" type="url" maxlength="512" dir="ltr" autocomplete="off" spellcheck="false"><label class="native-login-title" for="provider-username">اسم المستخدم</label><input class="input" id="provider-username" maxlength="256" dir="ltr" autocomplete="off" spellcheck="false"><label class="native-login-title" for="provider-password">كلمة المرور</label><input class="input" type="password" id="provider-password" maxlength="256" dir="ltr" autocomplete="off">':k==='m3u'?'<label class="native-login-title" for="provider-url">رابط M3U الخاص ببلوفي</label><input class="input" id="provider-url" type="password" maxlength="2048" dir="ltr" autocomplete="off" spellcheck="false" placeholder="https://x.blofyplayer.com/get.php?...">':'';
+  updateModeButtons(false);setStatus(k==='code'?'أدخل كود اشتراكك':'يتطلب اشتراك BLOFY مؤهلًا للدخول المباشر.');
+  var field=document.getElementById(k==='code'?'activation-code':k==='xtream'?'provider-username':'provider-url');if(field)field.focus()
+ }
+ Object.keys(modes).forEach(function(k){modes[k].onclick=function(){selectMode(k)}});
+ form.onsubmit=function(e){
+  e.preventDefault();if(mode==='code'){redeem();return}
+  var btn=document.getElementById('redeem');if(!directReady||!btn||btn.disabled)return;
+  var payload={mode:mode,deviceKey:deviceKey()};
+  if(mode==='xtream'){
+   payload.host=document.getElementById('provider-host').value.trim();payload.username=document.getElementById('provider-username').value;payload.password=document.getElementById('provider-password').value;
+   if(!payload.host||!payload.username||!payload.password){setStatus('أكمل بيانات اشتراكك.',true);return}
+   document.getElementById('provider-password').value='';
+  }else{
+   payload.url=document.getElementById('provider-url').value.trim();
+   if(!payload.url){setStatus('أدخل رابط اشتراك M3U.',true);return}
+   document.getElementById('provider-url').value='';
+  }
+  btn.disabled=true;updateModeButtons(true);setStatus('جار التحقق من الاشتراك…');
+  api('POST','/api/direct-login',payload,function(st,r){
+   btn.disabled=false;updateModeButtons(false);
+   if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth();return}
+   setStatus(st===429?'محاولات كثيرة. جرّب لاحقًا.':st===400?'تحقق من رابط أو بيانات BLOFY.':st===401?'تحقق من الاشتراك، أو استخدم كود التفعيل الأصلي إن كان مرتبطًا بجهاز.':'الدخول غير متاح حاليًا. حاول لاحقًا.',true)
+  })
+ };
+ api('GET','/api/login-modes',null,function(st,v){
+  if(S.route!=='login'||!form.isConnected)return;
+  if(st===200&&v.external===true){var external=document.getElementById('external-playlist-entry');if(external)external.hidden=false}
+  if(st===200&&v.direct===true){directReady=true;notice.textContent='دخول اشتراكات BLOFY المؤهلة؛ الروابط الخارجية غير مدعومة هنا.';updateModeButtons(false)}
+ });
+ setTimeout(function(){if(S.route==='login'&&mode==='code')(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
 }
 function redeem(){
+ var btn=document.getElementById('redeem');if(!btn||btn.disabled)return;
  var code=(document.getElementById('activation-code').value||'').replace(/[\s-]/g,'').toUpperCase();
  if(!/^([0-9]{8,12}|[A-F0-9]{24})$/.test(code)){setStatus('تأكد من إدخال كود BLOFY STREAM الصحيح',true);return}
- var btn=document.getElementById('redeem');btn.disabled=true;setStatus('جار التحقق من التفعيل…');
+ btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
-  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth()}
+  if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth()}
    else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
  })
@@ -242,7 +282,7 @@ function viewKey(route){
 }
 function focusIdentity(node){
  if(!node||node===document.body)return null;
- var keys=['data-cat','data-channel','data-details','data-watch','data-more','data-season','data-go','data-episodes','data-sort','data-favorite','data-back'];
+ var keys=['data-download','data-cat','data-channel','data-details','data-watch','data-more','data-season','data-go','data-episodes','data-sort','data-favorite','data-back'];
  for(var i=0;i<keys.length;i++)if(node.hasAttribute&&node.hasAttribute(keys[i]))return [keys[i],node.getAttribute(keys[i])];
  if(node.id)return ['id',node.id];
  return null
@@ -283,23 +323,43 @@ function restoreView(route,preferred){
   }else if(root)root.scrollTop=0
  },0)
 }
+function nativeNavIcon(kind){
+ var icons={"home":"<path d=\"M3,10 L12,3 L21,10 M5,9 L5,21 L10,21 L10,14 L14,14 L14,21 L19,21 L19,9\"/>","live":"<path d=\"M4,5 L20,5 Q22,5 22,7 L22,17 Q22,19 20,19 L4,19 Q2,19 2,17 L2,7 Q2,5 4,5 M8,22 L16,22 M10,9 L15,12 L10,15 Z\"/>","movie":"<path d=\"M3,7 L21,7 L21,21 L3,21 Z M3,7 L3,3 L21,3 L21,7 M7,3 L5,7 M13,3 L11,7 M19,3 L17,7\"/>","series":"<path d=\"M3,9 L21,9 L21,21 L3,21 Z M5,5 L19,5 M7,1 L17,1\"/>","collections":"<path d=\"M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z\"/>","downloads":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","search":"<path d=\"M10,3 A7,7 0,1 0,10,17 A7,7 0,1 0,10,3 M15,15 L22,22\"/>","ai":"<path d=\"M11.5,2L13.8,8.2L20,10.5L13.8,12.8L11.5,19L9.2,12.8L3,10.5L9.2,8.2Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M19,16L19.9,18.1L22,19L19.9,19.9L19,22L18.1,19.9L16,19L18.1,18.1Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M4.5,2L5.1,3.4L6.5,4L5.1,4.6L4.5,6L3.9,4.6L2.5,4L3.9,3.4Z\" fill=\"currentColor\" stroke=\"none\"/>","favorites":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","settings":"<path d=\"M3,6 L21,6 M3,18 L21,18 M8,3 L8,9 M16,15 L16,21\"/>","refresh":"<path d=\"M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4\"/>"};
+ return '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+(icons[kind]||icons.home)+'</svg>'
+}
+function compactNativeHome(){
+ return S.route==='home'&&document.documentElement.getAttribute('data-blofy-device')==='touch'
+}
+function compactNativeNavigation(){
+ return document.documentElement.getAttribute('data-blofy-device')==='touch'&&['home','downloads','collections'].indexOf(S.route)>=0
+}
+function nativeHomeHeader(){
+ return '<header class="native-home-header"><div class="native-home-brand"><img src="/stream-icon.svg" alt=""><strong>BLOFY STREAM</strong></div>'+
+ '<button type="button" class="native-home-icon" id="refresh-content" aria-label="تحديث المحتوى">'+nativeNavIcon('refresh')+'</button>'+
+ [['search','البحث'],['ai','الذكاء الاصطناعي'],['settings','الإعدادات']].map(function(v){return '<button class="native-home-icon" type="button" data-go="'+v[0]+'" aria-label="'+v[1]+'">'+nativeNavIcon(v[0])+'</button>'}).join('')+'</header>'+
+ '<div class="native-home-tabs">'+[['live','البث المباشر'],['movie','الأفلام'],['series','المسلسلات']].map(function(v){return '<button class="btn secondary" data-go="'+v[0]+'">'+v[1]+'</button>'}).join('')+'</div>'+
+ '<div class="native-home-refresh" id="refresh-progress" role="status" aria-live="polite"></div>'
+}
 function navHtml(){
- return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
- NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
- '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
+ if(compactNativeNavigation())return '<nav class="rail native-home-bottom" aria-label="التنقل">'+[['home','الرئيسية'],['live','البث المباشر'],['downloads','التنزيلات'],['collections','التصنيفات']].map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'">'+nativeNavIcon(v[0])+'<span>'+v[1]+'</span></button>'}).join('')+'</nav>';
+ return '<aside class="rail native-tv-rail"><div class="brand"><img src="/stream-icon.svg" alt="BLOFY STREAM"></div>'+
+ NAV.filter(function(v){return v[0]!=='favorites'}).map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+nativeNavIcon(v[0])+'</span><span>'+v[2]+'</span></button>'}).join('')+
+ '</aside>'
 }
 function shell(pageTitle,markup){
  var catalogPage=S.route==='live'||S.route==='movie'||S.route==='series';
  S.heading=pageTitle;
+ var nativeHome=compactNativeHome(),nativeNav=compactNativeNavigation(),touchDetail=!catalogPage&&!nativeNav&&document.documentElement.getAttribute('data-blofy-device')==='touch';
  // Each catalog is its own wide TV screen. The global app sidebar belongs
  // to Home, not to the Live/Movies/Series list, as in the native TV workflow.
- app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+'">'+
- (catalogPage?'':navHtml())+'<main class="workspace" id="workspace">'+
- '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
+ app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+(nativeHome?' native-compact-home':'')+(nativeNav?' native-compact-navigation':'')+(touchDetail?' native-touch-detail':'')+'">'+
+ (catalogPage||touchDetail?'':navHtml())+'<main class="workspace" id="workspace">'+
+ (nativeHome?nativeHomeHeader():'<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
  (S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+
  (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
- '<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
+ '<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>')+
  '<div id="screen">'+markup+'</div></main></div>';
+ if(nativeHome){var refresh=document.getElementById('refresh-content');refresh.disabled=!!S.refreshing;refresh.onclick=function(){refreshCatalog(true)}}
  showWebShellUpdateHint();
  // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
@@ -313,6 +373,7 @@ function pushBrowserStep(route,opts){
  }catch(e){}
 }
 function navigate(route,opts,replace){
+ if(S.route==='downloads'||S.route==='offline')closeOfflineVideo();
  if(S.route==='search'&&route!=='search')cancelSearch();
  if(route!==S.route)rememberView();
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
@@ -337,6 +398,7 @@ function navigate(route,opts,replace){
  else if(route==='detail')details(opts||{});
  else if(route==='episodes')episodesScreen(opts||{});
  else if(route==='favorites')favoritesScreen();
+ else if(route==='downloads')downloadsScreen();
  else if(route==='search')searchScreen();
  else if(route==='ai')aiScreen();
  else if(route==='settings')settingsScreen();
@@ -448,7 +510,9 @@ function home(){
    '<button class="story" id="home-shortcut-live" data-go="live"><strong>◉ البث المباشر</strong><small>القنوات المفضلة والتصنيفات</small></button>'+
    '<button class="story" id="home-shortcut-movie" data-go="movie"><strong>▣ الأفلام</strong><small>الملصقات والتفاصيل</small></button>'+
    '<button class="story" id="home-shortcut-series" data-go="series"><strong>▤ المسلسلات</strong><small>المواسم والحلقات</small></button>'+
-   '<button class="story" id="home-shortcut-search" data-go="search"><strong>⌕ البحث</strong><small>ابحث في المكتبة</small></button></div></div>';
+   '<button class="story" id="home-shortcut-downloads" data-go="downloads"><strong>↓ التنزيلات</strong></button>'+
+   '<button class="story" id="home-shortcut-search" data-go="search"><strong>⌕ البحث</strong><small>ابحث في المكتبة</small></button>'+
+   '<button class="story" id="home-shortcut-ai" data-go="ai"><strong>✧ الذكاء الاصطناعي</strong></button></div></div>';
   var shelfMovies=film.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث الأفلام</h2><button class="btn secondary" data-go="movie">عرض الكل</button></div>'+shelves(film,'movie')+'</section>':'';
   var shelfSeries=show.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث المسلسلات</h2><button class="btn secondary" data-go="series">عرض الكل</button></div>'+shelves(show,'series')+'</section>':'';
   var recent=Object.keys(S.watch).map(function(key){
@@ -471,7 +535,7 @@ function home(){
    var focus=hadScreen&&S.keyboardMode&&target.contains(document.activeElement)?
     (document.activeElement.id?['id',document.activeElement.id]:focusIdentity(document.activeElement)):null;
    if(hadScreen)rememberView();
-   target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;
+   target.innerHTML=hero+watch+shelfMovies+shelfSeries+shortcuts;
    restoreView('home',focus);
    enrichPosters('movie',film.slice(0,12));enrichPosters('series',show.slice(0,12))
   }
@@ -1025,23 +1089,58 @@ function saveResume(kind,id,pos,duration,ready){
  }
  profileSave('watch',S.watch)
 }
+function needsPlotTranslation(value){
+ var text=typeof value==='string'?value.trim():'';
+ if(text.length<4||text.length>3900)return false;
+ var arabic=(text.match(/[\u0621-\u064a\u066e-\u06d3]/g)||[]).length;
+ var latin=(text.match(/[a-zA-Z]/g)||[]).length;
+ return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
+}
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
  if(!item){navigate(k,{},true);return}
- if(k==='series'&&S.item&&S.item.id!==id)S.episodes=null;
+ if(k==='series'&&S.episodesSeriesId!==id){S.episodes=null;S.episodesSeriesId='';S.selectedSeason=''}
  S.item={kind:k,id:id,data:item};S.kind=k;S.route='detail';
  shell(title(item),'<div id="detail-root">'+loading('تفاصيل المحتوى')+'</div>');
+ var detailRoot=document.getElementById('detail-root'),detailEpoch=S.accountEpoch,plotSource='',plotTranslation='',plotPending='',plotAttempted='',plotOriginal=false,plotGeneration=0;
+ function detailCurrent(){return S.accountEpoch===detailEpoch&&S.route==='detail'&&S.item&&S.item.kind===k&&S.item.id===id&&document.getElementById('detail-root')===detailRoot}
+ function renderPlotTranslation(){
+  if(!detailCurrent())return;
+  var field=document.getElementById('detail-plot-text'),control=document.getElementById('detail-translate'),notice=document.getElementById('detail-translate-status');
+  if(!field||!control||!notice)return;
+  field.textContent=plotTranslation&&!plotOriginal?plotTranslation:plotSource;
+  control.hidden=!needsPlotTranslation(plotSource);
+  control.disabled=!!plotPending&&plotPending===plotSource;
+  control.textContent=plotTranslation?(plotOriginal?'عرض الترجمة العربية':'عرض الوصف الأصلي'):(control.disabled?'جار الترجمة…':'ترجمة الوصف');
+  notice.textContent=control.disabled?'جار الترجمة بالذكاء الاصطناعي…':'';
+ }
+ function translatePlot(){
+  if(!detailCurrent()||!needsPlotTranslation(plotSource)||plotPending===plotSource)return;
+  if(plotTranslation){plotOriginal=!plotOriginal;renderPlotTranslation();return}
+  var source=plotSource,generation=++plotGeneration;
+  plotAttempted=source;plotPending=source;renderPlotTranslation();
+  api('POST','/api/ai/translate',{overview:source},function(st,data){
+   if(!detailCurrent()||generation!==plotGeneration||plotSource!==source)return;
+   plotPending='';
+   if(st===200&&data&&data.ok===true&&typeof data.translatedOverview==='string'&&data.translatedOverview.trim()){plotTranslation=data.translatedOverview;plotOriginal=false}
+   renderPlotTranslation();
+   var notice=document.getElementById('detail-translate-status');
+   if(!plotTranslation&&notice)notice.textContent=st===429?'الترجمة مشغولة مؤقتًا، حاول لاحقًا.':'تعذرت الترجمة، يمكنك إعادة المحاولة.';
+  });
+ }
  function show(extra){
-  if(S.route!=='detail'||!S.item||S.item.id!==id)return;
+  if(!detailCurrent())return;
   var info=(extra&&extra.info)||{};
   if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
   var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
-  var plot=info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM';
+  var plot=String(info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM');
+  if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation='';plotPending='';plotAttempted='';plotOriginal=false}
   var gen=info.genre||info.genres||'',year=info.releaseDate||info.release_date||item.release_date||'',rating=info.rating||item.rating||'';
   var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
    (hasResume?'<button class="btn secondary" data-watch="movie:'+esc(id)+'" data-from="0">ابدأ من البداية</button>':''):
    '<button class="btn" data-episodes="'+esc(id)+'">▤ المواسم والحلقات</button>';
+  if(k==='movie')buttons+='<button class="btn secondary" data-download="movie:'+esc(id)+'" data-ext="'+esc(item.container_extension||'mp4')+'" data-name="'+esc(title(item))+'">↓ تنزيل الفيلم</button>';
   buttons+='<button class="btn secondary" data-favorite="'+k+':'+esc(id)+'">'+(S.library[key]?'♥ إزالة من المفضلة':'♡ المفضلة')+'</button>';
   var genre=Array.isArray(gen)?gen.join(' • '):String(gen||'');
   var root=document.getElementById('detail-root');if(!root)return;
@@ -1049,18 +1148,21 @@ function details(o){
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
   (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
-  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot">'+esc(plot)+'</p>'+
+  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
   '<div class="detail-actions">'+buttons+'</div>'+
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
+  document.getElementById('detail-translate').onclick=translatePlot;
+  renderPlotTranslation();
+  if(extra&&needsPlotTranslation(plotSource)&&plotAttempted!==plotSource&&!plotTranslation)translatePlot();
   restoreView('detail');
   if(savedFocus&&S.keyboardMode){var target=findFocus(savedFocus);if(target)try{target.focus({preventScroll:true})}catch(e){target.focus()}}
  }
  show();
  var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
  api('GET','/api/catalog?action='+endpoint+enc(id),null,function(st,data){
-  if(S.route!=='detail'||!S.item||S.item.id!==id)return;
-  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
+  if(!detailCurrent())return;
+  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;S.episodesSeriesId=id;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
  })
 }
 function parseEpisodes(data){
@@ -1071,17 +1173,20 @@ function parseEpisodes(data){
  return result
 }
 function episodesScreen(opts){
- var id=String(opts.id||S.item&&S.item.id||'');var item=findItem('series',id)||S.item&&S.item.data;
+ var id=String(opts.id||S.item&&S.item.id||'');var item=findItem('series',id)||(S.item&&S.item.kind==='series'&&S.item.id===id?S.item.data:null);
  if(!item){navigate('series',{},true);return}
- S.route='episodes';S.kind='series';
+ if(S.episodesSeriesId!==id){S.episodes=null;S.episodesSeriesId='';S.selectedSeason=''}
+ S.item={kind:'series',id:id,data:item};S.route='episodes';S.kind='series';
  shell(title(item)+' — الحلقات','<div id="episodes-root">'+loading('مواسم المسلسل')+'</div>');
+ var episodeRoot=document.getElementById('episodes-root'),episodeEpoch=S.accountEpoch;
+ function episodesCurrent(){return S.accountEpoch===episodeEpoch&&S.route==='episodes'&&S.item&&S.item.kind==='series'&&S.item.id===id&&document.getElementById('episodes-root')===episodeRoot}
  function finish(data){
-  if(S.route!=='episodes')return;
+  if(!episodesCurrent())return;
   var list=parseEpisodes(data),seasons={};for(var i=0;i<list.length;i++)seasons[list[i].__season]=true;
   var keys=Object.keys(seasons).sort(function(a,b){return Number(a)-Number(b)});
   if(!keys.length){document.getElementById('episodes-root').innerHTML='<div class="info">تعذر جلب الحلقات لهذا المسلسل.</div>';return}
   if(keys.indexOf(S.selectedSeason)<0)S.selectedSeason=keys[0];
-  S.episodes=data;
+  S.episodes=data;S.episodesSeriesId=id;
   var chosen=list.filter(function(x){return x.__season===S.selectedSeason}).sort(function(a,b){return Number(a.episode_num||0)-Number(b.episode_num||0)});
   var rail=keys.map(function(x){return '<button class="cat-item '+(x===S.selectedSeason?'selected':'')+'" data-season="'+esc(x)+'">الموسم '+esc(x)+'</button>'}).join('');
   var html='<div class="episode-layout"><aside class="cat-rail season-rail"><div class="pane-head"><strong>المواسم</strong></div><div class="pane-scroll">'+rail+'</div></aside>'+
@@ -1093,12 +1198,192 @@ function episodesScreen(opts){
    '<span class="episode-meta">الموسم '+esc(S.selectedSeason)+
    (x.info&&x.info.duration||x.duration?' • '+esc(String(x.info&&x.info.duration||x.duration).slice(0,30)):'')+
    (pct?' • متابعة '+pct+'٪':' • اضغط للمشاهدة')+'</span>'+
-   (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'
+   (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'+
+   '<button class="btn secondary episode-download" type="button" data-download="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'">↓ تنزيل الحلقة</button>'
   }).join('')+'</section></div>';
   document.getElementById('episodes-root').innerHTML=html;restoreView('episodes');
  }
- if(S.episodes&&S.episodes.episodes)finish(S.episodes);
- else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(st===200)finish(d);else document.getElementById('episodes-root').innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div>'})
+ if(S.episodesSeriesId===id&&S.episodes&&S.episodes.episodes)finish(S.episodes);
+ else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(!episodesCurrent())return;if(st===200)finish(d);else episodeRoot.innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div><button class="btn secondary" data-episodes="'+esc(id)+'">إعادة المحاولة</button>'})
+}
+/* Web downloads: file delivery is delegated to the browser's download manager.
+ * A requested transfer is NOT claimed to be complete or available offline in
+ * this web app. All URLs stay same-origin and are reauthorized on the server.
+ * This feature never downloads live channels or entire HLS playlists. */
+function webDownloadPath(kind,id,ext){
+ var k=String(kind||''),n=String(id||''),x=String(ext||'').toLowerCase();
+ if((k!=='movie'&&k!=='series')||!/^[1-9][0-9]{0,14}$/.test(n)||
+   ['mp4','mkv','avi','mov','ts'].indexOf(x)<0)return '';
+ return '/api/download/'+k+'/'+n+'.'+x
+}
+function webDownloadHistory(){
+ var rows=S.profileKey?readJson(profileStorageKey('downloadRequests'),[]):[];
+ return Array.isArray(rows)?rows.filter(function(row){
+  return row&&webDownloadPath(row.kind,row.id,row.ext)&&
+    Number.isFinite(Number(row.at))&&String(row.name||'').length<200
+ }).slice(0,40):[]
+}
+// User-initiated, account-scoped offline media, separate from the shell cache.
+// OPFS writes stream directly to disk; no full movie held in JavaScript RAM.
+var OFFLINE_GRANT_KEY='blofy_offline_grant_v1',OFFLINE_MAX_BYTES=2*1024*1024*1024,offlineTransfer=null,offlineVideoUrl='',offlinePlaybackTimer=null;
+function offlineGrantValid(grant,now){
+ return !!grant&&/^[a-f0-9]{24}$/.test(grant.profile||'')&&Number.isFinite(grant.verifiedAt)&&Number.isFinite(grant.until)&&now>=grant.verifiedAt&&now<grant.until&&grant.until-grant.verifiedAt<=86400000
+}
+function offlineGrant(){
+ var grant=readJson(OFFLINE_GRANT_KEY,null);return offlineGrantValid(grant,Date.now())?grant:null
+}
+function rememberOfflineGrant(profile,expiry){
+ var end=typeof expiry==='number'?expiry:Date.parse(String(expiry||'')),now=Date.now();
+ if(/^[a-f0-9]{24}$/.test(profile||'')&&Number.isFinite(end)&&end>now)writeJson(OFFLINE_GRANT_KEY,{profile:profile,verifiedAt:now,until:Math.min(end,now+86400000)})
+}
+function clearOfflineGrant(){try{localStorage.removeItem(OFFLINE_GRANT_KEY)}catch(e){}if(offlineTransfer)offlineTransfer.ctrl.abort();closeOfflineVideo()}
+function offlineSupported(){return !!(navigator.storage&&navigator.storage.getDirectory&&window.AbortController&&window.URL&&URL.createObjectURL&&window.ReadableStream)}
+function offlineRows(profile){
+ var rows=readJson('blofy_web_offline_v1:'+profile,[]);
+ return Array.isArray(rows)?rows.filter(function(row){return row&&/^(movie|series)-[1-9][0-9]{0,14}-[a-f0-9]{24}\.mp4$/.test(row.file)&&Number.isSafeInteger(row.size)&&row.size>0&&row.size<=OFFLINE_MAX_BYTES&&typeof row.name==='string'}).slice(0,20):[]
+}
+async function offlineFolder(profile){
+ if(!/^[a-f0-9]{24}$/.test(profile)||!offlineSupported())throw Error('unsupported');
+ var root=await navigator.storage.getDirectory(),base=await root.getDirectoryHandle('blofy-offline-v1',{create:true});
+ return base.getDirectoryHandle(profile,{create:true})
+}
+function offlineMessage(text){
+ var progress=document.getElementById('offline-progress');if(progress){progress.hidden=!offlineTransfer;progress.value=offlineTransfer?offlineTransfer.pct||0:0}
+ var cancel=document.getElementById('offline-cancel');if(cancel)cancel.hidden=!offlineTransfer;
+ var el=document.getElementById('offline-status')||document.getElementById('web-download-message');
+ if(!el){el=document.createElement('div');el.id='web-download-message';el.className='info';var target=document.querySelector('#detail-root .detail-actions,.episode-list,#screen');if(target)target.appendChild(el)}
+ if(el)el.textContent=text
+}
+function closeOfflineVideo(){
+ if(offlinePlaybackTimer){clearInterval(offlinePlaybackTimer);offlinePlaybackTimer=null}
+ var video=document.getElementById('offline-video');if(video)try{video.pause();video.removeAttribute('src');video.load()}catch(e){}
+ if(offlineVideoUrl){URL.revokeObjectURL(offlineVideoUrl);offlineVideoUrl=''}
+}
+function drawOfflineDownloads(profile,standalone){
+ closeOfflineVideo();
+ var root=document.getElementById('offline-library');if(!root)return;
+ var rows=offlineRows(profile);
+ root.innerHTML=rows.length?rows.map(function(row,index){return '<div class="download-row"><strong>'+esc(row.name)+'</strong><span>'+Math.round(row.size/1048576)+' MB • محفوظ</span><button class="btn" data-offline-play="'+index+'">▶ مشاهدة</button><button class="btn secondary" data-offline-delete="'+index+'">حذف</button></div>'}).join(''):'<div class="empty-state">لا توجد ملفات مكتملة. نزّل فيلم MP4 أو حلقة أثناء اتصالك بالإنترنت.</div>';
+ root.onclick=async function(event){
+  var node=event.target.closest&&event.target.closest('[data-offline-play],[data-offline-delete]');if(!node||!root.contains(node))return;
+  var grant=offlineGrant(),row=rows[Number(node.getAttribute(node.hasAttribute('data-offline-play')?'data-offline-play':'data-offline-delete'))];
+  if(!row||!grant||grant.profile!==profile){offlineMessage('اتصل بالإنترنت للتحقق من اشتراكك.');return}
+  try{
+   var folder=await offlineFolder(profile);
+   if(node.hasAttribute('data-offline-delete')){
+    await folder.removeEntry(row.file);localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(offlineRows(profile).filter(function(x){return x.file!==row.file})));drawOfflineDownloads(profile,standalone);return
+   }
+   var file=await (await folder.getFileHandle(row.file)).getFile();
+   if(file.size!==row.size)throw Error('incomplete');
+   if(!root.isConnected||!offlineGrant()||offlineGrant().profile!==profile)return;
+   closeOfflineVideo();var player=document.getElementById('offline-player');
+   if(!player)return;
+   player.innerHTML='<video id="offline-video" controls playsinline preload="metadata" style="width:100%;max-height:65vh;background:#000"></video>';
+   var video=document.getElementById('offline-video');
+   offlineVideoUrl=URL.createObjectURL(file.slice(0,file.size,'video/mp4'));video.src=offlineVideoUrl;
+   video.onerror=function(){offlineMessage('هذا الملف غير مدعوم في متصفح جهازك.')};
+   offlinePlaybackTimer=setInterval(function(){var current=offlineGrant();if(!current||current.profile!==profile||!video.isConnected){closeOfflineVideo();offlineMessage('اتصل بالإنترنت لتجديد صلاحية المشاهدة.')}},1000);
+   var play=video.play();if(play&&play.catch)play.catch(function(){})
+  }catch(e){offlineMessage('تعذر فتح الملف المحفوظ. قد تكون مساحة التخزين حُذفت من المتصفح.')}
+ }
+}
+function offlineOnlyScreen(){
+ var grant=offlineGrant();if(!grant||!offlineSupported())return false;
+ S.route='offline';S.userVerified=false;
+ app.innerHTML='<main class="workspace"><h1>BLOFY STREAM</h1><h2>التنزيلات • بدون إنترنت</h2><div id="offline-status" role="status"></div><div id="offline-player"></div><div id="offline-library"></div><button class="btn secondary" id="offline-reconnect">التحقق من الاتصال</button></main>';
+ document.getElementById('offline-reconnect').onclick=function(){closeOfflineVideo();S.route='boot';bootSession(0)};
+ drawOfflineDownloads(grant.profile,true);return true
+}
+async function saveOfflineDownload(kind,id,ext,name){
+ if(!S.userVerified||!offlineSupported()){offlineMessage('التنزيل داخل التطبيق غير مدعوم في هذا المتصفح.');return}
+ if(String(ext).toLowerCase()!=='mp4'||!webDownloadPath(kind,id,ext)){offlineMessage('المشاهدة دون إنترنت تدعم ملفات MP4 المتوافقة مع جهازك حاليًا.');return}
+ if(offlineTransfer){offlineMessage('يوجد تنزيل جارٍ.');return}
+ var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl,name:String(name||'فيديو').slice(0,160),pct:0};offlineTransfer=task;
+ var folder=null,fileName='',writer=null,reader=null,committed=false;
+ function current(){return S.userVerified&&S.accountEpoch===epoch&&S.profileKey===profile&&!ctrl.signal.aborted}
+ function check(){if(!current())throw Error('cancelled')}
+ try{
+  offlineMessage('جار التحقق من الاشتراك…');
+  var session=await fetch('/api/session',{credentials:'same-origin',cache:'no-store',signal:ctrl.signal});
+  if(!session.ok)throw Error('auth');var info=await session.json();check();
+  if(info.active!==true||info.profileKey!==profile)throw Error('auth');
+  rememberOfflineGrant(profile,info.expiresAt);if(!offlineGrant())throw Error('auth');
+  if(offlineRows(profile).length>=20)throw Error('quota');
+  folder=await offlineFolder(profile);check();
+  var nonce=new Uint8Array(12);crypto.getRandomValues(nonce);
+  fileName=kind+'-'+id+'-'+Array.from(nonce,function(x){return ('0'+x.toString(16)).slice(-2)}).join('')+'.mp4';
+  var response=await fetch(webDownloadPath(kind,id,ext),{credentials:'same-origin',cache:'no-store',signal:ctrl.signal});check();
+  if(response.status!==200||!response.body||!response.headers.get('content-disposition')||!/^attachment;/i.test(response.headers.get('content-disposition')))throw Error('source');
+  var total=Number(response.headers.get('content-length'));
+  if(!Number.isSafeInteger(total)||total<1||total>OFFLINE_MAX_BYTES)throw Error('size');
+  if(navigator.storage.estimate){var estimate=await navigator.storage.estimate();if(Number.isFinite(estimate.quota)&&Number.isFinite(estimate.usage)&&estimate.quota-estimate.usage<total+1048576)throw Error('quota')}
+  var handle=await folder.getFileHandle(fileName,{create:true});
+  writer=await handle.createWritable();reader=response.body.getReader();
+  var written=0,last=-1;
+  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار التنزيل داخل BLOFY STREAM • '+pct+'٪')}}
+  check();if(written!==total)throw Error('size');await writer.close();writer=null;
+  var saved=await handle.getFile();check();if(saved.size!==total)throw Error('size');
+  var rows=offlineRows(profile);rows.unshift({file:fileName,size:total,name:String(name||'فيديو').slice(0,160)});
+  localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(rows.slice(0,20)));committed=true;
+  offlineMessage('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.');
+  if(S.route==='downloads')drawOfflineDownloads(profile,false)
+ }catch(e){offlineMessage(e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
+ finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}
+}
+function downloadsScreen(){
+ shell('التنزيلات','<section class="downloads-page"><p class="small muted">الملفات المحفوظة بالكامل للمشاهدة دون إنترنت.</p><div id="offline-space" class="small muted"></div><div class="row offline-filters"><button class="btn secondary" id="offline-all">الكل</button><button class="btn secondary" id="offline-active">قيد التنزيل</button><button class="btn secondary" id="offline-ready">جاهزة</button></div><div id="offline-status" role="status" aria-live="polite"></div><progress id="offline-progress" max="100" value="0" hidden></progress><button class="btn secondary" id="offline-cancel" hidden>إلغاء التنزيل الجاري</button><div id="offline-player"></div><div id="offline-library"></div><p class="small muted">تجديد صلاحية المشاهدة بالاتصال مرة كل 24 ساعة.</p></section>');
+ var profile=S.profileKey,filter='all',library=document.getElementById('offline-library'),space=document.getElementById('offline-space');
+ var saved=offlineRows(profile).reduce(function(sum,row){return sum+row.size},0);space.textContent='المساحة المستخدمة: '+Math.round(saved/1048576)+' ميغابايت';
+ if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(function(info){if(space.isConnected&&Number.isFinite(info.quota)&&Number.isFinite(info.usage))space.textContent+=' • المتاحة تقريبًا: '+Math.max(0,Math.floor((info.quota-info.usage)/1048576))+' ميغابايت'}).catch(function(){});
+ function setFilter(next){filter=next;library.hidden=filter==='active';['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).classList.toggle('active',key===filter)});if(next==='active')offlineMessage(offlineTransfer?'جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪':'لا يوجد تنزيل جارٍ.')}
+ ['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).onclick=function(){setFilter(key)}});
+ setFilter('all');if(offlineTransfer)offlineMessage('جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪');
+ document.getElementById('offline-cancel').onclick=function(){if(offlineTransfer)offlineTransfer.ctrl.abort()};
+ drawOfflineDownloads(S.profileKey,false);restoreView('downloads')
+}
+function requestWebDownload(kind,id,ext,name){
+ var url=webDownloadPath(kind,id,ext);
+ var message=document.getElementById('download-status')||document.getElementById('web-download-message');
+ if(!message){message=document.createElement('div');message.id='web-download-message';message.className='info';message.setAttribute('role','status');
+  var target=document.querySelector('#detail-root .detail-actions,.downloads-page,.episode-list');
+  if(target)target.insertAdjacentElement('afterend',message);
+  else {var hud=document.getElementById('player-more-panel');
+   if(hud)hud.appendChild(message);
+   else {var screen=document.querySelector('#screen');if(screen)screen.insertBefore(message,screen.firstChild)}}}
+ if(!url){if(message)message.textContent='صيغة هذا الملف لا تدعم التنزيل المباشر على الويب.';return}
+ if(!S.userVerified){if(message)message.textContent='فعّل اشتراكك أولًا.';return}
+ var epoch=S.accountEpoch;
+ if(S.downloadPending){if(message)message.textContent='يوجد طلب تنزيل قيد التحقق، حاول بعد انتهائه.';return}
+ var pending={epoch:epoch,url:url},controller=typeof AbortController==='function'?new AbortController():null;
+ S.downloadPending=pending;
+ var timer=setTimeout(function(){if(S.downloadPending!==pending)return;S.downloadPending=null;if(controller)controller.abort();if(message&&epoch===S.accountEpoch)message.textContent='انتهت مهلة التحقق؛ حاول مرة أخرى.'},15000);
+ function finish(){clearTimeout(timer);if(S.downloadPending!==pending)return false;S.downloadPending=null;return epoch===S.accountEpoch&&S.userVerified}
+ if(message)message.textContent='جار التحقق من صلاحية طلب التنزيل…';
+ fetch(url,{method:'HEAD',credentials:'same-origin',cache:'no-store',signal:controller?controller.signal:undefined}).then(function(res){
+  if(!finish())return;
+  if(!res.ok){if(message)message.textContent=res.status===503?'التنزيلات غير مفعلة على هذا السيرفر حاليًا.':res.status===429?'التنزيلات مشغولة حاليًا، حاول لاحقًا.':'هذا الملف غير متوفر للتنزيل المباشر حاليًا.';return}
+  var link=document.createElement('a');link.href=url;link.download='BLOFY-STREAM-'+kind+'-'+id+'.'+ext;
+  function recordRequest(){
+   if(epoch!==S.accountEpoch||!S.userVerified)return false;
+   var rows=webDownloadHistory(),safeName=String(name||((kind==='movie'?'فيلم ':'حلقة ')+id)).slice(0,160);
+   rows.unshift({kind:kind,id:id,ext:ext,name:safeName,at:Date.now()});
+   profileSave('downloadRequests',rows.slice(0,40));
+   return true
+  }
+  // iOS Safari/PWA may discard a programmatic download after an asynchronous
+  // preflight. Offer a real user-activated anchor instead, with no popups.
+  if(message&&document.documentElement&&document.documentElement.getAttribute('data-blofy-device')==='touch'){
+   message.textContent='';link.className='btn';link.textContent='↓ حفظ الملف على الجهاز';
+   link.onclick=function(e){
+    if(!recordRequest()){e.preventDefault();link.remove();return}
+    setTimeout(function(){if(link.isConnected){link.remove();message.textContent='بدأ طلب الحفظ؛ تابع تنزيلات جهازك.'}},0)
+   };
+   message.appendChild(link);return
+  }
+  document.body.appendChild(link);link.click();link.remove();recordRequest();
+  if(message)message.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.';
+  if(S.route==='downloads'){downloadsScreen();var status=document.getElementById('download-status');if(status)status.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.'}
+ }).catch(function(){if(finish()&&message)message.textContent='تعذر التحقق من التنزيل، حاول مرة أخرى.'})
 }
 function favoritesScreen(){
  shell('المفضلة','<div id="fav-root"></div>');var keys=Object.keys(S.library),html='';
@@ -1290,6 +1575,7 @@ function refreshCatalog(manual,version){
  function finish(){
   if(!current())return;
   S.refreshing=false;if(button)button.disabled=false;
+  if(manual&&S.route==='home'&&button&&button.isConnected){rememberView();home()}
   if(!errors.length){
    if(version)S.catalogVersion=version;
    if(S.catalogVersionPending===version)S.catalogVersionPending=null;
@@ -1339,14 +1625,31 @@ function checkCatalogVersion(){
   }else S.catalogVersionPending=null
  })
 }
+function pictureFitMode(value){return value==='zoom'?'cover':value==='fill'?'fill':'contain'}
 function settingsScreen(){
  shell('الإعدادات','<div class="customer-settings">'+
- '<section class="customer-setting-group"><h3>المحتوى</h3><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
+ '<section class="customer-setting-group"><h3>اشتراكي والمكتبة</h3><button class="customer-setting-row" id="subscription-status">اشتراكي <span>‹</span></button><p id="subscription-feedback" class="customer-setting-feedback" role="status" aria-live="polite"></p><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
+ '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button></section>'+
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
- '<p class="customer-version">BLOFY STREAM · 2026.11.27.1</p></div>');
+ '<p class="customer-version">BLOFY STREAM · 2026.11.28.56.0.3</p></div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
+ var fitButton=document.getElementById('picture-fit'),fitLabel=document.getElementById('picture-fit-label'),fitOptions=['fit','zoom','fill'],fitLabels=['ملاءمة','تكبير','ملء'];
+ function updateFit(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));fitLabel.textContent=fitLabels[Math.max(0,index)]}
+ updateFit();fitButton.onclick=function(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));profileSave('pictureFit',fitOptions[(Math.max(0,index)+1)%3]);updateFit()};
+ document.getElementById('subscription-status').onclick=function(){
+  var button=this,notice=document.getElementById('subscription-feedback'),epoch=S.accountEpoch;button.disabled=true;notice.textContent='جار التحقق…';
+  api('GET','/api/session',null,function(st,data){
+   if(S.accountEpoch!==epoch||S.route!=='settings'||!notice.isConnected)return;
+   button.disabled=false;
+   if(st===200&&data&&data.active===true&&data.profileKey===S.profileKey){
+    var expiry=new Date(data.expiresAt),days=Number(data.daysRemaining);rememberOfflineGrant(S.profileKey,data.expiresAt);
+    notice.textContent='الاشتراك نشط'+(data.daysRemaining!=null&&Number.isFinite(days)?' • '+Math.max(0,days)+' يوم متبقي':'')+(data.expiresAt&&!isNaN(expiry.getTime())?' • ينتهي '+expiry.toLocaleDateString('ar-SA'):'')
+   }else if(st===401||st===403||st===200&&data&&data.active===false){clearOfflineGrant();notice.textContent='الاشتراك غير نشط. تحقق من التفعيل.'}
+   else notice.textContent='تعذر التحقق مؤقتًا، لم يتم إلغاء اشتراكك.'
+  })
+ };
  document.getElementById('clear-watch-history').onclick=function(){
   var trigger=this,existing=document.getElementById('watch-clear-confirm');
   if(existing){existing.remove();trigger.focus();return}
@@ -1388,7 +1691,7 @@ function settingsScreen(){
  }
  document.getElementById('logout').onclick=function(){
   if(S.loggingOut)return;
-  S.loggingOut=true;
+  S.loggingOut=true;clearOfflineGrant();
   var button=document.getElementById('logout');if(button)button.disabled=true;
   // Close the video while the authenticated cookie is still valid. In-flight
   // stop requests otherwise arrive after logout and get a 401, leaking a
@@ -1521,6 +1824,7 @@ function cleanupPlayer(){
   S.playerView.liveHlsHandoff=null;
   clearVodBufferNotice(S.playerView);
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
+  if(S.playerView.disposeSubtitles)S.playerView.disposeSubtitles();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
@@ -1563,6 +1867,54 @@ function commentarySeekTarget(audio,delta){
   }
  }catch(e){}
  return null
+}
+// Local HLS buffer only. This does not advertise server-side DVR or
+// TimeShift: the source may remove old segments at any moment.
+function bufferedLiveRange(video,record){
+ if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
+ var at=Number(video.currentTime),seekable=video.seekable,buffered=video.buffered;
+ if(!Number.isFinite(at)||!seekable||!buffered)return null;
+ try{
+  for(var i=0;i<Math.min(seekable.length,32);i++){
+   var ss=seekable.start(i),se=seekable.end(i);
+   if(at<ss||at>se)continue;
+   for(var j=0;j<Math.min(buffered.length,32);j++){
+    var start=Math.max(ss,buffered.start(j)),end=Math.min(se,buffered.end(j));
+    if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
+    return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
+   }
+  }
+ }catch(e){}
+ return null
+}
+function bufferedLiveSeekTarget(video,record,action){
+ var range=bufferedLiveRange(video,record);if(!range)return null;
+ var start=range.start,end=range.end,at=range.at;
+ var target=action==='back'?at-5:action==='forward'?at+5:action==='back-one'?at-1:action==='forward-one'?at+1:action==='back-ten'?at-10:action==='forward-ten'?at+10:action==='earliest'?start+0.25:action==='latest'?end-0.75:NaN;
+ if(action==='forward'||action==='forward-ten')target=Math.min(target,end-0.75);
+ if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target;
+ return null
+}
+// Convert only bounded plain-text timed cues. No external resources or markup.
+function localSubtitleVtt(raw){
+ if(typeof raw!=='string'||raw.length>2*1024*1024)return null;
+ var blocks=raw.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').trim().split(/\n[ \t]*\n/),cues=[];
+ function stamp(value){
+  var m=/^(?:(\d{1,3}):)?([0-5]\d):([0-5]\d)[,.](\d{3})$/.exec(value);
+  if(!m)return null;
+  var h=Number(m[1]||0);return {ms:((h*60+Number(m[2]))*60+Number(m[3]))*1000+Number(m[4]),text:('00'+h).slice(-Math.max(2,String(h).length))+':'+m[2]+':'+m[3]+'.'+m[4]}
+ }
+ for(var i=0;i<blocks.length&&cues.length<20000;i++){
+  var lines=blocks[i].split('\n'),timing=-1;
+  if(/^WEBVTT(?:\s|$)|^(?:NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0]))continue;
+  for(var j=0;j<Math.min(2,lines.length);j++)if(lines[j].indexOf('-->')>=0){timing=j;break}
+  if(timing<0)continue;
+  var match=/^(\S+)\s+-->\s+(\S+)(?:\s.*)?$/.exec(lines[timing].trim());if(!match)continue;
+  var start=stamp(match[1]),end=stamp(match[2]);if(!start||!end||end.ms<=start.ms)continue;
+  var body=lines.slice(timing+1).join('\n').replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim();
+  if(body)cues.push(start.text+' --> '+end.text+'\n'+body)
+ }
+ return cues.length?'WEBVTT\n\n'+cues.join('\n\n')+'\n':null
 }
 function simpleLiveStatus(message,error){
  if(error||!message)return message;
@@ -1714,7 +2066,7 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
  */
 function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
  if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
-    record.reconnecting||Number(video.readyState)<2){
+    record.reconnecting||Number(video.readyState)<2||now<(record.localBufferSeekUntil||0)){
   record.liveLagSince=0;return false
  }
  var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
@@ -2921,6 +3273,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button></div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
+ (isLive?playerControl('player-commentary','audio','المعلقين'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -2933,7 +3286,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-live-buffer" type="button">توقيت البث</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -2951,6 +3304,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     visualOutageCount:0,visualOutageMs:0,longestVisualOutageMs:0,
     visualOutageByEngine:{hls:{count:0,ms:0},mpegts:{count:0,ms:0}},
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
+ video.style.objectFit=pictureFitMode(readJson(profileStorageKey('pictureFit'),'fit'));
  // The 20-minute acceptance uses existing decoded-frame and source health
  // observations. It never opens a new media, catalog or telemetry request.
  // Monotonic time avoids TV system-clock/date problems.
@@ -3721,7 +4075,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
       [result.duration_secs,'seconds'],[result.duration,'duration']];
      for(var i=0;i<opts.length;i++){var d=durationSeconds(opts[i][0],opts[i][1]);if(d>=120){state.duration=d;break}}
     }else if(kind==='series'){
-     S.episodes=result;
+     if(S.item&&S.item.kind==='series'&&S.item.id===String(episodeParent)){S.episodes=result;S.episodesSeriesId=String(episodeParent)}
      var eps=parseEpisodes(result);
      for(var j=0;j<eps.length;j++)if(String(eps[j].id)===String(id)){
       var episode=eps[j],extra=episode.info||{},options=[
@@ -4011,7 +4365,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -4019,6 +4373,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function stopCommentary(){
   commentaryEpoch++;
+  if(commentaryPictureSeek){clearTimeout(commentaryPictureSeek.timer);commentaryPictureSeek=null}
   if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}
   var old=commentary;commentary=null;
   if(!old)return;
@@ -4034,7 +4389,25 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('pause',stopCommentary);
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
- video.addEventListener('seeking',stopCommentary);
+ video.addEventListener('seeking',function(){
+  var intentional=commentaryPictureSeek;
+  if(intentional&&commentary===intentional.audio&&S.play===intentional.transport&&Math.abs(Number(video.currentTime)-intentional.target)<0.5)return;
+  stopCommentary()
+ });
+ video.addEventListener('seeked',function(){
+  var intentional=commentaryPictureSeek;if(!intentional)return;
+  clearTimeout(intentional.timer);commentaryPictureSeek=null;
+  if(commentary!==intentional.audio||S.play!==intentional.transport||video.readyState<2||Math.abs(Number(video.currentTime)-intentional.target)>0.5)stopCommentary()
+ });
+ function adjustCommentaryPicture(action){
+  if(!commentary||!commentary.audible||commentaryPictureSeek||video.paused||document.hidden||S.playerView!==state||S.route!=='player')return false;
+  var transport=S.play,target=bufferedLiveSeekTarget(video,transport,action);
+  if(!transport||transport.video!==video||target===null)return false;
+  var intentional={audio:commentary,transport:transport,target:target,timer:null};
+  commentaryPictureSeek=intentional;
+  intentional.timer=setTimeout(function(){if(commentaryPictureSeek===intentional)stopCommentary()},3000);
+  try{transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}catch(e){stopCommentary();return false}
+ }
  video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}});
  video.addEventListener('waiting',function(){
   if(!commentary||commentaryVideoWait||video.readyState>=3)return;
@@ -4043,13 +4416,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  });
  function startCommentary(track){
   stopCommentary();
-  if(S.route!=='player'||S.playerView!==state||video.paused||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
+  if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
   function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true
+   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true;
+   commentaryNotice('المعلق: '+String(track.label||'').slice(0,80))
   };
   audio.onerror=audio.onended=fail;
   audio.onwaiting=audio.onstalled=function(){
@@ -4079,54 +4453,122 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    })(list[j],j)
   }
   if(!isLive){showPlayerChoices('المسارات الصوتية',options,this);return}
-  if(commentary&&commentary.audible){
-   var active=commentary;
-   function adjustCommentary(delta){
-    if(commentary!==active||!active.audible)return;
-    var target=commentarySeekTarget(active.audio,delta);
-    if(target===null){playerStatus('ضبط التزامن غير متاح لهذا الصوت.');return}
-    try{active.audio.currentTime=target}catch(e){playerStatus('تعذر ضبط توقيت الصوت.')}
-   }
-   if(commentarySeekTarget(active.audio,-1)!==null)options.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjustCommentary(-1)}});
-   if(commentarySeekTarget(active.audio,1)!==null)options.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjustCommentary(1)}});
-  }
-  var epoch=++commentaryEpoch,channel=String(state.id);
-  options.push({name:'المعلقون • BLOFY',selected:false,select:function(){
-   api('GET','/api/commentary?channel='+enc(channel),null,function(st,data){
-    if(S.route!=='player'||S.playerView!==state||String(state.id)!==channel||epoch!==commentaryEpoch||document.hidden)return;
-    var list=[{name:'الصوت الأصلي',selected:!commentary,select:stopCommentary}];
-    if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
-     if(track&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
-    });
-    if(list.length===1){commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');return}
-    showPlayerChoices('المعلقون',list,audioButton)
-   })
-  }});
-  showPlayerChoices('الصوت والمعلقون',options,this)
+  showPlayerChoices('المسارات الصوتية',options,this)
  };
- var subtitleButton=document.getElementById('player-subtitles');
+ function openCommentaryChoices(origin){
+  if(!isLive||S.route!=='player'||S.playerView!==state||document.hidden)return;
+  var epoch=++commentaryEpoch,channel=String(state.id);
+  commentaryNotice('جار تحميل المعلقين…');
+  api('GET','/api/commentary?channel='+enc(channel),null,function(st,data){
+   if(S.route!=='player'||S.playerView!==state||String(state.id)!==channel||epoch!==commentaryEpoch||document.hidden)return;
+   var list=[{name:'الصوت الأصلي للقناة',selected:!commentary,select:stopCommentary}];
+   if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
+    if(track&&typeof track.label==='string'&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
+   });
+   if(commentary&&commentary.audible){
+    var active=commentary;
+    function adjust(delta){
+     if(commentary!==active||!active.audible)return;
+     var target=commentarySeekTarget(active.audio,delta);
+     if(target===null){commentaryNotice('ضبط التوقيت غير متاح لهذا الصوت.');return}
+     try{active.audio.currentTime=target;commentaryNotice(delta<0?'تم تأخير الصوت ثانية':'تم تقديم الصوت ثانية')}catch(e){commentaryNotice('تعذر ضبط توقيت الصوت.')}
+    }
+    if(commentarySeekTarget(active.audio,-1)!==null)list.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjust(-1)}});
+    if(commentarySeekTarget(active.audio,1)!==null)list.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjust(1)}});
+    // Progressive live audio may not expose a seek range. Instead allow a
+    // deliberate one-second picture adjustment inside actual retained HLS bytes.
+    ['back-one','forward-one'].forEach(function(action){
+     if(bufferedLiveSeekTarget(video,S.play,action)===null)return;
+     list.push({name:action==='back-one'?'تأخير الصورة ثانية':'تقديم الصورة ثانية',selected:false,select:function(){
+      if(commentary!==active)return;
+      commentaryNotice(adjustCommentaryPicture(action)?'تم طلب ضبط توقيت الصورة':'ضبط التوقيت غير متاح الآن.')
+     }})
+    });
+   }
+   if(st!==200)commentaryNotice('تعذر جلب المعلقين الآن؛ الصوت الأصلي متاح.');
+   else if(list.length===1)commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');
+   else{var notice=document.getElementById('player-audio-notice');if(notice)notice.hidden=true}
+   showPlayerChoices('المعلقين',list,origin)
+  })
+ }
+ var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
+ if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
+ if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
+ var bufferButton=document.getElementById('player-live-buffer');
+ if(bufferButton)bufferButton.onclick=function(){
+  if(!isLive||S.playerView!==state||S.route!=='player')return;
+  var record=S.play,origin=this,options=[],range=null;
+  if(record&&record.video===video){
+   range=bufferedLiveRange(video,record);
+   [['earliest','أقدم نقطة محفوظة'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['latest','أحدث نقطة محفوظة']].forEach(function(entry){
+    if(bufferedLiveSeekTarget(video,record,entry[0])===null)return;
+    options.push({name:entry[1],selected:false,select:function(){
+     if(S.play!==record||S.playerView!==state||S.route!=='player')return;
+     var target=bufferedLiveSeekTarget(video,record,entry[0]);
+     if(target===null){playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return}
+     try{stopCommentary();video.currentTime=target;record.localBufferSeekUntil=Date.now()+20000;playerStatus('')}catch(e){playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
+    }})
+   });
+  }
+  if(!options.length){playerStatus('لا يتوفر جزء قابل للرجوع داخل ذاكرة المشغل الآن.');return}
+  showPlayerChoices('ذاكرة البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
+ };
+ var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
+ function clearLocalSubtitle(){
+  subtitleGeneration++;
+  if(!localSubtitle)return;
+  try{localSubtitle.element.track.mode='disabled';localSubtitle.element.remove();URL.revokeObjectURL(localSubtitle.url)}catch(e){}
+  localSubtitle=null
+ }
+ state.disposeSubtitles=clearLocalSubtitle;
+ function disableSubtitles(){
+  var activeEngine=S.play&&S.play.engine;
+  if(activeEngine&&activeEngine.subtitleTracks&&activeEngine.subtitleTracks.length){try{activeEngine.subtitleDisplay=false;activeEngine.subtitleTrack=-1}catch(e){}}
+  var native=video.textTracks;
+  if(native)for(var n=0;n<native.length;n++)if(native[n].kind==='subtitles'||native[n].kind==='captions')native[n].mode='disabled'
+ }
+ function localSubtitlePicker(){
+  if(isLive||S.playerView!==state||S.route!=='player'||!window.FileReader||!window.URL||!URL.createObjectURL)return;
+  var input=document.createElement('input');input.type='file';input.accept='.srt,.vtt,text/vtt,application/x-subrip';input.hidden=true;
+  var generation=++subtitleGeneration;
+  input.onchange=function(){
+   var file=input.files&&input.files[0];input.remove();
+   if(!file||generation!==subtitleGeneration||S.playerView!==state)return;
+   if(!/\.(srt|vtt)$/i.test(file.name)||file.size<1||file.size>2*1024*1024){playerStatus('اختر ملف SRT أو VTT بحجم لا يتجاوز 2 ميغابايت.');return}
+   var reader=new FileReader();
+   reader.onload=function(){
+    if(generation!==subtitleGeneration||S.playerView!==state||S.route!=='player')return;
+    var vtt=localSubtitleVtt(String(reader.result||''));if(!vtt){playerStatus('ملف الترجمة غير صالح.');return}
+    clearLocalSubtitle();disableSubtitles();
+    var url=URL.createObjectURL(new Blob([vtt],{type:'text/vtt;charset=utf-8'})),track=document.createElement('track');
+    track.kind='subtitles';track.label='ترجمة من الجهاز';track.srclang='ar';track.src=url;
+    localSubtitle={element:track,url:url};var chosen=localSubtitle;
+    track.onload=function(){if(localSubtitle===chosen&&S.playerView===state)try{track.track.mode='showing'}catch(e){}};
+    track.onerror=function(){if(localSubtitle===chosen){clearLocalSubtitle();playerStatus('تعذر قراءة ملف الترجمة.')}};
+    video.appendChild(track);try{track.track.mode='showing'}catch(e){}
+   };
+   reader.onerror=function(){if(generation===subtitleGeneration&&S.playerView===state)playerStatus('تعذر قراءة ملف الترجمة.')};
+   reader.readAsText(file,'UTF-8')
+  };
+  input.oncancel=function(){input.remove()};root.appendChild(input);
+  try{input.click()}catch(e){input.remove();playerStatus('المتصفح لا يدعم اختيار ملف الترجمة.')}
+ }
  if(subtitleButton)subtitleButton.onclick=function(){
-  var engine=S.play&&S.play.engine,list=[],native=video.textTracks;
-  if(native&&native.length){
-   for(var i=0;i<native.length;i++)if(native[i].kind==='subtitles'||native[i].kind==='captions')list.push(native[i]);
-  }
-  var options=[];
-  if(list.length){
-   options.push({name:'إيقاف الترجمة',selected:list.every(function(track){return track.mode!=='showing'}),
-    select:function(){for(var n=0;n<list.length;n++)list[n].mode='disabled';playerStatus('تم إيقاف الترجمة')}})
-   for(var j=0;j<list.length;j++)(function(track,index){
-    options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
-     select:function(){for(var n=0;n<list.length;n++)list[n].mode=n===index?'showing':'disabled';playerStatus('تم اختيار الترجمة')}})
-   })(list[j],j)
-  }else if(engine&&engine.subtitleTracks&&engine.subtitleTracks.length){
-   var subs=engine.subtitleTracks;
-   options.push({name:'إيقاف الترجمة',selected:engine.subtitleTrack===-1,
-    select:function(){engine.subtitleDisplay=false;engine.subtitleTrack=-1;playerStatus('تم إيقاف الترجمة')}})
-   for(var k=0;k<subs.length;k++)(function(track,index){
-    options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index,
-     select:function(){engine.subtitleDisplay=true;engine.subtitleTrack=index;playerStatus('تم اختيار الترجمة')}})
-   })(subs[k],k)
-  }
+  var engine=S.play&&S.play.engine,native=video.textTracks,list=[],subs=engine&&engine.subtitleTracks||[];
+  if(native)for(var i=0;i<native.length;i++)if(native[i].kind==='subtitles'||native[i].kind==='captions')list.push(native[i]);
+  var options=[{name:'إيقاف الترجمة',selected:(!subs.length||engine.subtitleTrack===-1)&&list.every(function(track){return track.mode!=='showing'}),select:disableSubtitles}];
+  // HLS.js manages its own subtitle tracks. Native textTracks may include
+  // duplicate generated tracks; prefer the HLS API for those tracks.
+  for(var k=0;k<subs.length;k++)(function(track,index){
+   options.push({name:track.name||track.lang||('ترجمة '+(index+1)),selected:engine.subtitleTrack===index&&engine.subtitleDisplay!==false,
+    select:function(){if(!S.play||S.play.engine!==engine)return;disableSubtitles();engine.subtitleTrack=index;engine.subtitleDisplay=true}})
+  })(subs[k],k);
+  for(var j=0;j<list.length;j++)(function(track,index){
+   if(subs.length&&(!localSubtitle||track!==localSubtitle.element.track))return;
+   options.push({name:track.label||track.language||('ترجمة '+(index+1)),selected:track.mode==='showing',
+    select:function(){disableSubtitles();track.mode='showing'}})
+  })(list[j],j);
+  if(!isLive&&window.FileReader&&window.URL&&URL.createObjectURL)options.push({name:'اختيار ملف ترجمة SRT / VTT',selected:false,select:localSubtitlePicker});
   showPlayerChoices('الترجمة',options,this)
  };
  if(qualityButton)qualityButton.onclick=function(){
@@ -4463,9 +4905,10 @@ window.addEventListener('error',function(e){
 },true);
 
 function clickHandler(event){
- var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload'))node=node.parentNode;
+ var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload')&&!node.getAttribute('data-download'))node=node.parentNode;
  if(!node||node===document.body)return;
  var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
+ var download=node.getAttribute('data-download');if(download){var parts=download.split(':');saveOfflineDownload(parts[0],parts[1],node.getAttribute('data-ext'),node.getAttribute('data-name'));return}
  if(node.hasAttribute('data-back')){back();return}
  if(go){if(go!==S.route)navigate(go);return}
  if(cat){var parts=cat.split(':'),kind=parts[0];
@@ -4505,7 +4948,7 @@ function clickHandler(event){
  if(node.hasAttribute('data-reload')){delete S.loaded[keyOf(node.getAttribute('data-reload'),S.cat[node.getAttribute('data-reload')])];catalog(node.getAttribute('data-reload'))}
 }
 function directional(e){
- var code=e.keyCode||e.which;
+ var code=e.keyCode||e.which||({ArrowLeft:37,ArrowUp:38,ArrowRight:39,ArrowDown:40,Enter:13,Escape:27,Backspace:8,GoBack:461,Back:461}[e.key]||0);
  var editable=e.target&&((e.target.tagName==='INPUT'&&e.target.type!=='range')||
   /^(TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable);
  if(code===37||code===38||code===39||code===40||code===13||code===27||
@@ -4611,11 +5054,14 @@ function directional(e){
   e.preventDefault();navigate('search');return
  }
  if(code!==37&&code!==38&&code!==39&&code!==40)return;
- if(editable)return;
- var nodes=document.querySelectorAll('button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])'),arr=[];
+ if(editable){
+  // On a television leave the field with Up/Down, keeping left/right for text editing.
+  if(document.documentElement.getAttribute('data-blofy-device')!=='tv'||(code!==38&&code!==40)||e.target.tagName==='SELECT')return;
+ }
+ var nodes=document.querySelectorAll('button:not([disabled]),input:not([disabled]),a[href],select:not([disabled]),[tabindex]:not([tabindex="-1"])'),arr=[];
  for(var i=0;i<nodes.length;i++){
   var node=nodes[i],r=node.getBoundingClientRect();
-  if(r.width>0&&r.height>0)arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
+  if(r.width>0&&r.height>0&&node.tabIndex>=0&&(!node.closest||!node.closest('[hidden],[aria-hidden="true"],[inert]'))&&getComputedStyle(node).visibility!=='hidden')arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
  }
  var active=document.activeElement,from=null;
  for(var j=0;j<arr.length;j++)if(arr[j].node===active){from=arr[j];break}
@@ -4698,9 +5144,10 @@ document.addEventListener('visibilitychange',function(){
 });
 try{window.history.replaceState({blofyStreamWeb:true,depth:0,route:'boot'},'',window.location.href)}catch(e){}
 function bootSession(attempt){
+ if(navigator.onLine===false&&offlineOnlyScreen())return;
  api('GET','/api/session',null,function(st,data){
   if(S.route!=='boot'||S.userVerified)return;
-  if(st===200&&data.active&&useProfile(data.profileKey,data.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000);return}
+  if(st===200&&data.active&&useProfile(data.profileKey,data.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(data.profileKey,data.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth();setTimeout(checkCatalogVersion,25000);return}
   if(st===401||st===403||(st===200&&data.active===false)){login('أدخل كود اشتراك BLOFY STREAM للتفعيل');return}
   if(attempt<3){setTimeout(function(){if(S.route==='boot'&&!S.userVerified)bootSession(attempt+1)},[1000,2500,5000][attempt]);return}
   app.innerHTML='<div class="login-screen"><div class="login-panel"><div class="login-brand">BLOFY<small>STREAM</small></div><p>تعذر الاتصال مؤقتًا. لم يتم إلغاء اشتراكك.</p><button class="btn" id="retry-session">إعادة المحاولة</button></div></div>';
