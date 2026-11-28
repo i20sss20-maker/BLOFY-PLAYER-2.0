@@ -1014,8 +1014,8 @@ change("لا توجد مسارات ترجمة في التشغيل الحالي",
 new Function(app);writeFileSync('app.js',app);
 
 
- // A 503 while a live producer is still preparing a segment or honoring
- // upstream backoff is not proof that its authenticated session vanished.
+ // Honor explicit upstream backoff on the same SID. Segment-not-ready
+ // may accompany worker retirement, so retain conservative recovery there.
  // Keep that SID and the existing bounded Retry-After path. Unknown reasons
  // retain the previous conservative recovery policy.
 change("function liveSessionLost(record,detail,code){",`function liveHlsFailureReason(detail){
@@ -1026,6 +1026,6 @@ change("function liveSessionLost(record,detail,code){",`function liveHlsFailureR
  }catch(e){return null}
 }
 function liveSessionLost(record,detail,code){`);
-change(" return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))",` if(code===503&&['hls_live_segment_not_ready','hls_origin_backoff'].indexOf(liveHlsFailureReason(detail))>=0)return false;
+change(" return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))",` if(code===503&&liveHlsFailureReason(detail)==='hls_origin_backoff')return false;
  return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))`);
 new Function(app);writeFileSync('app.js',app);
