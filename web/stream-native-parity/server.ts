@@ -3,6 +3,7 @@ import {externalPlaylistOrigins} from './external-playlist-policy.mjs';
 import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 let activeVodDownloads=0;
 const activeVodDownloadAccounts=new Map();
+const activeVodDownloadTokens=new Map();
 const MAX_VOD_DOWNLOADS=2;
 import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
@@ -96,6 +97,7 @@ setInterval(()=>{
   console.info('BLOFY_WEB_QOE_WINDOW',JSON.stringify(window))
  }
 },60000).unref?.();
+function downloadAccountKey(bearer){return typeof bearer==='string'&&bearer.startsWith('Bearer ')?stableAccountProfileKey(bearer.slice(7),KEY):null}
 function externalAccountKey(bearer){return createHmac('sha256',KEY).update('external:'+bearer).digest('hex')}
 function pruneExternalTickets(now=Date.now()){
  for(const [key,t] of externalTickets)if(t.until<=now)externalTickets.delete(key)
@@ -182,7 +184,7 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 }
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
-if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const download=activeVodDownloadAccounts.get(externalAccountKey('Bearer '+t));if(download)download.abort();}if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const download=activeVodDownloadTokens.get(externalAccountKey('Bearer '+t));if(download)download.abort();}if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
 if(p==='/api/external/stop'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
  revokeExternal(h.Authorization);
@@ -586,7 +588,8 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
  const match=/^\/api\/download\/(movie|series)\/([1-9][0-9]{0,14})\.(mp4|mkv|avi|mov|ts)$/.exec(p);
  if(!match||vodDownloadPath(match[1],match[2],match[3])!==p)
   return json(400,{error:'invalid_download_path'});
- const accountKey=externalAccountKey(h.Authorization);
+ const accountKey=downloadAccountKey(h.Authorization),ownerKey=externalAccountKey(h.Authorization);
+ if(!accountKey)return json(401,{error:'invalid_session'});
  if(activeVodDownloads>=MAX_VOD_DOWNLOADS||activeVodDownloadAccounts.has(accountKey))
   return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
  // Provider HEAD may fail or consume a licensed provider slot. Probe only
@@ -596,10 +599,10 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
  const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
  const ctrl=new AbortController();
  let released=false,reader=null,headerTimer=null,deadline=null;
- const release=()=>{if(released)return;released=true;clearTimeout(deadline);clearTimeout(headerTimer);activeVodDownloads=Math.max(0,activeVodDownloads-1);if(activeVodDownloadAccounts.get(accountKey)===ctrl)activeVodDownloadAccounts.delete(accountKey);req.signal.removeEventListener('abort',cancel);ctrl.signal.removeEventListener('abort',cancelReader)};
+ const release=()=>{if(released)return;released=true;clearTimeout(deadline);clearTimeout(headerTimer);activeVodDownloads=Math.max(0,activeVodDownloads-1);if(activeVodDownloadAccounts.get(accountKey)===ctrl)activeVodDownloadAccounts.delete(accountKey);if(activeVodDownloadTokens.get(ownerKey)===ctrl)activeVodDownloadTokens.delete(ownerKey);req.signal.removeEventListener('abort',cancel);ctrl.signal.removeEventListener('abort',cancelReader)};
  const cancelReader=()=>{try{if(reader)Promise.resolve(reader.cancel()).catch(()=>{})}catch{}release()};
  const cancel=()=>ctrl.abort();
- activeVodDownloads++;activeVodDownloadAccounts.set(accountKey,ctrl);
+ activeVodDownloads++;activeVodDownloadAccounts.set(accountKey,ctrl);activeVodDownloadTokens.set(ownerKey,ctrl);
  ctrl.signal.addEventListener('abort',cancelReader,{once:true});
  req.signal.addEventListener('abort',cancel,{once:true});
  headerTimer=setTimeout(cancel,20000);deadline=setTimeout(cancel,30*60*1000);
