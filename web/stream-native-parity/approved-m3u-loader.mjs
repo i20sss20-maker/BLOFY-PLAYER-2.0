@@ -32,3 +32,16 @@ export async function loadApprovedM3u(raw,{approvedOrigins,fetchImpl,signal}={})
   try{void reader?.cancel().catch(()=>{})}catch{}
  }
 }
+
+// Xtream's standard M3U export is a browser-only entry path for approved
+// providers. Credentials never go to the BLOFY account API or local storage.
+export function approvedXtreamPlaylistUrl({host,username,password},approvedOrigins){
+ if(typeof host!=='string'||host.length>512||host!==host.trim()||/[\u0000-\u001f\u007f]/.test(host))throw Error('invalid_provider_host');
+ let url;try{url=new URL(host)}catch{throw Error('invalid_provider_host')}
+ if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/'||!new Set(approvedOrigins||[]).has(url.origin))throw Error('provider_not_approved');
+ for(const value of [username,password])if(typeof value!=='string'||!value.length||value.length>256||/[\u0000-\u001f\u007f]/.test(value))throw Error('invalid_credentials');
+ const target=new URL('/get.php',url.origin);
+ target.searchParams.set('username',username);target.searchParams.set('password',password);
+ target.searchParams.set('type','m3u_plus');target.searchParams.set('output','m3u8');
+ return target.href;
+}
