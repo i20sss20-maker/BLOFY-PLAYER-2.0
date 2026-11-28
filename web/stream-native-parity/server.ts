@@ -14,6 +14,7 @@ import {audioWorkerHost} from './audio-worker-policy.mjs';
 import {createAdmission,readBoundedJson,sessionFailure,createPlaybackMetrics} from './web-security-controls.mjs';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
+const SYNTHETIC_PROJECT=Bun.env.RAILWAY_PROJECT_ID==='9501c37d-dd0c-44b5-90c6-5cb170d4e689';
 const PLAYLIST_ORIGINS=Bun.env.BLOFY_WEB_EXTERNAL_PLAYLIST_QA==='1'?externalPlaylistOrigins(Bun.env.BLOFY_WEB_EXTERNAL_PLAYLIST_ORIGINS||''):[];
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
 const KEY=/^[a-f0-9]{64}$/i.test(KEY_HEX)?Buffer.from(KEY_HEX,'hex'):null;
@@ -122,7 +123,7 @@ if(p==='/internal/ops'){
 
 // Staging may exercise packaging and private worker readiness, but must not
 // use production subscriptions, origins, catalog requests, or media sessions.
-if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging'){
+if(SYNTHETIC_PROJECT||Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging'){
  if(p==='/health'&&method==='GET'){
   const host=audioWorkerHost('isolated');let audioReady=false;
   try{const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(3000)});const v=await r.json();audioReady=r.ok&&v.ok===true&&v.service==='blofy-stream-web-audio'}catch{}
@@ -140,7 +141,7 @@ const playlistAssets={
  '/approved-m3u-catalog.mjs':'approved-m3u-catalog.mjs'
 };
 if(p==='/playlist-preview-policy'||Object.hasOwn(playlistAssets,p)){
- if(method!=='GET'||!PLAYLIST_ORIGINS.length||Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging')return json(404,{error:'not_found'});
+ if(method!=='GET'||!PLAYLIST_ORIGINS.length||Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||SYNTHETIC_PROJECT||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging')return json(404,{error:'not_found'});
  if(p==='/playlist-preview-policy')return json(200,{origins:PLAYLIST_ORIGINS},{'Referrer-Policy':'no-referrer'});
  const file=playlistAssets[p],asset=Bun.file(new URL('./'+file,import.meta.url));
  if(!await asset.exists())return json(404,{error:'not_found'});
@@ -619,8 +620,13 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
   const out=noCache({'Content-Type':'application/octet-stream',
     'Content-Disposition':'attachment; filename="'+attachmentFilename(match[1],match[2],match[3])+'"',
     'X-Content-Type-Options':'nosniff','Accept-Ranges':'none'});
-  const length=upstream.headers.get('content-length');
-  if(length&&/^[1-9][0-9]{0,14}$/.test(length))out['Content-Length']=length;
+  const length=upstream.headers.get('content-length'),encoding=upstream.headers.get('content-encoding');
+  // A completed transfer must contain the exact advertised number of bytes.
+  // Unknown-size or compressed responses cannot prove a complete raw file.
+  if(!length||!/^[1-9][0-9]{0,14}$/.test(length)||(encoding&&encoding.toLowerCase()!=='identity')){
+   try{await upstream.body.cancel()}catch{}release();return json(502,{error:'download_size_unverified'});
+  }
+  out['Content-Length']=length;
   reader=upstream.body.getReader();
   const expected=out['Content-Length']?Number(out['Content-Length']):null;
   let received=0;
