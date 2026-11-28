@@ -1107,3 +1107,8 @@ html[data-blofy-device="touch"] .native-home-bottom .rail-link{flex:1 1 0;min-wi
 @font-face{font-family:"BLOFY Plex Arabic";src:url("/fonts/IBMPlexSansArabic-SemiBold.ttf") format("truetype");font-style:normal;font-weight:700;font-display:swap}
 html,body,button,input,select,textarea{font-family:"BLOFY Plex Arabic","Geeza Pro",Tahoma,Arial,sans-serif}
 .native-home-brand strong,.native-login-brand,.brand{font-family:system-ui,"Segoe UI",Arial,sans-serif}
+
+.native-stream-login #login-code-fields[hidden],.native-stream-login #login-direct-fields[hidden]{display:none!important}
+.native-stream-login #login-direct-fields:not([hidden]){display:flex;flex-direction:column;gap:8px}
+.native-stream-login #login-direct-fields .native-login-title{font-size:14px;margin:0;text-align:start}
+.native-stream-login #login-direct-fields .input{width:100%;min-height:44px;box-sizing:border-box;font-size:15px;text-align:start}
