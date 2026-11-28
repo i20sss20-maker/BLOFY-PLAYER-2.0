@@ -61,3 +61,13 @@ test('boot session retries 503 and later authenticates; only actual rejection pr
  scheduled.shift().fn();requests[1](200,{active:true,profileKey:'synthetic'});assert.deepEqual(routes,['home']);assert.equal(state.userVerified,true);
  state.userVerified=false;boot(0);requests[2](401,{});assert.equal(logins.length,1);
 });
+
+
+test('tiny or empty chunks cannot exhaust the JSON reader budget',async()=>{
+ let count=0,cancelled=false;
+ const body=new ReadableStream({pull(c){count++;c.enqueue(new Uint8Array(0));},cancel(){cancelled=true}});
+ const result=await readBoundedJson({headers:new Headers(),body},256,5000);
+ assert.equal(result.status,413);assert.equal(cancelled,true);assert.ok(count<=4098);
+ const normal=new ReadableStream({start(c){for(const ch of '{"id":"123"}')c.enqueue(new TextEncoder().encode(ch));c.close()}});
+ assert.deepEqual(await readBoundedJson({headers:new Headers(),body:normal},256),{ok:true,value:{id:'123'}});
+});
