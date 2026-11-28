@@ -324,8 +324,8 @@ function restoreView(route,preferred){
  },0)
 }
 function nativeNavIcon(kind){
- var icons={home:'<path d="M3 11l9-8 9 8v9h-6v-7H9v7H3z"/>',live:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="m9 9 6 3-6 3z"/>',downloads:'<path d="M12 3v13m-5-5 5 5 5-5M4 20h16"/>',collections:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',search:'<circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/>',ai:'<path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/><circle cx="12" cy="12" r="7"/>',refresh:'<path d="M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4"/>'};
- return '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(icons[kind]||icons.home)+'</svg>'
+ var icons={"home":"<path d=\"M3,10 L12,3 L21,10 M5,9 L5,21 L10,21 L10,14 L14,14 L14,21 L19,21 L19,9\"/>","live":"<path d=\"M4,5 L20,5 Q22,5 22,7 L22,17 Q22,19 20,19 L4,19 Q2,19 2,17 L2,7 Q2,5 4,5 M8,22 L16,22 M10,9 L15,12 L10,15 Z\"/>","movie":"<path d=\"M3,7 L21,7 L21,21 L3,21 Z M3,7 L3,3 L21,3 L21,7 M7,3 L5,7 M13,3 L11,7 M19,3 L17,7\"/>","series":"<path d=\"M3,9 L21,9 L21,21 L3,21 Z M5,5 L19,5 M7,1 L17,1\"/>","collections":"<path d=\"M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z\"/>","downloads":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","search":"<path d=\"M10,3 A7,7 0,1 0,10,17 A7,7 0,1 0,10,3 M15,15 L22,22\"/>","ai":"<path d=\"M11.5,2L13.8,8.2L20,10.5L13.8,12.8L11.5,19L9.2,12.8L3,10.5L9.2,8.2Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M19,16L19.9,18.1L22,19L19.9,19.9L19,22L18.1,19.9L16,19L18.1,18.1Z\" fill=\"currentColor\" stroke=\"none\"/><path d=\"M4.5,2L5.1,3.4L6.5,4L5.1,4.6L4.5,6L3.9,4.6L2.5,4L3.9,3.4Z\" fill=\"currentColor\" stroke=\"none\"/>","favorites":"<path d=\"M12,21 L3,12 C-2,5 6,-1 12,6 C18,-1 26,5 21,12 Z\"/>","settings":"<path d=\"M3,6 L21,6 M3,18 L21,18 M8,3 L8,9 M16,15 L16,21\"/>","refresh":"<path d=\"M20 7v6h-6M4 17v-6h6M5 9a8 8 0 0 1 13-4l2 2M4 17l2 2a8 8 0 0 0 13-4\"/>"};
+ return '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+(icons[kind]||icons.home)+'</svg>'
 }
 function compactNativeHome(){
  return S.route==='home'&&document.documentElement.getAttribute('data-blofy-device')==='touch'
@@ -342,9 +342,9 @@ function nativeHomeHeader(){
 }
 function navHtml(){
  if(compactNativeNavigation())return '<nav class="rail native-home-bottom" aria-label="التنقل">'+[['home','الرئيسية'],['live','البث المباشر'],['downloads','التنزيلات'],['collections','التصنيفات']].map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'">'+nativeNavIcon(v[0])+'<span>'+v[1]+'</span></button>'}).join('')+'</nav>';
- return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
- NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
- '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
+ return '<aside class="rail native-tv-rail"><div class="brand"><img src="/stream-icon.svg" alt="BLOFY STREAM"></div>'+
+ NAV.filter(function(v){return v[0]!=='favorites'}).map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+nativeNavIcon(v[0])+'</span><span>'+v[2]+'</span></button>'}).join('')+
+ '</aside>'
 }
 function shell(pageTitle,markup){
  var catalogPage=S.route==='live'||S.route==='movie'||S.route==='series';
