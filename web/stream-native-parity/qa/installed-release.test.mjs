@@ -170,16 +170,16 @@ test('failed preview stop retains its original SID until confirmed, with latest 
 test('adaptive live buffer increases on sustained waiting, caps growth and cools down after stability',()=>{
  const a=app.indexOf('function adaptLiveBuffer('),b=app.indexOf('function resumeLiveHlsNetwork(',a);
  const adapt=new Function(app.slice(a,b)+';return adaptLiveBuffer')();
- const record={ready:true},engine={config:{maxBufferLength:45,liveSyncDurationCount:5}};
+ const record={ready:true},engine={config:{maxBufferLength:25,liveSyncDurationCount:3}};
  for(const now of [1000,10000,20000])adapt(record,engine,now,true,false);
- assert.equal(engine.config.maxBufferLength,52);assert.equal(engine.config.liveSyncDurationCount,6);
+ assert.equal(engine.config.maxBufferLength,35);assert.equal(engine.config.liveSyncDurationCount,4);
  for(const now of [30000,40000,50000])adapt(record,engine,now,true,false);
- assert.equal(engine.config.maxBufferLength,60);
+ assert.equal(engine.config.maxBufferLength,45);
  for(const now of [60000,70000,80000])adapt(record,engine,now,true,false);
- assert.equal(engine.config.maxBufferLength,60);
- adapt(record,engine,259999,false,false);assert.equal(engine.config.maxBufferLength,60);
- adapt(record,engine,260000,false,false);assert.equal(engine.config.maxBufferLength,52);
- adapt(record,engine,440000,false,false);assert.equal(engine.config.maxBufferLength,45);
+ assert.equal(engine.config.maxBufferLength,45);
+ adapt(record,engine,259999,false,false);assert.equal(engine.config.maxBufferLength,45);
+ adapt(record,engine,260000,false,false);assert.equal(engine.config.maxBufferLength,35);
+ adapt(record,engine,440000,false,false);assert.equal(engine.config.maxBufferLength,25);
  assert.equal(adapt({ready:true},engine,450000,true,true),null);
  assert.equal(adapt({ready:true,reconnecting:true},engine,450000,true,false),null);
 });
@@ -225,4 +225,27 @@ test('external player waits for retained internal transport retirement',()=>{
  assert.match(app,/stop=state\.directStopKey\?'\/api\/hls\/'\+state\.directStopKey\+'\/stop'/);
  assert.match(app,/if\(st===200\|\|st===404\)\{state\.externalRetiringStop=null;state\.directStopKey=null;issue\(\)\}/);
  assert.match(app,/state\.externalRetiringStop=null;state\.directStopKey=null;stopExternal\(\)/);
+});
+
+test('Apple touch devices prefer native HLS even after prior MSE fallback',()=>{
+ const i=app.indexOf('function appleMobileNativeHls('),j=app.indexOf('function loadHls(',i);
+ const policy=new Function('appleTouchBrowser','navigator','S','window','installedWebApp',app.slice(i,j)+';return shouldUseNativeHls');
+ const isTouch=(ua,t)=>/iPhone|iPad|iPod/i.test(ua)||/Macintosh/i.test(ua)&&t>1;
+ const video={canPlayType:()=> 'maybe'};
+ for(const ua of ['iPhone Safari','iPad Safari','Macintosh AppleWebKit Safari','iPhone CriOS']){
+  const fn=policy(isTouch,{userAgent:ua,maxTouchPoints:5},{preferMseHls:true},{MediaSource:{isTypeSupported:()=>true}},()=>false);
+  assert.equal(fn(video),true);
+ }
+ assert.match(app,/if\(!appleMobileNativeHls\(navigator.userAgent,navigator.maxTouchPoints,video\)&&!installedNativeHlsPreferred/);
+});
+
+test('source quota denial is distinguished from transient network failure',()=>{
+ const i=app.indexOf('function liveSourceQuotaRejected('),j=app.indexOf('function liveRetryHint(',i);
+ const denied=new Function(app.slice(i,j)+';return liveSourceQuotaRejected')();
+ assert.equal(denied({networkDetails:{getResponseHeader:()=> 'source_channel_limit'}}),true);
+ assert.equal(denied({networkDetails:{headers:{get:()=> 'source_channel_limit'}}}),true);
+ assert.equal(denied({networkDetails:{getResponseHeader:()=> 'other'}}),false);
+ assert.equal(denied(null),false);
+ assert.match(app,/failure\.error==='live_source_channel_limit'\)\{showSourceQuota\(\);return\}/);
+ assert.match(app,/code===503&&liveSourceQuotaRejected\(detail\)/);
 });
