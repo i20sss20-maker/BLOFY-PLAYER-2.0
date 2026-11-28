@@ -81,3 +81,13 @@ test('manual timing restores the actual live latency profile',()=>{
  setMode(record,false);assert.equal(record.engine.config.liveMaxLatencyDurationCount,16);assert.equal(record.userTimeshift,false);assert.equal(record.liveLagSince,0);
  const native={};setMode(native,true);assert.equal(native.userTimeshift,true);setMode(native,false);assert.equal(native.userTimeshift,false);
 });
+
+
+test('healthy live picture never invokes automatic catch-up seek',()=>{
+ assert.match(app,/if\(progress\.advanced\)record\.liveLagSince=0/);
+ assert.match(app,/if\(!progress\.advanced&&progress\.idleMs>=6500&&liveLatencyCatchup\(/);
+ const begin=app.indexOf('function setLiveTimeshiftMode('),end=app.indexOf('function liveTimeshiftTarget(',begin);
+ const setMode=vm.runInNewContext(app.slice(begin,end)+';setLiveTimeshiftMode',{Number,Infinity});
+ const record={engine:{config:{liveMaxLatencyDurationCount:Infinity}}};
+ setMode(record,true);setMode(record,false);assert.equal(record.engine.config.liveMaxLatencyDurationCount,Infinity);
+});
