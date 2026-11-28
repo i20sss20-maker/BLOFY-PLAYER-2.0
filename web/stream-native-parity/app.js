@@ -141,7 +141,7 @@ function useProfile(id,legacy){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
  migrateLegacyProfile(id,legacy);
  var changed=S.profileKey!==id;
- if(changed){S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh()}
+ if(changed){S.accountEpoch++;if(offlineTransfer)offlineTransfer.ctrl.abort();closeOfflineVideo();S.downloadPending=null;S.plotCache=[];resetCatalogRefresh()}
  S.profileKey=id;
  S.library=readJson(profileStorageKey('favorites'),{});
  S.watch=readJson(profileStorageKey('watch'),{});
@@ -673,7 +673,7 @@ function buildCatalog(kind,listing){
   '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
   '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
   '<p class="live-preview-quality" id="live-preview-quality" aria-live="polite">الدقة المعروضة: جار قراءة معلومات الفيديو…</p>'+
-  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
+  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" id="preview-audio-toggle" data-preview-audio aria-pressed="false">🔊 تفعيل الصوت</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
   var selected=findItem('live',S.selected)||source[0];
@@ -959,6 +959,18 @@ function loadShortEpg(id){
   })
  },450)
 }
+function applyPreviewAudio(video,enabled){
+ if(!video)return;
+ video.muted=!enabled;video.defaultMuted=!enabled;
+ if(enabled)video.removeAttribute('muted');else video.setAttribute('muted','');
+ var button=document.getElementById('preview-audio-toggle');
+ if(button){button.setAttribute('aria-pressed',String(!!enabled));button.textContent=enabled?'🔇 كتم الصوت':'🔊 تفعيل الصوت'}
+}
+function togglePreviewAudio(){
+ var video=document.getElementById('live-video');if(S.route!=='live'||!video)return;
+ S.previewAudioEnabled=!S.previewAudioEnabled;applyPreviewAudio(video,S.previewAudioEnabled);
+ if(S.previewAudioEnabled&&video.paused){try{var p=video.play();if(p&&p.catch)p.catch(function(){if(document.getElementById('live-video')===video){S.previewAudioEnabled=false;applyPreviewAudio(video,false)}})}catch(e){S.previewAudioEnabled=false;applyPreviewAudio(video,false)}}
+}
 function beginPreview(item){
  var video=document.getElementById('live-video'),box=document.getElementById('live-status'),empty=document.getElementById('preview-empty');
  if(!video||!item||S.route!=='live')return;
@@ -1000,8 +1012,7 @@ function beginPreview(item){
  }
  S.livePreview=id;
  if(box)box.textContent='جار تشغيل معاينة '+title(item)+' تلقائيًا…';
- video.muted=true;video.defaultMuted=true;
- video.setAttribute('muted','');
+ applyPreviewAudio(video,!!S.previewAudioEnabled);
  video.autoplay=true;video.setAttribute('autoplay','');
  video.playsInline=true;video.controls=false;
  playHls(video,'live',id,'ts',0,box,true)
@@ -1185,6 +1196,16 @@ function needsPlotTranslation(value){
  var latin=(text.match(/[a-zA-Z]/g)||[]).length;
  return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
 }
+function cachedArabicPlot(kind,id,source){
+ var rows=S.plotCache||[];
+ for(var i=0;i<rows.length;i++){var row=rows[i];if(row.kind===kind&&row.id===id&&row.source===source)return row.text}
+ return ''
+}
+function rememberArabicPlot(kind,id,source,text){
+ if(!source||source.length>3900||typeof text!=='string'||text.length>5500||!/[\u0600-\u06ff]/.test(text))return;
+ var rows=(S.plotCache||[]).filter(function(row){return row.kind!==kind||row.id!==id});
+ rows.unshift({kind:kind,id:id,source:source,text:text});S.plotCache=rows.slice(0,32)
+}
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
  if(!item){navigate(k,{},true);return}
@@ -1211,10 +1232,10 @@ function details(o){
   api('POST','/api/ai/translate',{overview:source},function(st,data){
    if(!detailCurrent()||generation!==plotGeneration||plotSource!==source)return;
    plotPending='';
-   if(st===200&&data&&data.ok===true&&typeof data.translatedOverview==='string'&&data.translatedOverview.trim()){plotTranslation=data.translatedOverview;plotOriginal=false}
+   if(st===200&&data&&data.ok===true&&typeof data.translatedOverview==='string'&&data.translatedOverview.trim()){plotTranslation=data.translatedOverview;plotOriginal=false;rememberArabicPlot(k,id,source,plotTranslation)}
    renderPlotTranslation();
    var notice=document.getElementById('detail-translate-status');
-   if(!plotTranslation&&notice)notice.textContent=st===429?'الترجمة مشغولة مؤقتًا، حاول لاحقًا.':'تعذرت الترجمة، يمكنك إعادة المحاولة.';
+   if(!plotTranslation&&notice){var msg=st===429?'حاول الترجمة لاحقًا.':'تعذرت الترجمة.';notice.textContent=msg;setTimeout(function(){if(detailCurrent()&&notice.textContent===msg)notice.textContent=''},3500)};
   });
  }
  function show(extra){
@@ -1223,7 +1244,7 @@ function details(o){
   if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
   var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
   var plot=String(info.plot||info.description||info.overview||item.plot||item.description||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM');
-  if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation='';plotPending='';plotAttempted='';plotOriginal=false}
+  if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation=cachedArabicPlot(k,id,plot);plotPending='';plotAttempted='';plotOriginal=false}
   var gen=info.genre||info.genres||item.genre||'',year=info.releaseDate||info.release_date||info.releasedate||item.release_date||item.year||'',rating=info.rating||item.rating||'';
   var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
@@ -1328,7 +1349,7 @@ function rememberOfflineGrant(profile,expiry){
  if(/^[a-f0-9]{24}$/.test(profile||'')&&Number.isFinite(end)&&end>now)writeJson(OFFLINE_GRANT_KEY,{profile:profile,verifiedAt:now,until:Math.min(end,now+86400000)})
 }
 function clearOfflineGrant(){try{localStorage.removeItem(OFFLINE_GRANT_KEY)}catch(e){}if(offlineTransfer)offlineTransfer.ctrl.abort();closeOfflineVideo()}
-function offlineSupported(){return !!(navigator.storage&&navigator.storage.getDirectory&&window.AbortController&&window.URL&&URL.createObjectURL&&window.ReadableStream)}
+function offlineSupported(){return !!(navigator.storage&&navigator.storage.getDirectory&&window.AbortController&&window.URL&&URL.createObjectURL&&window.ReadableStream&&window.crypto&&crypto.getRandomValues)}
 function offlineRows(profile){
  var rows=readJson('blofy_web_offline_v1:'+profile,[]);
  return Array.isArray(rows)?rows.filter(function(row){return row&&/^(movie|series)-[1-9][0-9]{0,14}-[a-f0-9]{24}\.mp4$/.test(row.file)&&Number.isSafeInteger(row.size)&&row.size>0&&row.size<=OFFLINE_MAX_BYTES&&typeof row.name==='string'}).slice(0,20):[]
@@ -1366,7 +1387,7 @@ function drawOfflineDownloads(profile,standalone){
    }
    var file=await (await folder.getFileHandle(row.file)).getFile();
    if(file.size!==row.size)throw Error('incomplete');
-   if(!root.isConnected||!offlineGrant()||offlineGrant().profile!==profile)return;
+   if(!root.isConnected||!offlineGrant()||offlineGrant().profile!==profile||(!standalone&&S.profileKey!==profile))return;
    closeOfflineVideo();var player=document.getElementById('offline-player');
    if(!player)return;
    player.innerHTML='<video id="offline-video" controls playsinline preload="metadata" style="width:100%;max-height:65vh;background:#000"></video>';
@@ -1419,22 +1440,22 @@ async function saveOfflineDownload(kind,id,ext,name){
   if(navigator.storage.estimate){var estimate=await navigator.storage.estimate();if(Number.isFinite(estimate.quota)&&Number.isFinite(estimate.usage)&&estimate.quota-estimate.usage<total+1048576)throw Error('quota')}
   writer=await handle.createWritable();reader=response.body.getReader();
   var written=0,last=-1;
-  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار تنزيل '+task.name+' • '+pct+'٪ • '+Math.floor(written/1048576)+' / '+Math.ceil(total/1048576)+' MB')}}
+  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;if(current())offlineMessage('جار تنزيل '+task.name+' • '+pct+'٪ • '+Math.floor(written/1048576)+' / '+Math.ceil(total/1048576)+' MB')}}
   check();if(written!==total)throw Error('size');await writer.close();writer=null;
   var saved=await handle.getFile();check();if(saved.size!==total)throw Error('size');
   var rows=offlineRows(profile);rows.unshift({file:fileName,size:total,name:String(name||'فيديو').slice(0,160)});
   localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(rows.slice(0,20)));committed=true;
   offlineMessage('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.');
   if(S.route==='downloads')drawOfflineDownloads(profile,false)
- }catch(e){offlineMessage(ctrl.signal.aborted?'تم إلغاء التنزيل.':e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
- finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}
+ }catch(e){if(S.accountEpoch===epoch&&S.profileKey===profile)offlineMessage(ctrl.signal.aborted?'تم إلغاء التنزيل.':e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
+ finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task){offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}}
 }
 function downloadsScreen(){
  shell('التنزيلات','<section class="downloads-page"><p class="small muted">الملفات المحفوظة بالكامل للمشاهدة دون إنترنت.</p><div id="offline-space" class="small muted"></div><div class="row offline-filters"><button class="btn secondary" id="offline-all">الكل</button><button class="btn secondary" id="offline-active">قيد التنزيل</button><button class="btn secondary" id="offline-ready">جاهزة</button></div><div id="offline-status" role="status" aria-live="polite"></div><progress id="offline-progress" max="100" value="0" hidden></progress><button class="btn secondary" id="offline-cancel" hidden>إلغاء التنزيل الجاري</button><div id="offline-player"></div><div id="offline-library"></div><p class="small muted">تجديد صلاحية المشاهدة بالاتصال مرة كل 24 ساعة.</p></section>');
  var profile=S.profileKey,filter='all',library=document.getElementById('offline-library'),space=document.getElementById('offline-space');
  var saved=offlineRows(profile).reduce(function(sum,row){return sum+row.size},0);space.textContent='المساحة المستخدمة: '+Math.round(saved/1048576)+' ميغابايت';
  if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(function(info){if(space.isConnected&&Number.isFinite(info.quota)&&Number.isFinite(info.usage))space.textContent+=' • المتاحة تقريبًا: '+Math.max(0,Math.floor((info.quota-info.usage)/1048576))+' ميغابايت'}).catch(function(){});
- function setFilter(next){filter=next;library.hidden=filter==='active';['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).classList.toggle('active',key===filter)});if(next==='active')offlineMessage(offlineTransfer?'جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪':'لا يوجد تنزيل جارٍ.')}
+ function setFilter(next){filter=next;library.hidden=filter==='active';['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).classList.toggle('active',key===filter)});if(next==='active')offlineMessage(offlineTransfer?'جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪':'لا يوجد تنزيل جارٍ.');else if(!offlineTransfer){var notice=document.getElementById('offline-status');if(notice)notice.textContent=''}}
  ['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).onclick=function(){setFilter(key)}});
  setFilter('all');if(offlineTransfer)offlineMessage('جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪');
  document.getElementById('offline-cancel').onclick=function(){if(offlineTransfer)offlineTransfer.ctrl.abort()};
@@ -1537,6 +1558,7 @@ function searchScreen(){
  var filters=document.querySelectorAll('[data-search-kind]');
  for(var i=0;i<filters.length;i++)filters[i].onclick=function(){setSearchKind(this.getAttribute('data-search-kind'))};
  function commitSearch(){
+  if(S.searchTimer){clearTimeout(S.searchTimer);S.searchTimer=null}
   var q=document.getElementById('search-input').value.trim().slice(0,75);
   if(q.length<2)return;
   S.recentSearches=[q].concat(S.recentSearches.filter(function(v){return v!==q})).slice(0,8);
@@ -1551,9 +1573,9 @@ function searchScreen(){
  setSearchKind(S.searchKind);
  renderRecent();
  document.getElementById('search-input').oninput=function(e){if(e&&e.isComposing)return;var q=this.value.trim().slice(0,75);cancelSearch();
- if(q.length<2){cancelSearch();document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
+ if(q.length<2){document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
- S.searchTimer=setTimeout(function(){S.searchTimer=null;searchNow(q,token)},400)
+ S.searchTimer=setTimeout(function(){S.searchTimer=null;searchNow(q,token)},650)
  };
  document.getElementById('search-input').focus();
  if(S.aiSearchTitle){
@@ -1593,8 +1615,8 @@ function searchNow(q,token){
    if(token!==S.searchToken||S.route!=='search')return;
    pending--;
    if(st===200&&p){
-    responses[k]=responses[k].concat(p.items.slice(0,48)).sort(function(a,b){return score(b)-score(a)});
-    if(p.hasMore&&Number(p.nextOffset)>offset&&responses[k].length<192)more[k]=Number(p.nextOffset);
+    var seen=Object.create(null);responses[k]=responses[k].concat(p.items.slice(0,48)).filter(function(item){var id=String(item.stream_id||item.series_id||item.id||'');if(!id)return true;if(seen[id])return false;seen[id]=true;return true}).sort(function(a,b){return score(b)-score(a)});
+    if(p.hasMore&&Number(p.nextOffset)>offset&&Number(p.nextOffset)<=960)more[k]=Number(p.nextOffset);
     S.loaded[keyOf(k,'search')]={items:responses[k]};
    }else failed++;
    draw()
@@ -1603,24 +1625,51 @@ function searchNow(q,token){
  }
  for(var i=0;i<kinds.length;i++)load(kinds[i],0)
 }
-function aiTitleKey(s){return String(s||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')}
+function aiTitleKey(s){
+ var name=String(s||'').toLowerCase();
+ if(typeof name.normalize==='function')name=name.normalize('NFKD');
+ name=name.replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ة/g,'ه').replace(/[٠-٩]/g,function(c){return String(c.charCodeAt(0)-1632)}).replace(/[۰-۹]/g,function(c){return String(c.charCodeAt(0)-1776)});
+ // Property escapes are not parseable in some legacy TV engines.
+ // Construct dynamically and fall back to broad Unicode letter ranges.
+ var separators;
+ try{separators=new RegExp('[^\\p{L}\\p{N}]+','gu')}catch(e){separators=/[^0-9a-z\u00c0-\u024f\u0370-\u052f\u0620-\u063f\u0641-\u064a\u066e-\u06d3\u06fa-\u06fc\u0750-\u077f\u08a0-\u08c9\u0900-\u1fff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+/g}
+ return name.replace(separators,' ').trim().replace(/\s+/g,' ')
+}
 function verifyAiTitles(names,token,done){
- var tasks=[],matches=[],seen={},cursor=0,epoch=S.accountEpoch;
- (names||[]).filter(function(x){return typeof x==='string'&&x.trim().length>=2}).slice(0,4).forEach(function(name){['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})});
- function step(){
-  if(token!==S.aiToken||epoch!==S.accountEpoch)return;
-  if(cursor>=tasks.length){done(matches);return}
-  var job=tasks[cursor++],wanted=aiTitleKey(job.name);
-  pageRequest(job.kind,'all',0,24,function(st,p){
-   if(token!==S.aiToken||epoch!==S.accountEpoch)return;
-   if(st===200&&p){
-    var match=p.items.find(function(item){return [item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en].some(function(n){var k=aiTitleKey(n);return k===wanted||k.replace(/ (?:19|20)\d{2}$/,'')===wanted})});
-    if(match){var id=itemId(match,job.kind),key=job.kind+':'+id;if(id&&!seen[key]){seen[key]=true;var cache=S.loaded[keyOf(job.kind,'ai')]||(S.loaded[keyOf(job.kind,'ai')]={items:[]});cache.items.push(match);if(cache.items.length>48)cache.items.shift();matches.push({kind:job.kind,id:id,name:title(match)})}}
-   }
-   step()
-  },job.name)
+ var tasks=[],matches=[],seen=Object.create(null),unique=Object.create(null),cursor=0,epoch=S.accountEpoch,active=0,failed=false,ended=false,requests=[];
+ (names||[]).forEach(function(name){
+  if(typeof name!=='string'||Object.keys(unique).length>=4)return;
+  var key=aiTitleKey(name);if(key.length<2||unique[key])return;
+  unique[key]=true;['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})
+ });
+ function current(){return token===S.aiToken&&epoch===S.accountEpoch}
+ function finish(){
+  if(ended)return;ended=true;clearTimeout(deadline);
+  requests.forEach(function(xhr){try{xhr.abort()}catch(e){}});
+  if(current())done(matches,failed)
  }
- step()
+ var deadline=setTimeout(function(){failed=true;finish()},18000);
+ function pump(){
+  if(ended)return;
+  if(!current()){finish();return}
+  while(active<2&&cursor<tasks.length){
+   (function(job){
+    active++;var wanted=aiTitleKey(job.name);
+    var xhr=pageRequest(job.kind,'all',0,24,function(st,p){
+     if(ended)return;
+     active--;if(!current()){finish();return}
+     if(st===200&&p){
+      var match=p.items.find(function(item){return [item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en,item.title_ar,item.title_en].some(function(n){var k=aiTitleKey(n);return k===wanted||k.replace(/ (?:19|20)\d{2}$/,'')===wanted})});
+      if(match){var id=itemId(match,job.kind),key=job.kind+':'+id;if(id&&!seen[key]){seen[key]=true;var cache=S.loaded[keyOf(job.kind,'ai')]||(S.loaded[keyOf(job.kind,'ai')]={items:[]});cache.items=cache.items.filter(function(item){return itemId(item,job.kind)!==id});cache.items.push(match);if(cache.items.length>48)cache.items.shift();matches.push({kind:job.kind,id:id,name:title(match)})}}
+     }else failed=true;
+     pump()
+    },job.name);
+    if(xhr&&!ended)requests.push(xhr)
+   })(tasks[cursor++])
+  }
+  if(!active&&cursor>=tasks.length)finish()
+ }
+ pump()
 }
 function aiScreen(){
  S.route='ai';
@@ -1663,11 +1712,11 @@ function aiScreen(){
     var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
     if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
     var answer=String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000);
-    verifyAiTitles(suggestions,token,function(matches){
+    verifyAiTitles(suggestions,token,function(matches,verificationFailed){
      if(token!==S.aiToken)return;
      S.aiBusy=false;
      var recommendation=/رشح|ترشيح|اقترح|تنصح|recommend|suggest/i.test(query);
-     var verifiedText=suggestions.length?(matches.length?'هذه العناوين التي تحققت من وجودها في مكتبتك:':'لم أجد تطابقًا مؤكدًا لهذه الترشيحات في مكتبتك. جرّب طلب نوع آخر أو اسم محدد.'):(recommendation?'لم أجد ترشيحات مؤكدة في مكتبتك لهذا الطلب. جرّب تحديد النوع أو اسم ممثل.':answer);
+     var verifiedText=suggestions.length?(matches.length?'وجدت في مكتبتك: '+matches.map(function(m){return m.name}).join('، ')+(verificationFailed?' — تعذر التحقق من بعض العناوين الأخرى.':'')+'.':verificationFailed?'تعذر التحقق من مكتبتك الآن. حاول مرة أخرى.':'لم أجد تطابقًا مؤكدًا في مكتبتك. جرّب نوعًا آخر أو اسمًا محددًا.'):(recommendation?'لم أجد ترشيحات مؤكدة في مكتبتك لهذا الطلب. جرّب تحديد النوع أو اسم ممثل.':answer);
      S.aiTurns.push({user:false,model:true,text:verifiedText,suggestions:matches});
      if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);render()
     });return
@@ -2027,74 +2076,6 @@ function commentarySeekTarget(audio,delta){
  }catch(e){}
  return null
 }
-// Local HLS buffer only. This does not advertise server-side DVR or
-// TimeShift: the source may remove old segments at any moment.
-function bufferedLiveRange(video,record){
- if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
- var at=Number(video.currentTime),seekable=video.seekable,buffered=video.buffered;
- if(!Number.isFinite(at)||!seekable||!buffered)return null;
- try{
-  for(var i=0;i<Math.min(seekable.length,32);i++){
-   var ss=seekable.start(i),se=seekable.end(i);
-   if(at<ss||at>se)continue;
-   for(var j=0;j<Math.min(buffered.length,32);j++){
-    var start=Math.max(ss,buffered.start(j)),end=Math.min(se,buffered.end(j));
-    if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
-    return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
-   }
-  }
- }catch(e){}
- return null
-}
-function bufferedLiveSeekTarget(video,record,action){
- var range=bufferedLiveRange(video,record);if(!range)return null;
- var start=range.start,end=range.end,at=range.at;
- var target=action==='back'?at-5:action==='forward'?at+5:action==='back-one'?at-1:action==='forward-one'?at+1:action==='back-ten'?at-10:action==='forward-ten'?at+10:action==='earliest'?start+0.25:action==='latest'?end-0.75:NaN;
- if(action==='forward'||action==='forward-ten')target=Math.min(target,end-0.75);
- if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target;
- return null
-}
-// TimeShift can request retained server segments outside the local decoded buffer.
-function liveTimeshiftRange(video,record){
- if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
- var at=Number(video.currentTime),ranges=video.seekable,engine=record.engine,details=engine&&engine.latestLevelDetails;
- if(!Number.isFinite(at)||!ranges)return null;
- try{
-  for(var i=0;i<Math.min(ranges.length,32);i++){
-   var start=Number(ranges.start(i)),end=Number(ranges.end(i));
-   if(details&&details.live&&Number.isFinite(details.fragmentStart)&&Number.isFinite(details.edge)){
-    start=Math.max(start,details.fragmentStart);end=Math.min(end,details.edge)
-   }
-   if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
-   return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
-  }
- }catch(e){}
- return null
-}
-// Preserve the actual latency profile chosen by the live engine. Manual
-// picture/audio timing must not be silently undone by automatic catch-up.
-function setLiveTimeshiftMode(record,enabled){
- if(!record)return;
- var config=record.engine&&record.engine.config;
- if(config){
-  if(record.normalLiveMaxLatency!==Infinity&&!Number.isFinite(record.normalLiveMaxLatency)){
-   var current=Number(config.liveMaxLatencyDurationCount);
-   record.normalLiveMaxLatency=current>0?current:Infinity
-  }
-  config.liveMaxLatencyDurationCount=enabled?Infinity:record.normalLiveMaxLatency
- }
- record.userTimeshift=enabled===true;
- record.liveLagSince=0
-}
-function liveTimeshiftTarget(video,record,action){
- var range=liveTimeshiftRange(video,record);if(!range)return null;
- var step={'back-one':-1,back:-5,'back-ten':-10,'back-thirty':-30,'forward-one':1,forward:5,'forward-ten':10,'forward-thirty':30};
- var edge=Number(record.engine&&record.engine.liveSyncPosition);
- var target=action==='earliest'?range.start+0.25:action==='latest'?Math.max(range.start+0.1,Math.min(range.end-0.75,Number.isFinite(edge)&&edge>0?edge:range.end-0.75)):range.at+step[action];
- if(!Number.isFinite(target))return null;
- target=Math.max(range.start+0.1,Math.min(range.end-0.75,target));
- return Math.abs(target-range.at)>=0.5?target:null
-}
 function subtitleTrackLabel(label,language,index){
  var code=String(language||'').toLowerCase().split(/[-_]/)[0],names={ar:'العربية',ara:'العربية',en:'الإنجليزية',eng:'الإنجليزية',fr:'الفرنسية',fra:'الفرنسية',fre:'الفرنسية',es:'الإسبانية',spa:'الإسبانية',fa:'الفارسية',fas:'الفارسية',per:'الفارسية',tr:'التركية',tur:'التركية',de:'الألمانية',deu:'الألمانية',ger:'الألمانية',hi:'الهندية',hin:'الهندية',ur:'الأردية',urd:'الأردية',ru:'الروسية',rus:'الروسية'};
  var name=String(label||'').trim(),localized=names[code]||names[name.toLowerCase()]||'';
@@ -2240,7 +2221,6 @@ function countVisualOutage(record,video,now){
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
 function liveExpiredSegmentRecovery(record,engine,video,now){
- setLiveTimeshiftMode(record,false);
  // HLS occasionally requests a sequence that has fallen off the live
  // playlist while the viewer catches up. Prefer an in-place live-edge
  // jump before tearing down a healthy source and FFmpeg decoder.
@@ -2264,40 +2244,6 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
   engine.startLoad(-1);
   return 'resync'
  }catch(e){return 'restart'}
-}
-/* A viewer can fall far behind even while the audio/video clocks continue.
- * With MSE Hls.js (not the native TV HLS engine), return to a validated live
- * edge after sustained lag, without restarting its shared source/encoder.
- * The 90-second cool-down protects decoders and slower Wi-Fi connections.
- */
-function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
- if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
-    record.reconnecting||Number(video.readyState)<2||record.userTimeshift===true||now<(record.localBufferSeekUntil||0)){
-  record.liveLagSince=0;return false
- }
- var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
- var gap=edge-at;
- if(!Number.isFinite(edge)||!Number.isFinite(at)||edge<=0||at<0||
-    !Number.isFinite(gap)||gap<16||gap>180){
-  record.liveLagSince=0;return false
- }
- var ranges=video.seekable;
- if(ranges&&ranges.length){
-  try{
-   var last=ranges.length-1,first=Number(ranges.start(last)),end=Number(ranges.end(last));
-   if(!Number.isFinite(first)||!Number.isFinite(end)||edge<first||edge>end+1){
-    record.liveLagSince=0;return false
-   }
-  }catch(e){record.liveLagSince=0;return false}
- }
- if(!record.liveLagSince){record.liveLagSince=now;return false}
- if(now-record.liveLagSince<8000)return false;
- if(record.lastLiveCatchupAt&&now-record.lastLiveCatchupAt<90000)return false;
- try{
-  video.currentTime=edge;
-  record.lastLiveCatchupAt=now;record.liveLagSince=0;
-  return true
- }catch(e){record.liveLagSince=0;return false}
 }
 function liveTransientRetryMs(attempt){
  // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
@@ -2663,7 +2609,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if('preservesPitch' in video)video.preservesPitch=true;
   if('webkitPreservesPitch' in video)video.webkitPreservesPitch=true
  }
- video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
+ if(preview)applyPreviewAudio(video,!!S.previewAudioEnabled);else{video.muted=false;video.defaultMuted=false}video.autoplay=true;video.playsInline=true;video.controls=false;
  function alive(){return S.play===record}
  function setCompatibility(force,automatic,forceUltra){
   var nextUltra=!!(force&&forceUltra);
@@ -2870,13 +2816,6 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
-   // A healthy advancing picture must never skip content to catch up.
-   if(progress.advanced)record.liveLagSince=0;
-   if(!progress.advanced&&progress.idleMs>=6500&&liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
-    if(!preview)recordLiveIncident('live_catchup',now);
-    status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
-    return
-   }
    if(progress.advanced){clearRecoveredLiveLoading();return}
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
@@ -3479,10 +3418,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⏭</span><small>'+(isLive?'قناة تالية':nextEpisode?'الحلقة التالية':'+10 ثوانٍ')+'</small></button>'+
  '<button class="mobile-player-action" type="button" id="mobile-player-fullscreen" aria-label="ملء الشاشة">'+
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button>'+
- (isLive?'<button class="mobile-player-action" type="button" id="mobile-player-timing" aria-label="تقديم وتأخير البث"><span aria-hidden="true">↶</span><small>توقيت البث</small></button>':'')+'</div>'+
+ '</div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
- (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
+ (isLive?playerControl('player-commentary','audio','المعلقين'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -3495,7 +3434,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-live-buffer" type="button">توقيت البث</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4574,7 +4513,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null,commentaryResume=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryRetryAfter=0,commentaryRetryTimer=null,commentaryResume=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -4584,7 +4523,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   commentaryResume=null;
   commentaryEpoch++;
   if(commentaryRetryTimer){clearTimeout(commentaryRetryTimer);commentaryRetryTimer=null}
-  if(commentaryPictureSeek){clearTimeout(commentaryPictureSeek.timer);commentaryPictureSeek=null}
   if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}
   var old=commentary;commentary=null;
   if(!old)return;
@@ -4610,27 +4548,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('pause',function(){if(document.hidden)suspendCommentary();else stopCommentary()});
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
- video.addEventListener('seeking',function(){
-  var intentional=commentaryPictureSeek;
-  if(intentional&&commentary===intentional.audio&&S.play===intentional.transport&&Math.abs(Number(video.currentTime)-intentional.target)<0.5)return;
-  stopCommentary()
- });
- video.addEventListener('seeked',function(){
-  var intentional=commentaryPictureSeek;if(!intentional)return;
-  clearTimeout(intentional.timer);commentaryPictureSeek=null;
-  if(commentary!==intentional.audio||S.play!==intentional.transport||video.readyState<2||Math.abs(Number(video.currentTime)-intentional.target)>0.5)stopCommentary()
- });
- function adjustCommentaryPicture(action){
-  if(!commentary||!commentary.audible||commentaryPictureSeek||video.paused||document.hidden||S.playerView!==state||S.route!=='player')return false;
-  var transport=S.play,target=bufferedLiveSeekTarget(video,transport,action);
-  if(!transport||transport.video!==video||target===null)return false;
-  var intentional={audio:commentary,transport:transport,target:target,timer:null};
-  commentaryPictureSeek=intentional;
-  intentional.timer=setTimeout(function(){if(commentaryPictureSeek===intentional)stopCommentary()},3000);
-  var wasDelayed=transport.userTimeshift===true;
-  try{setLiveTimeshiftMode(transport,true);transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}
-  catch(e){setLiveTimeshiftMode(transport,wasDelayed);stopCommentary();return false}
- }
+ video.addEventListener('seeking',stopCommentary);
  video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}resumeCommentary()});
  video.addEventListener('waiting',function(){
   if(!commentary||commentaryVideoWait||video.readyState>=3)return;
@@ -4700,15 +4618,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     }
     if(commentarySeekTarget(active.audio,-1)!==null)list.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjust(-1)}});
     if(commentarySeekTarget(active.audio,1)!==null)list.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjust(1)}});
-    // Progressive live audio may not expose a seek range. Instead allow a
-    // deliberate one-second picture adjustment inside actual retained HLS bytes.
-    ['back-one','forward-one'].forEach(function(action){
-     if(bufferedLiveSeekTarget(video,S.play,action)===null)return;
-     list.push({name:action==='back-one'?'تأخير الصورة ثانية':'تقديم الصورة ثانية',selected:false,select:function(){
-      if(commentary!==active)return;
-      commentaryNotice(adjustCommentaryPicture(action)?'تم طلب ضبط توقيت الصورة':'ضبط التوقيت غير متاح الآن.')
-     }})
-    });
    }
    if(st!==200)commentaryNotice('تعذر جلب المعلقين الآن؛ الصوت الأصلي متاح.');
    else if(list.length===1)commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');
@@ -4719,33 +4628,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
  if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
  if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
- var bufferButton=document.getElementById('player-live-buffer'),timeshiftButton=document.getElementById('player-timeshift');
- function openLiveTiming(){
-  if(!isLive||S.playerView!==state||S.route!=='player')return;
-  var record=S.play,origin=this,options=[],range=null;
-  if(record&&record.video===video){
-   range=liveTimeshiftRange(video,record);
-   [['earliest','أقدم نقطة محفوظة'],['back-thirty','رجوع 30 ثانية'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['forward-thirty','تقديم 30 ثانية'],['latest','العودة للبث المباشر']].forEach(function(entry){
-    // Even at the live edge, allow the viewer to release manual timing.
-    if(liveTimeshiftTarget(video,record,entry[0])===null&&!(entry[0]==='latest'&&record.userTimeshift))return;
-    options.push({name:entry[1],selected:false,select:function(){
-     if(S.play!==record||S.playerView!==state||S.route!=='player')return;
-     var target=liveTimeshiftTarget(video,record,entry[0]);
-     if(target===null){
-      if(entry[0]==='latest'&&record.userTimeshift){setLiveTimeshiftMode(record,false);playerStatus('');return}
-      playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return
-     }
-     try{stopCommentary();setLiveTimeshiftMode(record,entry[0]!=='latest');record.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;playerStatus('')}
-     catch(e){setLiveTimeshiftMode(record,false);playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
-    }})
-   });
-  }
-  if(!options.length){playerStatus('انتظر حتى تتوفر ثوانٍ محفوظة من البث.');return}
-  showPlayerChoices('تقديم وتأخير البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
- }
- if(bufferButton)bufferButton.onclick=openLiveTiming;
- if(timeshiftButton)timeshiftButton.onclick=openLiveTiming;
- var mobileTiming=document.getElementById('mobile-player-timing');if(mobileTiming)mobileTiming.onclick=openLiveTiming;
  var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
  function clearLocalSubtitle(){
   subtitleGeneration++;
@@ -5143,7 +5025,7 @@ window.addEventListener('error',function(e){
 },true);
 
 function clickHandler(event){
- var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload')&&!node.getAttribute('data-download'))node=node.parentNode;
+ var node=event.target;while(node&&node!==document.body&&!node.hasAttribute('data-back')&&!node.getAttribute('data-go')&&!node.getAttribute('data-cat')&&!node.getAttribute('data-details')&&!node.getAttribute('data-channel')&&!node.getAttribute('data-more')&&!node.getAttribute('data-sort')&&!node.getAttribute('data-watch')&&!node.getAttribute('data-episodes')&&!node.getAttribute('data-season')&&!node.getAttribute('data-favorite')&&!node.hasAttribute('data-preview-play')&&!node.hasAttribute('data-preview-audio')&&!node.hasAttribute('data-preview-full')&&!node.getAttribute('data-reload')&&!node.getAttribute('data-download'))node=node.parentNode;
  if(!node||node===document.body)return;
  var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
  var download=node.getAttribute('data-download');if(download){var parts=download.split(':');saveOfflineDownload(parts[0],parts[1],node.getAttribute('data-ext'),node.getAttribute('data-name'));return}
@@ -5181,6 +5063,7 @@ function clickHandler(event){
   return
  }
  if(watch){var a=watch.split(':'),kind=a[0],id=a[1],it=findItem(kind,id),ext=node.getAttribute('data-ext')||(it&&it.container_extension)||'mp4',name=node.getAttribute('data-name')||title(it);openPlayer(kind,id,ext,name,Number(node.getAttribute('data-from'))||0);return}
+ if(node.hasAttribute('data-preview-audio')){togglePreviewAudio();return}
  if(node.hasAttribute('data-preview-play')){var x=findItem('live',S.selected);if(x)beginPreview(x);return}
  if(node.hasAttribute('data-preview-full')){var live=findItem('live',S.selected);if(live)openPlayer('live',S.selected,'ts',title(live),0);return}
  if(node.hasAttribute('data-reload')){delete S.loaded[keyOf(node.getAttribute('data-reload'),S.cat[node.getAttribute('data-reload')])];catalog(node.getAttribute('data-reload'))}

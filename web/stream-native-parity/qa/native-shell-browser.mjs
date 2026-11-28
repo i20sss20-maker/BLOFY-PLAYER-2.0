@@ -55,6 +55,26 @@ try{
   }
   await page.locator('#redeem').click();
   await page.locator('.native-home-header').waitFor();
+  // Verify that the primary app container and right rail stay within the
+  // viewport even on a narrow handset and tablet landscape. No real accounts.
+  if(mode==='code'){
+   const original=page.viewportSize();
+   for(const size of [original,{width:320,height:568},{width:844,height:390},{width:1024,height:768}]){
+    await page.setViewportSize(size);
+    await page.waitForFunction(()=>{const el=document.querySelector('.app');if(!el)return false;const r=el.getBoundingClientRect();return r.left>=-2&&r.right<=innerWidth+2});
+    const layout=await page.evaluate(()=>{
+     const rail=document.querySelector('.native-home-bottom'),workspace=document.querySelector('.workspace');
+     if(!rail||!workspace)return null;
+     const a=rail.getBoundingClientRect(),b=workspace.getBoundingClientRect();
+     return {railRight:a.right,railLeft:a.left,railTop:a.top,railBottom:a.bottom,railHeight:a.height,workspaceRight:b.right,workspaceBottom:b.bottom,workspaceWidth:b.width,viewport:innerWidth,viewportHeight:innerHeight};
+    });
+    assert.ok(layout&&layout.workspaceWidth>150&&layout.railRight<=layout.viewport+2,JSON.stringify(layout));
+    if(size.width<=600&&size.height>size.width){
+     assert.ok(layout.workspaceWidth>=layout.viewport-3&&layout.railTop>=layout.workspaceBottom-2&&layout.railBottom<=layout.viewportHeight+2&&layout.railHeight<=90,JSON.stringify(layout));
+    }else assert.ok(layout.railLeft>=layout.workspaceRight-2,JSON.stringify(layout));
+   }
+   await page.setViewportSize(original);
+  }
   assert.equal(requests.length,1);assert.match(requests[0].input.deviceKey,/^[a-f0-9]{64}$/);
   assert.equal(requests[0].p,mode==='code'?'/api/redeem':'/api/direct-login');
   if(mode==='code')assert.equal(requests[0].input.code,'12345678');else assert.equal(requests[0].input.mode,mode);
@@ -63,7 +83,10 @@ try{
   assert.equal(await page.locator('.native-home-bottom [data-go="series"]').count(),1);
   assert.equal(await page.locator('.native-home-tabs').count(),0);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
+  const portraitPhone=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);
+  assert.ok(navBox&&workspaceBox,'navigation and workspace exist');
+  if(portraitPhone){assert.ok(navBox.y>=workspaceBox.y+workspaceBox.height-2&&navBox.height<=90,'phone navigation belongs below full-width content')}
+  else assert.ok(navBox.x>=workspaceBox.x+workspaceBox.width-2,'larger screen navigation belongs on the right');}
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
@@ -73,7 +96,10 @@ try{
   assert.equal(await page.locator('.native-home-bottom [data-go="series"]').count(),1);
   assert.equal(await page.locator('.native-home-tabs').count(),0);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
+  const portraitPhone=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);
+  assert.ok(navBox&&workspaceBox,'navigation and workspace exist');
+  if(portraitPhone){assert.ok(navBox.y>=workspaceBox.y+workspaceBox.height-2&&navBox.height<=90,'phone navigation belongs below full-width content')}
+  else assert.ok(navBox.x>=workspaceBox.x+workspaceBox.width-2,'larger screen navigation belongs on the right');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
   await page.locator('.native-home-header [data-go="settings"]').click();

@@ -124,3 +124,17 @@ test('saved login slots preserve the preceding account, switch only with verific
  assert.match(route,/redirect:'manual'/);
  assert.match(route,/slice\(0,3000\)/);
 });
+
+test('Arabic description cache is bounded, exact-source keyed, and cleared on account changes',()=>{
+ const a=app.indexOf('function cachedArabicPlot('),b=app.indexOf('function details(',a),S={};
+ const cache=new Function('S',app.slice(a,b)+';return {get:cachedArabicPlot,put:rememberArabicPlot}')(S);
+ cache.put('movie','1','English description','وصف عربي');
+ assert.equal(cache.get('movie','1','English description'),'وصف عربي');
+ assert.equal(cache.get('movie','1','Changed description'),'');
+ assert.equal(cache.get('series','1','English description'),'');
+ cache.put('movie','2','English description','English only');
+ assert.equal(cache.get('movie','2','English description'),'');
+ for(let i=0;i<40;i++)cache.put('movie',String(i),'description','وصف');
+ assert.equal(S.plotCache.length,32);
+ assert.match(app,/if\(changed\)\{S\.accountEpoch\+\+;if\(offlineTransfer\)offlineTransfer\.ctrl\.abort\(\);closeOfflineVideo\(\);S\.downloadPending=null;S\.plotCache=\[\]/);
+});
