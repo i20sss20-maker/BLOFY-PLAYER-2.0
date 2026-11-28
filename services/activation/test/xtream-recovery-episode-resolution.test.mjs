@@ -54,7 +54,7 @@ test('recovery remains exact same source with no entitlement changes or full med
  const scope=source.slice(a,b);
  assert.match(scope,/shouldUseIndependentSourceMedia\(\{/);
  assert.match(scope,/sourceId:key.serverId,kind:key.kind,extension:ext/);
- assert.match(scope,/issueStreamRelayGrant\(\{sourceUrl:original.href,kind:key.kind\}\)/);
+ assert.match(scope,/issueStreamRelayGrant\(\{routingSourceId:row\.server_id,sourceUrl:original.href,kind:key.kind\}\)/);
  assert.match(scope,/range:'bytes=0-1023'/);
  assert.match(scope,/inspectXtreamMediaChunk\(first.value,response.headers.get\('content-type'\)\)\.valid/);
  assert.doesNotMatch(scope,/proxyMedia\(req|gatewayAccount|grantEntitlement|subscriberCutover:true/);

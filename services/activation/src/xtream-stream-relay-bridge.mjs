@@ -3,7 +3,24 @@ import {assertMediaProbeAllowed} from './linode-maintenance-ingress.mjs';
 // plane. STREAM only receives a 45-second opaque capability over a pinned
 // HTTPS service-to-service origin. Default OFF and allowlisted BY account UUID.
 const HOST='blofy-stream-api-production.up.railway.app';
-const externalOrigins=new Set(['https://media2.blofyplayer.com','https://media.blofyplayer.com']);
+const relayOrigins=Object.freeze({hostbrr:'https://media2.blofyplayer.com',linode:'https://media.blofyplayer.com'});
+const externalOrigins=new Set(Object.values(relayOrigins));
+const ownerRouting=env=>env.BLOFY_RELAY_OWNER_ROUTING==='1';
+// A grant is pinned to the committed owner at issuance. Never choose an
+// alternate origin from health alone or cache the durable owner across requests.
+export async function selectOwnedRelayEnvironment({sourceId,readApprovedSource,readOwner,env=process.env}={}){
+  if(!ownerRouting(env))return env;
+  if(env.BLOFY_RELAY_ENGINE_OWNERSHIP!=='1'||env.BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER!=='1')
+    throw Error('relay_owner_routing_not_ready');
+  const approved=await readApprovedSource();
+  if(!UUID.test(String(approved||''))||!UUID.test(String(sourceId||'')))
+    throw Error('relay_owner_source_unconfirmed');
+  if(approved!==sourceId)return env;
+  const row=await readOwner(sourceId);
+  if(row?.mode!=='legacy'||!Object.hasOwn(relayOrigins,row.relay_owner))
+    throw Error('relay_owner_unavailable');
+  return {...env,BLOFY_STREAM_RELAY_MEDIA_ORIGIN:relayOrigins[row.relay_owner]};
+}
 const RESOURCE=/^\/relay\/[0-9a-f]{48}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function relayConfiguration(env=process.env){
@@ -31,7 +48,10 @@ export function relayEligible({accountId,kind,extension},env=process.env){
 export function isConfiguredRelayTicket(value,env=process.env){
   try{
     const u=new URL(value),cfg=relayConfiguration(env);
-    return !!cfg.origin&&u.origin===cfg.origin&&RESOURCE.test(u.pathname)&&!u.search&&!u.hash&&!u.username&&!u.password;
+    const pinned=!!cfg.origin&&(u.origin===cfg.origin||
+      (ownerRouting(env)&&env.BLOFY_RELAY_ENGINE_OWNERSHIP==='1'&&
+       env.BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER==='1'&&externalOrigins.has(u.origin)));
+    return pinned&&RESOURCE.test(u.pathname)&&!u.search&&!u.hash&&!u.username&&!u.password;
   }catch{return false}
 }
 async function remoteRelayRequest(path,{method='GET',body,env=process.env,

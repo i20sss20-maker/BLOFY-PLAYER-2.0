@@ -102,7 +102,7 @@ import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs'
 import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
   unsealXtreamHlsTicket,refreshExpiredXtreamHlsTicket} from './xtream-hls-playback.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
-import {relayEligible,issueStreamRelayGrant,isConfiguredRelayTicket} from './xtream-stream-relay-bridge.mjs';
+import {relayEligible,issueStreamRelayGrant as issueRelayGrant,isConfiguredRelayTicket,selectOwnedRelayEnvironment} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,permittedLicensedLiveProduction,
   createFirstAccountSharedLiveTestPilot,authorizedLiveTrialQuota} from './xtream-licensed-live-fanout-policy.mjs';
 import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
@@ -153,6 +153,13 @@ const pool = new pg.Pool({
 });
 pool.on('error', error => console.error('xtream gateway database error:', safeErrorSummary(error)));
 const enterLegacyIngress=createLegacyIngress(pool);
+async function issueStreamRelayGrant({routingSourceId,...grant}){
+  const env=await selectOwnedRelayEnvironment({sourceId:routingSourceId,
+    readApprovedSource:()=>resolveEngineIngressSource(pool),
+    readOwner:async id=>(await pool.query('SELECT mode,relay_owner FROM blofy_engine_ingress_gate WHERE source_id=$1',[id])).rows[0]});
+  return issueRelayGrant(grant,{env});
+}
+
 const relayFenceEndpoint=createRelayFenceEndpoint(pool);
 const relayHoldEndpoint=createRelayHoldEndpoint(pool);
 const authorityReadEndpoint=createAuthorityReadEndpoint(pool,{readProviderAccount:readEngineProviderAccount});
@@ -1175,7 +1182,7 @@ async function probeUnavailableMediaOnSameSource(key){
  let response,reader;
  try{
   const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
-  const signed=await issueStreamRelayGrant({sourceUrl:original.href,kind:key.kind});
+  const signed=await issueStreamRelayGrant({routingSourceId:row.server_id,sourceUrl:original.href,kind:key.kind});
   response=await checkedFetch(new URL(signed),{
    timeoutMs:12000,signal:AbortSignal.timeout(12000),
    method:'GET',headers:{range:'bytes=0-1023',
@@ -1486,7 +1493,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         accountId:account.id,gatewayId,sourceName:row.source_name
       })))){
     try{
-      const destination=await issueStreamRelayGrant({
+      const destination=await issueStreamRelayGrant({routingSourceId:row.server_id,
         sourceUrl:upstream.href,kind,sharedLive:true,
         requireSharedLive:true,licensedCdnRedirect:true,
         licensedSourceId:row.server_id,
@@ -1515,7 +1522,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // and subscriber expiry stay checked here first. Disabled by default.
   if(relayEligible({accountId:account.id,kind,extension:mediaExtension})){
     try{
-      const destination=await issueStreamRelayGrant({
+      const destination=await issueStreamRelayGrant({routingSourceId:row.server_id,
         sourceUrl:upstream.href,kind,
         // Legacy account canary remains per-viewer only. Shared fanout
         // is exclusively available through the source-scoped licensed
@@ -1542,7 +1549,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     sourceId:row.server_id,kind,extension:mediaExtension
   })){
     try{
-      mediaFetchTarget=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+      mediaFetchTarget=new URL(await issueStreamRelayGrant({routingSourceId:row.server_id,sourceUrl:upstream.href,kind}));
       usingIndependentRelay=true;
     }catch{
       console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
@@ -1647,7 +1654,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               const corrected=mediaUpstreamUrl(row,kind,sourceId,freshExtension);
               try{
                 mediaFetchTarget=usingIndependentRelay?
-                  new URL(await issueStreamRelayGrant({
+                  new URL(await issueStreamRelayGrant({routingSourceId:row.server_id,
                     sourceUrl:corrected.href,kind})):corrected;
                 directSourceTarget=corrected;
                 // The provider advertised an extension for the SAME movie or
@@ -1690,7 +1697,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             fallbackTried=true;
             await response.body?.cancel().catch(()=>{});
             try{
-              mediaFetchTarget=new URL(await issueStreamRelayGrant({
+              mediaFetchTarget=new URL(await issueStreamRelayGrant({routingSourceId:row.server_id,
                 sourceUrl:upstream.href,kind
               }));
               usingIndependentRelay=true;
@@ -2024,7 +2031,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           !res.headersSent&&transportFailure&&attempt<maxAttempts){
           fallbackTried=true;
           try{
-            mediaFetchTarget=new URL(await issueStreamRelayGrant({
+            mediaFetchTarget=new URL(await issueStreamRelayGrant({routingSourceId:row.server_id,
               sourceUrl:upstream.href,kind
             }));
             usingIndependentRelay=true;
@@ -2581,7 +2588,7 @@ async function probeGatewayMedia(kind,itemId){
       sourceId:row.server_id,kind,extension:ext
     })){
       try{
-        url=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+        url=new URL(await issueStreamRelayGrant({routingSourceId:row.server_id,sourceUrl:upstream.href,kind}));
       }catch{
         // A failed capability request must never change source permissions,
         // retry a denied provider response, or leak a signed media URL.
