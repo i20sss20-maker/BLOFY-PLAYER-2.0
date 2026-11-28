@@ -10,7 +10,7 @@ function fixture(){
  const ctx=vm.createContext({S,Date:{now:()=>now},art:x=>x.movie_image||'',
   itemId:x=>String(x.id),enc:encodeURIComponent,urlPic:x=>typeof x==='string'?x:'',
   document:{querySelectorAll:()=>[]},api:(m,url,p,cb)=>calls.push({url,cb})});
- vm.runInContext(snippet,ctx);
+ vm.runInContext(source.slice(source.indexOf('function posterCategory('),source.indexOf('function refreshPosterCategories('))+snippet,ctx);
  return {S,calls,enrich:(items,kind='movie',force=false)=>ctx.enrichPosters(kind,items,force),
   advance:ms=>now+=ms};
 }
@@ -50,3 +50,5 @@ test('metadata queue pauses during playback and resumes on catalog',()=>{
  const f=fixture();f.S.route='player';f.enrich([{id:1},{id:2}]);assert.equal(f.calls.length,0);
  f.S.route='movie';f.enrich([{id:3}]);assert.equal(f.calls.length,2);
 });
+
+test('existing poster gets genuine genre from metadata without changing artwork',()=>{const f=fixture(),a={id:1,movie_image:'https://images.example/good'};f.enrich([a]);assert.equal(f.calls.length,1);f.calls[0].cb(200,{info:{genre:'Action, Crime'}});assert.equal(a.genre,'أكشن • جريمة');assert.equal(a.movie_image,'https://images.example/good')});

@@ -540,9 +540,21 @@ function arabicCategory(raw){
  return label
 }
 function posterCategory(item,kind){
- var category=String(item&&item.category_id||''),rows=S.cats&&S.cats[kind]||[];
- for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return arabicCategory(rows[i].category_name);
- return arabicCategory(item&&item.category_name||item&&item.genre||'')
+ if(!item||kind==='live')return '';
+ var raw=item.genre||item.genres||item.genre_name||(item.info&&(item.info.genre||item.info.genres))||'';
+ if(Array.isArray(raw))raw=raw.map(function(x){return typeof x==='object'&&x?x.name||'':x}).join(', ');
+ if(typeof raw!=='string')return '';
+ var rules=[
+ [/\b(?:science fiction|sci[- ]?fi)\b|خيال علمي/i,'خيال علمي'],[/\baction\b|أكشن|حركة/i,'أكشن'],[/\bcomedy\b|كوميديا|كوميدي/i,'كوميديا'],
+ [/\bdrama\b|دراما/i,'دراما'],[/\bhorror\b|رعب/i,'رعب'],[/\bthriller\b|إثارة|اثارة/i,'إثارة'],[/\bmystery\b|غموض/i,'غموض'],
+ [/\bromance\b|رومانسي/i,'رومانسي'],[/\badventure\b|مغامر/i,'مغامرات'],[/\bfantasy\b|فانتازيا|خيال(?! علمي)/i,'فانتازيا'],
+ [/\bcrime\b|جريمة|جرائم/i,'جريمة'],[/\banimation\b|رسوم متحركة|أنيميشن/i,'رسوم متحركة'],[/\bdocumentary\b|وثائقي/i,'وثائقي'],
+ [/\bfamily\b|عائلي/i,'عائلي'],[/\bhistory\b|تاريخي/i,'تاريخي'],[/\bwar\b|حربي/i,'حربي'],[/\bwestern\b|غرب أمريكي/i,'غرب أمريكي'],
+ [/\bmusic(?:al)?\b|موسيقي/i,'موسيقي'],[/\bbiograph(?:y|ical)\b|سيرة ذاتية/i,'سيرة ذاتية'],[/\bsport\b|رياضي/i,'رياضي']
+ ];
+ var found=[];
+ rules.forEach(function(rule){var match=rule[0].exec(raw);if(match)found.push({at:match.index,name:rule[1]})});
+ return found.sort(function(x,y){return x.at-y.at}).slice(0,3).map(function(x){return x.name}).join(' • ')
 }
 function refreshPosterCategories(kind){
  var cards=document.querySelectorAll('[data-details] .poster-category');
@@ -550,14 +562,14 @@ function refreshPosterCategories(kind){
   var card=cards[i].closest('[data-details]'),key=card&&card.getAttribute('data-details')||'',prefix=kind+':';
   if(key.indexOf(prefix)!==0)continue;
   var item=findItem(kind,key.slice(prefix.length)),label=item&&posterCategory(item,kind);
-  if(label)cards[i].textContent=label
+  cards[i].textContent=label||''
  }
 }
 function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
  '<span class="poster-art">'+safeImg(item)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
- '<span class="poster-caption"><strong>'+esc(name)+'</strong><span class="poster-category">'+esc(posterCategory(item,kind)||(kind==='movie'?'فيلم':kind==='series'?'مسلسل':'مباشر'))+'</span>'+(percent>3&&percent<95?'<span>متابعة • '+percent+'٪</span>':'')+'</span></button>'
+ '<span class="poster-caption"><strong>'+esc(name)+'</strong><span class="poster-category">'+esc(posterCategory(item,kind))+'</span>'+(percent>3&&percent<95?'<span>متابعة • '+percent+'٪</span>':'')+'</span></button>'
 }
 function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).map(function(x){return posterCard(x,kind)}).join('')+'</div>'}
 function home(){
@@ -805,23 +817,25 @@ function enrichPosters(kind,source,force){
   posterRecovery={epoch:S.accountEpoch,queue:[],pending:{},cache:{},order:[],active:0};
  var state=posterRecovery;
  function current(){return S.accountEpoch===state.epoch&&posterRecovery===state}
- function apply(item,key,cover){
-  if(!cover||!current())return;
-  item.movie_image=cover;
+ function apply(item,key,cover,genre,force){
+  if(!current())return;
+  if(cover&&(force||!art(item)))item.movie_image=cover;
+  if(genre&&!posterCategory(item,kind))item.genre=genre;
   var buttons=document.querySelectorAll('[data-details]');
   for(var j=0;j<buttons.length;j++){
    if(buttons[j].getAttribute('data-details')!==key)continue;
+   var label=buttons[j].querySelector('.poster-category');if(label&&genre)label.textContent=posterCategory(item,kind);
    var holder=buttons[j].querySelector('.poster-art');
-   if(holder&&!holder.querySelector('img')&&holder.getAttribute('data-art-failed')!==cover){
+   if(cover&&holder&&!holder.querySelector('img')&&holder.getAttribute('data-art-failed')!==cover){
     var image=document.createElement('img');
     image.loading='lazy';image.decoding='async';image.referrerPolicy='no-referrer';
     image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
    }
   }
  }
- function remember(key,cover,ttl){
+ function remember(key,cover,genre,ttl){
   var old=state.order.indexOf(key);if(old>=0)state.order.splice(old,1);
-  state.cache[key]={cover:cover,until:Date.now()+ttl};state.order.push(key);
+  state.cache[key]={cover:cover,genre:genre,until:Date.now()+ttl};state.order.push(key);
   while(state.order.length>128)delete state.cache[state.order.shift()];
  }
  function pump(){
@@ -833,35 +847,36 @@ function enrichPosters(kind,source,force){
     api('GET','/api/catalog?action='+action+enc(task.id),null,function(st,res){
      if(!current())return;
      state.active--;delete state.pending[task.key];
-     var cover='';
+     var cover='',genre='';
      if(st===200&&res){
       var data=res.info||res.movie_data||res;
       var candidates=[data,res.movie_data||{},res.info||{},res];
-      for(var k=0;k<candidates.length&&!cover;k++){
-       var d=candidates[k];cover=urlPic(d.movie_image||d.cover_big||d.cover||d.poster||d.poster_path||d.stream_icon||d.backdrop_path||'')
+      for(var k=0;k<candidates.length;k++){
+       var d=candidates[k];if(!cover)cover=urlPic(d.movie_image||d.cover_big||d.cover||d.poster||d.poster_path||d.stream_icon||d.backdrop_path||'');if(!genre)genre=posterCategory(d,task.kind)
       }
      }
      // Failed metadata reads are retryable instead of permanently hiding
      // artwork. Successful covers are reused only inside this account.
-     remember(task.key,cover,cover?300000:30000);
-     if(cover)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover);
+     remember(task.key,cover,genre,cover||genre?300000:30000);
+     if(cover||genre)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover,genre,task.force);
      pump();
     });
    })(job)
   }
  }
- var candidates=source.filter(function(x){return force||!art(x)}).slice(0,16);
+ var candidates=source.filter(function(x){return force||!art(x)||!posterCategory(x,kind)}).slice(0,16);
  for(var i=0;i<candidates.length;i++){
   var item=candidates[i],id=itemId(item,kind);
   if(!id||id.length>128)continue;
   var key=kind+':'+id,hit=state.cache[key];
-  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover);continue}
+  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover,hit.genre,force);continue}
   if(state.pending[key]){
    if(state.pending[key].items.length<16)state.pending[key].items.push(item);
+   if(force)state.pending[key].force=true;
    continue
   }
   if(state.queue.length>=32)break;
-  var job={kind:kind,id:id,key:key,items:[item]};
+  var job={kind:kind,id:id,key:key,items:[item],force:!!force};
   state.pending[key]=job;state.queue.push(job)
  }
  pump()
@@ -1125,9 +1140,11 @@ function finishResume(kind,id){
  // Only explicitly verified media EOF can mark a title as fully watched.
  if(kind==='live')return;
  var player=S.playerView;
- if(player&&player.kind===kind&&String(player.id)===String(id))player.completed=true;
+ var current=player&&player.kind===kind&&String(player.id)===String(id),wasCompleted=current&&player.completed;
+ if(current)player.completed=true;
  delete S.watch[progressKey(kind,id)];
- profileSave('watch',S.watch)
+ profileSave('watch',S.watch);
+ if(current&&!wasCompleted&&typeof player.afterVerifiedEnd==='function')player.afterVerifiedEnd()
 }
 function saveResume(kind,id,pos,duration,ready){
  if(kind==='live'||!ready||!isFinite(pos)||pos<0)return;
@@ -1533,10 +1550,10 @@ function searchScreen(){
  };
  setSearchKind(S.searchKind);
  renderRecent();
- document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
+ document.getElementById('search-input').oninput=function(e){if(e&&e.isComposing)return;var q=this.value.trim().slice(0,75);cancelSearch();
  if(q.length<2){cancelSearch();document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
- S.searchTimer=setTimeout(function(){searchNow(q,token)},260)
+ S.searchTimer=setTimeout(function(){S.searchTimer=null;searchNow(q,token)},400)
  };
  document.getElementById('search-input').focus();
  if(S.aiSearchTitle){
@@ -1546,10 +1563,11 @@ function searchScreen(){
  }
 }
 function searchNow(q,token){
+ if(token!==S.searchToken||S.route!=='search')return;
  var old=S.searchRequests||[];S.searchRequests=[];
  for(var j=0;j<old.length;j++)try{old[j].abort()}catch(e){}
  var kinds=S.searchKind==='all'?['live','movie','series']:[S.searchKind],
- responses={live:[],movie:[],series:[]},pending=kinds.length,failed=0;
+ responses={live:[],movie:[],series:[]},pending=kinds.length,failed=0,more={};
  // Keep only the current search results, not every result ever browsed.
  ['live','movie','series'].forEach(function(k){delete S.loaded[keyOf(k,'search')]});
  function draw(){
@@ -1558,23 +1576,51 @@ function searchNow(q,token){
   if(!output||!status)return;
   var count=0,html=kinds.map(function(kind){
    var cards=responses[kind];count+=cards.length;
-   return cards.map(function(item){return posterCard(item,kind)}).join('')
+   return cards.map(function(item){return posterCard(item,kind)}).join('')+(more[kind]?'<button class="btn secondary search-more" data-search-more="'+kind+'">المزيد من '+(kind==='movie'?'الأفلام':kind==='series'?'المسلسلات':'القنوات')+'</button>':'')
   }).join('');
   output.innerHTML=html||(pending===0?'<div class="empty-state">'+(failed?'تعذر البحث في بعض الأقسام، حاول مرة أخرى.':'لم يتم العثور على نتائج لهذا البحث.')+'</div>':'');
+  var buttons=output.querySelectorAll?output.querySelectorAll('[data-search-more]'):[];
+  for(var i=0;i<buttons.length;i++)buttons[i].onclick=function(){var k=this.getAttribute('data-search-more'),offset=more[k];if(!offset)return;delete more[k];pending++;draw();load(k,offset)};
   status.textContent=(count?'تم العثور على '+count+' نتيجة':pending?'جار البحث':failed?'تعذر البحث':'لا توجد نتائج')+(pending?' • استكمال باقي المكتبة…':failed&&count?' • تعذر البحث في بعض الأقسام':'')
  }
- for(var i=0;i<kinds.length;i++)(function(k){
-  var xhr=pageRequest(k,'all',0,20,function(st,p){
+ function score(item){
+  var query=aiTitleKey(q),words=query.split(' '),names=[item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en,item.title_ar,item.title_en].map(aiTitleKey),best=0;
+  names.forEach(function(name){if(name===query)best=Math.max(best,1000);else if(name.indexOf(query+' ')===0)best=Math.max(best,800);else if((' '+name+' ').indexOf(' '+query+' ')>=0)best=Math.max(best,650);else if(name.indexOf(query)>=0)best=Math.max(best,500);else if(words.every(function(w){return name.indexOf(w)>=0}))best=Math.max(best,300)});
+  return best
+ }
+ function load(k,offset){
+  var xhr=pageRequest(k,'all',offset,48,function(st,p){
    if(token!==S.searchToken||S.route!=='search')return;
    pending--;
    if(st===200&&p){
-    responses[k]=p.items.slice(0,20);
+    responses[k]=responses[k].concat(p.items.slice(0,48)).sort(function(a,b){return score(b)-score(a)});
+    if(p.hasMore&&Number(p.nextOffset)>offset&&responses[k].length<192)more[k]=Number(p.nextOffset);
     S.loaded[keyOf(k,'search')]={items:responses[k]};
    }else failed++;
    draw()
   },q);
   if(xhr)S.searchRequests.push(xhr)
- })(kinds[i])
+ }
+ for(var i=0;i<kinds.length;i++)load(kinds[i],0)
+}
+function aiTitleKey(s){return String(s||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')}
+function verifyAiTitles(names,token,done){
+ var tasks=[],matches=[],seen={},cursor=0,epoch=S.accountEpoch;
+ (names||[]).filter(function(x){return typeof x==='string'&&x.trim().length>=2}).slice(0,4).forEach(function(name){['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})});
+ function step(){
+  if(token!==S.aiToken||epoch!==S.accountEpoch)return;
+  if(cursor>=tasks.length){done(matches);return}
+  var job=tasks[cursor++],wanted=aiTitleKey(job.name);
+  pageRequest(job.kind,'all',0,24,function(st,p){
+   if(token!==S.aiToken||epoch!==S.accountEpoch)return;
+   if(st===200&&p){
+    var match=p.items.find(function(item){return [item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en].some(function(n){var k=aiTitleKey(n);return k===wanted||k.replace(/ (?:19|20)\d{2}$/,'')===wanted})});
+    if(match){var id=itemId(match,job.kind),key=job.kind+':'+id;if(id&&!seen[key]){seen[key]=true;var cache=S.loaded[keyOf(job.kind,'ai')]||(S.loaded[keyOf(job.kind,'ai')]={items:[]});cache.items.push(match);if(cache.items.length>48)cache.items.shift();matches.push({kind:job.kind,id:id,name:title(match)})}}
+   }
+   step()
+  },job.name)
+ }
+ step()
 }
 function aiScreen(){
  S.route='ai';
@@ -1586,14 +1632,14 @@ function aiScreen(){
   '<button class="chip" data-ai-prompt="اقترح فيلم رعب جديد">أفلام رعب جديدة</button></div>'+
   '<div class="ai-compose"><textarea class="input" id="ai-text" maxlength="1600" rows="2" placeholder="اكتب سؤالك…" autocomplete="off"></textarea>'+
   '<button class="btn" id="ai-send">إرسال</button></div><button class="btn secondary" id="ai-new">محادثة جديدة</button>'+
-  '<p class="muted small">الذكاء الاصطناعي قد يخطئ. اضغط على العنوان لعرض النتائج الفعلية في مكتبتك.</p></section>');
+  '<p class="muted small">الذكاء الاصطناعي قد يخطئ. الترشيحات المتاحة تُتحقق من مكتبتك قبل عرضها.</p></section>');
  function render(){
   if(S.route!=='ai')return;
   var box=document.getElementById('ai-thread');if(!box)return;
   var turns=S.aiTurns.slice(-16);
   box.innerHTML=turns.map(function(turn){
    var suggestions=(turn.suggestions||[]).map(function(t){
-    return '<button class="chip ai-result" data-ai-result="'+esc(t)+'">⌕ '+esc(t)+'</button>'
+    return '<button class="chip ai-result" data-ai-result="'+esc(t.kind+':'+t.id)+'">▶ '+esc(t.name)+'</button>'
    }).join('');
    return '<div class="ai-bubble '+(turn.user?'mine':'assistant')+'"><strong>'+(turn.user?'أنت':'BLOFY AI')+'</strong>'+
     '<p>'+esc(turn.text)+'</p>'+(suggestions?'<div class="ai-links">'+suggestions+'</div>':'')+'</div>'
@@ -1613,12 +1659,20 @@ function aiScreen(){
   var messages=S.aiTurns.filter(function(turn){return turn.user||turn.model===true}).slice(-9).map(function(turn){return {role:turn.user?'user':'assistant',content:String(turn.text||'').slice(0,1600)}});
   api('POST','/api/ai/chat',{messages:messages,locale:document.documentElement.lang==='en'?'en':'ar'},function(st,data){
    if(token!==S.aiToken)return;
-   S.aiBusy=false;
    if(st===200&&data&&data.ok){
     var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
     if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
-    S.aiTurns.push({user:false,model:true,text:String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000),suggestions:suggestions})
+    var answer=String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000);
+    verifyAiTitles(suggestions,token,function(matches){
+     if(token!==S.aiToken)return;
+     S.aiBusy=false;
+     var recommendation=/رشح|ترشيح|اقترح|تنصح|recommend|suggest/i.test(query);
+     var verifiedText=suggestions.length?(matches.length?'هذه العناوين التي تحققت من وجودها في مكتبتك:':'لم أجد تطابقًا مؤكدًا لهذه الترشيحات في مكتبتك. جرّب طلب نوع آخر أو اسم محدد.'):(recommendation?'لم أجد ترشيحات مؤكدة في مكتبتك لهذا الطلب. جرّب تحديد النوع أو اسم ممثل.':answer);
+     S.aiTurns.push({user:false,model:true,text:verifiedText,suggestions:matches});
+     if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);render()
+    });return
    }else{
+    S.aiBusy=false;
     var message=st===429?'تم الوصول إلى حد الطلبات مؤقتًا. جرب بعد قليل.':
      st===401||st===403?'انتهت جلسة الاشتراك. افتح الإعدادات وتحقق من التفعيل.':
      'خدمة المساعد غير متاحة حاليًا. يمكنك استخدام البحث المباشر من القائمة.';
@@ -1637,7 +1691,7 @@ function aiScreen(){
  document.getElementById('ai-thread').onclick=function(e){
   var node=e.target;
   while(node&&node!==this&&!node.getAttribute('data-ai-result'))node=node.parentNode;
-  if(node&&node!==this){var title=node.getAttribute('data-ai-result');S.aiSearchTitle=title;navigate('search')}
+  if(node&&node!==this){var key=node.getAttribute('data-ai-result'),split=key.indexOf(':'),kind=key.slice(0,split),id=key.slice(split+1);if(findItem(kind,id))navigate('detail',{kind:kind,id:id})}
  };
 }
 function resetCatalogRefresh(){
@@ -1714,7 +1768,7 @@ function pictureFitMode(value){return value==='zoom'?'cover':value==='fill'?'fil
 function settingsScreen(){
  shell('الإعدادات','<div class="customer-settings">'+
  '<section class="customer-setting-group"><h3>اشتراكي والمكتبة</h3><button class="customer-setting-row" id="subscription-status">اشتراكي <span>‹</span></button><p id="subscription-feedback" class="customer-setting-feedback" role="status" aria-live="polite"></p><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
- '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button></section>'+
+ '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button><button class="customer-setting-row" id="auto-next-episode">تشغيل الحلقة التالية تلقائيًا <span id="auto-next-label"></span></button></section>'+
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row" id="switch-saved-login" hidden>تبديل الاشتراك <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
@@ -1738,6 +1792,9 @@ function settingsScreen(){
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  var fitButton=document.getElementById('picture-fit'),fitLabel=document.getElementById('picture-fit-label'),fitOptions=['fit','zoom','fill'],fitLabels=['ملاءمة','تكبير','ملء'];
  function updateFit(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));fitLabel.textContent=fitLabels[Math.max(0,index)]}
+ var autoNext=document.getElementById('auto-next-episode'),autoNextLabel=document.getElementById('auto-next-label');
+ function updateAutoNext(){autoNextLabel.textContent=readJson(profileStorageKey('autoNextEpisode'),true)!==false?'مفعّل':'متوقف'}
+ updateAutoNext();autoNext.onclick=function(){profileSave('autoNextEpisode',readJson(profileStorageKey('autoNextEpisode'),true)===false);updateAutoNext()};
  updateFit();fitButton.onclick=function(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));profileSave('pictureFit',fitOptions[(Math.max(0,index)+1)%3]);updateFit()};
  document.getElementById('subscription-status').onclick=function(){
   var button=this,notice=document.getElementById('subscription-feedback'),epoch=S.accountEpoch;button.disabled=true;notice.textContent='جار التحقق…';
@@ -1925,6 +1982,7 @@ function cleanupPlayer(){
   S.playerView.liveHlsHandoff=null;
   clearVodBufferNotice(S.playerView);
   if(S.playerView.disposeCommentary)S.playerView.disposeCommentary();
+  if(S.playerView.nextEpisodeTimer)clearTimeout(S.playerView.nextEpisodeTimer);
   if(S.playerView.disposeSubtitles)S.playerView.disposeSubtitles();
   if(S.playerView.stopLongTest)S.playerView.stopLongTest();
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
@@ -4499,13 +4557,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null,commentaryResume=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
   commentaryNoticeTimer=setTimeout(function(){el.hidden=true;el.textContent=''},3500)
  }
  function stopCommentary(){
+  commentaryResume=null;
   commentaryEpoch++;
   if(commentaryRetryTimer){clearTimeout(commentaryRetryTimer);commentaryRetryTimer=null}
   if(commentaryPictureSeek){clearTimeout(commentaryPictureSeek.timer);commentaryPictureSeek=null}
@@ -4517,11 +4576,21 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   try{old.audio.pause();old.audio.removeAttribute('src');old.audio.load();old.audio.remove()}catch(e){}
   video.muted=old.originalMuted
  }
- function commentaryVisibility(){if(document.hidden)stopCommentary()}
+ function suspendCommentary(){
+  var saved=commentary&&commentary.track?{track:commentary.track,channel:String(state.id)}:commentaryResume;
+  stopCommentary();commentaryResume=saved
+ }
+ function resumeCommentary(){
+  var saved=commentaryResume;
+  if(!saved||document.hidden||video.paused||video.seeking||video.readyState<3||S.playerView!==state||S.route!=='player')return;
+  commentaryResume=null;if(saved.channel!==String(state.id))return;
+  startCommentary(saved.track,1)
+ }
+ function commentaryVisibility(){if(document.hidden)suspendCommentary();else resumeCommentary()}
  document.addEventListener('visibilitychange',commentaryVisibility);
  state.stopCommentary=stopCommentary;
  state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);clearTimeout(commentaryNoticeTimer);stopCommentary()};
- video.addEventListener('pause',stopCommentary);
+ video.addEventListener('pause',function(){if(document.hidden)suspendCommentary();else stopCommentary()});
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
  video.addEventListener('seeking',function(){
@@ -4543,18 +4612,18 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   intentional.timer=setTimeout(function(){if(commentaryPictureSeek===intentional)stopCommentary()},3000);
   try{transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}catch(e){stopCommentary();return false}
  }
- video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}});
+ video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}resumeCommentary()});
  video.addEventListener('waiting',function(){
   if(!commentary||commentaryVideoWait||video.readyState>=3)return;
   var active=commentary;
-  commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
+  commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)suspendCommentary()},3000)
  });
  function startCommentary(track,retryAttempt){
   retryAttempt=Number(retryAttempt)||0;
   if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
   if(Date.now()<commentaryRetryAfter){commentaryNotice('انتظر قليلاً ثم أعد المحاولة.');return}
   stopCommentary();commentaryNotice('جار تشغيل المعلق…');
-  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
+  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,track:track,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
   function fail(){if(commentary!==record)return;var retry=record.hasPlayed&&retryAttempt<1;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice(retry?'جار استعادة المعلق…':'تعذر تشغيل المعلق؛ الصوت الأصلي مستمر. أعد المحاولة بعد 5 ثوانٍ.');if(retry){var epoch=commentaryEpoch;commentaryRetryTimer=setTimeout(function(){commentaryRetryTimer=null;if(commentaryEpoch===epoch&&S.playerView===state&&S.route==='player'&&!document.hidden&&!video.paused&&!video.seeking&&video.readyState>=2)startCommentary(track,retryAttempt+1)},5500)}}
   audio.onplaying=function(){
@@ -4860,6 +4929,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    targetEpisode.title||'الحلقة '+(targetEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0,true);
   S.previousBeforePlayer=previous;
  }
+ state.afterVerifiedEnd=function(){
+  if(kind!=='series'||!nextEpisode||readJson(profileStorageKey('autoNextEpisode'),true)===false||document.hidden)return;
+  if(state.nextEpisodeTimer)return;
+  state.nextEpisodeTimer=setTimeout(function(){state.nextEpisodeTimer=null;if(S.playerView===state&&S.route==='player'&&state.completed&&!document.hidden&&readJson(profileStorageKey('autoNextEpisode'),true)!==false)jumpEpisode(nextEpisode)},3000)
+ };
  var nextBtn=document.getElementById('player-next-episode'),previousBtn=document.getElementById('player-previous-episode');
  if(nextBtn&&nextEpisode)nextBtn.onclick=function(){jumpEpisode(nextEpisode)};
  if(previousBtn&&previousEpisode)previousBtn.onclick=function(){jumpEpisode(previousEpisode)};

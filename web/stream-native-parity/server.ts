@@ -69,10 +69,17 @@ function verifiedWorkerRetryHeaders(headers){
 }
 function noCache(extra={}){return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...extra}}
 function normalizeSearch(text){
- return String(text||'').toLowerCase().normalize('NFKC')
-  .replace(/[\u064b-\u065f\u0670\u0640]/g,'')
+ return String(text||'').toLowerCase().normalize('NFKD')
+  .replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'')
   .replace(/[\u0622\u0623\u0625\u0671]/g,'ا')
-  .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
+  .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي').replace(/\u0629/g,'ه')
+  .replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')
+}
+function searchCatalogMatch(item,query){
+ const words=normalizeSearch(query).split(' ').filter(Boolean);
+ if(!words.length)return false;
+ const names=[item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en,item.title_ar,item.title_en].filter(x=>typeof x==='string'&&x).map(normalizeSearch);
+ return names.some(name=>words.every(word=>name.includes(word))||name.replace(/ /g,'').includes(words.join('')))
 }
 const catalogPageCache=createCatalogPageCache();
 const catalogFlights=createCatalogFlights();
@@ -466,7 +473,7 @@ if(p==='/api/page'&&method==='GET'){
    if(!upstream.ok||!upstream.body)return {status:upstream.status>=400?upstream.status:502,error:'catalog_unavailable'};
    reader=upstream.body.getReader();
    const page=await readCatalogPage(reader,{offset,limit,match:item=>
-    (!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))});
+    (!cat||String(item.category_id||'')===cat)&&(!query||searchCatalogMatch(item,query))});
    if(signal.aborted)return {status:499,error:'catalog_cancelled'};
    const payload={...page,kind:k};
    if(pageCacheKey)catalogPageCache.put(pageCacheKey,payload);

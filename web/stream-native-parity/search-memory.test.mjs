@@ -22,7 +22,7 @@ test('new search replaces retained results and ignores old callbacks',()=>{
  f.calls[0].cb(200,{items:[{id:999}]});
  assert.equal(f.S.loaded['live:search'],undefined);
  f.calls[4].cb(200,{items:Array.from({length:40},(_,id)=>({id}))});
- assert.equal(f.S.loaded['movie:search'].items.length,20);
+ assert.equal(f.S.loaded['movie:search'].items.length,40);
  assert.equal(f.S.loaded['movie:all'].items[0].id,88);
 });
 test('failed search does not claim that catalog contains no matching items',()=>{
@@ -37,3 +37,6 @@ test('successful empty search completes with no results rather than loading fore
  assert.match(f.output.innerHTML,/لم يتم العثور/);
  assert.equal(f.status.textContent,'لا توجد نتائج');
 });
+
+test('exact title ranks above incidental partial matches',()=>{const f=fixture();f.search('The Matrix');f.calls[1].cb(200,{items:[{id:1,name:'The Matrix Reloaded'},{id:2,name:'The Matrix'},{id:3,name:'Making the Matrix'}]});assert.equal(f.S.loaded['movie:search'].items[0].id,2)});
+test('stale debounced search cannot abort current requests',()=>{const f=fixture();f.search('current');f.S.searchToken++;f.search('new');assert.equal(f.calls.length,6);});

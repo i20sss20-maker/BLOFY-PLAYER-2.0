@@ -96,14 +96,15 @@ test('saved login slots preserve the preceding account, switch only with verific
  assert.match(app,/id="switch-saved-login"/);
 });
 
- test('poster category labels match actual category IDs and full detail fields are retained',()=>{
+ test('poster captions use genuine localized genres, not provider categories',()=>{
  const a=app.indexOf('function arabicCategory('),b=app.indexOf('function refreshPosterCategories(',a);
  const category=new Function('S',app.slice(a,b)+';return posterCategory')({cats:{movie:[{category_id:'2',category_name:'دراما'}]}});
- assert.equal(category({category_id:2},'movie'),'دراما');
+ assert.equal(category({category_id:2},'movie'),'');
  assert.equal(category({category_id:9,genre:'Action'},'movie'),'أكشن');
  assert.equal(category({category_id:9},'movie'),'');
- assert.equal(category({category_name:'TOP MOVIES 4K DOLBY AUDIO'},'movie'),'أفضل الأفلام 4K صوت دولبي');
- assert.equal(category({category_name:'TOP KIDS BLURAY (MULTI-SUBS)'},'movie'),'أفضل أفلام الأطفال بلو راي (ترجمات متعددة)');
+ assert.equal(category({category_name:'TOP MOVIES 4K DOLBY AUDIO'},'movie'),'');
+ assert.equal(category({category_name:'TOP KIDS BLURAY (MULTI-SUBS)'},'movie'),'');
+ assert.equal(category({genre:'Action, Crime, Drama'},'movie'),'أكشن • جريمة • دراما');
  for(const label of ['الممثلون','المخرج','التقييم','تاريخ الإصدار','المدة','الدولة','اللغة'])assert.ok(app.includes("field('"+label+"'"));
  const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
  assert.match(css,/\.detail-plot\{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none/);
