@@ -2948,9 +2948,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             keyHex:KEY_HEX,authenticate:(username,password)=>authenticate(username,password,{touch:false}),
             findVoucher:async(accountId,proof)=>{
               const rows=(await pool.query(`SELECT account_id,code_hash,redeemed_device_hash,redeemed_at,expires_at,revoked_at
-                FROM blofy_xtream_gateway_duration_codes WHERE account_id=$1 AND redeemed_device_hash=$2
-                AND redeemed_at IS NOT NULL AND revoked_at IS NULL AND expires_at>NOW() LIMIT 2`,[accountId,proof])).rows;
-              return rows.length===1?rows[0]:null;
+                FROM blofy_xtream_gateway_duration_codes WHERE account_id=$1 AND redeemed_device_hash IS NOT NULL
+                AND redeemed_at IS NOT NULL AND revoked_at IS NULL AND expires_at>NOW() LIMIT 2`,[accountId])).rows;
+              return rows.length===1&&rows[0].redeemed_device_hash===proof?rows[0]:null;
             }
           });
           return json(res,result.ok?200:401,result,headers);
