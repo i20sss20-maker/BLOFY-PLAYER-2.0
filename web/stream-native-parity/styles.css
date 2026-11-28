@@ -1187,3 +1187,5 @@ html[data-blofy-device="touch"] .native-home-header{flex-wrap:wrap;gap:4px}
 .detail-translation{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 12px}
 .detail-translation [hidden]{display:none!important}
 .detail-translation span{color:var(--muted);font-size:12px}
+
+.offline-filters{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.offline-filters .btn{flex:1 1 65px;padding:8px 6px;min-height:44px}.offline-filters .btn.active{color:#06161d;background:#46e4d0;border-color:#46e4d0}#offline-progress{width:100%;height:12px;accent-color:#46e4d0;margin:8px 0}#offline-progress[hidden],#offline-cancel[hidden],#offline-library[hidden]{display:none!important}
