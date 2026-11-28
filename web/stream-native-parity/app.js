@@ -2077,9 +2077,9 @@ function setLiveTimeshiftMode(record,enabled){
  if(!record)return;
  var config=record.engine&&record.engine.config;
  if(config){
-  if(!Number.isFinite(record.normalLiveMaxLatency)){
+  if(record.normalLiveMaxLatency!==Infinity&&!Number.isFinite(record.normalLiveMaxLatency)){
    var current=Number(config.liveMaxLatencyDurationCount);
-   record.normalLiveMaxLatency=Number.isFinite(current)&&current>0?current:10
+   record.normalLiveMaxLatency=current>0?current:Infinity
   }
   config.liveMaxLatencyDurationCount=enabled?Infinity:record.normalLiveMaxLatency
  }
@@ -2870,7 +2870,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
-   if(liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
+   // A healthy advancing picture must never skip content to catch up.
+   if(progress.advanced)record.liveLagSince=0;
+   if(!progress.advanced&&progress.idleMs>=6500&&liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
     if(!preview)recordLiveIncident('live_catchup',now);
     status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
     return
