@@ -19,7 +19,7 @@ test('all PWA icons exist in actual runtime image and PNG dimensions match the d
  assert.match(html,/rel="apple-touch-icon"/);
 });
 test('PWA shell refresh keeps authenticated APIs and media out of cache',()=>{
- assert.match(sw,/blofy-stream-shell-v19/);
+ assert.match(sw,/blofy-stream-shell-v20/);
  const paths=JSON.parse(sw.match(/const SHELL=(\[[^\n]+\]);/)[1].replaceAll("'",'"'));
  for(const path of paths){
   assert.ok(!/^\/(?:api|vendor)\//.test(path));
