@@ -1012,3 +1012,20 @@ change("   else if(list.length===1)commentaryNotice('لا يتوفر معلق إ
 change("   showPlayerChoices('المعلقين',list,origin)","   showPlayerChoices(list.length===1?'الصوت الأصلي':'المعلقين',list,origin)");
 change("لا توجد مسارات ترجمة في التشغيل الحالي","لا توجد مسارات ترجمة في التشغيل الحالي");
 new Function(app);writeFileSync('app.js',app);
+
+
+ // A 503 while a live producer is still preparing a segment or honoring
+ // upstream backoff is not proof that its authenticated session vanished.
+ // Keep that SID and the existing bounded Retry-After path. Unknown reasons
+ // retain the previous conservative recovery policy.
+change("function liveSessionLost(record,detail,code){",`function liveHlsFailureReason(detail){
+ try{
+  var n=detail&&detail.networkDetails;
+  return n&&typeof n.getResponseHeader==='function'?n.getResponseHeader('X-Blofy-Hls-Reason'):
+   n&&n.headers&&n.headers.get?n.headers.get('X-Blofy-Hls-Reason'):null
+ }catch(e){return null}
+}
+function liveSessionLost(record,detail,code){`);
+change(" return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))",` if(code===503&&['hls_live_segment_not_ready','hls_origin_backoff'].indexOf(liveHlsFailureReason(detail))>=0)return false;
+ return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))`);
+new Function(app);writeFileSync('app.js',app);
