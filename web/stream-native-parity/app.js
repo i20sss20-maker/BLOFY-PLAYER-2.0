@@ -1590,6 +1590,25 @@ function searchNow(q,token){
   if(xhr)S.searchRequests.push(xhr)
  })(kinds[i])
 }
+function aiTitleKey(s){return String(s||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')}
+function verifyAiTitles(names,token,done){
+ var tasks=[],matches=[],seen={},cursor=0,epoch=S.accountEpoch;
+ (names||[]).filter(function(x){return typeof x==='string'&&x.trim().length>=2}).slice(0,4).forEach(function(name){['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})});
+ function step(){
+  if(token!==S.aiToken||epoch!==S.accountEpoch)return;
+  if(cursor>=tasks.length){done(matches);return}
+  var job=tasks[cursor++],wanted=aiTitleKey(job.name);
+  pageRequest(job.kind,'all',0,24,function(st,p){
+   if(token!==S.aiToken||epoch!==S.accountEpoch)return;
+   if(st===200&&p){
+    var match=p.items.find(function(item){return [item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en].some(function(n){var k=aiTitleKey(n);return k===wanted||k.replace(/ (?:19|20)\d{2}$/,'')===wanted})});
+    if(match){var id=itemId(match,job.kind),key=job.kind+':'+id;if(id&&!seen[key]){seen[key]=true;var cache=S.loaded[keyOf(job.kind,'ai')]||(S.loaded[keyOf(job.kind,'ai')]={items:[]});cache.items.push(match);if(cache.items.length>48)cache.items.shift();matches.push({kind:job.kind,id:id,name:title(match)})}}
+   }
+   step()
+  },job.name)
+ }
+ step()
+}
 function aiScreen(){
  S.route='ai';
  shell('مساعد BLOFY الذكي','<section class="ai-chat-screen" aria-label="محادثة مساعد BLOFY">'+
@@ -1600,14 +1619,14 @@ function aiScreen(){
   '<button class="chip" data-ai-prompt="اقترح فيلم رعب جديد">أفلام رعب جديدة</button></div>'+
   '<div class="ai-compose"><textarea class="input" id="ai-text" maxlength="1600" rows="2" placeholder="اكتب سؤالك…" autocomplete="off"></textarea>'+
   '<button class="btn" id="ai-send">إرسال</button></div><button class="btn secondary" id="ai-new">محادثة جديدة</button>'+
-  '<p class="muted small">الذكاء الاصطناعي قد يخطئ. اضغط على العنوان لعرض النتائج الفعلية في مكتبتك.</p></section>');
+  '<p class="muted small">الذكاء الاصطناعي قد يخطئ. الترشيحات المتاحة تُتحقق من مكتبتك قبل عرضها.</p></section>');
  function render(){
   if(S.route!=='ai')return;
   var box=document.getElementById('ai-thread');if(!box)return;
   var turns=S.aiTurns.slice(-16);
   box.innerHTML=turns.map(function(turn){
    var suggestions=(turn.suggestions||[]).map(function(t){
-    return '<button class="chip ai-result" data-ai-result="'+esc(t)+'">⌕ '+esc(t)+'</button>'
+    return '<button class="chip ai-result" data-ai-result="'+esc(t.kind+':'+t.id)+'">▶ '+esc(t.name)+'</button>'
    }).join('');
    return '<div class="ai-bubble '+(turn.user?'mine':'assistant')+'"><strong>'+(turn.user?'أنت':'BLOFY AI')+'</strong>'+
     '<p>'+esc(turn.text)+'</p>'+(suggestions?'<div class="ai-links">'+suggestions+'</div>':'')+'</div>'
@@ -1627,12 +1646,18 @@ function aiScreen(){
   var messages=S.aiTurns.filter(function(turn){return turn.user||turn.model===true}).slice(-9).map(function(turn){return {role:turn.user?'user':'assistant',content:String(turn.text||'').slice(0,1600)}});
   api('POST','/api/ai/chat',{messages:messages,locale:document.documentElement.lang==='en'?'en':'ar'},function(st,data){
    if(token!==S.aiToken)return;
-   S.aiBusy=false;
    if(st===200&&data&&data.ok){
     var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
     if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
-    S.aiTurns.push({user:false,model:true,text:String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000),suggestions:suggestions})
+    var answer=String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000);
+    verifyAiTitles(suggestions,token,function(matches){
+     if(token!==S.aiToken)return;
+     S.aiBusy=false;
+     S.aiTurns.push({user:false,model:true,text:answer+(suggestions.length?'\n\n'+(matches.length?'العناوين المطابقة في مكتبتك موضحة أدناه.':'لم أجد تطابقًا مؤكدًا لهذه الترشيحات في مكتبتك.') :''),suggestions:matches});
+     if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);render()
+    });return
    }else{
+    S.aiBusy=false;
     var message=st===429?'تم الوصول إلى حد الطلبات مؤقتًا. جرب بعد قليل.':
      st===401||st===403?'انتهت جلسة الاشتراك. افتح الإعدادات وتحقق من التفعيل.':
      'خدمة المساعد غير متاحة حاليًا. يمكنك استخدام البحث المباشر من القائمة.';
@@ -1651,7 +1676,7 @@ function aiScreen(){
  document.getElementById('ai-thread').onclick=function(e){
   var node=e.target;
   while(node&&node!==this&&!node.getAttribute('data-ai-result'))node=node.parentNode;
-  if(node&&node!==this){var title=node.getAttribute('data-ai-result');S.aiSearchTitle=title;navigate('search')}
+  if(node&&node!==this){var key=node.getAttribute('data-ai-result'),split=key.indexOf(':'),kind=key.slice(0,split),id=key.slice(split+1);if(findItem(kind,id))navigate('detail',{kind:kind,id:id})}
  };
 }
 function resetCatalogRefresh(){
