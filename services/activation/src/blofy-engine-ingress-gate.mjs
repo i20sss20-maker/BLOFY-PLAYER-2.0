@@ -18,7 +18,7 @@ export async function ensureEngineIngressGate(db){
  await db.query("ALTER TABLE blofy_engine_legacy_holds ADD COLUMN IF NOT EXISTS relay_engine text");
 
 }
-export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
+export function createEngineIngressGate(pool,{sourceId,enabled=false,expectedRelayMaxConnections=1}={}){
  const denied=reason=>({ok:false,reason});
  const tx=async(fn)=>{
   if(!enabled||!valid(sourceId))return denied('disabled');
@@ -121,7 +121,7 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
     const now=new Date(time.now).getTime(),drainStartedAt=new Date(row.updated_at).getTime();
     if(proof?.sourceId!==sourceId||proof?.previousOwner!==expectedOwner||
        proof?.authoritative!==true||proof?.scope!=='all_paths'||
-       proof?.activeConnections!==0||proof?.maxConnections!==1||
+       proof?.activeConnections!==0||!Number.isSafeInteger(expectedRelayMaxConnections)||expectedRelayMaxConnections<1||proof?.maxConnections!==expectedRelayMaxConnections||
        !Number.isSafeInteger(proof.observedAt)||!Number.isSafeInteger(drainStartedAt)||
        proof.drainStartedAt!==drainStartedAt||proof.observedAt<drainStartedAt||
        proof.observedAt<now-10000||proof.observedAt>now+2000)

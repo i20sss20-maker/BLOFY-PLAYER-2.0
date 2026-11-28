@@ -103,3 +103,52 @@ test('real PostgreSQL serializes optional source admission across separate gatew
   admin.release();await root.end();
  }
 });
+
+test('real PostgreSQL multi-channel handoff requires all holds closed and exact fresh approved quota',
+ {skip:!url,timeout:30000},async()=>{
+ const u=new URL(url);assert.ok(['127.0.0.1','localhost'].includes(u.hostname));
+ assert.equal(u.pathname,'/blofy_handoff_test');
+ const root=new pg.Pool({connectionString:url,max:2});
+ const sourceId=randomUUID(),schema='multi_'+sourceId.replaceAll('-','');
+ const admin=await root.connect();
+ let p1,p2;
+ try{
+  await admin.query('CREATE SCHEMA '+schema);
+  const cfg={connectionString:url,max:4,options:'-c search_path='+schema};
+  p1=new pg.Pool(cfg);p2=new pg.Pool(cfg);
+  await ensureEngineIngressGate(p1);
+  await p1.query('CREATE TABLE blofy_linode_feed_ledger(source_id uuid PRIMARY KEY,state text NOT NULL)');
+  const quota=5,opts={sourceId,enabled:true,expectedRelayMaxConnections:quota};
+  const a=createEngineIngressGate(p1,opts),b=createEngineIngressGate(p2,opts);
+  assert.equal((await a.initialize()).ok,true);
+  // Test fixture only: not a production bootstrap path.
+  await p1.query("UPDATE blofy_engine_ingress_gate SET relay_owner='hostbrr' WHERE source_id=$1",[sourceId]);
+  const ids=Array.from({length:3},()=>randomUUID());
+  assert.ok((await Promise.all(ids.map(id=>a.enterOwnedRelay(id,'hostbrr')))).every(x=>x.ok));
+  let observed=quota,active=0;
+  const settings={enabled:true,sourceId,expectedRelayMaxConnections:quota,
+   readHealth:async()=>{const n=Date.now();return {hostbrr:{ok:false,observedAt:n,since:n-60000},linode:{ok:true,observedAt:n,since:n-60000}}},
+   verifyCoverage:async()=>true,stopPreviousOwner:async()=>true,
+   observeProviderRelease:async i=>({...i,authoritative:true,scope:'all_paths',activeConnections:active,maxConnections:observed,observedAt:Date.now()})};
+  const runA=createRelayHandoffCoordinator({...settings,gate:a}),runB=createRelayHandoffCoordinator({...settings,gate:b});
+  assert.equal((await runA()).reason,'holds_open');
+  assert.equal((await b.enterOwnedRelay(randomUUID(),'linode')).ok,false);
+  assert.ok((await Promise.all(ids.slice(0,2).map(id=>a.closeOwnedRelay(id,'hostbrr')))).every(x=>x.ok));
+  assert.equal((await runB()).reason,'holds_open');
+  assert.equal((await a.closeOwnedRelay(ids[2],'hostbrr')).ok,true);
+  observed=1;assert.equal((await runA()).reason,'provider_release_unconfirmed');
+  observed=quota;active=1;assert.equal((await runB()).reason,'provider_release_unconfirmed');
+  active=0;
+  const results=await Promise.all([runA(),runB()]);
+  assert.equal(results.filter(x=>x.ok&&x.owner==='linode').length,1);
+  assert.equal((await a.readRelayOwnerState()).owner,'linode');
+  assert.equal((await a.enterOwnedRelay(randomUUID(),'hostbrr')).ok,false);
+  const fresh=Array.from({length:3},()=>randomUUID());
+  assert.ok((await Promise.all(fresh.map(id=>b.enterOwnedRelay(id,'linode')))).every(x=>x.ok));
+  assert.equal((await b.readRelayOwnerState()).openHolds,3);
+ }finally{
+  await Promise.all([p1?.end(),p2?.end()]);
+  await admin.query('DROP SCHEMA IF EXISTS '+schema+' CASCADE');
+  admin.release();await root.end();
+ }
+});

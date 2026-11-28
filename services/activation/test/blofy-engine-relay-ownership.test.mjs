@@ -4,7 +4,7 @@ import {createEngineIngressGate} from '../src/blofy-engine-ingress-gate.mjs';
 const sourceId='11111111-1111-4111-8111-111111111111';
 const hold='22222222-2222-4222-8222-222222222222';
 const now=Date.now();
-function fixture({mode='draining',owner='hostbrr',nextOwner='linode',holds=0,state=null}={}){
+function fixture({mode='draining',owner='hostbrr',nextOwner='linode',holds=0,state=null,expectedRelayMaxConnections=1}={}){
  const row={mode,relay_owner:owner,relay_next_owner:mode==='draining'?nextOwner:null,updated_at:new Date(now-1000)};
  const calls=[];
  const pool={async connect(){return {release(){},async query(sql,args){
@@ -18,7 +18,7 @@ function fixture({mode='draining',owner='hostbrr',nextOwner='linode',holds=0,sta
   if(sql.startsWith('INSERT INTO blofy_engine_legacy_holds'))return {rowCount:1};
   return {rows:[]};
  }}}};
- return {gate:createEngineIngressGate(pool,{sourceId,enabled:true}),row,calls};
+ return {gate:createEngineIngressGate(pool,{sourceId,enabled:true,expectedRelayMaxConnections}),row,calls};
 }
 const proof={sourceId,previousOwner:'hostbrr',authoritative:true,scope:'all_paths',activeConnections:0,maxConnections:1,observedAt:now,drainStartedAt:now-1000};
 test('only owner can acquire portable relay hold',async()=>{
@@ -54,4 +54,12 @@ test('relay transition intent is durable and compared before cancel or commit',a
  assert.equal((await gate.cancelRelayDrain({expectedOwner:'hostbrr',nextOwner:'linode',epoch:now-1})).ok,false);
  assert.equal((await gate.cancelRelayDrain({expectedOwner:'hostbrr',nextOwner:'linode',epoch:now})).ok,true);
  assert.equal(row.relay_owner,'hostbrr');assert.equal(row.relay_next_owner,null);
+});
+
+test('multichannel relay owner requires exact approved capacity and zero active connections',async()=>{
+ for(const [quota,observed,active,ok] of [[5,5,0,true],[5,1,0,false],[5,5,1,false],[0,0,0,false],[NaN,5,0,false],[1,5,0,false]]){
+  const {gate,row}=fixture({expectedRelayMaxConnections:quota});
+  const result=await gate.commitRelayOwner({expectedOwner:'hostbrr',nextOwner:'linode',proof:{...proof,maxConnections:observed,activeConnections:active}});
+  assert.equal(result.ok,ok);assert.equal(row.relay_owner,ok?'linode':'hostbrr');
+ }
 });

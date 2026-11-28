@@ -86,3 +86,14 @@ test('tracked health requires 30 seconds of continuous observations before drain
  assert.equal((await run()).owner,'linode');
  assert.equal(f.calls.filter(x=>x==='begin').length,1);
 });
+
+test('multichannel handoff requires the same explicitly approved quota and zero source sessions',async()=>{
+ for(const [quota,observed,active,reason] of [[5,5,0,null],[5,1,0,'provider_release_unconfirmed'],[5,5,1,'provider_release_unconfirmed'],[0,5,0,'source_capacity_unconfirmed']]){
+  const f=fixture();f.opts.expectedRelayMaxConnections=quota;
+  f.opts.observeProviderRelease=async i=>({...i,authoritative:true,scope:'all_paths',activeConnections:active,maxConnections:observed,observedAt:now});
+  const result=await createRelayHandoffCoordinator(f.opts)();
+  assert.equal(result.ok,reason===null);
+  if(reason)assert.equal(result.reason,reason);
+  assert.equal(f.calls.includes('commit'),reason===null);
+ }
+});
