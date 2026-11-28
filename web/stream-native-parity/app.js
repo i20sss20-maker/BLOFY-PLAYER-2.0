@@ -544,11 +544,11 @@ function home(){
   var film=(movies&&movies.items)||[],show=(series&&series.items)||[],combined=film.concat(show),candidate=combined.length?combined[S.heroIndex%combined.length]:null;
   var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art').replace('loading="lazy"','loading="eager" fetchpriority="high"')+'<div class="hero-shade"></div><div class="hero-copy">'+
   '<div class="hero-kicker">'+esc(candidate.series_id?'مسلسل جديد':'أحدث العناوين')+'</div><h2 class="hero-title">'+esc(title(candidate))+'</h2>'+
-  '<div class="hero-description">اكتشف أحدث ما أضيف إلى مكتبة BLOFY STREAM، مع تفاصيل ومواسم ومتابعة مشاهدة.</div>'+
+ 
   '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل والمشاهدة</button>'+
-  '<button class="btn secondary" data-go="movie">استكشف الأفلام</button></div>'+
+  '</div>'+
   '<div class="hero-dots">'+combined.slice(0,5).map(function(x,n){return '<span class="'+(n===S.heroIndex?'current':'')+'"></span>'}).join('')+'</div></div></div>':
-  '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2><div class="hero-description">قنوات وأفلام ومسلسلات باستخدام كود اشتراكك.</div></div></div>';
+  '<div class="home-hero"><div class="hero-copy"><div class="hero-kicker">BLOFY STREAM</div><h2 class="hero-title">كل ما تحب مشاهدته، في مكان واحد</h2></div></div>';
   var shortcuts='<div class="shelf"><div class="shelf-title"><h2>وصول سريع</h2></div><div class="story-row">'+
    '<button class="story" id="home-shortcut-live" data-go="live"><strong>◉ البث المباشر</strong><small>القنوات المفضلة والتصنيفات</small></button>'+
    '<button class="story" id="home-shortcut-movie" data-go="movie"><strong>▣ الأفلام</strong><small>الملصقات والتفاصيل</small></button>'+
@@ -1160,7 +1160,7 @@ function details(o){
   control.hidden=!needsPlotTranslation(plotSource);
   control.disabled=!!plotPending&&plotPending===plotSource;
   control.textContent=plotTranslation?(plotOriginal?'عرض الترجمة العربية':'عرض الوصف الأصلي'):(control.disabled?'جار الترجمة…':'ترجمة الوصف');
-  notice.textContent=control.disabled?'جار الترجمة بالذكاء الاصطناعي…':'';
+  notice.textContent='';
  }
  function translatePlot(){
   if(!detailCurrent()||!needsPlotTranslation(plotSource)||plotPending===plotSource)return;
@@ -1198,8 +1198,8 @@ function details(o){
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
   (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
-  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><h3 class="detail-section-title">القصة</h3><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
-  '<div class="detail-actions">'+buttons+'</div>'+(metadata?'<section class="detail-metadata"><h3 class="detail-section-title">معلومات المحتوى</h3><dl>'+metadata+'</dl></section>':'')+
+  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><div class="detail-actions">'+buttons+'</div><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
+  (metadata?'<details class="detail-metadata"><summary>معلومات المحتوى والممثلون</summary><dl>'+metadata+'</dl></details>':'')+
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
   document.getElementById('detail-translate').onclick=translatePlot;
@@ -1212,7 +1212,7 @@ function details(o){
  var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
  api('GET','/api/catalog?action='+endpoint+enc(id),null,function(st,data){
   if(!detailCurrent())return;
-  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;S.episodesSeriesId=id;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
+  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;S.episodesSeriesId=id;var p=document.getElementById('related-root');if(p)p.innerHTML=''}}
  })
 }
 function parseEpisodes(data){
