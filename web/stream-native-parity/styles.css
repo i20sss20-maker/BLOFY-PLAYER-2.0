@@ -1291,3 +1291,6 @@ html[data-blofy-device="touch"] .native-stream-hud{padding-inline:max(12px,env(s
 #web-download-message{margin:10px 0;font-size:14px;line-height:1.6}
 #web-download-message .btn{margin:6px 0}
 @media(max-width:600px) and (orientation:portrait){html[data-blofy-device="touch"] .app.catalog-app .catalog .category-filter{padding:0 0 6px}html[data-blofy-device="touch"] .category-filter .input{font-size:16px}}
+
+/* Phone playback opens directly, so do not reserve space for an inactive decoder. */
+@media(max-width:730px), (max-height:540px) and (orientation:landscape){html[data-blofy-device="touch"] .app.catalog-app .catalog.live-catalog .preview{display:none!important}}
