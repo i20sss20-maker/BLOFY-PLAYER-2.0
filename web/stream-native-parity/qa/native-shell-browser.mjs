@@ -4,7 +4,7 @@ import {chromium,webkit,devices} from '@playwright/test';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const files={'/':'index.html','/app.js':'app.js','/styles.css':'styles.css','/profile-transfer.js':'profile-transfer.js','/playback-acceptance.js':'playback-acceptance.js','/stream-icon.svg':'stream-icon.svg','/manifest.webmanifest':'manifest.webmanifest'};
+const files={'/':'index.html','/app.js':'app.js','/styles.css':'styles.css','/profile-transfer.js':'profile-transfer.js','/playback-acceptance.js':'playback-acceptance.js','/stream-icon.svg':'stream-icon.svg','/manifest.webmanifest':'manifest.webmanifest','/sw.js':'sw.js'};
 const types={'.js':'application/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
 const server=createServer((req,res)=>{
  const path=new URL(req.url,'http://localhost').pathname,file=files[path];
@@ -114,4 +114,45 @@ try{
  assert.deepEqual(failures,[]);
  console.log('BLOFY_TV_REMOTE_SYNTHETIC_PASS 720p directional keys, login, navigation and back');
  await tv.close();
+ const offline=await browser.newContext({serviceWorkers:'allow'});
+ const offPage=await offline.newPage(),profile='c'.repeat(24),expiresAt=Date.now()+3600000;
+ let activated=false,mediaCalls=0;
+ await offline.route('**/*',async route=>{
+  const u=new URL(route.request().url());
+  if(u.origin!==origin)return route.abort();
+  const p=u.pathname;
+  if(p==='/api/download/movie/123.mp4'){
+   mediaCalls++;const bytes=readFileSync('qa-fixtures/offline.mp4');
+   return route.fulfill({status:200,body:bytes,headers:{'content-type':'application/octet-stream','content-disposition':'attachment; filename="fixture.mp4"','content-length':String(bytes.length)}});
+  }
+  if(!p.startsWith('/api/'))return route.continue();
+  const respond=(status,data)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+  if(p==='/api/session')return respond(activated?200:401,activated?{ok:true,active:true,profileKey:profile,expiresAt}:{active:false});
+  if(p==='/api/redeem'){activated=true;return respond(200,{ok:true,profileKey:profile,expiresAt})}
+  if(p==='/api/login-modes')return respond(200,{direct:false});
+  if(p==='/api/page')return respond(200,{items:[],total:0,hasMore:false,nextOffset:null});
+  return respond(200,[]);
+ });
+ await offPage.goto(origin);
+ await offPage.locator('#activation-code').fill('12345678');
+ await offPage.locator('#redeem').click();
+ await offPage.locator('.rail-link[data-go="downloads"]').waitFor();
+ await offPage.locator('.rail-link[data-go="downloads"]').click();
+ await offPage.locator('.downloads-page').waitFor();
+ await offPage.evaluate(async()=>{await navigator.serviceWorker.ready;await saveOfflineDownload('movie','123','mp4','Offline fixture')});
+ await offPage.getByText('Offline fixture',{exact:true}).waitFor();
+ assert.equal(mediaCalls,1);
+ await offPage.waitForFunction(()=>!!navigator.serviceWorker.controller);
+ await offline.setOffline(true);
+ await offPage.reload({waitUntil:'domcontentloaded'});
+ await offPage.locator('#offline-reconnect').waitFor();
+ await offPage.locator('[data-offline-play="0"]').click();
+ await offPage.waitForFunction(()=>{const v=document.getElementById('offline-video');return v&&v.readyState>=2&&v.videoWidth>0});
+ await offPage.locator('#offline-video').evaluate(v=>{v.muted=true;return v.play()});
+ await offPage.waitForFunction(()=>document.getElementById('offline-video').currentTime>0.25);
+ assert.equal(mediaCalls,1);
+ await offPage.locator('[data-offline-delete="0"]').click();
+ await offPage.waitForFunction(()=>!document.querySelector('[data-offline-play]'));
+ console.log('BLOFY_OFFLINE_MP4_BROWSER_PASS complete file on disk, offline reload, decoded video, deletion');
+ await offline.close();
 }finally{await browser?.close();await new Promise(r=>server.close(r))}
