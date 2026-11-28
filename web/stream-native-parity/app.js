@@ -817,23 +817,25 @@ function enrichPosters(kind,source,force){
   posterRecovery={epoch:S.accountEpoch,queue:[],pending:{},cache:{},order:[],active:0};
  var state=posterRecovery;
  function current(){return S.accountEpoch===state.epoch&&posterRecovery===state}
- function apply(item,key,cover){
-  if(!cover||!current())return;
-  item.movie_image=cover;
+ function apply(item,key,cover,genre){
+  if(!current())return;
+  if(cover&&!art(item))item.movie_image=cover;
+  if(genre&&!posterCategory(item,kind))item.genre=genre;
   var buttons=document.querySelectorAll('[data-details]');
   for(var j=0;j<buttons.length;j++){
    if(buttons[j].getAttribute('data-details')!==key)continue;
+   var label=buttons[j].querySelector('.poster-category');if(label&&genre)label.textContent=posterCategory(item,kind);
    var holder=buttons[j].querySelector('.poster-art');
-   if(holder&&!holder.querySelector('img')&&holder.getAttribute('data-art-failed')!==cover){
+   if(cover&&holder&&!holder.querySelector('img')&&holder.getAttribute('data-art-failed')!==cover){
     var image=document.createElement('img');
     image.loading='lazy';image.decoding='async';image.referrerPolicy='no-referrer';
     image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
    }
   }
  }
- function remember(key,cover,ttl){
+ function remember(key,cover,genre,ttl){
   var old=state.order.indexOf(key);if(old>=0)state.order.splice(old,1);
-  state.cache[key]={cover:cover,until:Date.now()+ttl};state.order.push(key);
+  state.cache[key]={cover:cover,genre:genre,until:Date.now()+ttl};state.order.push(key);
   while(state.order.length>128)delete state.cache[state.order.shift()];
  }
  function pump(){
@@ -845,29 +847,29 @@ function enrichPosters(kind,source,force){
     api('GET','/api/catalog?action='+action+enc(task.id),null,function(st,res){
      if(!current())return;
      state.active--;delete state.pending[task.key];
-     var cover='';
+     var cover='',genre='';
      if(st===200&&res){
       var data=res.info||res.movie_data||res;
       var candidates=[data,res.movie_data||{},res.info||{},res];
-      for(var k=0;k<candidates.length&&!cover;k++){
-       var d=candidates[k];cover=urlPic(d.movie_image||d.cover_big||d.cover||d.poster||d.poster_path||d.stream_icon||d.backdrop_path||'')
+      for(var k=0;k<candidates.length;k++){
+       var d=candidates[k];if(!cover)cover=urlPic(d.movie_image||d.cover_big||d.cover||d.poster||d.poster_path||d.stream_icon||d.backdrop_path||'');if(!genre)genre=posterCategory(d,task.kind)
       }
      }
      // Failed metadata reads are retryable instead of permanently hiding
      // artwork. Successful covers are reused only inside this account.
-     remember(task.key,cover,cover?300000:30000);
-     if(cover)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover);
+     remember(task.key,cover,genre,cover||genre?300000:30000);
+     if(cover||genre)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover,genre);
      pump();
     });
    })(job)
   }
  }
- var candidates=source.filter(function(x){return force||!art(x)}).slice(0,16);
+ var candidates=source.filter(function(x){return force||!art(x)||!posterCategory(x,kind)}).slice(0,16);
  for(var i=0;i<candidates.length;i++){
   var item=candidates[i],id=itemId(item,kind);
   if(!id||id.length>128)continue;
   var key=kind+':'+id,hit=state.cache[key];
-  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover);continue}
+  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover,hit.genre);continue}
   if(state.pending[key]){
    if(state.pending[key].items.length<16)state.pending[key].items.push(item);
    continue
