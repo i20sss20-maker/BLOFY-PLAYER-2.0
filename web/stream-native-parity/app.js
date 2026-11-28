@@ -1626,22 +1626,40 @@ function aiTitleKey(s){
  return name.replace(separators,' ').trim().replace(/\s+/g,' ')
 }
 function verifyAiTitles(names,token,done){
- var tasks=[],matches=[],seen={},cursor=0,epoch=S.accountEpoch;
- (names||[]).filter(function(x){return typeof x==='string'&&x.trim().length>=2}).slice(0,4).forEach(function(name){['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})});
- function step(){
-  if(token!==S.aiToken||epoch!==S.accountEpoch)return;
-  if(cursor>=tasks.length){done(matches);return}
-  var job=tasks[cursor++],wanted=aiTitleKey(job.name);
-  pageRequest(job.kind,'all',0,24,function(st,p){
-   if(token!==S.aiToken||epoch!==S.accountEpoch)return;
-   if(st===200&&p){
-    var match=p.items.find(function(item){return [item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en].some(function(n){var k=aiTitleKey(n);return k===wanted||k.replace(/ (?:19|20)\d{2}$/,'')===wanted})});
-    if(match){var id=itemId(match,job.kind),key=job.kind+':'+id;if(id&&!seen[key]){seen[key]=true;var cache=S.loaded[keyOf(job.kind,'ai')]||(S.loaded[keyOf(job.kind,'ai')]={items:[]});cache.items.push(match);if(cache.items.length>48)cache.items.shift();matches.push({kind:job.kind,id:id,name:title(match)})}}
-   }
-   step()
-  },job.name)
+ var tasks=[],matches=[],seen=Object.create(null),unique=Object.create(null),cursor=0,epoch=S.accountEpoch,active=0,failed=false,ended=false,requests=[];
+ (names||[]).forEach(function(name){
+  if(typeof name!=='string'||Object.keys(unique).length>=4)return;
+  var key=aiTitleKey(name);if(key.length<2||unique[key])return;
+  unique[key]=true;['movie','series'].forEach(function(kind){tasks.push({name:name,kind:kind})})
+ });
+ function current(){return token===S.aiToken&&epoch===S.accountEpoch}
+ function finish(){
+  if(ended)return;ended=true;clearTimeout(deadline);
+  requests.forEach(function(xhr){try{xhr.abort()}catch(e){}});
+  if(current())done(matches,failed)
  }
- step()
+ var deadline=setTimeout(function(){failed=true;finish()},18000);
+ function pump(){
+  if(ended)return;
+  if(!current()){finish();return}
+  while(active<2&&cursor<tasks.length){
+   (function(job){
+    active++;var wanted=aiTitleKey(job.name);
+    var xhr=pageRequest(job.kind,'all',0,24,function(st,p){
+     if(ended)return;
+     active--;if(!current()){finish();return}
+     if(st===200&&p){
+      var match=p.items.find(function(item){return [item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en,item.title_ar,item.title_en].some(function(n){var k=aiTitleKey(n);return k===wanted||k.replace(/ (?:19|20)\d{2}$/,'')===wanted})});
+      if(match){var id=itemId(match,job.kind),key=job.kind+':'+id;if(id&&!seen[key]){seen[key]=true;var cache=S.loaded[keyOf(job.kind,'ai')]||(S.loaded[keyOf(job.kind,'ai')]={items:[]});cache.items=cache.items.filter(function(item){return itemId(item,job.kind)!==id});cache.items.push(match);if(cache.items.length>48)cache.items.shift();matches.push({kind:job.kind,id:id,name:title(match)})}}
+     }else failed=true;
+     pump()
+    },job.name);
+    if(xhr&&!ended)requests.push(xhr)
+   })(tasks[cursor++])
+  }
+  if(!active&&cursor>=tasks.length)finish()
+ }
+ pump()
 }
 function aiScreen(){
  S.route='ai';
@@ -1684,11 +1702,11 @@ function aiScreen(){
     var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
     if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
     var answer=String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000);
-    verifyAiTitles(suggestions,token,function(matches){
+    verifyAiTitles(suggestions,token,function(matches,verificationFailed){
      if(token!==S.aiToken)return;
      S.aiBusy=false;
      var recommendation=/رشح|ترشيح|اقترح|تنصح|recommend|suggest/i.test(query);
-     var verifiedText=suggestions.length?(matches.length?'هذه العناوين التي تحققت من وجودها في مكتبتك:':'لم أجد تطابقًا مؤكدًا لهذه الترشيحات في مكتبتك. جرّب طلب نوع آخر أو اسم محدد.'):(recommendation?'لم أجد ترشيحات مؤكدة في مكتبتك لهذا الطلب. جرّب تحديد النوع أو اسم ممثل.':answer);
+     var verifiedText=suggestions.length?(matches.length?'وجدت في مكتبتك: '+matches.map(function(m){return m.name}).join('، ')+(verificationFailed?' — تعذر التحقق من بعض العناوين الأخرى.':'')+'.':verificationFailed?'تعذر التحقق من مكتبتك الآن. حاول مرة أخرى.':'لم أجد تطابقًا مؤكدًا في مكتبتك. جرّب نوعًا آخر أو اسمًا محددًا.'):(recommendation?'لم أجد ترشيحات مؤكدة في مكتبتك لهذا الطلب. جرّب تحديد النوع أو اسم ممثل.':answer);
      S.aiTurns.push({user:false,model:true,text:verifiedText,suggestions:matches});
      if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);render()
     });return
