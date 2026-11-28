@@ -34,8 +34,17 @@ try{
     const input=request.postDataJSON();requests.push({p,input});
     return respond(200,{ok:true,profileKey:'a'.repeat(24),expiresAt:Date.now()+3600000});
    }
-   if(p==='/api/page')return respond(200,{items:[],total:0,hasMore:false,nextOffset:null});
-   if(p==='/api/catalog')return respond(200,[]);
+   if(p==='/api/page'){
+    const kind=u.searchParams.get('kind'),items=kind==='movie'?[{stream_id:123,name:'Fixture movie',container_extension:'mp4'}]:kind==='series'?[{series_id:321,name:'Fixture series'}]:kind==='live'?[{stream_id:456,name:'Fixture live'}]:[];
+    return respond(200,{items,total:items.length,hasMore:false,nextOffset:null})
+   }
+   if(p==='/api/catalog'){
+    const action=u.searchParams.get('action');
+    if(action&&action.endsWith('_categories'))return respond(200,[{category_id:'1',category_name:'رياضة'},{category_id:'2',category_name:'دراما'}]);
+    if(action==='get_series_info')return respond(200,{info:{plot:'وصف عربي'},episodes:{'1':[{id:'789',title:'Fixture series episode one',episode_num:1,container_extension:'mp4'}]}});
+    if(action==='get_vod_info')return respond(200,{info:{plot:'وصف عربي للفيلم'}});
+    return respond(200,[])
+   }
    if(p==='/api/ai/interpret')return respond(200,{ok:true,reply:'نتيجة اختبار محلية',suggestedTitles:['Fixture']});
    return respond(404,{error:'synthetic_route_not_configured'});
   });
@@ -63,6 +72,40 @@ try{
   const narrow=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);assert.ok(navBox&&workspaceBox&&(narrow?navBox.y>=workspaceBox.y+workspaceBox.height-2:navBox.x>=workspaceBox.x+workspaceBox.width-2),'responsive navigation must stay outside the content');}
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'phone layout must not overflow horizontally');
   assert.equal(await page.locator('.native-home-bottom').locator('[data-go="downloads"] svg').count(),1);
+  if(mode==='code'){
+   // Populated screens: cover the real layout rather than only empty Home.
+   await page.locator('.native-home-tabs [data-go="movie"]').click();
+   await page.locator('.poster-grid [data-details="movie:123"]').waitFor();
+   await page.locator('.category-filter-input').fill('دراما');
+   assert.equal(await page.locator('.cat-item[data-cat="movie:1"]').isVisible(),false);
+   assert.equal(await page.locator('.cat-item[data-cat="movie:2"]').isVisible(),true);
+   await page.locator('.category-filter-input').fill('');
+   await page.locator('.poster-grid [data-details="movie:123"]').click();
+   await page.locator('#detail-plot-text').waitFor();
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.locator('[data-back]').first().click();
+   await page.locator('.catalog-home').click();
+   await page.locator('.native-home-tabs [data-go="series"]').click();
+   await page.locator('.poster-grid [data-details="series:321"]').click();
+   await page.locator('[data-episodes="321"]').first().click();
+   await page.locator('.episode-card [data-watch="series:789"]').waitFor();
+   assert.equal(await page.locator('.episode-name').first().textContent(),'الحلقة 1');
+   assert.ok(await page.locator('.episode-card [data-download="series:789"]').isVisible());
+   await page.locator('[data-back]').first().click();
+   await page.locator('[data-back]').first().click();
+   await page.locator('.catalog-home').click();
+   await page.locator('.native-home-tabs [data-go="live"]').click();
+   await page.locator('[data-channel="456"]').waitFor();
+   const phone=await page.evaluate(()=>matchMedia('(max-width:730px), (max-height:540px) and (orientation:landscape)').matches);
+   if(phone)assert.equal(await page.locator('.preview').isVisible(),false);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.locator('.catalog-home').click();
+   const vp=page.viewportSize();
+   await page.setViewportSize({width:vp.height,height:vp.width});
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.setViewportSize(vp);
+   console.log('BLOFY_POPULATED_LAYOUT_PASS',name,device);
+  }
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
