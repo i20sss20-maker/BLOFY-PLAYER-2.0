@@ -56,3 +56,14 @@ test('movie and series descriptions use Arabic AI translation without replacing 
  assert.match(server,/blofy-ai-gateway-production\.up\.railway\.app\/v1\/translate/);
  assert.match(server,/JSON.stringify\(\{title:'',overview,locale:'ar'\}\)/);
 });
+
+test('native subscription screen uses verified session and picture fit persists per profile',()=>{
+ const a=app.indexOf('function pictureFitMode('),b=app.indexOf('function settingsScreen(',a);
+ const fit=new Function(app.slice(a,b)+';return pictureFitMode')();
+ assert.equal(fit('fit'),'contain');assert.equal(fit('zoom'),'cover');assert.equal(fit('fill'),'fill');assert.equal(fit('invalid'),'contain');
+ const settings=app.slice(b,app.indexOf('function fmt(',b));
+ assert.match(settings,/api\('GET','\/api\/session'/);
+ assert.match(settings,/data\.profileKey===S\.profileKey/);
+ assert.match(settings,/profileSave\('pictureFit'/);
+ assert.match(app,/video\.style\.objectFit=pictureFitMode\(readJson\(profileStorageKey\('pictureFit'\)/);
+});
