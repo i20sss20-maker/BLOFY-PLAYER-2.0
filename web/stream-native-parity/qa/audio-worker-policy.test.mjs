@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createAudioSlots,audioContainer,audioWorkerHost} from '../audio-worker-policy.mjs';
+import {createAudioSlots,audioContainer,audioWorkerHost,audioSlotLimit} from '../audio-worker-policy.mjs';
 test('audio slot stays occupied until explicit process release',()=>{
  const slots=createAudioSlots(),release=slots.acquire('opaque-a');
  assert.ok(release);assert.equal(slots.acquire('opaque-a'),null);assert.equal(slots.acquire('opaque-b'),null);
@@ -13,4 +13,12 @@ test('only known audio containers and exact private worker routes are accepted',
  assert.equal(audioWorkerHost('isolated'),'http://blofy-stream-web-audio.railway.internal:8080');
  assert.equal(audioWorkerHost(''),'http://blofy-stream-web-media.railway.internal:8080');
  assert.equal(audioWorkerHost('http://127.0.0.1'),null);
+});
+
+test('independent audio capacity is bounded and one account cannot hold duplicate conversions',()=>{
+ for(const value of [undefined,0,-1,5,1.5,'invalid'])assert.equal(audioSlotLimit(value),1);
+ assert.equal(audioSlotLimit('2'),2);
+ const slots=createAudioSlots(2),a=slots.acquire('one'),b=slots.acquire('two');
+ assert.ok(a&&b);assert.equal(slots.acquire('one'),null);assert.equal(slots.acquire('three'),null);
+ a();assert.ok(slots.acquire('three'));b();assert.equal(slots.snapshot().active,1);
 });
