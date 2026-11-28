@@ -1680,6 +1680,27 @@ function commentarySeekTarget(audio,delta){
  }catch(e){}
  return null
 }
+// Local HLS buffer only. This does not advertise server-side DVR or
+// TimeShift: the source may remove old segments at any moment.
+function bufferedLiveSeekTarget(video,record,action){
+ if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
+ var at=Number(video.currentTime),seekable=video.seekable,buffered=video.buffered;
+ if(!Number.isFinite(at)||!seekable||!buffered)return null;
+ try{
+  for(var i=0;i<Math.min(seekable.length,32);i++){
+   var ss=seekable.start(i),se=seekable.end(i);
+   if(at<ss||at>se)continue;
+   for(var j=0;j<Math.min(buffered.length,32);j++){
+    var start=Math.max(ss,buffered.start(j)),end=Math.min(se,buffered.end(j));
+    if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
+    var target=action==='back'?at-5:action==='forward'?at+5:action==='latest'?end-0.75:NaN;
+    if(action==='forward')target=Math.min(target,end-0.75);
+    if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target
+   }
+  }
+ }catch(e){}
+ return null
+}
 function simpleLiveStatus(message,error){
  if(error||!message)return message;
  // Collapse internal progress phases, never actionable errors or play prompts.
@@ -1830,7 +1851,7 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
  */
 function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
  if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
-    record.reconnecting||Number(video.readyState)<2){
+    record.reconnecting||Number(video.readyState)<2||now<(record.localBufferSeekUntil||0)){
   record.liveLagSince=0;return false
  }
  var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
@@ -3050,7 +3071,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-live-buffer" type="button">توقيت البث</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4229,6 +4250,24 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
  if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
  if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
+ var bufferButton=document.getElementById('player-live-buffer');
+ if(bufferButton)bufferButton.onclick=function(){
+  if(!isLive||S.playerView!==state||S.route!=='player')return;
+  var record=S.play,origin=this,options=[];
+  if(record&&record.video===video){
+   [['back','رجوع 5 ثوانٍ'],['forward','تقديم 5 ثوانٍ'],['latest','أحدث نقطة محفوظة']].forEach(function(entry){
+    if(bufferedLiveSeekTarget(video,record,entry[0])===null)return;
+    options.push({name:entry[1],selected:false,select:function(){
+     if(S.play!==record||S.playerView!==state||S.route!=='player')return;
+     var target=bufferedLiveSeekTarget(video,record,entry[0]);
+     if(target===null){playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return}
+     try{stopCommentary();video.currentTime=target;record.localBufferSeekUntil=Date.now()+20000;playerStatus('')}catch(e){playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
+    }})
+   });
+  }
+  if(!options.length){playerStatus('لا يتوفر جزء قابل للرجوع داخل ذاكرة المشغل الآن.');return}
+  showPlayerChoices('التوقيت داخل الجزء المحفوظ',options,origin)
+ };
  var subtitleButton=document.getElementById('player-subtitles');
  if(subtitleButton)subtitleButton.onclick=function(){
   var engine=S.play&&S.play.engine,list=[],native=video.textTracks;
