@@ -211,20 +211,22 @@ function login(message){
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
  S.epgToken++;S.epgCache={};
- app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
- '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
- '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
- '<button class="btn" id="redeem">تفعيل الاشتراك</button><div class="login-status" id="login-status">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
- '</div></div>';
- var button=document.getElementById('redeem');
- button.onclick=redeem;
- document.getElementById('activation-code').onkeydown=function(e){if((e.keyCode||e.which)===13)redeem()};
+ app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel native-stream-login">'+
+ '<div class="login-brand native-login-brand">BLOFY STREAM</div><p class="native-login-tagline">البث المباشر والأفلام والمسلسلات</p><div class="native-login-divider" aria-hidden="true"></div>'+
+ '<div class="native-login-modes" role="group" aria-label="طريقة الدخول"><button class="native-login-mode active" type="button" aria-pressed="true">الكود</button><button class="native-login-mode" type="button" disabled aria-describedby="direct-login-notice">اكستريم</button><button class="native-login-mode" type="button" disabled aria-describedby="direct-login-notice">M3U</button></div>'+
+ '<form id="stream-login-form"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
+ '<input class="input" id="activation-code" placeholder="•••• ••••" maxlength="24" inputmode="numeric" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">'+
+ '<button class="btn native-login-submit" id="redeem" type="submit">ابدأ المشاهدة</button></form><div class="login-status" id="login-status" role="status" aria-live="polite">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
+ '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p></div></div>';
+ var form=document.getElementById('stream-login-form');
+ form.onsubmit=function(e){e.preventDefault();redeem()};
  setTimeout(function(){(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
 }
 function redeem(){
+ var btn=document.getElementById('redeem');if(!btn||btn.disabled)return;
  var code=(document.getElementById('activation-code').value||'').replace(/[\s-]/g,'').toUpperCase();
  if(!/^([0-9]{8,12}|[A-F0-9]{24})$/.test(code)){setStatus('تأكد من إدخال كود BLOFY STREAM الصحيح',true);return}
- var btn=document.getElementById('redeem');btn.disabled=true;setStatus('جار التحقق من التفعيل…');
+ btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
   if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth()}
