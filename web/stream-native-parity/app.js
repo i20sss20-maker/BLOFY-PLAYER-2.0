@@ -211,7 +211,7 @@ function login(message){
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
  S.epgToken++;S.epgCache={};
- app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel native-stream-login">'+
+ app.innerHTML='<div class="login-screen screen-appear native-login-screen"><div class="login-panel native-stream-login">'+
  '<div class="login-brand native-login-brand">BLOFY STREAM</div><p class="native-login-tagline">البث المباشر والأفلام والمسلسلات</p><div class="native-login-divider" aria-hidden="true"></div>'+
  '<div class="native-login-modes" role="group" aria-label="طريقة الدخول"><button class="native-login-mode active" type="button" aria-pressed="true">الكود</button><button class="native-login-mode" type="button" disabled aria-describedby="direct-login-notice">اكستريم</button><button class="native-login-mode" type="button" disabled aria-describedby="direct-login-notice">M3U</button></div>'+
  '<form id="stream-login-form"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
