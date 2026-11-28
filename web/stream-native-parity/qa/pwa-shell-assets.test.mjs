@@ -34,3 +34,14 @@ test('fresh app navigation versions all shell scripts and styles',()=>{
   assert.ok(html.includes('/'+asset+'?v=2026.11.28.56.0.3'));
  }
 });
+
+test('native Arabic fonts are packaged and served locally',()=>{
+ const css=readFileSync('styles.css','utf8'),server=readFileSync('server.ts','utf8'),docker=readFileSync('Dockerfile','utf8');
+ for(const name of ['IBMPlexSansArabic-Regular.ttf','IBMPlexSansArabic-SemiBold.ttf']){
+  assert.ok(existsSync('fonts/'+name));
+  assert.ok(css.includes('/fonts/'+name));
+  assert.ok(server.includes('/fonts/'+name));
+  assert.equal(readFileSync('fonts/'+name).subarray(0,4).toString('hex'),'00010000');
+ }
+ assert.ok(docker.includes('COPY fonts/ /app/fonts/'));
+});
