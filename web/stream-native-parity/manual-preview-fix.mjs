@@ -986,4 +986,13 @@ change("     if(response.status===401||response.status===403||response.status===
 change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);", "    if(code===503&&liveSourceQuotaRejected(detail)){showSourceQuota();return}\n    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);");
 
 
+// Preview can be audible after a gesture; autoplay policy may require one
+// silent attempt to keep picture navigation functioning without extra sessions.
+change("record.autoplayBlocked=true;\n   status('اضغط تشغيل ▶');",`if(preview&&!video.muted&&!record.previewMutedFallback){
+    record.previewMutedFallback=true;video.muted=true;video.defaultMuted=true;
+    var sound=document.getElementById('preview-audio-toggle');if(sound)sound.textContent='🔇 تفعيل الصوت';
+    try{var silent=video.play();if(silent&&silent.catch)silent.catch(handleLivePlayRejection);return}catch(e){}
+   }
+   record.autoplayBlocked=true;
+   status('اضغط تشغيل ▶');`);
 new Function(app);writeFileSync('app.js',app);
