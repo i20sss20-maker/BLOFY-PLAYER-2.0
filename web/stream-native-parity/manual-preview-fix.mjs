@@ -1086,3 +1086,27 @@ change("function liveSessionLost(record,detail,code){",`function liveSessionTerm
 function liveSessionLost(record,detail,code){`);
 change("response.status===404||failure&&failure.error==='hls_session_retired'","response.status===404||response.status===503&&failure&&liveSessionTerminalReason(failure.error)");
 new Function(app);writeFileSync('app.js',app);
+
+
+// Native WebKit and MSE can both report a clean end without a media error.
+// Reuse the existing authenticated STOP handoff; never seek, replay, or
+// allocate a second source connection. Leave all VOD end handlers intact.
+change("function liveUnexpectedPause(record,video,userPaused,hidden,now){",`function liveCleanEndAllowed(record,video,active,paused,hidden,offline,external){
+ return !!(active&&record.kind==='live'&&!record.reconnecting&&video.isConnected&&video.ended&&
+  !video.seeking&&liveRecoveryAllowed(paused,hidden,offline,external))
+}
+function liveUnexpectedPause(record,video,userPaused,hidden,now){`);
+change(" video.onerror=function(){if(alive()){",` if(kind==='live'){
+  record.cleanEndListener=function(){
+   var owner=!preview&&S.playerView;
+   var current=alive()&&(preview?S.route==='live'&&String(S.selected)===String(id):
+    S.route==='player'&&owner&&owner.video===video&&String(owner.id)===String(id));
+   if(liveCleanEndAllowed(record,video,current,owner&&owner.userPaused,document.hidden,navigator.onLine===false,owner&&owner.externalMode)){
+    recoverConnection()
+   }
+  };
+  video.addEventListener('ended',record.cleanEndListener)
+ }
+ video.onerror=function(){if(alive()){`);
+change("  if(old.qualityListener&&old.video){","  if(old.cleanEndListener&&old.video)old.video.removeEventListener('ended',old.cleanEndListener);\n  if(old.qualityListener&&old.video){");
+new Function(app);writeFileSync('app.js',app);
