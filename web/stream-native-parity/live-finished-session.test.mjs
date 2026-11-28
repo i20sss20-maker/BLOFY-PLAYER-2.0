@@ -24,5 +24,17 @@ test('released app reuses deferred recovery, stop acknowledgement and initial ma
  assert.match(app,/if\(!detail\.fatal&&!liveSessionLost\(record,detail,code\)\)return/);
  assert.match(app,/deferHlsRetry\('originTimer',delay,function\(\)\{/);
  assert.match(app,/if\(!record\.manifestParsed\)engine\.loadSource\(manifest\)/);
- assert.match(app,/if\(status!==200&&status!==404\)\{ops\.error\(\);return\}/);
+ const start=app.indexOf('function queueLiveHlsHandoff('),end=app.indexOf('function liveHlsFailureReason(',start);
+ const queue=new Function(app.slice(start,end)+';return queueLiveHlsHandoff')();
+ const state={},calls=[];let ack;
+ const ops={detach(){calls.push('detach')},current:()=>true,visible:()=>true,matches:()=>true,
+  wait(){},error(){calls.push('error')},timer:()=>1,clear(){},
+  stop(key,cb){calls.push(key);ack=cb},start(req){calls.push(req.id)}};
+ queue(state,{id:'9'},'old-sid',ops);
+ assert.deepEqual(calls,['detach','old-sid']);
+ ack(503);assert.deepEqual(calls,['detach','old-sid','error']);
+ queue(state,{id:'9'},null,ops);
+ assert.equal(calls.at(-1),'old-sid');
+ ack(200);assert.equal(calls.at(-1),'9');
+ assert.equal(state.liveHlsHandoff,null);
 });
