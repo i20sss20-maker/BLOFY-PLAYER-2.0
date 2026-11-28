@@ -1,0 +1,6 @@
+BLOFY STREAM WEB — customer release
+Validated source: 311f8cb45988e8dac342bdadc29508702b0cc9ec
+Staging deployment: b0177b3f-49bf-4ad2-8fab-c6c9e0fd0b6d (SUCCESS)
+Scope: web shell, responsive navigation, playback notices, search, preview audio, AI verification, translation cache, account-scoped downloads.
+No activation service, database, media-worker, engine, or subscription changes.
+Rollback source: 4c92042ce560c455506ec0f23ec0d1505423f426
