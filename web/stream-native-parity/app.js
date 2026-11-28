@@ -2019,6 +2019,7 @@ function stopPlayback(sendStop){
   if(old.retryTimer)clearTimeout(old.retryTimer);
   if(old.capacityTimer)clearTimeout(old.capacityTimer);
   if(old.originTimer)clearTimeout(old.originTimer);
+  if(old.finishedSessionTimer)clearTimeout(old.finishedSessionTimer);
   if(old.stableTimer)clearTimeout(old.stableTimer);
   if(old.qualityListener&&old.video){old.video.removeEventListener('loadedmetadata',old.qualityListener);old.video.removeEventListener('resize',old.qualityListener)}
  }catch(e){}
@@ -2509,6 +2510,16 @@ function queueLiveHlsHandoff(state,request,oldKey,ops){
  });
  return true
 }
+function liveFinishedHlsHint(detail,code){
+ var reason='',retry=0,net=detail&&detail.networkDetails;
+ function header(name){
+  try{return net&&typeof net.getResponseHeader==='function'?net.getResponseHeader(name):net&&net.headers&&typeof net.headers.get==='function'?net.headers.get(name):null}catch(e){return null}
+ }
+ reason=header('X-Blofy-Hls-Reason');
+ var raw=header('Retry-After');
+ if(/^[0-9]{1,2}$/.test(String(raw))&&Number(raw)>=1&&Number(raw)<=30)retry=Number(raw)*1000;
+ return {ended:code===503&&(reason==='hls_source_finished'||reason==='hls_session_closed'||reason==='hls_source_stalled'),delay:Math.max(2000,retry)}
+}
 function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt){
  var player=S.playerView;
  if(!preview&&kind==='live'&&S.route==='player'&&player&&player.video===video){
@@ -2631,7 +2642,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
  }
  function recoverConnection(){
-  if(!alive()||record.reconnecting)return;
+  if(!alive()||record.reconnecting||record.finishedSessionTimer)return;
   if(preview){
    if(S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
    if(record.recoveryAttempt>=2){
@@ -2801,7 +2812,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  // Independent timer covers silent stalls in preview and fullscreen.
  // Preview restarts are capped to two to protect the upstream connection.
  record.progressWatchdog=setInterval(function(){
-   if(!alive()||!record.ready||!video.isConnected)return;
+   if(!alive()||!record.ready||record.finishedSessionTimer||!video.isConnected)return;
    if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
    if(!preview&&S.route!=='player')return;
    var now=Date.now();
@@ -2843,7 +2854,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
   try{
    var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,maxLiveSyncPlaybackRate:1,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
-   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
+   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;record.manifestParsed=true;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
    // Network and decoder are separate signals. If HLS fragments arrive while
    // actual decoded frames remain frozen, the report can flag a TV decoder
    // problem instead of blaming Railway or the subscriber's source.
@@ -2856,8 +2867,29 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     }
    });
    engine.on(window.Hls.Events.ERROR,function(event,detail){
-    if(!alive()||!detail)return;
+    if(!alive()||!detail||record.reconnecting||record.finishedSessionTimer)return;
     var code=Number(detail.response&&detail.response.code)||0;
+    var hint=liveFinishedHlsHint(detail,code);
+    if(hint.ended){
+     // A retired FFmpeg producer cannot be resumed with startLoad().
+     // Wait for its advertised backoff; the normal handoff acknowledges STOP before a fresh SID.
+     if(record.retryTimer){clearTimeout(record.retryTimer);record.retryTimer=null}
+     if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
+     if(record.capacityTimer){clearTimeout(record.capacityTimer);record.capacityTimer=null}
+     if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
+     try{engine.stopLoad()}catch(e){}
+     status('جار استعادة القناة تلقائيًا…');
+     function renewFinished(){
+      record.finishedSessionTimer=null;
+      if(!alive())return;
+      if(document.hidden||navigator.onLine===false||(!preview&&S.playerView&&S.playerView.userPaused)){
+       record.finishedSessionTimer=setTimeout(renewFinished,3000);return
+      }
+      recoverConnection()
+     }
+     record.finishedSessionTimer=setTimeout(renewFinished,hint.delay);
+     return
+    }
     if(code===410&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
      if(!preview)recordLiveIncident('live_edge_resync');
      var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());
@@ -2880,7 +2912,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.capacityTimer=setTimeout(function(){
       record.capacityTimer=null;
       if(!alive())return;
-      try{engine.startLoad()}catch(e){recoverConnection()}
+      try{if(record.manifestParsed)engine.startLoad();else engine.loadSource(manifest)}catch(e){recoverConnection()}
      },delay);
      return
     }
@@ -2894,7 +2926,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.originTimer=setTimeout(function(){
       record.originTimer=null;
       if(!alive())return;
-      try{engine.startLoad()}catch(e){recoverConnection()}
+      try{if(record.manifestParsed)engine.startLoad();else engine.loadSource(manifest)}catch(e){recoverConnection()}
      },delay);
      return
     }
@@ -2906,7 +2938,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.retryTimer=setTimeout(function(){
       record.retryTimer=null;
       if(!alive())return;
-      try{engine.startLoad()}catch(e){recoverConnection()}
+      try{if(record.manifestParsed)engine.startLoad();else engine.loadSource(manifest)}catch(e){recoverConnection()}
      },pause);
      return
     }
