@@ -30,3 +30,13 @@ test('independent web capability is route scoped and opt-in',()=>{
  assert.equal(route({url:'/api/v1/stream/media/live/123.ts',method:'POST'}),false);
  assert.match(source,/BLOFY_STREAM_WEB_XTREAM_LOGIN_QA!=='1'\|\|!xtreamWebBearerRoute\(req\)/);
 });
+
+test('direct credential login has a distinct bounded budget and never consumes code redemption limits',()=>{
+ const source=readFileSync(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const a=source.indexOf("if(url.pathname==='/api/v1/stream/app/web-bound-login')"),b=source.indexOf("if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem'",a);
+ assert.ok(a>=0&&b>a);const route=source.slice(a,b);
+ assert.match(route,/webCredentialGlobalLimiter\.consume\('web_credentials'\)/);
+ assert.match(route,/webCredentialAccountLimiter\.consume\(userKey\)/);
+ assert.doesNotMatch(route,/streamCode(?:Global)?Limiter\.consume/);
+ assert.match(route,/normalizeGatewayUsername\(input.username\)/);
+});
