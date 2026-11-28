@@ -217,7 +217,7 @@ function login(message){
  '<form id="stream-login-form"><div id="login-code-fields"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
  '<input class="input" id="activation-code" placeholder="•••• ••••" maxlength="24" inputmode="numeric" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">'+
  '</div><div id="login-direct-fields" hidden></div><button class="btn native-login-submit" id="redeem" type="submit">ابدأ المشاهدة</button></form><div class="login-status" id="login-status" role="status" aria-live="polite">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
- '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p></div></div>';
+ '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>قائمة M3U خارجية</a></div></div>';
  var form=document.getElementById('stream-login-form'),mode='code',directReady=false;
  var codeFields=document.getElementById('login-code-fields'),directFields=document.getElementById('login-direct-fields'),notice=document.getElementById('direct-login-notice');
  var modes={code:document.getElementById('login-mode-code'),xtream:document.getElementById('login-mode-xtream'),m3u:document.getElementById('login-mode-m3u')};
@@ -254,6 +254,7 @@ function login(message){
  };
  api('GET','/api/login-modes',null,function(st,v){
   if(S.route!=='login'||!form.isConnected)return;
+  if(st===200&&v.external===true){var external=document.getElementById('external-playlist-entry');if(external)external.hidden=false}
   if(st===200&&v.direct===true){directReady=true;notice.textContent='دخول اشتراكات BLOFY المؤهلة؛ الروابط الخارجية غير مدعومة هنا.';updateModeButtons(false)}
  });
  setTimeout(function(){if(S.route==='login'&&mode==='code')(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
