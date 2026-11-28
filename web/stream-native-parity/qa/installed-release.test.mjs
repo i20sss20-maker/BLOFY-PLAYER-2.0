@@ -272,3 +272,15 @@ test('detail metadata uses both account epoch and exact screen identity',()=>{
  assert.match(app,/function detailCurrent\(\)\{return S.accountEpoch===detailEpoch&&S.route==='detail'&&S.item&&S.item.kind===k&&S.item.id===id&&document.getElementById\('detail-root'\)===detailRoot/);
  assert.match(app,/if\(S.episodesSeriesId===id&&S.episodes&&S.episodes.episodes\)finish/);
 });
+
+test('evicted live fragment never seeks a healthy picture and recovery waits for real outage',()=>{
+ const a=app.indexOf('function liveExpiredSegmentRecovery('),b=app.indexOf('function liveTransientRetryMs(',a);
+ const recover=new Function(app.slice(a,b)+';return liveExpiredSegmentRecovery')();
+ const engine={startLoad(){throw Error('unexpected load')},stopLoad(){throw Error('unexpected stop')}};
+ const video={currentTime:123,paused:false,seeking:false},record={ready:true,lastProgressAt:10000};
+ assert.equal(recover(record,engine,video,12000),'waiting');
+ assert.equal(recover(record,engine,video,17000),'restart');
+ assert.equal(recover(record,engine,video,18000),'cooling');
+ assert.equal(video.currentTime,123);
+ video.paused=true;assert.equal(recover(record,engine,video,30000),'waiting');
+});
