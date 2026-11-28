@@ -203,6 +203,14 @@ function deviceKey(){
  try{localStorage.setItem('blofy_stream_web_device_v1',key)}catch(e){}
  return key
 }
+var savedLoginEnabled=false,accountSwitching=false;
+function reloadSavedLogin(){
+ try{localStorage.setItem('blofy-account-switch-notice',String(Date.now()))}catch(e){}
+ window.location.reload()
+}
+window.addEventListener('storage',function(e){
+ if(e.key==='blofy-account-switch-notice'&&e.newValue)window.location.reload()
+});
 function login(message){
  clearOfflineGrant();
  S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh();
@@ -218,7 +226,7 @@ function login(message){
  '<form id="stream-login-form"><div id="login-code-fields"><label class="native-login-title" for="activation-code">أدخل كود الاشتراك</label>'+
  '<input class="input" id="activation-code" placeholder="•••• ••••" maxlength="24" inputmode="numeric" autocomplete="off" autocapitalize="characters" spellcheck="false" dir="ltr">'+
  '</div><div id="login-direct-fields" hidden></div><button class="btn native-login-submit" id="redeem" type="submit">ابدأ المشاهدة</button></form><div class="login-status" id="login-status" role="status" aria-live="polite">'+esc(message||'أدخل كود اشتراكك')+'</div>'+
- '<p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>مصادر Xtream وM3U الخارجية</a></div></div>';
+ '<div id="saved-login-slots" hidden></div><p class="native-login-secure">اتصال آمن بحسابك</p><p class="native-login-unavailable" id="direct-login-notice">دخول اكستريم وM3U غير متاح في الويب بعد.</p><a class="btn secondary" id="external-playlist-entry" href="/playlist-preview" hidden>مصادر Xtream وM3U الخارجية</a></div></div>';
  var form=document.getElementById('stream-login-form'),mode='code',directReady=false;
  var codeFields=document.getElementById('login-code-fields'),directFields=document.getElementById('login-direct-fields'),notice=document.getElementById('direct-login-notice');
  var modes={code:document.getElementById('login-mode-code'),xtream:document.getElementById('login-mode-xtream'),m3u:document.getElementById('login-mode-m3u')};
@@ -249,12 +257,32 @@ function login(message){
   btn.disabled=true;updateModeButtons(true);setStatus('جار التحقق من الاشتراك…');
   api('POST','/api/direct-login',payload,function(st,r){
    btn.disabled=false;updateModeButtons(false);
+   if(st===200&&r.ok&&savedLoginEnabled){reloadSavedLogin();return}
    if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth();return}
    setStatus(st===429?'محاولات كثيرة. جرّب لاحقًا.':st===400?'تحقق من رابط أو بيانات BLOFY.':st===401?'تحقق من الاشتراك، أو استخدم كود التفعيل الأصلي إن كان مرتبطًا بجهاز.':'الدخول غير متاح حاليًا. حاول لاحقًا.',true)
   })
  };
  api('GET','/api/login-modes',null,function(st,v){
   if(S.route!=='login'||!form.isConnected)return;
+  if(st===200&&v.savedLogins===true){
+   savedLoginEnabled=true;
+   api('GET','/api/saved-logins',null,function(status,data){
+    if(S.route!=='login'||!form.isConnected||status!==200||!data||!Array.isArray(data.modes))return;
+    var slot=document.getElementById('saved-login-slots'),labels={code:'الكود',xtream:'اكستريم',m3u:'M3U'};
+    var keys=data.modes.filter(function(k){return Object.prototype.hasOwnProperty.call(labels,k)});
+    if(!keys.length)return;
+    slot.hidden=false;slot.innerHTML='<p>اشتراكات محفوظة</p>'+keys.map(function(k){return '<button type="button" class="btn secondary" data-saved-mode="'+k+'">'+labels[k]+(data.active===k?' • الحالي':'')+'</button> '}).join('');
+    slot.onclick=function(e){
+     var target=e.target,k=target.getAttribute('data-saved-mode'),btn=document.getElementById('redeem');
+     if(!k||!btn||btn.disabled)return;
+     btn.disabled=true;updateModeButtons(true);setStatus('جار التحقق من الاشتراك المحفوظ…');
+     api('POST','/api/saved-logins/switch',{mode:k},function(st,r){
+      if(st===200&&r&&r.ok){reloadSavedLogin();return}
+      btn.disabled=false;updateModeButtons(false);setStatus(st===401?'انتهت صلاحية الجلسة المحفوظة. سجل دخول هذا الاشتراك مجددًا.':'تعذر التبديل مؤقتًا، اشتراكاتك محفوظة.',true)
+     })
+    }
+   })
+  }
   if(st===200&&v.external===true){var external=document.getElementById('external-playlist-entry');if(external)external.hidden=false}
   if(st===200&&v.direct===true){directReady=true;notice.textContent='دخول اشتراكات BLOFY المؤهلة؛ الروابط الخارجية غير مدعومة هنا.';updateModeButtons(false)}
  });
@@ -267,6 +295,7 @@ function redeem(){
  btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
+  if(st===200&&r.ok&&savedLoginEnabled){reloadSavedLogin();return}
   if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;rememberOfflineGrant(r.profileKey,r.expiresAt);navigate('home',{},true);warmDesktopHlsAfterAuth()}
    else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
@@ -1631,9 +1660,25 @@ function settingsScreen(){
  '<section class="customer-setting-group"><h3>اشتراكي والمكتبة</h3><button class="customer-setting-row" id="subscription-status">اشتراكي <span>‹</span></button><p id="subscription-feedback" class="customer-setting-feedback" role="status" aria-live="polite"></p><button class="customer-setting-row" id="refresh-content">تحديث المحتوى <span>↻</span></button><p id="refresh-progress" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
  '<section class="customer-setting-group"><h3>المشاهدة</h3><button class="customer-setting-row" id="picture-fit">حجم الصورة <span id="picture-fit-label"></span></button></section>'+
  '<section class="customer-setting-group"><h3>التطبيق</h3><button class="customer-setting-row" id="install-blofy-web">طريقة إضافة BLOFY</button><p id="install-blofy-help" class="customer-setting-feedback" role="status" aria-live="polite"></p></section>'+
- '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
+ '<section class="customer-setting-group"><h3>الحساب</h3><button class="customer-setting-row" data-go="favorites">المفضلة <span>‹</span></button><button class="customer-setting-row" id="clear-watch-history">مسح سجل المشاهدة <span>‹</span></button><button class="customer-setting-row" id="switch-saved-login" hidden>تبديل الاشتراك <span>‹</span></button><button class="customer-setting-row customer-logout" id="logout">تسجيل الخروج <span>‹</span></button></section>'+
  '<p id="page-status" class="customer-setting-feedback" role="status" aria-live="polite"></p>'+
  '<p class="customer-version">BLOFY STREAM · 2026.11.28.56.0.3</p></div>');
+ var switchButton=document.getElementById('switch-saved-login');
+ api('GET','/api/login-modes',null,function(st,data){
+  if(st!==200||!data||data.savedLogins!==true||!switchButton.isConnected)return;
+  savedLoginEnabled=true;switchButton.hidden=false;
+  document.getElementById('logout').innerHTML='تسجيل الخروج من جميع الاشتراكات <span>‹</span>';
+ });
+ switchButton.onclick=function(){
+  if(accountSwitching)return;
+  accountSwitching=true;switchButton.disabled=true;
+  cleanupPlayer();var deadline=Date.now()+3500;
+  function openSwitch(){
+   if(pendingMediaStops>0&&Date.now()<deadline){setTimeout(openSwitch,100);return}
+   accountSwitching=false;login('اختر اشتراكًا محفوظًا أو أضف اشتراكًا جديدًا. اشتراكك السابق يبقى محفوظًا.');
+  }
+  openSwitch()
+ };
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  var fitButton=document.getElementById('picture-fit'),fitLabel=document.getElementById('picture-fit-label'),fitOptions=['fit','zoom','fill'],fitLabels=['ملاءمة','تكبير','ملء'];
  function updateFit(){var index=fitOptions.indexOf(readJson(profileStorageKey('pictureFit'),'fit'));fitLabel.textContent=fitLabels[Math.max(0,index)]}
@@ -1700,7 +1745,7 @@ function settingsScreen(){
   var deadline=Date.now()+3500;
   function finishLogout(){
    if(pendingMediaStops>0&&Date.now()<deadline){setTimeout(finishLogout,100);return}
-   api('POST','/api/logout',{},function(){S.loggingOut=false;login('تم تسجيل الخروج')})
+   api('POST','/api/logout',{},function(st){S.loggingOut=false;if(savedLoginEnabled){if(st===200){reloadSavedLogin();return}if(button)button.disabled=false;setStatus('تعذر تسجيل الخروج، حاول مرة أخرى.',true);return}login('تم تسجيل الخروج')})
   }
   finishLogout()
  }
