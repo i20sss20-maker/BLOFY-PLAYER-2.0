@@ -72,14 +72,23 @@ function normalizeSearch(text){
  return String(text||'').toLowerCase().normalize('NFKD')
   .replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g,'')
   .replace(/[\u0622\u0623\u0625\u0671]/g,'ا')
+  .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776))
   .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي').replace(/\u0629/g,'ه')
   .replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ')
 }
-function searchCatalogMatch(item,query){
- const words=normalizeSearch(query).split(' ').filter(Boolean);
- if(!words.length)return false;
+function searchCatalogRank(item,query){
+ const q=normalizeSearch(query),words=q.split(' ').filter(Boolean),compact=q.replace(/ /g,'');
+ if(!words.length)return 0;
  const names=[item.name,item.title,item.original_name,item.original_title,item.name_ar,item.name_en,item.title_ar,item.title_en].filter(x=>typeof x==='string'&&x).map(normalizeSearch);
- return names.some(name=>words.every(word=>name.includes(word))||name.replace(/ /g,'').includes(words.join('')))
+ let best=0;
+ for(const name of names){
+  if(name===q||name.replace(/ /g,'')===compact)best=Math.max(best,5);
+  else if(name.startsWith(q+' '))best=Math.max(best,4);
+  else if((' '+name+' ').includes(' '+q+' '))best=Math.max(best,3);
+  else if(words.every(word=>name.split(' ').some(part=>part.startsWith(word))))best=Math.max(best,2);
+  else if(q.length>=3&&(name.includes(q)||name.replace(/ /g,'').includes(compact)||words.every(word=>word.length>=3&&name.includes(word))))best=Math.max(best,1);
+ }
+ return best
 }
 const catalogPageCache=createCatalogPageCache();
 const catalogFlights=createCatalogFlights();
@@ -450,7 +459,7 @@ if(p==='/api/page'&&method==='GET'){
  if(!action)return json(400,{error:'invalid_kind'});
  const cat=u.searchParams.get('category_id')||'',query=normalizeSearch((u.searchParams.get('query')||'').trim().slice(0,75));
  if(cat&&!/^[0-9]{1,18}$/.test(cat))return json(400,{error:'invalid_category'});
- const offset=Math.max(0,Math.min(10000,parseInt(u.searchParams.get('offset')||'0',10)||0));
+ const offset=Math.max(0,Math.min(query?1000:10000,parseInt(u.searchParams.get('offset')||'0',10)||0));
  const limit=Math.max(1,Math.min(48,parseInt(u.searchParams.get('limit')||'30',10)||30));
  // Only bounded browsing pages are eligible. Searches/credentials/media are
  // never cached. A manual refresh explicitly bypasses this 45s cache.
@@ -473,7 +482,7 @@ if(p==='/api/page'&&method==='GET'){
    if(!upstream.ok||!upstream.body)return {status:upstream.status>=400?upstream.status:502,error:'catalog_unavailable'};
    reader=upstream.body.getReader();
    const page=await readCatalogPage(reader,{offset,limit,match:item=>
-    (!cat||String(item.category_id||'')===cat)&&(!query||searchCatalogMatch(item,query))});
+    (!cat||String(item.category_id||'')===cat),rank:query?item=>searchCatalogRank(item,query):null});
    if(signal.aborted)return {status:499,error:'catalog_cancelled'};
    const payload={...page,kind:k};
    if(pageCacheKey)catalogPageCache.put(pageCacheKey,payload);
