@@ -281,3 +281,16 @@ test('explicit origin backoff respects existing SID while ambiguous or retired s
   assert.equal(liveSessionLost({manifestParsed:true},withReason(reason),503),true);
  assert.equal(liveSessionLost({manifestParsed:true},{...detail,networkDetails:{getResponseHeader(){throw Error('blocked')}}},503),true);
 });
+
+test('delayed HLS retry discards obsolete viewer and defers offline, hidden or paused viewer',()=>{
+ const start=app.indexOf('function liveRecoveryAllowed('),end=app.indexOf('function resumeLiveHlsNetwork(',start);
+ const decide=new Function(app.slice(start,end)+';return hlsDelayedRetryDecision')();
+ assert.equal(decide(true,true,false,false,false,false),'resume');
+ assert.equal(decide(false,true,false,false,false,false),'discard');
+ assert.equal(decide(true,false,false,false,false,false),'discard');
+ for(let i=2;i<6;i++){
+  const flags=[true,true,false,false,false,false];flags[i]=true;
+  assert.equal(decide(...flags),'defer');
+ }
+ assert.equal((app.match(/deferHlsRetry\('/g)||[]).length,4);
+});
