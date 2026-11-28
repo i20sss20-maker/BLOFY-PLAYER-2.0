@@ -34,3 +34,4 @@ jobs:
         run: |
           node manual-preview-fix.mjs
           node qa/synthetic-browser-playback.mjs qa-fixtures
+          node qa/native-shell-browser.mjs
