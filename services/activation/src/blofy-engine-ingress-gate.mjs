@@ -11,6 +11,11 @@ export async function ensureEngineIngressGate(db){
  source_id uuid NOT NULL, hold_id uuid PRIMARY KEY, closed boolean NOT NULL DEFAULT false,
  created_at timestamptz NOT NULL DEFAULT now(), closed_at timestamptz)`);
  await db.query('CREATE INDEX IF NOT EXISTS blofy_engine_legacy_holds_active ON blofy_engine_legacy_holds(source_id) WHERE NOT closed');
+ // Durable relay ownership is separate from the leased-worker gate.
+ // Null/disabled leaves the existing production relay path unchanged.
+ await db.query("ALTER TABLE blofy_engine_ingress_gate ADD COLUMN IF NOT EXISTS relay_owner text");
+ await db.query("ALTER TABLE blofy_engine_legacy_holds ADD COLUMN IF NOT EXISTS relay_engine text");
+
 }
 export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
  const denied=reason=>({ok:false,reason});
@@ -37,6 +42,57 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    const r=await c.query('INSERT INTO blofy_engine_legacy_holds(source_id,hold_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING hold_id',[sourceId,holdId]);
    return r.rowCount===1?{ok:true,holdId}:denied('hold_replayed');
   })},
+  // For the existing portable relay path: the authenticated node, not a
+  // caller-supplied hostname, owns admission. A standby cannot open a
+  // source socket even if an old ticket is still valid.
+  async enterOwnedRelay(holdId,engineId){
+   if(!valid(holdId)||!['hostbrr','linode'].includes(engineId))return denied('invalid_hold');
+   return tx(async(c,row)=>{
+    if(row?.mode!=='legacy'||row.relay_owner!==engineId)return denied('relay_not_owner');
+    const r=await c.query('INSERT INTO blofy_engine_legacy_holds(source_id,hold_id,relay_engine) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING hold_id',[sourceId,holdId,engineId]);
+    return r.rowCount===1?{ok:true,holdId}:denied('hold_replayed');
+   });
+  },
+  async closeOwnedRelay(holdId,engineId,{abandon=false}={}){
+   if(!valid(holdId)||!['hostbrr','linode'].includes(engineId))return denied('invalid_hold');
+   return tx(async(c,row)=>{
+    if(!row)return denied('gate_missing');
+    // A delayed cleanup is allowed for its original node only. An ambiguous
+    // enter that never opened upstream may create a matching tombstone.
+    const r=abandon?await c.query(`INSERT INTO blofy_engine_legacy_holds(source_id,hold_id,relay_engine,closed,closed_at)
+     VALUES($1,$2,$3,true,now()) ON CONFLICT(hold_id) DO UPDATE
+     SET closed=true,closed_at=COALESCE(blofy_engine_legacy_holds.closed_at,EXCLUDED.closed_at)
+     WHERE blofy_engine_legacy_holds.source_id=EXCLUDED.source_id AND blofy_engine_legacy_holds.relay_engine=EXCLUDED.relay_engine`,[sourceId,holdId,engineId]):
+     await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=COALESCE(closed_at,now()) WHERE source_id=$1 AND hold_id=$2 AND relay_engine=$3',[sourceId,holdId,engineId]);
+    return r.rowCount===1?{ok:true}:denied('hold_not_owned');
+   });
+  },
+  // Internal orchestration only. Change the selected portable relay under
+  // the same source lock as all admissions. A health failure alone is never
+  // evidence of release. No external endpoint is allowed to supply proof.
+  async commitRelayOwner({expectedOwner=null,nextOwner,proof}={}){
+   if(![null,'hostbrr','linode'].includes(expectedOwner)||!['hostbrr','linode'].includes(nextOwner)||expectedOwner===nextOwner)
+    return denied('invalid_relay_transition');
+   return tx(async(c,row)=>{
+    if(row?.mode!=='draining'||(row.relay_owner??null)!==expectedOwner)
+     return denied('relay_transition_conflict');
+    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
+    const now=new Date(time.now).getTime(),drainStartedAt=new Date(row.updated_at).getTime();
+    if(proof?.sourceId!==sourceId||proof?.previousOwner!==expectedOwner||
+       proof?.authoritative!==true||proof?.scope!=='all_paths'||
+       proof?.activeConnections!==0||proof?.maxConnections!==1||
+       !Number.isSafeInteger(proof.observedAt)||!Number.isSafeInteger(drainStartedAt)||
+       proof.drainStartedAt!==drainStartedAt||proof.observedAt<drainStartedAt||
+       proof.observedAt<now-10000||proof.observedAt>now+2000)
+      return denied('external_fence_unconfirmed');
+    const {rows:[n]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    if(n.n!==0)return denied('legacy_holds_open');
+    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+    if(feed&&feed.state!=='released')return denied('reservation_unresolved');
+    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',relay_owner=$2,reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId,nextOwner]);
+    return {ok:true,mode:'legacy',relayOwner:nextOwner};
+   });
+  },
   async closeLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
    const r=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=COALESCE(closed_at,now()) WHERE source_id=$1 AND hold_id=$2',[sourceId,holdId]);
