@@ -1,3 +1,4 @@
+import {normalizeDirectEntry} from './direct-provider-entry.mjs';
 import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 let activeVodDownloads=0;
 const activeVodDownloadAccounts=new Map();
@@ -216,6 +217,34 @@ if(p.startsWith('/external/live/')){
    cancel(){cleanup();try{return reader.cancel()}catch{}}
   }),{headers:noCache({'Content-Type':'video/mp2t','Accept-Ranges':'none'})});
  }catch{cleanup();return json(502,{error:'external_connection_failed'})}
+}
+// Fixed first-party credential exchange; never fetch the supplied M3U URL.
+if(p==='/api/login-modes'&&method==='GET')return json(200,{direct:Bun.env.BLOFY_WEB_BOUND_LOGIN_QA==='1'});
+if(p==='/api/direct-login'&&method==='POST'){
+ if(Bun.env.BLOFY_WEB_BOUND_LOGIN_QA!=='1')return json(503,{ok:false,error:'direct_login_unavailable'});
+ if(u.search||!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type')||''))return json(400,{ok:false,error:'invalid_payload'});
+ const input=await readBoundedJson(req,4096);if(!input.ok)return json(input.status,{ok:false,error:'invalid_payload'});
+ const key=input.value.deviceKey;
+ if(typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key))return json(400,{ok:false,error:'invalid_payload'});
+ let entry;try{entry=normalizeDirectEntry(input.value)}catch{return json(400,{ok:false,error:'invalid_provider_entry'})}
+ try{
+  const response=await fetch(ORIGIN+'/api/v1/stream/app/web-bound-login',{
+   method:'POST',headers:{'Content-Type':CT,Accept:'application/json'},
+   body:JSON.stringify({username:entry.username,password:entry.password,deviceKey:key}),
+   redirect:'manual',signal:AbortSignal.timeout(15000)
+  });
+  if(!response.ok){try{await response.body?.cancel()}catch{};return json(response.status===429?429:response.status===401?401:503,{ok:false,error:'direct_login_unavailable'})}
+  const v=await response.json();
+  if(v?.ok!==true||typeof v.accessToken!=='string'||!/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(v.accessToken))return json(503,{ok:false,error:'direct_login_unavailable'});
+  // Do not accept a token that cannot already access the existing account.
+  const check=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:{Authorization:'Bearer '+v.accessToken,Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(10000)});
+  if(!check.ok){try{await check.body?.cancel()}catch{};return json(503,{ok:false,error:'direct_login_unavailable'})}
+  const session=await check.json();
+  const profileKey=stableAccountProfileKey(v.accessToken,KEY),expiresAt=Number(session.expiresAt);
+  if(!session.active||!profileKey||!Number.isFinite(expiresAt)||expiresAt<=Date.now())return json(401,{ok:false,error:'direct_login_unavailable'});
+  return json(200,{ok:true,expiresAt,profileKey,legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},
+   {'Set-Cookie':'bv_session='+seal(v.accessToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+Math.min(2592000,Math.floor((expiresAt-Date.now())/1000))});
+ }catch{return json(503,{ok:false,error:'direct_login_unavailable'})}
 }
 if(p==='/api/redeem'&&method==='POST'){
  const inputResult=await readBoundedJson(req,2048);if(!inputResult.ok)return json(inputResult.status,{error:'invalid_payload'});
