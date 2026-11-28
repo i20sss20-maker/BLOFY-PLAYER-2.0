@@ -1,0 +1,3 @@
+Operator requested resolving web playback interruption and improving stability.
+Web candidate 89ae8989ad954d7cb7090acd481e7dd9d1fc5805 passed QA web staging integration (46188657716) and QA web synthetic browser playback (46188657757). Android CI failed separately on an unchanged version-code baseline; this is a web-only deployment.
+Scope: explicit finished HLS producer response renews the viewer session after acknowledged STOP and bounded retry. No TimeShift, provider quota, authentication, account, Android or media-engine change. Prior web production 344285bf3dcc7328ec7c8768fd2734d14cb907fa is the rollback candidate. Real-device and production playback verification remain required.
