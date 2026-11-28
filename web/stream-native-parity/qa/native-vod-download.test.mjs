@@ -102,3 +102,15 @@ test('web download UI permits one pending preflight and ignores stale account re
  pending[2]({ok:true});await Promise.resolve();await Promise.resolve();
  assert.equal(clicks.length,1);
 });
+
+test('touch browsers get a real save link after the asynchronous authorization check',async()=>{
+ const source=readFileSync('app.js','utf8'),a=source.indexOf('function requestWebDownload('),b=source.indexOf('function favoritesScreen(',a);
+ const S={accountEpoch:1,userVerified:true,route:'detail'},saved=[];let link,clicks=0;
+ const message={textContent:'',appendChild(node){link=node}};
+ const doc={documentElement:{getAttribute:()=> 'touch'},getElementById:()=>message,createElement:()=>({click(){clicks++},remove(){},isConnected:false})};
+ const request=new Function('S','document','webDownloadPath','fetch','setTimeout','clearTimeout','webDownloadHistory','profileSave','downloadsScreen',source.slice(a,b)+';return requestWebDownload')(S,doc,vodDownloadPath,async()=>({ok:true}),()=>1,()=>{},()=>[],(_,rows)=>saved.push(rows),()=>{});
+ request('movie','123','mp4','Fixture');await Promise.resolve();await Promise.resolve();
+ assert.equal(clicks,0);assert.equal(saved.length,0);assert.equal(link.href,'/api/download/movie/123.mp4');
+ link.onclick({preventDefault(){throw Error('unexpected rejection')}});assert.equal(saved.length,1);
+ S.accountEpoch++;let blocked=false;link.onclick({preventDefault(){blocked=true}});assert.equal(blocked,true);assert.equal(saved.length,1);
+});
