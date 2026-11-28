@@ -87,69 +87,6 @@ test('dedicated commentator controls appear only on live and preserve original a
  assert.match(app,/commentarySeekTarget\(active\.audio,-1\)!==null/);
 });
 
-test('live timing only seeks actual retained bytes within one continuous playable range',()=>{
- const app=readFileSync('app.js','utf8');
- const a=app.indexOf('function bufferedLiveRange('),b=app.indexOf('function simpleLiveStatus(',a);
- assert.ok(a>=0&&b>a);
- const seek=new Function(app.slice(a,b)+';return bufferedLiveSeekTarget')();
- const ranges=(rows)=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
- const video={currentTime:15,readyState:4,seeking:false,ended:false,seekable:ranges([[0,30]]),buffered:ranges([[5,25]])};
- const record={hlsKey:'live/fixture',ready:true};
- assert.equal(seek(video,record,'back'),10);
- assert.equal(seek(video,record,'forward'),20);
- assert.equal(seek(video,record,'latest'),24.25);
- assert.equal(seek({...video,buffered:ranges([[5,11],[14,25]])},record,'back'),null);
- assert.equal(seek({...video,seekable:ranges([[12,30]])},record,'back'),null);
- assert.equal(seek(video,{...record,hlsKey:null},'back'),null);
- assert.equal(seek(video,{...record,preview:true},'back'),null);
- assert.equal(seek(video,{...record,reconnecting:true},'back'),null);
- assert.equal(seek({...video,seeking:true},record,'back'),null);
- assert.equal(seek(video,record,'invalid'),null);
- assert.match(app,/now<\(record.localBufferSeekUntil\|\|0\)/);
- assert.match(app,/stopCommentary\(\);setLiveTimeshiftMode\(record,entry\[0\]!=='latest'\)/);
- assert.match(app,/record.localBufferSeekUntil=Date.now\(\)\+20000;video.currentTime=target/);
-});
-
-test('manual commentary picture timing preserves one active audio stream only for a confirmed buffered seek',()=>{
- const app=readFileSync('app.js','utf8'),a=app.indexOf('function bufferedLiveRange('),b=app.indexOf('function simpleLiveStatus(',a);
- const target=new Function(app.slice(a,b)+';return bufferedLiveSeekTarget')();
- const ranges=rows=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
- const events={},timers=new Map();let tick=0;
- const video={currentTime:15,readyState:4,seeking:false,ended:false,paused:false,muted:false,seekable:ranges([[0,30]]),buffered:ranges([[5,25]]),addEventListener:(name,fn)=>events[name]=fn};
- const state={},transport={hlsKey:'fixture',ready:true,video},S={route:'player',playerView:state,play:transport};
- const document={hidden:false,getElementById:()=>null,addEventListener(){},removeEventListener(){}};
- const fakeAudio={readyState:4,play(){},pause(){},removeAttribute(){},load(){},remove(){}};
- const doc=Object.assign(document,{createElement:()=>fakeAudio});
- const start=app.indexOf('var commentary=null,commentaryEpoch='),end=app.indexOf('var audioButton=',start);
- const run=new Function('S','state','video','document','root','setTimeout','clearTimeout','enc','bufferedLiveSeekTarget',app.slice(app.indexOf('function setLiveTimeshiftMode('),app.indexOf('function liveTimeshiftTarget('))+app.slice(start,end)+';return {start:startCommentary,adjust:adjustCommentaryPicture,active:()=>commentary}');
- const controls=run(S,state,video,doc,{appendChild(){}},fn=>{timers.set(++tick,fn);return tick},id=>timers.delete(id),encodeURIComponent,target);
- controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();assert.equal(video.muted,true);
- assert.equal(controls.adjust('back-one'),true);assert.equal(video.currentTime,14);
- events.seeking();assert.ok(controls.active());events.seeked();assert.ok(controls.active());assert.equal(video.muted,true);
- assert.equal(controls.adjust('forward-one'),true);assert.equal(video.currentTime,15);
- video.currentTime=8;events.seeking();assert.equal(controls.active(),null);assert.equal(video.muted,false);
- controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();
- video.buffered=ranges([[8,8.5]]);assert.equal(controls.adjust('back-one'),false);assert.ok(controls.active());
- video.buffered=ranges([[5,25]]);assert.equal(controls.adjust('forward-one'),true);
- const timeout=[...timers.values()].at(-1);timeout();assert.equal(controls.active(),null);assert.equal(video.muted,false);
-});
-
-test('live retained range reports only playable seconds and never crosses holes',()=>{
- const app=readFileSync('app.js','utf8'),a=app.indexOf('function bufferedLiveRange('),b=app.indexOf('function simpleLiveStatus(',a);
- const {range,target}=new Function(app.slice(a,b)+';return {range:bufferedLiveRange,target:bufferedLiveSeekTarget}')();
- const ranges=rows=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
- const video={currentTime:16,readyState:4,seekable:ranges([[0,40]]),buffered:ranges([[4,30]])};
- const record={ready:true,hlsKey:'fixture'};
- assert.deepEqual(range(video,record),{start:4,end:30,at:16,behind:11,ahead:13});
- assert.equal(target(video,record,'back-ten'),6);assert.equal(target(video,record,'forward-ten'),26);
- assert.equal(target(video,record,'earliest'),4.25);assert.equal(target(video,record,'latest'),29.25);
- video.buffered=ranges([[4,12],[14,19],[22,30]]);
- assert.equal(target(video,record,'back-ten'),null);
- assert.equal(target(video,record,'forward-ten'),18.25);
- assert.equal(target(video,record,'earliest'),14.25);
- assert.equal(range(video,{...record,reconnecting:true}),null);
-});
-
 test('local Arabic subtitle files convert to safe WebVTT without external resources',()=>{
  const app=readFileSync('app.js','utf8'),a=app.indexOf('function localSubtitleVtt('),b=app.indexOf('function simpleLiveStatus(',a);
  const convert=new Function(app.slice(a,b)+';return localSubtitleVtt')();
@@ -160,20 +97,6 @@ test('local Arabic subtitle files convert to safe WebVTT without external resour
  assert.equal(convert('x'.repeat(2*1024*1024+1)),null);
  assert.match(app,/disposeSubtitles=clearLocalSubtitle/);assert.match(app,/URL.revokeObjectURL\(localSubtitle.url\)/);
 });
-
- test('TimeShift can seek retained server segments beyond the locally buffered video',()=>{
- const app=readFileSync('app.js','utf8'),a=app.indexOf('function liveTimeshiftRange('),b=app.indexOf('// Convert only bounded',a);
- const {liveTimeshiftRange,liveTimeshiftTarget}=new Function(app.slice(a,b)+';return {liveTimeshiftRange,liveTimeshiftTarget}')();
- const ranges=(a,b)=>({length:1,start:()=>a,end:()=>b});
- const video={currentTime:55,seekable:ranges(0,60),buffered:ranges(50,60),readyState:3};
- const record={hlsKey:'fixture',ready:true,engine:{latestLevelDetails:{live:true,fragmentStart:10,edge:60},liveSyncPosition:56}};
- assert.equal(liveTimeshiftTarget(video,record,'back-thirty'),25);
- assert.equal(liveTimeshiftTarget(video,record,'earliest'),10.25);
- assert.equal(liveTimeshiftTarget(video,record,'latest'),56);
- assert.equal(liveTimeshiftTarget(video,record,'forward-thirty'),59.25);
- assert.equal(liveTimeshiftTarget(video,{...record,preview:true},'back'),null);
- assert.equal(liveTimeshiftRange({...video,currentTime:5},record),null);
- });
 
 test('subtitle language labels reflect actual advertised tracks',()=>{
  const app=readFileSync('app.js','utf8'),a=app.indexOf('function subtitleTrackLabel('),b=app.indexOf('// Convert only bounded',a);
@@ -195,4 +118,13 @@ test('commentary suspends when hidden and resumes only the same live channel',()
  events.pause();doc.hidden=false;docEvents.visibilitychange();assert.ok(controls.active());audio.onplaying();assert.equal(video.muted,true);
  doc.hidden=true;docEvents.visibilitychange();state.id='456';doc.hidden=false;docEvents.visibilitychange();assert.equal(controls.active(),null);
  controls.start({id:'anis-fixture',label:'Fixture'});audio.onplaying();doc.hidden=true;docEvents.visibilitychange();state.disposeCommentary();doc.hidden=false;docEvents.visibilitychange();assert.equal(controls.active(),null);
+});
+
+
+test('live TimeShift and picture seeking removed while commentary and VOD remain',()=>{
+ const app=readFileSync('app.js','utf8');
+ assert.doesNotMatch(app,/player-timeshift|player-live-buffer|mobile-player-timing|openLiveTiming|adjustCommentaryPicture|liveTimeshiftTarget|setLiveTimeshiftMode/);
+ assert.match(app,/video.addEventListener\('seeking',stopCommentary\)/);
+ assert.match(app,/commentarySeekTarget\(active.audio,-1\)/);
+ assert.match(app,/player-skip-forward/);
 });
