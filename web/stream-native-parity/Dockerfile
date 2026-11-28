@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json /app/package.json
 RUN bun install --production --no-save
 COPY server.ts vod-download-policy.mjs ops-dashboard.html ops-dashboard.js catalog-flights.mjs audio-worker-policy.mjs web-security-controls.mjs commentary-catalog.mjs web-profile-key.mjs catalog-page-cache.mjs catalog-array-reader.mjs index.html app.js profile-transfer.js playback-acceptance.js styles.css manifest.webmanifest stream-icon.svg apple-touch-icon.png icon-192.png icon-512.png sw.js /app/
+COPY fonts/ /app/fonts/
 COPY manual-preview-fix.mjs /app/
 RUN bun run ./manual-preview-fix.mjs
 COPY poster-recovery.test.mjs catalog-refresh.test.mjs catalog-array-reader.test.mjs search-memory.test.mjs category-cache.test.mjs pagination-progress.test.mjs live-manifest-retry.test.mjs /app/
