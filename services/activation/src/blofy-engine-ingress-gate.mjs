@@ -156,6 +156,16 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    await c.query("UPDATE blofy_engine_ingress_gate SET mode='legacy',reservation_id=NULL,engine_id=NULL,updated_at=now() WHERE source_id=$1",[sourceId]);
    return {ok:true,mode:'legacy'};
   })},
+  // Ticket admission must also fence existing shared-feed attachments,
+  // not only the creation of a new upstream hold.
+  async readRelayAdmission(engineId){
+   if(!['hostbrr','linode'].includes(engineId))return denied('invalid_engine');
+   return tx(async(c,row)=>{
+    if(row?.mode!=='legacy'||row.relay_owner!==engineId)return denied('relay_not_owner');
+    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
+    return {ok:true,mode:'legacy',observedAt:new Date(time.now).getTime()};
+   });
+  },
   async readMode(){return tx(async(c,row)=>{
    if(!row)return denied('gate_missing');
    const {rows:[time]}=await c.query('SELECT clock_timestamp() now');
