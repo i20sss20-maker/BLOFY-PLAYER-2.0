@@ -51,13 +51,13 @@ function safeEncoderCapacity(raw){
  // customer info, hostnames, station identifiers or arbitrary JSON.
  const data=raw&&typeof raw==='object'?raw:{},jobs=data.jobKinds||{};
  return {busy:data.busy===true,
-  freeSlots:boundedEncoderCount(data.freeSlots,2),
+  freeSlots:boundedEncoderCount(data.freeSlots,12),
   deniedLastMinute:boundedEncoderCount(data.deniedLastMinute,100000),
   jobKinds:{
-   live:boundedEncoderCount(jobs.live,2),
-   legacyVod:boundedEncoderCount(jobs.legacyVod,2),
-   fullVod:boundedEncoderCount(jobs.fullVod,2),
-   compatible:boundedEncoderCount(jobs.compatible,2)
+   live:boundedEncoderCount(jobs.live,12),
+   legacyVod:boundedEncoderCount(jobs.legacyVod,12),
+   fullVod:boundedEncoderCount(jobs.fullVod,12),
+   compatible:boundedEncoderCount(jobs.compatible,12)
   }}
 }
 function verifiedWorkerRetryHeaders(headers){
@@ -322,7 +322,7 @@ if(p==='/api/redeem'&&method==='POST'){
  const code=String(input.code||'').toUpperCase().trim();const key=String(input.deviceKey||'');
  if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)||!/^[a-f0-9]{64}$/.test(key))return json(400,{error:'كود أو جهاز غير صالح'});
  try{const r=await fetch(ORIGIN+'/api/v1/stream/app/redeem',{method:'POST',headers:{'Content-Type':CT,'Accept':'application/json'},body:JSON.stringify({code,deviceKey:key}),redirect:'manual',signal:AbortSignal.timeout(20000)});
- let v={};try{v=await r.json()}catch{}if(!r.ok||!v.ok||typeof v.accessToken!=='string'||!/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(v.accessToken))return json(r.status===409?409:r.status===429?429:400,{ok:false,error:r.status===409?'الكود مستخدم أو مربوط بجهاز آخر':r.status===429?'محاولات كثيرة، حاول لاحقًا':'تعذّر تفعيل الكود'});
+ let v={};try{v=await r.json()}catch{}if(!r.ok||!v.ok||typeof v.accessToken!=='string'||!/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(v.accessToken))return json(r.status===409?409:r.status===429?429:r.status===401||r.status===403?r.status:r.status>=500||r.ok?503:400,{ok:false,error:r.status===409?'الكود مستخدم أو مربوط بجهاز آخر':r.status===429?'محاولات كثيرة، حاول لاحقًا':r.status>=500||r.ok?'خادم التفعيل غير متاح مؤقتًا':'تعذّر تفعيل الكود'});
  if(SAVED_LOGIN&&token(req)!==v.accessToken)closeAccountMedia(token(req));
  return loginResponse(req,{ok:true,activatedAt:v.account?.activatedAt||null,expiresAt:v.account?.expiresAt||null,
    profileKey:stableAccountProfileKey(v.accessToken,KEY),legacyProfileKey:legacyTokenProfileKey(v.accessToken,KEY)},v.accessToken,'code');
