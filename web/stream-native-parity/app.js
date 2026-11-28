@@ -515,11 +515,16 @@ function safeImg(pic,cls){
  return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" src="'+esc(pic)+'"'+
   (alternatives.length?' data-art-fallback="'+esc(JSON.stringify(alternatives))+'"':'')+'>':''
 }
+function posterCategory(item,kind){
+ var category=String(item&&item.category_id||''),rows=S.cats&&S.cats[kind]||[];
+ for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return String(rows[i].category_name||'');
+ return String(item&&item.category_name||item&&item.genre||'')
+}
 function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
  '<span class="poster-art">'+safeImg(item)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
- '<span class="poster-caption"><strong>'+esc(name)+'</strong><span>'+(percent>3&&percent<95?'متابعة • '+percent+'٪':'BLOFY STREAM')+'</span></span></button>'
+ '<span class="poster-caption"><strong>'+esc(name)+'</strong><span class="poster-category">'+esc(posterCategory(item,kind)||(kind==='movie'?'فيلم':kind==='series'?'مسلسل':'مباشر'))+'</span>'+(percent>3&&percent<95?'<span>متابعة • '+percent+'٪</span>':'')+'</span></button>'
 }
 function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).map(function(x){return posterCard(x,kind)}).join('')+'</div>'}
 function home(){
@@ -1121,6 +1126,9 @@ function saveResume(kind,id,pos,duration,ready){
 function needsPlotTranslation(value){
  var text=typeof value==='string'?value.trim():'';
  if(text.length<4||text.length>3900)return false;
+ var persianLetters=(text.match(/[\u067e\u0686\u0698\u06af\u06a9\u06cc]/g)||[]).length;
+ var persianWords=(text.match(/(?:^|[\s،؛.!؟])(?:این|برای|است|می‌شود|میشود|خواهد|که|را|در)(?=$|[\s،؛.!؟])/g)||[]).length;
+ if(persianLetters>=3||persianLetters>=1&&persianWords>=2||persianWords>=4)return true;
  var arabic=(text.match(/[\u0621-\u064a\u066e-\u06d3]/g)||[]).length;
  var latin=(text.match(/[a-zA-Z]/g)||[]).length;
  return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
@@ -1172,13 +1180,15 @@ function details(o){
   if(k==='movie')buttons+='<button class="btn secondary" data-download="movie:'+esc(id)+'" data-ext="'+esc(item.container_extension||'mp4')+'" data-name="'+esc(title(item))+'">↓ تنزيل الفيلم</button>';
   buttons+='<button class="btn secondary" data-favorite="'+k+':'+esc(id)+'">'+(S.library[key]?'♥ إزالة من المفضلة':'♡ المفضلة')+'</button>';
   var genre=Array.isArray(gen)?gen.join(' • '):String(gen||'');
+  function field(label,value){if(Array.isArray(value))value=value.map(function(v){return typeof v==='object'&&v?v.name||'':v}).filter(Boolean).join('، ');if(typeof value!=='string'&&typeof value!=='number')return '';var clean=String(value).trim();return clean?'<div class="detail-meta-row"><dt>'+esc(label)+'</dt><dd>'+esc(clean)+'</dd></div>':''}
+  var metadata=field('التصنيف',genre||posterCategory(item,k))+field('تاريخ الإصدار',year)+field('التقييم',rating)+field('المدة',info.duration||item.duration)+field('الممثلون',info.cast||info.actors||item.cast)+field('المخرج',info.director||item.director)+field('اللغة',info.language||item.language)+field('الدولة',info.country||item.country);
   var root=document.getElementById('detail-root');if(!root)return;
   var savedFocus=root.contains(document.activeElement)?focusIdentity(document.activeElement):null;
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
   (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
-  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
-  '<div class="detail-actions">'+buttons+'</div>'+
+  '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><h3 class="detail-section-title">القصة</h3><p class="detail-plot" id="detail-plot-text">'+esc(plot)+'</p><div class="detail-translation"><button type="button" class="btn secondary" id="detail-translate" hidden>ترجمة الوصف</button><span id="detail-translate-status" role="status" aria-live="polite"></span></div>'+
+  '<div class="detail-actions">'+buttons+'</div>'+(metadata?'<section class="detail-metadata"><h3 class="detail-section-title">معلومات المحتوى</h3><dl>'+metadata+'</dl></section>':'')+
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
   document.getElementById('detail-translate').onclick=translatePlot;
@@ -1348,13 +1358,13 @@ async function saveOfflineDownload(kind,id,ext,name){
   folder=await offlineFolder(profile);check();
   var nonce=new Uint8Array(12);crypto.getRandomValues(nonce);
   fileName=kind+'-'+id+'-'+Array.from(nonce,function(x){return ('0'+x.toString(16)).slice(-2)}).join('')+'.mp4';
+  var handle=await folder.getFileHandle(fileName,{create:true});
+  if(typeof handle.createWritable!=='function'){offerDeviceDownload(kind,id,ext,name);return}
   var response=await fetch(webDownloadPath(kind,id,ext),{credentials:'same-origin',cache:'no-store',signal:ctrl.signal});check();
   if(response.status!==200||!response.body||!response.headers.get('content-disposition')||!/^attachment;/i.test(response.headers.get('content-disposition')))throw Error('source');
   var total=Number(response.headers.get('content-length'));
   if(!Number.isSafeInteger(total)||total<1||total>OFFLINE_MAX_BYTES)throw Error('size');
   if(navigator.storage.estimate){var estimate=await navigator.storage.estimate();if(Number.isFinite(estimate.quota)&&Number.isFinite(estimate.usage)&&estimate.quota-estimate.usage<total+1048576)throw Error('quota')}
-  var handle=await folder.getFileHandle(fileName,{create:true});
-  if(typeof handle.createWritable!=='function'){offerDeviceDownload(kind,id,ext,name);return}
   writer=await handle.createWritable();reader=response.body.getReader();
   var written=0,last=-1;
   while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار تنزيل '+task.name+' • '+pct+'٪ • '+Math.floor(written/1048576)+' / '+Math.ceil(total/1048576)+' MB')}}
