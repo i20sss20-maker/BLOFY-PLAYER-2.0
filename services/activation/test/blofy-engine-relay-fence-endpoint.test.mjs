@@ -19,3 +19,16 @@ test('relay fence reports only authenticated current database mode; denies uncer
  fail=true;assert.equal((await call()).status,503);
  assert.equal((await call(undefined,'GET',createRelayFenceEndpoint(pool,{}))).status,403);
 });
+
+test('ownership requires distinct credentials and current owner even for existing tickets',async()=>{
+ const e={...env,BLOFY_RELAY_ENGINE_OWNERSHIP:'1',BLOFY_HOSTBRR_RELAY_HOLD_TOKEN:'h'.repeat(40),BLOFY_LINODE_RELAY_HOLD_TOKEN:'l'.repeat(40)};
+ let mode='legacy',relay_owner='hostbrr';
+ const pool={query:async()=>({rows:[{id:env.BLOFY_LINODE_MEDIA_TEST_SOURCE_ID,enabled:true,publish_catalog:true,quota:'1',restreamer:'false'}]}),connect:async()=>({release(){},async query(sql){if(sql.startsWith('SELECT *'))return {rows:[{mode,relay_owner}]};if(sql.includes('clock_timestamp'))return {rows:[{now:new Date()}]};return {rows:[]}}})};
+ const call=async(token,h=createRelayFenceEndpoint(pool,e))=>{let status;await h({method:'GET',headers:{authorization:'Bearer '+token}},{writeHead(s){status=s},end(){}});return status};
+ assert.equal(await call(e.BLOFY_STREAM_RELAY_SHARED_TOKEN),403);
+ assert.equal(await call(e.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN),200);
+ assert.equal(await call(e.BLOFY_LINODE_RELAY_HOLD_TOKEN),503);
+ mode='draining';assert.equal(await call(e.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN),503);
+ mode='legacy';relay_owner='linode';assert.equal(await call(e.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN),503);assert.equal(await call(e.BLOFY_LINODE_RELAY_HOLD_TOKEN),200);
+ assert.equal(await call(e.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN,createRelayFenceEndpoint(pool,{...e,BLOFY_LINODE_RELAY_HOLD_TOKEN:e.BLOFY_HOSTBRR_RELAY_HOLD_TOKEN})),403);
+});
