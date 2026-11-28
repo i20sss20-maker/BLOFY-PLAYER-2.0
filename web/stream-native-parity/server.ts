@@ -580,7 +580,10 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
    const retrySeconds=Number(response.headers.get('retry-after')||0);
    const headers=noCache({'Content-Type':'application/json'});
    const evidence=hlsFailureEvidence(match[1],match[7],response.status,error,retrySeconds);
-   if(evidence)console.info('BLOFY_HLS_WORKER_REJECTION',evidence);
+   if(evidence){
+    console.info('BLOFY_HLS_WORKER_REJECTION',evidence);
+    if(match[1]==='live'&&evidence.reason!=='other')headers['X-Blofy-Hls-Reason']=evidence.reason;
+   }
 
    if(response.status===503&&error==='live_source_channel_limit')headers['X-Blofy-Live-Status']='source_channel_limit';
    // Forward only numeric 1–30 second wait hints, never upstream URLs,
