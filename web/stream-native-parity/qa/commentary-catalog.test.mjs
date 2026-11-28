@@ -82,3 +82,25 @@ test('dedicated commentator controls appear only on live and preserve original a
  assert.match(app,/video\.muted=old\.originalMuted/);
  assert.match(app,/commentarySeekTarget\(active\.audio,-1\)!==null/);
 });
+
+test('live timing only seeks actual retained bytes within one continuous playable range',()=>{
+ const app=readFileSync('app.js','utf8');
+ const a=app.indexOf('function bufferedLiveSeekTarget('),b=app.indexOf('function simpleLiveStatus(',a);
+ assert.ok(a>=0&&b>a);
+ const seek=new Function(app.slice(a,b)+';return bufferedLiveSeekTarget')();
+ const ranges=(rows)=>({length:rows.length,start:i=>rows[i][0],end:i=>rows[i][1]});
+ const video={currentTime:15,readyState:4,seeking:false,ended:false,seekable:ranges([[0,30]]),buffered:ranges([[5,25]])};
+ const record={hlsKey:'live/fixture',ready:true};
+ assert.equal(seek(video,record,'back'),10);
+ assert.equal(seek(video,record,'forward'),20);
+ assert.equal(seek(video,record,'latest'),24.25);
+ assert.equal(seek({...video,buffered:ranges([[5,11],[14,25]])},record,'back'),null);
+ assert.equal(seek({...video,seekable:ranges([[12,30]])},record,'back'),null);
+ assert.equal(seek(video,{...record,hlsKey:null},'back'),null);
+ assert.equal(seek(video,{...record,preview:true},'back'),null);
+ assert.equal(seek(video,{...record,reconnecting:true},'back'),null);
+ assert.equal(seek({...video,seeking:true},record,'back'),null);
+ assert.equal(seek(video,record,'invalid'),null);
+ assert.match(app,/now<\(record.localBufferSeekUntil\|\|0\)/);
+ assert.match(app,/stopCommentary\(\);video.currentTime=target;record.localBufferSeekUntil=Date.now\(\)\+20000/);
+});
