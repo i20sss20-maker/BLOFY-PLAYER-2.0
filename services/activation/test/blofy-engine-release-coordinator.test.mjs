@@ -23,3 +23,18 @@ test('ambiguous stop, mismatched engine and unconfirmed provider never release',
 test('disabled by default does not touch ledger or workers',async()=>{
  const h=harness({enabled:false});assert.equal((await h.fn(input)).reason,'disabled');assert.deepEqual(h.calls,[]);
 });
+
+test('renewable mode requires exact committed renewal fence before worker stop',async()=>{
+ const calls=[];
+ const valid={...input,ok:true,state:'unknown',renewalsBlocked:true,providerReleaseConfirmed:false,sequence:2,lastLeaseMayExpireAt:now+60000,observedAt:now};
+ const run=fence=>createEngineReleaseCoordinator({
+  env:{BLOFY_ENGINE_RELEASE_COORDINATOR:'1',BLOFY_ENGINE_RENEWABLE_LEASE:'1',BLOFY_LINODE_MEDIA_TEST_SOURCE_ID:input.sourceId},clock:()=>now,
+  ledger:{fenceLeaseRenewal:async()=>{calls.push('fence');return fence},transition:async x=>{calls.push(x.next);return {ok:true,state:x.next}}},
+  workers:{hostbrr:{stopAndFence:async x=>{calls.push('stop');assert.equal(x.leaseFence.lastLeaseMayExpireAt,valid.lastLeaseMayExpireAt);return {...input,status:'stopped_and_fenced',localSourceConnections:0,observedAt}}}},
+  capacity:{observe:async()=>{calls.push('observe');return {...input,scope:'all_paths',authoritative:true,activeConnections:0,maxConnections:1,observedAt}}}
+ })(input);
+ for(const invalid of [{...valid,renewalsBlocked:false},{...valid,reservationId:'other'},{...valid,lastLeaseMayExpireAt:null}]){
+  calls.length=0;assert.equal((await run(invalid)).reason,'lease_fence_unconfirmed');assert.deepEqual(calls,['fence']);
+ }
+ calls.length=0;assert.equal((await run(valid)).action,'released');assert.deepEqual(calls,['fence','stop','observe','released']);
+});
