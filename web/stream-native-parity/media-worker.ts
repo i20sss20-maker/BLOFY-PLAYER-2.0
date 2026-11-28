@@ -13,6 +13,11 @@ let active=0;
 // Never raise this from a synthetic CI benchmark. Only a measured Railway
 // resource profile + real subscribed-source long-play can justify scaling.
 const MAX_JOBS=2;
+// Optional rolling DVR window. Default remains unchanged.
+function liveWindowSegments(raw){
+ const n=Number(raw);return Number.isSafeInteger(n)&&n>=8&&n<=120?n:8
+}
+const LIVE_WINDOW_SEGMENTS=liveWindowSegments(Bun.env.BLOFY_WEB_LIVE_WINDOW_SEGMENTS);
 /* Pilot quality profiles: never enlarge a low-resolution source.
  * The previous forced 854x480 / 900 kbit/s severely degraded every HD film
  * and channel. Live compatibility defaults to 720p; movies/series on the
@@ -453,7 +458,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    '-af','aresample=async=1:min_hard_comp=0.100:first_pts=0',
    '-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
-  if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
+  if(kind==='live')args.push('-hls_list_size',String(LIVE_WINDOW_SEGMENTS),'-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
   else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
   args.push(join(dir,'index.m3u8'));
   if(session.stopped||hlsSessions.get(key)!==session){
@@ -1271,7 +1276,7 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
   const coolingSources=Array.from(liveSourceFailureWindows.values())
    .filter(event=>event.retryAt>now).length;
   return json(ok?200:503,{ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,
-   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
+   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveWindowSegments:LIVE_WINDOW_SEGMENTS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
    sharedLive:{enabled:String(Bun.env.VIDAA_LIVE_SHARE_SAME_BEARER||'')==='1',
     groups:sharedLiveGroups.size,viewers:Array.from(sharedLiveGroups.values())
      .reduce((sum,group)=>sum+group.viewers.size,0),
