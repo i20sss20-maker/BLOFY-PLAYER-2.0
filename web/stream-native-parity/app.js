@@ -603,7 +603,7 @@ function catalog(kind){
 function categoryRail(kind){
  var data=S.cats[kind]||[],cat=S.cat[kind]||'all';
  return '<aside class="cat-rail"><div class="pane-head"><strong>الفئات</strong><small>'+data.length+' تصنيف</small></div>'+
- '<div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
+ '<div class="category-filter"><input class="input category-filter-input" type="search" placeholder="بحث في الفئات" aria-label="بحث في الفئات" autocomplete="off"></div><div class="pane-scroll"><button class="cat-item '+(cat==='all'?'selected':'')+'" data-cat="'+kind+':all">الكل</button>'+
  data.map(function(x){var id=String(x.category_id);return '<button class="cat-item '+(id===cat?'selected':'')+'" data-cat="'+kind+':'+esc(id)+'">'+esc(x.category_name||'تصنيف')+'</button>'}).join('')+
  '</div></aside>'
 }
@@ -612,7 +612,7 @@ function buildCatalog(kind,listing){
  var host=document.getElementById('catalog-root');if(!host)return;var source=listing.items||[];
  if(host.querySelector('.catalog'))rememberView();
  if(kind==='live'){
-  host.innerHTML='<div class="catalog">'+categoryRail(kind)+
+  host.innerHTML='<div class="catalog live-catalog">'+categoryRail(kind)+
   '<section class="channels"><div class="pane-head"><strong>القنوات</strong><small>'+source.length+' قناة محمّلة</small></div>'+
   '<div class="pane-scroll" id="channel-list">'+source.map(function(x){var id=itemId(x,kind),pic=art(x);return '<button class="channel-item '+(S.selected===id?'selected':'')+'" data-channel="'+esc(id)+'">'+
   (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
@@ -1328,8 +1328,14 @@ function offlineOnlyScreen(){
  drawOfflineDownloads(grant.profile,true);return true
 }
 async function saveOfflineDownload(kind,id,ext,name){
- if(!S.userVerified||!offlineSupported()){offlineMessage('التنزيل داخل التطبيق غير مدعوم في هذا المتصفح.');return}
- if(String(ext).toLowerCase()!=='mp4'||!webDownloadPath(kind,id,ext)){offlineMessage('المشاهدة دون إنترنت تدعم ملفات MP4 المتوافقة مع جهازك حاليًا.');return}
+ if(!S.userVerified){offlineMessage('فعّل اشتراكك أولًا.');return}
+ if(!offlineSupported()||String(ext).toLowerCase()!=='mp4'){
+  offlineMessage('هذا الملف لا يدعم المشاهدة دون إنترنت داخل BLOFY على جهازك.');
+  var msg=document.getElementById('offline-status')||document.getElementById('web-download-message');
+  if(msg&&webDownloadPath(kind,id,ext)){var save=document.createElement('button');save.type='button';save.className='btn secondary';save.textContent='حفظ الملف على الجهاز';save.onclick=function(){save.disabled=true;requestWebDownload(kind,id,ext,name)};msg.appendChild(document.createTextNode(' '));msg.appendChild(save)}
+  return
+ }
+ if(!webDownloadPath(kind,id,ext)){offlineMessage('صيغة الملف غير مدعومة.');return}
  if(offlineTransfer){offlineMessage('يوجد تنزيل جارٍ.');return}
  var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl,name:String(name||'فيديو').slice(0,160),pct:0};offlineTransfer=task;
  var folder=null,fileName='',writer=null,reader=null,committed=false;
@@ -1376,7 +1382,7 @@ function downloadsScreen(){
 }
 function requestWebDownload(kind,id,ext,name){
  var url=webDownloadPath(kind,id,ext);
- var message=document.getElementById('download-status')||document.getElementById('web-download-message');
+ var message=document.getElementById('download-status')||document.getElementById('offline-status')||document.getElementById('web-download-message');
  if(!message){message=document.createElement('div');message.id='web-download-message';message.className='info';message.setAttribute('role','status');
   var target=document.querySelector('#detail-root .detail-actions,.downloads-page,.episode-list');
   if(target)target.insertAdjacentElement('afterend',message);
@@ -3986,10 +3992,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var copyMode=!!(S.play&&S.play.video===video&&S.play.videoMode==='source_copy');
   var src=S.play&&S.play.video===video?S.play.sourceDimensions||'':'';
   var srcH=src?Number(src.split('x')[1])||0:0;
-  el.textContent='المعروض '+w+'×'+h+' • '+grade+
-   (src?' • المصدر '+src:(copyMode&&h<690?' • المصدر نفسه SD':''))+
-   (srcH>=690&&h<690?' • تحويل خفّض الدقة':'');
-  el.title='دقة الصورة التي يعرضها المتصفح، وليس جودة المصدر المعلنة';
+  el.textContent=grade+' • '+w+'×'+h;
+  el.setAttribute('aria-label','الدقة المعروضة '+w+'×'+h+(src?'، المصدر '+src:''));
+  el.title='دقة العرض الفعلية '+w+'×'+h+(src?' • المصدر '+src:'')+(srcH>h?' • وضع التوافق خفّض الدقة':'');
   el.hidden=false
  }
  video.addEventListener('loadedmetadata',refreshVideoResolution);
@@ -4901,7 +4906,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    if(!el)return;
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var guide=document.querySelector('.player-live-guide');
-   if(phoneLiveLayout()&&(!guide||!guide.classList.contains('phone-guide-open')))return;
+   if(!guide||!guide.classList.contains('phone-guide-open'))return;
    var cached=S.epgCache[String(id)],fresh=cached&&Date.now()-cached.time<300000;
    if(fresh)el.innerHTML=cached.html;
    else{
@@ -5152,6 +5157,11 @@ document.addEventListener('focusin',function(e){
 document.addEventListener('focusout',function(e){
  if(e.target&&e.target.classList)e.target.classList.remove('remote-focus')
 },true);
+document.addEventListener('input',function(event){
+ var input=event.target;if(!input||!input.classList||!input.classList.contains('category-filter-input'))return;
+ var rail=input.closest('.cat-rail');if(!rail)return;var q=String(input.value||'').trim().toLowerCase(),rows=rail.querySelectorAll('[data-cat]');
+ for(var i=0;i<rows.length;i++)rows[i].hidden=!!q&&rows[i].textContent.toLowerCase().indexOf(q)<0;
+},false);
 document.addEventListener('click',clickHandler,false);
 document.addEventListener('keydown',directional,false);
 function persistPlaybackCheckpoint(){
