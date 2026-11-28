@@ -1,3 +1,6 @@
+import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
+let activeVodDownloads=0;
+const MAX_VOD_DOWNLOADS=2;
 import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
 import { createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual } from 'node:crypto';
@@ -518,6 +521,61 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
   }
   return new Response(r.body,{headers:noCache({'Content-Type':mime,'Accept-Ranges':'none'})});
  }catch{return json(503,{error:'commentary_unavailable'})}
+}
+// File downloads are isolated from live and normal VOD playback.
+// A browser writes the streamed bytes to its own download manager;
+// it cannot be treated as a completed offline library item here.
+if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
+ if(!h)return json(401,{error:'activation_required'});
+ if(Bun.env.BLOFY_WEB_VOD_DOWNLOAD_ENABLED!=='1')
+  return json(503,{error:'downloads_not_enabled'});
+ const match=/^\/api\/download\/(movie|series)\/([1-9][0-9]{0,14})\.(mp4|mkv|avi|mov|ts)$/.exec(p);
+ if(!match||vodDownloadPath(match[1],match[2],match[3])!==p)
+  return json(400,{error:'invalid_download_path'});
+ if(activeVodDownloads>=MAX_VOD_DOWNLOADS)
+  return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
+ // Provider HEAD may fail or consume a licensed provider slot. Probe only
+ // the authenticated, local feature gate; do not claim this proves that
+ // the remote movie file is available or complete.
+ if(method==='HEAD')return new Response(null,{status:200,headers:noCache({'Accept-Ranges':'none'})});
+ const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
+ const ctrl=new AbortController();
+ const cancel=()=>ctrl.abort();
+ const deadline=setTimeout(cancel,30*60*1000);
+ req.signal.addEventListener('abort',cancel,{once:true});
+ activeVodDownloads++;
+ let released=false;
+ const release=()=>{if(released)return;released=true;clearTimeout(deadline);activeVodDownloads=Math.max(0,activeVodDownloads-1);req.signal.removeEventListener('abort',cancel)};
+ try{
+  const upstream=await fetch(target,{
+   method,headers:{Authorization:h.Authorization,Accept:'application/octet-stream,video/*;q=0.9','accept-encoding':'identity'},
+   redirect:'manual',signal:ctrl.signal
+  });
+  if(!downloadableResponse(upstream.status,upstream.headers.get('content-type'))||!upstream.body&&method==='GET'){
+   try{await upstream.body?.cancel()}catch{}
+   release();
+   return json(upstream.status===401||upstream.status===403?403:upstream.status===404?404:502,
+     {error:'download_source_unavailable'});
+  }
+  const out=noCache({'Content-Type':'application/octet-stream',
+    'Content-Disposition':'attachment; filename="'+attachmentFilename(match[1],match[2],match[3])+'"',
+    'X-Content-Type-Options':'nosniff','Accept-Ranges':'none'});
+  const length=upstream.headers.get('content-length');
+  if(length&&/^[1-9][0-9]{0,14}$/.test(length))out['Content-Length']=length;
+   const reader=upstream.body.getReader();
+  // Pull one chunk at a time (no entire movie buffered in Railway RAM).
+  const stream=new ReadableStream({
+   async pull(controller){
+    try{
+     const chunk=await reader.read();
+     if(chunk.done){release();controller.close();return}
+     controller.enqueue(chunk.value);
+    }catch{release();controller.error(new Error('download_stream_interrupted'))}
+   },
+   async cancel(){cancel();try{await reader.cancel()}catch{}release()}
+  });
+  return new Response(stream,{status:200,headers:out});
+ }catch{release();return json(502,{error:'download_source_unreachable'})}
 }
 if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
  const m=p.match(/^\/api\/media\/(live|movie|series)\/([0-9]{1,15})\.(ts|m3u8|mp4|mkv|avi|mov)$/i);if(!m)return json(400,{error:'invalid_media_path'});
