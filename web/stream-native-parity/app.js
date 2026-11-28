@@ -1221,10 +1221,24 @@ function requestWebDownload(kind,id,ext,name){
   if(!finish())return;
   if(!res.ok){if(message)message.textContent=res.status===503?'التنزيلات غير مفعلة على هذا السيرفر حاليًا.':res.status===429?'التنزيلات مشغولة حاليًا، حاول لاحقًا.':'هذا الملف غير متوفر للتنزيل المباشر حاليًا.';return}
   var link=document.createElement('a');link.href=url;link.download='BLOFY-STREAM-'+kind+'-'+id+'.'+ext;
-  document.body.appendChild(link);link.click();link.remove();
-  var rows=webDownloadHistory(),safeName=String(name||((kind==='movie'?'فيلم ':'حلقة ')+id)).slice(0,160);
-  rows.unshift({kind:kind,id:id,ext:ext,name:safeName,at:Date.now()});
-  profileSave('downloadRequests',rows.slice(0,40));
+  function recordRequest(){
+   if(epoch!==S.accountEpoch||!S.userVerified)return false;
+   var rows=webDownloadHistory(),safeName=String(name||((kind==='movie'?'فيلم ':'حلقة ')+id)).slice(0,160);
+   rows.unshift({kind:kind,id:id,ext:ext,name:safeName,at:Date.now()});
+   profileSave('downloadRequests',rows.slice(0,40));
+   return true
+  }
+  // iOS Safari/PWA may discard a programmatic download after an asynchronous
+  // preflight. Offer a real user-activated anchor instead, with no popups.
+  if(message&&document.documentElement&&document.documentElement.getAttribute('data-blofy-device')==='touch'){
+   message.textContent='';link.className='btn';link.textContent='↓ حفظ الملف على الجهاز';
+   link.onclick=function(e){
+    if(!recordRequest()){e.preventDefault();link.remove();return}
+    setTimeout(function(){if(link.isConnected){link.remove();message.textContent='بدأ طلب الحفظ؛ تابع تنزيلات جهازك.'}},0)
+   };
+   message.appendChild(link);return
+  }
+  document.body.appendChild(link);link.click();link.remove();recordRequest();
   if(message)message.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.';
   if(S.route==='downloads'){downloadsScreen();var status=document.getElementById('download-status');if(status)status.textContent='أرسلت طلب التنزيل للمتصفح؛ تابع اكتمال الحفظ من تنزيلات الجهاز.'}
  }).catch(function(){if(finish()&&message)message.textContent='تعذر التحقق من التنزيل، حاول مرة أخرى.'})
