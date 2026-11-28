@@ -1972,6 +1972,32 @@ function bufferedLiveSeekTarget(video,record,action){
  if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target;
  return null
 }
+// TimeShift can request retained server segments outside the local decoded buffer.
+function liveTimeshiftRange(video,record){
+ if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
+ var at=Number(video.currentTime),ranges=video.seekable,engine=record.engine,details=engine&&engine.latestLevelDetails;
+ if(!Number.isFinite(at)||!ranges)return null;
+ try{
+  for(var i=0;i<Math.min(ranges.length,32);i++){
+   var start=Number(ranges.start(i)),end=Number(ranges.end(i));
+   if(details&&details.live&&Number.isFinite(details.fragmentStart)&&Number.isFinite(details.edge)){
+    start=Math.max(start,details.fragmentStart);end=Math.min(end,details.edge)
+   }
+   if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
+   return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
+  }
+ }catch(e){}
+ return null
+}
+function liveTimeshiftTarget(video,record,action){
+ var range=liveTimeshiftRange(video,record);if(!range)return null;
+ var step={'back-one':-1,back:-5,'back-ten':-10,'back-thirty':-30,'forward-one':1,forward:5,'forward-ten':10,'forward-thirty':30};
+ var edge=Number(record.engine&&record.engine.liveSyncPosition);
+ var target=action==='earliest'?range.start+0.25:action==='latest'?Math.max(range.start+0.1,Math.min(range.end-0.75,Number.isFinite(edge)&&edge>0?edge:range.end-0.75)):range.at+step[action];
+ if(!Number.isFinite(target))return null;
+ target=Math.max(range.start+0.1,Math.min(range.end-0.75,target));
+ return Math.abs(target-range.at)>=0.5?target:null
+}
 // Convert only bounded plain-text timed cues. No external resources or markup.
 function localSubtitleVtt(raw){
  if(typeof raw!=='string'||raw.length>2*1024*1024)return null;
@@ -2112,6 +2138,7 @@ function countVisualOutage(record,video,now){
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
 function liveExpiredSegmentRecovery(record,engine,video,now){
+ record.userTimeshift=false;if(engine&&engine.config)engine.config.liveMaxLatencyDurationCount=10;
  // HLS occasionally requests a sequence that has fallen off the live
  // playlist while the viewer catches up. Prefer an in-place live-edge
  // jump before tearing down a healthy source and FFmpeg decoder.
@@ -2143,7 +2170,7 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
  */
 function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
  if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
-    record.reconnecting||Number(video.readyState)<2||now<(record.localBufferSeekUntil||0)){
+    record.reconnecting||Number(video.readyState)<2||record.userTimeshift===true||now<(record.localBufferSeekUntil||0)){
   record.liveLagSince=0;return false
  }
  var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
@@ -4578,14 +4605,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(!isLive||S.playerView!==state||S.route!=='player')return;
   var record=S.play,origin=this,options=[],range=null;
   if(record&&record.video===video){
-   range=bufferedLiveRange(video,record);
-   [['earliest','أقدم نقطة محفوظة'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['latest','أحدث نقطة محفوظة']].forEach(function(entry){
-    if(bufferedLiveSeekTarget(video,record,entry[0])===null)return;
+   range=liveTimeshiftRange(video,record);
+   [['earliest','أقدم نقطة محفوظة'],['back-thirty','رجوع 30 ثانية'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['forward-thirty','تقديم 30 ثانية'],['latest','العودة للبث المباشر']].forEach(function(entry){
+    if(liveTimeshiftTarget(video,record,entry[0])===null)return;
     options.push({name:entry[1],selected:false,select:function(){
      if(S.play!==record||S.playerView!==state||S.route!=='player')return;
-     var target=bufferedLiveSeekTarget(video,record,entry[0]);
+     var target=liveTimeshiftTarget(video,record,entry[0]);
      if(target===null){playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return}
-     try{stopCommentary();video.currentTime=target;record.localBufferSeekUntil=Date.now()+20000;playerStatus('')}catch(e){playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
+     try{stopCommentary();record.userTimeshift=entry[0]!=='latest';if(record.engine&&record.engine.config)record.engine.config.liveMaxLatencyDurationCount=record.userTimeshift?Infinity:10;record.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;playerStatus('')}catch(e){record.userTimeshift=false;if(record.engine&&record.engine.config)record.engine.config.liveMaxLatencyDurationCount=10;playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
     }})
    });
   }
