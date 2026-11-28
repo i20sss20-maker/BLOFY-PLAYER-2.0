@@ -1,6 +1,6 @@
 // End-to-end browser shell smoke test, using synthetic accounts only.
 // No access to production, user data, source hosts, or real media.
-import {chromium,devices} from '@playwright/test';
+import {chromium,webkit,devices} from '@playwright/test';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
@@ -15,9 +15,11 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const origin='http://127.0.0.1:'+server.address().port;
 let browser;
 try{
- browser=await chromium.launch({headless:true,...(process.env.BLOFY_QA_BUNDLED_CHROMIUM==='1'?{}:{channel:'chrome'})});
+ const cases=process.env.BLOFY_QA_WEBKIT==='1'?[['chromium',chromium,'iPhone 13'],['webkit',webkit,'iPhone 13'],['webkit',webkit,'iPad Pro 11']]:[['chromium',chromium,'iPhone 13']];
+ for(const [name,engine,device] of cases){
+ browser=await engine.launch({headless:true,...(name==='chromium'&&process.env.BLOFY_QA_BUNDLED_CHROMIUM!=='1'?{channel:'chrome'}:{})});
  for(const mode of ['code','xtream','m3u']){
-  const ctx=await browser.newContext({...devices['iPhone 13'],serviceWorkers:'block'});
+  const ctx=await browser.newContext({...devices[device],serviceWorkers:'block'});
   const page=await ctx.newPage(),requests=[],errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await ctx.route('**/*',async route=>{
@@ -68,7 +70,9 @@ try{
   await page.locator('#ai-send').click();
   await page.getByText('نتيجة اختبار محلية',{exact:true}).waitFor();
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log('BLOFY_NATIVE_SHELL_SYNTHETIC_PASS',mode);
+  console.log('BLOFY_NATIVE_SHELL_SYNTHETIC_PASS',name,device,mode);
   await ctx.close();
+ }
+ await browser.close();browser=null;
  }
 }finally{await browser?.close();await new Promise(r=>server.close(r))}
