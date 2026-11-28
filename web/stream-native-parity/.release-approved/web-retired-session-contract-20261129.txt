@@ -1,0 +1,3 @@
+Operator requested completing the web stability repair.
+Candidate d18712d2d25dd6c70353bde1cd67ec299426f74c passed QA web staging integration 46189734426 and synthetic browser playback 46189734369. Android CI is separately blocked by unchanged version-code baseline; web-only scope.
+Preserve authenticated STOP handoff, bounded retry and source quota. Normalize retired/finished/closed/stalled HLS responses for native and MSE playback. No TimeShift or changes to subscriptions, engine routes, credentials or Android. Prior production 81391d00bf98bfdd1ea6c34619934ead1f96009d retained for rollback. Real-device playback verification remains required.
