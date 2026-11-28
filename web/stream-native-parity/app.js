@@ -141,7 +141,7 @@ function useProfile(id,legacy){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
  migrateLegacyProfile(id,legacy);
  var changed=S.profileKey!==id;
- if(changed){S.accountEpoch++;S.downloadPending=null;resetCatalogRefresh()}
+ if(changed){S.accountEpoch++;if(offlineTransfer)offlineTransfer.ctrl.abort();closeOfflineVideo();S.downloadPending=null;S.plotCache=[];resetCatalogRefresh()}
  S.profileKey=id;
  S.library=readJson(profileStorageKey('favorites'),{});
  S.watch=readJson(profileStorageKey('watch'),{});
@@ -1196,6 +1196,16 @@ function needsPlotTranslation(value){
  var latin=(text.match(/[a-zA-Z]/g)||[]).length;
  return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
 }
+function cachedArabicPlot(kind,id,source){
+ var rows=S.plotCache||[];
+ for(var i=0;i<rows.length;i++){var row=rows[i];if(row.kind===kind&&row.id===id&&row.source===source)return row.text}
+ return ''
+}
+function rememberArabicPlot(kind,id,source,text){
+ if(!source||source.length>3900||typeof text!=='string'||text.length>5500||!/[\u0600-\u06ff]/.test(text))return;
+ var rows=(S.plotCache||[]).filter(function(row){return row.kind!==kind||row.id!==id});
+ rows.unshift({kind:kind,id:id,source:source,text:text});S.plotCache=rows.slice(0,32)
+}
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
  if(!item){navigate(k,{},true);return}
@@ -1222,10 +1232,10 @@ function details(o){
   api('POST','/api/ai/translate',{overview:source},function(st,data){
    if(!detailCurrent()||generation!==plotGeneration||plotSource!==source)return;
    plotPending='';
-   if(st===200&&data&&data.ok===true&&typeof data.translatedOverview==='string'&&data.translatedOverview.trim()){plotTranslation=data.translatedOverview;plotOriginal=false}
+   if(st===200&&data&&data.ok===true&&typeof data.translatedOverview==='string'&&data.translatedOverview.trim()){plotTranslation=data.translatedOverview;plotOriginal=false;rememberArabicPlot(k,id,source,plotTranslation)}
    renderPlotTranslation();
    var notice=document.getElementById('detail-translate-status');
-   if(!plotTranslation&&notice)notice.textContent=st===429?'الترجمة مشغولة مؤقتًا، حاول لاحقًا.':'تعذرت الترجمة، يمكنك إعادة المحاولة.';
+   if(!plotTranslation&&notice){var msg=st===429?'حاول الترجمة لاحقًا.':'تعذرت الترجمة.';notice.textContent=msg;setTimeout(function(){if(detailCurrent()&&notice.textContent===msg)notice.textContent=''},3500)};
   });
  }
  function show(extra){
@@ -1234,7 +1244,7 @@ function details(o){
   if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
   var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
   var plot=String(info.plot||info.description||info.overview||item.plot||item.description||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM');
-  if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation='';plotPending='';plotAttempted='';plotOriginal=false}
+  if(plotSource!==plot){plotGeneration++;plotSource=plot;plotTranslation=cachedArabicPlot(k,id,plot);plotPending='';plotAttempted='';plotOriginal=false}
   var gen=info.genre||info.genres||item.genre||'',year=info.releaseDate||info.release_date||info.releasedate||item.release_date||item.year||'',rating=info.rating||item.rating||'';
   var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
@@ -1339,7 +1349,7 @@ function rememberOfflineGrant(profile,expiry){
  if(/^[a-f0-9]{24}$/.test(profile||'')&&Number.isFinite(end)&&end>now)writeJson(OFFLINE_GRANT_KEY,{profile:profile,verifiedAt:now,until:Math.min(end,now+86400000)})
 }
 function clearOfflineGrant(){try{localStorage.removeItem(OFFLINE_GRANT_KEY)}catch(e){}if(offlineTransfer)offlineTransfer.ctrl.abort();closeOfflineVideo()}
-function offlineSupported(){return !!(navigator.storage&&navigator.storage.getDirectory&&window.AbortController&&window.URL&&URL.createObjectURL&&window.ReadableStream)}
+function offlineSupported(){return !!(navigator.storage&&navigator.storage.getDirectory&&window.AbortController&&window.URL&&URL.createObjectURL&&window.ReadableStream&&window.crypto&&crypto.getRandomValues)}
 function offlineRows(profile){
  var rows=readJson('blofy_web_offline_v1:'+profile,[]);
  return Array.isArray(rows)?rows.filter(function(row){return row&&/^(movie|series)-[1-9][0-9]{0,14}-[a-f0-9]{24}\.mp4$/.test(row.file)&&Number.isSafeInteger(row.size)&&row.size>0&&row.size<=OFFLINE_MAX_BYTES&&typeof row.name==='string'}).slice(0,20):[]
@@ -1377,7 +1387,7 @@ function drawOfflineDownloads(profile,standalone){
    }
    var file=await (await folder.getFileHandle(row.file)).getFile();
    if(file.size!==row.size)throw Error('incomplete');
-   if(!root.isConnected||!offlineGrant()||offlineGrant().profile!==profile)return;
+   if(!root.isConnected||!offlineGrant()||offlineGrant().profile!==profile||(!standalone&&S.profileKey!==profile))return;
    closeOfflineVideo();var player=document.getElementById('offline-player');
    if(!player)return;
    player.innerHTML='<video id="offline-video" controls playsinline preload="metadata" style="width:100%;max-height:65vh;background:#000"></video>';
@@ -1430,22 +1440,22 @@ async function saveOfflineDownload(kind,id,ext,name){
   if(navigator.storage.estimate){var estimate=await navigator.storage.estimate();if(Number.isFinite(estimate.quota)&&Number.isFinite(estimate.usage)&&estimate.quota-estimate.usage<total+1048576)throw Error('quota')}
   writer=await handle.createWritable();reader=response.body.getReader();
   var written=0,last=-1;
-  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار تنزيل '+task.name+' • '+pct+'٪ • '+Math.floor(written/1048576)+' / '+Math.ceil(total/1048576)+' MB')}}
+  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;if(current())offlineMessage('جار تنزيل '+task.name+' • '+pct+'٪ • '+Math.floor(written/1048576)+' / '+Math.ceil(total/1048576)+' MB')}}
   check();if(written!==total)throw Error('size');await writer.close();writer=null;
   var saved=await handle.getFile();check();if(saved.size!==total)throw Error('size');
   var rows=offlineRows(profile);rows.unshift({file:fileName,size:total,name:String(name||'فيديو').slice(0,160)});
   localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(rows.slice(0,20)));committed=true;
   offlineMessage('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.');
   if(S.route==='downloads')drawOfflineDownloads(profile,false)
- }catch(e){offlineMessage(ctrl.signal.aborted?'تم إلغاء التنزيل.':e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
- finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}
+ }catch(e){if(S.accountEpoch===epoch&&S.profileKey===profile)offlineMessage(ctrl.signal.aborted?'تم إلغاء التنزيل.':e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
+ finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task){offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}}
 }
 function downloadsScreen(){
  shell('التنزيلات','<section class="downloads-page"><p class="small muted">الملفات المحفوظة بالكامل للمشاهدة دون إنترنت.</p><div id="offline-space" class="small muted"></div><div class="row offline-filters"><button class="btn secondary" id="offline-all">الكل</button><button class="btn secondary" id="offline-active">قيد التنزيل</button><button class="btn secondary" id="offline-ready">جاهزة</button></div><div id="offline-status" role="status" aria-live="polite"></div><progress id="offline-progress" max="100" value="0" hidden></progress><button class="btn secondary" id="offline-cancel" hidden>إلغاء التنزيل الجاري</button><div id="offline-player"></div><div id="offline-library"></div><p class="small muted">تجديد صلاحية المشاهدة بالاتصال مرة كل 24 ساعة.</p></section>');
  var profile=S.profileKey,filter='all',library=document.getElementById('offline-library'),space=document.getElementById('offline-space');
  var saved=offlineRows(profile).reduce(function(sum,row){return sum+row.size},0);space.textContent='المساحة المستخدمة: '+Math.round(saved/1048576)+' ميغابايت';
  if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(function(info){if(space.isConnected&&Number.isFinite(info.quota)&&Number.isFinite(info.usage))space.textContent+=' • المتاحة تقريبًا: '+Math.max(0,Math.floor((info.quota-info.usage)/1048576))+' ميغابايت'}).catch(function(){});
- function setFilter(next){filter=next;library.hidden=filter==='active';['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).classList.toggle('active',key===filter)});if(next==='active')offlineMessage(offlineTransfer?'جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪':'لا يوجد تنزيل جارٍ.')}
+ function setFilter(next){filter=next;library.hidden=filter==='active';['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).classList.toggle('active',key===filter)});if(next==='active')offlineMessage(offlineTransfer?'جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪':'لا يوجد تنزيل جارٍ.');else if(!offlineTransfer){var notice=document.getElementById('offline-status');if(notice)notice.textContent=''}}
  ['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).onclick=function(){setFilter(key)}});
  setFilter('all');if(offlineTransfer)offlineMessage('جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪');
  document.getElementById('offline-cancel').onclick=function(){if(offlineTransfer)offlineTransfer.ctrl.abort()};
