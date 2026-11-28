@@ -59,11 +59,15 @@ try{
   assert.equal(requests[0].p,mode==='code'?'/api/redeem':'/api/direct-login');
   if(mode==='code')assert.equal(requests[0].input.code,'12345678');else assert.equal(requests[0].input.mode,mode);
   assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
+  {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
+  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
   await page.locator('.downloads-page').waitFor();
   assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
+  {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
+  assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
   await page.locator('.native-home-header [data-go="ai"]').click();
