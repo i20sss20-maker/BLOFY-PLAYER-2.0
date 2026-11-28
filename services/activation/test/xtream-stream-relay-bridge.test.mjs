@@ -245,3 +245,18 @@ test('production pair checks both pinned relays without switching customer route
  assert.equal((await checkProductionRelayPair({env:{...env,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'0'},fetchImpl})).activeEngine,null);
  assert.deepEqual(calls,[]);
 });
+
+test('busy portable relay diagnostic report larger than 8 KiB remains healthy, without relaxing grant response cap',async()=>{
+ const health={ok:true,relayReady:true,service:'BLOFY-STREAM',role:'media_plane',
+  fanout:{activeFeeds:16,viewers:150,channels:Array.from({length:16},(_,channel)=>({channel,transportClock:{samples:100,backwardAcross:2},details:'x'.repeat(1000)})),events:[]}};
+ const body=JSON.stringify(health);
+ assert.ok(Buffer.byteLength(body)>12633);
+ const report=await checkStreamRelayBridge({env:enabled,fetchImpl:async()=>new Response(body)});
+ assert.equal(report.ok,true);
+ for(const withLength of [true,false]){
+  const tooLarge=JSON.stringify({...health,extra:'x'.repeat(128*1024)});
+  const result=await checkStreamRelayBridge({env:enabled,fetchImpl:async()=>new Response(tooLarge,{headers:withLength?{'content-length':String(Buffer.byteLength(tooLarge))}:{}})});
+  assert.equal(result.ok,false);assert.equal(result.code,'stream_bridge_bad_response');
+ }
+ await assert.rejects(issueStreamRelayGrant({kind:'live',sourceUrl:'https://fixture.example/live.ts'},{env:enabled,fetchImpl:async()=>new Response(JSON.stringify({ok:true,path:'/relay/'+'f'.repeat(48),expiresInSeconds:45,extra:'x'.repeat(2048)}),{status:201})}),/stream_bridge_bad_response/);
+});
