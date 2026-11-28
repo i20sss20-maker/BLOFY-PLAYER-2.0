@@ -15,7 +15,7 @@ test('authorization and hidden catalog failures do not become retryable media er
 });
 test('media worker cancels rejected body and forwards bounded retry hint',()=>{
  const s=readFileSync(new URL('../media-worker.ts',import.meta.url),'utf8');
- assert.match(s,/classifyWebMediaAdmission\(kind,status,upstream\.headers\.get\('retry-after'\)\)/);
+ assert.match(s,/classifyWebMediaAdmission\(kind,status,upstream\.headers\.get\('retry-after'\),upstream\.headers\.get\('x-blofy-live-status'\)\)/);
  assert.match(s,/await upstream\.body\?\.cancel\(\)/);
  assert.match(s,/start\.retryAfterSeconds\?\?/);
 });
