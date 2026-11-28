@@ -95,9 +95,7 @@ change(" if(!alive()||record.ready||video.paused)return;\n  recoverConnection()"
 change("   if(!alive()||!record.ready||!video.isConnected)return;\n   if(preview&&","   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;\n   if(preview&&");
 
 
- // Resync must never seek backwards: an expired playlist can advertise a
- // live edge behind the actual current decoder position.
-change("(!Number.isFinite(current)||edge-current>2)","Number.isFinite(current)&&edge-current>2");
+ // Expired-fragment resync now validates forward-only positions in app.js.
 change("   if(!alive()||!detail)return;\n    var code=Number(detail.response","   if(!alive()||!detail)return;\n    var code=Number(detail.response");
  // Track monotonic playlist sequence within one HLS SID. A reset signals
  // that a source/worker session was recreated under the same URL.
@@ -883,7 +881,7 @@ function adaptLiveBuffer(record,engine,now,waiting,preview){
  // Adapt buffering without forcing a seek on an otherwise healthy stream.
  record.normalLiveMaxLatency=Infinity;
  engine.config.liveMaxLatencyDurationCount=Infinity;
- engine.config.liveSyncDurationCount=profile.sync;
+ // Keep the initial live sync target stable for the life of this session.
  return next
 }
 function resumeLiveHlsNetwork(engine,manifest,record){`);
