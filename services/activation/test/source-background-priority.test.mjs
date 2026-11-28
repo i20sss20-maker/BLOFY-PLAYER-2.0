@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createLegacyIngress,createGatewayHoldLifetime} from '../src/blofy-engine-legacy-ingress.mjs';
 import {createEngineIngressGate} from '../src/blofy-engine-ingress-gate.mjs';
 const sourceId='550e8400-e29b-41d4-a716-446655440000';
 const hold='550e8400-e29b-41d4-a716-446655440001';
@@ -35,4 +36,23 @@ test('idle background probe can reserve; foreground admission stays unchanged',a
 test('background work never bypasses existing drain fence',async()=>{
  const {gate}=setup({mode:'draining'});
  assert.equal((await gate.enterLegacy(hold,{background:true})).reason,'legacy_fenced');
+});
+
+test('optional-media pause rejects before database access, even without ingress gate',async()=>{
+ let calls=0;
+ const pool={query(){calls++;throw Error('unexpected query')},connect(){calls++;throw Error('unexpected connect')}};
+ for(const enabled of ['0','1']){
+  const enter=createLegacyIngress(pool,{BLOFY_ENGINE_LEGACY_INGRESS_GATE:enabled,
+   BLOFY_ENGINE_PAUSE_OPTIONAL_SOURCE_MEDIA:'1'},createGatewayHoldLifetime());
+  assert.deepEqual(await enter(sourceId,{background:true}),{ok:false,reason:'background_source_busy'});
+ }
+ assert.equal(calls,0);
+});
+test('optional pause leaves foreground disabled-gate behavior intact; default is unchanged',async()=>{
+ const pool={connect(){throw Error('unexpected connect')}};
+ const paused=createLegacyIngress(pool,{BLOFY_ENGINE_PAUSE_OPTIONAL_SOURCE_MEDIA:'1'},createGatewayHoldLifetime());
+ const foreground=await paused(sourceId);
+ assert.equal(foreground.ok,true);assert.equal(await foreground.close(),true);
+ const standard=createLegacyIngress(pool,{},createGatewayHoldLifetime());
+ assert.equal((await standard(sourceId,{background:true})).ok,true);
 });
