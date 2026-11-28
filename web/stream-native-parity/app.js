@@ -152,7 +152,7 @@ function useProfile(id,legacy){
  if(changed){
   if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
   S.epgToken++;S.epgCache={};
-  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
   S.selected=null;S.livePreview=null;S.listingInflight={};S.catsInflight={}
  }
  return true
@@ -228,7 +228,7 @@ function login(message){
   if(!modes[k]||modes[k].disabled||document.getElementById('redeem').disabled)return;
   mode=k;codeFields.hidden=k!=='code';directFields.hidden=k==='code';
   directFields.innerHTML=k==='xtream'?'<label class="native-login-title" for="provider-host">الهوست</label><input class="input" id="provider-host" value="https://x.blofyplayer.com" type="url" maxlength="512" dir="ltr" autocomplete="off" spellcheck="false"><label class="native-login-title" for="provider-username">اسم المستخدم</label><input class="input" id="provider-username" maxlength="256" dir="ltr" autocomplete="off" spellcheck="false"><label class="native-login-title" for="provider-password">كلمة المرور</label><input class="input" type="password" id="provider-password" maxlength="256" dir="ltr" autocomplete="off">':k==='m3u'?'<label class="native-login-title" for="provider-url">رابط M3U الخاص ببلوفي</label><input class="input" id="provider-url" type="password" maxlength="2048" dir="ltr" autocomplete="off" spellcheck="false" placeholder="https://x.blofyplayer.com/get.php?...">':'';
-  updateModeButtons(false);setStatus(k==='code'?'أدخل كود اشتراكك':'يتطلب اشتراك BLOFY STREAM المرتبط بهذا الجهاز مسبقًا.');
+  updateModeButtons(false);setStatus(k==='code'?'أدخل كود اشتراكك':'يتطلب اشتراك BLOFY مؤهلًا للدخول المباشر.');
   var field=document.getElementById(k==='code'?'activation-code':k==='xtream'?'provider-username':'provider-url');if(field)field.focus()
  }
  Object.keys(modes).forEach(function(k){modes[k].onclick=function(){selectMode(k)}});
@@ -249,12 +249,12 @@ function login(message){
   api('POST','/api/direct-login',payload,function(st,r){
    btn.disabled=false;updateModeButtons(false);
    if(st===200&&r.ok&&useProfile(r.profileKey,r.legacyProfileKey)){S.userVerified=true;navigate('home',{},true);warmDesktopHlsAfterAuth();return}
-   setStatus(st===429?'محاولات كثيرة. جرّب لاحقًا.':st===400?'تحقق من رابط أو بيانات BLOFY.':st===401?'الاشتراك غير متاح لهذا الجهاز؛ استخدم كود التفعيل الأصلي.':'الدخول غير متاح حاليًا. حاول لاحقًا.',true)
+   setStatus(st===429?'محاولات كثيرة. جرّب لاحقًا.':st===400?'تحقق من رابط أو بيانات BLOFY.':st===401?'تحقق من الاشتراك، أو استخدم كود التفعيل الأصلي إن كان مرتبطًا بجهاز.':'الدخول غير متاح حاليًا. حاول لاحقًا.',true)
   })
  };
  api('GET','/api/login-modes',null,function(st,v){
   if(S.route!=='login'||!form.isConnected)return;
-  if(st===200&&v.direct===true){directReady=true;notice.textContent='دخول BLOFY للحساب المرتبط بهذا الجهاز مسبقًا؛ الروابط الخارجية غير مدعومة هنا.';updateModeButtons(false)}
+  if(st===200&&v.direct===true){directReady=true;notice.textContent='دخول اشتراكات BLOFY المؤهلة؛ الروابط الخارجية غير مدعومة هنا.';updateModeButtons(false)}
  });
  setTimeout(function(){if(S.route==='login'&&mode==='code')(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
 }
