@@ -1177,8 +1177,11 @@ async function probeUnavailableMediaOnSameSource(key){
  if(!shouldUseIndependentSourceMedia({
   sourceId:key.serverId,kind:key.kind,extension:ext
  }))return 'transient';
- const ingress=await enterLegacyIngress(row.server_id);
- if(!ingress.ok)return 'transient';
+ const ingress=await enterLegacyIngress(row.server_id,{background:true});
+ if(!ingress.ok){
+  if(ingress.reason==='background_source_busy')console.info('BLOFY_BACKGROUND_MEDIA_DEFERRED');
+  return 'transient';
+ }
  let response,reader;
  try{
   const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
