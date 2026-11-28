@@ -1143,6 +1143,8 @@ async function probeUnavailableMediaOnSameSource(key){
  if(!shouldUseIndependentSourceMedia({
   sourceId:key.serverId,kind:key.kind,extension:ext
  }))return 'transient';
+ const ingress=await enterLegacyIngress(row.server_id);
+ if(!ingress.ok)return 'transient';
  let response,reader;
  try{
   const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
@@ -1167,6 +1169,7 @@ async function probeUnavailableMediaOnSameSource(key){
  finally{
   if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
   else {try{await response?.body?.cancel()}catch{}}
+  await ingress.close();
  }
 }
 async function runDueUnavailableMedia({sourceId=null}={}){
@@ -2349,6 +2352,7 @@ async function handlePrivateContentHubSource(req,res,url){
   if(hubActiveRange)return json(res,429,{ok:false,
    code:'content_hub_source_range_busy'});
   hubActiveRange=true;
+  let ingress;
   try{
    const gatewayId=Number(episodeProbe[1]);
    if(!Number.isSafeInteger(gatewayId))return json(res,400,{
@@ -2361,6 +2365,8 @@ async function handlePrivateContentHubSource(req,res,url){
       String(row.series_source_id||'').length<1||
       String(row.container_extension||'').toLowerCase()!==candidate.extension)
     return json(res,409,{ok:false,code:'content_hub_episode_source_changed'});
+   ingress=await enterLegacyIngress(row.server_id);
+   if(!ingress.ok)return json(res,503,{ok:false,code:'source_ingress_fenced'},{'retry-after':'5'});
    const urlSource=mediaUpstreamUrl(row,'series',row.source_episode_id,
      candidate.extension);
    const result=await probePrivateEpisodeRange({
@@ -2373,7 +2379,7 @@ async function handlePrivateContentHubSource(req,res,url){
    code:'content_hub_episode_probe_unavailable',
    providerMediaRequests:0,automaticDownload:false,
    stored:false,customerCutover:false})}
-  finally{hubActiveRange=false}
+  finally{try{if(ingress?.ok)await ingress.close()}finally{hubActiveRange=false}}
  }
  if(url.pathname==='/internal/blofy-content-hub/episodes/candidates'){
   if(url.search)return json(res,400,{ok:false,
@@ -2450,8 +2456,11 @@ async function handlePrivateContentHubSource(req,res,url){
  const onClose=()=>abort.abort();
  req.once('aborted',onClose);
  res.once('close',()=>{if(!res.writableEnded)abort.abort()});
- let upstream;
+ let upstream,ingress;
  try{
+  ingress=await enterLegacyIngress(row.server_id);
+  if(!ingress.ok)return json(res,503,{ok:false,code:'source_ingress_fenced'},{'retry-after':'5'});
+  if(abort.signal.aborted||req.aborted||res.destroyed)return;
   const upstreamUrl=mediaUpstreamUrl(row,isEpisode?'series':'movie',
     isEpisode?row.source_episode_id:row.source_id,
     String(row.container_extension).toLowerCase());
@@ -2494,7 +2503,7 @@ async function handlePrivateContentHubSource(req,res,url){
   req.off('aborted',onClose);
   if(upstream?.body&&!upstream.body.locked)
    await upstream.body.cancel().catch(()=>{});
-  hubActiveRange=false;
+  try{if(ingress?.ok)await ingress.close()}finally{hubActiveRange=false}
  }
 }
 
@@ -2507,7 +2516,7 @@ async function probeGatewayMedia(kind,itemId){
   itemProbeAt=now;
   itemProbeRunning=true;
   const started=Date.now();
-  let reader,response;
+  let reader,response,ingress;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),10000);
   try{
@@ -2515,6 +2524,9 @@ async function probeGatewayMedia(kind,itemId){
       ?await episodeByGatewayId(itemId)
       :await gatewayItemById(kind==='live'?'live':'movie',itemId);
     if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
+    ingress=await enterLegacyIngress(row.server_id);
+    if(!ingress.ok)return{ok:false,kind,itemId,httpStatus:null,reason:'source_ingress_fenced',elapsedMs:Date.now()-started};
+    if(controller.signal.aborted)return{ok:false,kind,itemId,httpStatus:null,reason:'timeout',elapsedMs:Date.now()-started};
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
     const upstream=mediaUpstreamUrl(row,kind,sourceId,ext);
@@ -2580,7 +2592,7 @@ async function probeGatewayMedia(kind,itemId){
     controller.abort();
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
     else if(response?.body){try{await response.body.cancel()}catch{}}
-    itemProbeRunning=false;
+    try{if(ingress?.ok)await ingress.close()}finally{itemProbeRunning=false}
   }
 }
 
