@@ -58,14 +58,20 @@ try{
   assert.equal(requests.length,1);assert.match(requests[0].input.deviceKey,/^[a-f0-9]{64}$/);
   assert.equal(requests[0].p,mode==='code'?'/api/redeem':'/api/direct-login');
   if(mode==='code')assert.equal(requests[0].input.code,'12345678');else assert.equal(requests[0].input.mode,mode);
-  assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
+  assert.equal(await page.locator('.native-home-bottom [data-go]').count(),6);
+  assert.equal(await page.locator('.native-home-bottom [data-go="movie"]').count(),1);
+  assert.equal(await page.locator('.native-home-bottom [data-go="series"]').count(),1);
+  assert.equal(await page.locator('.native-home-tabs').count(),0);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
   assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
   await page.locator('.downloads-page').waitFor();
-  assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
+  assert.equal(await page.locator('.native-home-bottom [data-go]').count(),6);
+  assert.equal(await page.locator('.native-home-bottom [data-go="movie"]').count(),1);
+  assert.equal(await page.locator('.native-home-bottom [data-go="series"]').count(),1);
+  assert.equal(await page.locator('.native-home-tabs').count(),0);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
   assert.ok(navBox&&workspaceBox&&navBox.x>=workspaceBox.x+workspaceBox.width-2,'native navigation belongs on the right');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
