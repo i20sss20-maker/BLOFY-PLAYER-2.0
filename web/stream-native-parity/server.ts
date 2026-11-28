@@ -1,5 +1,6 @@
 import {vodDownloadPath,downloadableResponse,attachmentFilename} from './vod-download-policy.mjs';
 let activeVodDownloads=0;
+const activeVodDownloadAccounts=new Map();
 const MAX_VOD_DOWNLOADS=2;
 import {validCommentaryId,safeCommentaryTracks,boundedCommentaryJson} from './commentary-catalog.mjs';
 import {readCatalogPage} from './catalog-array-reader.mjs';
@@ -98,6 +99,7 @@ function pruneExternalTickets(now=Date.now()){
 function revokeExternal(bearer){
  if(!bearer)return;
  const account=externalAccountKey(bearer);
+ const download=activeVodDownloadAccounts.get(account);if(download)download.abort();
  externalIssueGate.revoke(account);
  for(const [key,t] of externalTickets)if(t.account===account)externalTickets.delete(key);
  const active=externalActive.get(account);if(active)active.abort()
@@ -535,7 +537,8 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
  const match=/^\/api\/download\/(movie|series)\/([1-9][0-9]{0,14})\.(mp4|mkv|avi|mov|ts)$/.exec(p);
  if(!match||vodDownloadPath(match[1],match[2],match[3])!==p)
   return json(400,{error:'invalid_download_path'});
- if(activeVodDownloads>=MAX_VOD_DOWNLOADS)
+ const accountKey=externalAccountKey(h.Authorization);
+ if(activeVodDownloads>=MAX_VOD_DOWNLOADS||activeVodDownloadAccounts.has(accountKey))
   return json(429,{error:'download_capacity_busy'},{'Retry-After':'15'});
  // Provider HEAD may fail or consume a licensed provider slot. Probe only
  // the authenticated, local feature gate; do not claim this proves that
@@ -543,18 +546,23 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
  if(method==='HEAD')return new Response(null,{status:200,headers:noCache({'Accept-Ranges':'none'})});
  const target=ORIGIN+'/api/v1/stream/media/'+match[1]+'/'+match[2]+'.'+match[3];
  const ctrl=new AbortController();
+ let released=false,reader=null,headerTimer=null,deadline=null;
+ const release=()=>{if(released)return;released=true;clearTimeout(deadline);clearTimeout(headerTimer);activeVodDownloads=Math.max(0,activeVodDownloads-1);if(activeVodDownloadAccounts.get(accountKey)===ctrl)activeVodDownloadAccounts.delete(accountKey);req.signal.removeEventListener('abort',cancel);ctrl.signal.removeEventListener('abort',cancelReader)};
+ const cancelReader=()=>{try{if(reader)Promise.resolve(reader.cancel()).catch(()=>{})}catch{}release()};
  const cancel=()=>ctrl.abort();
- const deadline=setTimeout(cancel,30*60*1000);
+ activeVodDownloads++;activeVodDownloadAccounts.set(accountKey,ctrl);
+ ctrl.signal.addEventListener('abort',cancelReader,{once:true});
  req.signal.addEventListener('abort',cancel,{once:true});
- activeVodDownloads++;
- let released=false;
- const release=()=>{if(released)return;released=true;clearTimeout(deadline);activeVodDownloads=Math.max(0,activeVodDownloads-1);req.signal.removeEventListener('abort',cancel)};
+ headerTimer=setTimeout(cancel,20000);deadline=setTimeout(cancel,30*60*1000);
+ if(req.signal.aborted){cancel();return json(499,{error:'download_cancelled'})}
  try{
   const upstream=await fetch(target,{
    method,headers:{Authorization:h.Authorization,Accept:'application/octet-stream,video/*;q=0.9','accept-encoding':'identity'},
    redirect:'manual',signal:ctrl.signal
   });
-  if(!downloadableResponse(upstream.status,upstream.headers.get('content-type'))||!upstream.body&&method==='GET'){
+  clearTimeout(headerTimer);
+  if(ctrl.signal.aborted){try{await upstream.body?.cancel()}catch{}release();return json(499,{error:'download_cancelled'})}
+  if(!downloadableResponse(upstream.status,upstream.headers.get('content-type'))||!upstream.body||upstream.headers.has('content-range')){
    try{await upstream.body?.cancel()}catch{}
    release();
    return json(upstream.status===401||upstream.status===403?403:upstream.status===404?404:502,
@@ -565,17 +573,18 @@ if(p.startsWith('/api/download/')&&(method==='GET'||method==='HEAD')){
     'X-Content-Type-Options':'nosniff','Accept-Ranges':'none'});
   const length=upstream.headers.get('content-length');
   if(length&&/^[1-9][0-9]{0,14}$/.test(length))out['Content-Length']=length;
-   const reader=upstream.body.getReader();
+  reader=upstream.body.getReader();
   // Pull one chunk at a time (no entire movie buffered in Railway RAM).
   const stream=new ReadableStream({
    async pull(controller){
     try{
      const chunk=await reader.read();
+     if(ctrl.signal.aborted){release();controller.error(new Error('download_cancelled'));return}
      if(chunk.done){release();controller.close();return}
      controller.enqueue(chunk.value);
     }catch{release();controller.error(new Error('download_stream_interrupted'))}
    },
-   async cancel(){cancel();try{await reader.cancel()}catch{}release()}
+   async cancel(){cancel();release()}
   });
   return new Response(stream,{status:200,headers:out});
  }catch{release();return json(502,{error:'download_source_unreachable'})}
