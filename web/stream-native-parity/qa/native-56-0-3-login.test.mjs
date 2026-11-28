@@ -117,7 +117,7 @@ test('saved login slots preserve the preceding account, switch only with verific
  const route=server.slice(server.indexOf("if(p==='/api/ai/chat'"),server.indexOf("if(p==='/api/ai/interpret'"));
  assert.match(route,/turns.length>9/);
  assert.match(route,/x.content.length>1600/);
- assert.match(route,/Authorization:h.Authorization/);
+ assert.match(route,/['"]Authorization['"]:h\.Authorization/);
  assert.match(route,/redirect:'manual'/);
  assert.match(route,/slice\(0,3000\)/);
 });
