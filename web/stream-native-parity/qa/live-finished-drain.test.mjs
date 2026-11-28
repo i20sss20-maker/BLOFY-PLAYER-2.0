@@ -126,3 +126,12 @@ test('source channel quota refusal is not an origin outage',async()=>{
  assert.equal(limit('60'),60);assert.equal(limit(120),120);
  assert.match(source,/-hls_list_size',String\(LIVE_WINDOW_SEGMENTS\),'-hls_delete_threshold','24'/);
  });
+
+
+test('web worker allows a configured third job but never an unbounded limit',()=>{
+ const begin=source.indexOf('function mediaJobLimit('),end=source.indexOf('const MAX_JOBS=',begin);
+ assert.ok(begin>=0&&end>begin);
+ const limit=vm.runInNewContext(source.slice(begin,end)+';mediaJobLimit');
+ assert.equal(limit(undefined),2);assert.equal(limit('2'),2);assert.equal(limit('3'),3);
+ for(const invalid of ['0','1','4','150','NaN','2.5'])assert.equal(limit(invalid),2);
+});
