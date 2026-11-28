@@ -1555,13 +1555,13 @@ function searchNow(q,token){
 function aiScreen(){
  S.route='ai';
  shell('مساعد BLOFY الذكي','<section class="ai-chat-screen" aria-label="محادثة مساعد BLOFY">'+
-  '<div class="ai-note">المساعد يستخدم خدمة BLOFY نفسها الموجودة في تطبيق Android. الاقتراحات تُعرض كبحث داخل مكتبتك، وليست روابط لمحتوى غير متحقق.</div>'+
+  '<div class="ai-note">اسأل عن أي موضوع أو اطلب ترشيحات أو مساعدة في BLOFY. تُرسل رسائلك الأخيرة إلى خدمة الذكاء الاصطناعي؛ لا تكتب أكواد الاشتراك أو كلمات المرور.</div>'+
   '<div class="ai-thread" id="ai-thread" role="log" aria-live="polite"></div>'+
   '<div class="ai-prompts" id="ai-prompts"><button class="chip" data-ai-prompt="اقترح أفلام أكشن">أفلام أكشن</button>'+
   '<button class="chip" data-ai-prompt="رشح لي مسلسل كوميدي">مسلسلات كوميدية</button>'+
   '<button class="chip" data-ai-prompt="اقترح فيلم رعب جديد">أفلام رعب جديدة</button></div>'+
-  '<div class="ai-compose"><input class="input" id="ai-text" maxlength="160" placeholder="اسأل عن فيلم أو مسلسل ترغب بمشاهدته…" autocomplete="off">'+
-  '<button class="btn" id="ai-send">إرسال ⟵</button></div>'+
+  '<div class="ai-compose"><textarea class="input" id="ai-text" maxlength="1600" rows="2" placeholder="اكتب سؤالك…" autocomplete="off"></textarea>'+
+  '<button class="btn" id="ai-send">إرسال</button></div><button class="btn secondary" id="ai-new">محادثة جديدة</button>'+
   '<p class="muted small">الذكاء الاصطناعي قد يخطئ. اضغط على العنوان لعرض النتائج الفعلية في مكتبتك.</p></section>');
  function render(){
   if(S.route!=='ai')return;
@@ -1574,24 +1574,26 @@ function aiScreen(){
    return '<div class="ai-bubble '+(turn.user?'mine':'assistant')+'"><strong>'+(turn.user?'أنت':'BLOFY AI')+'</strong>'+
     '<p>'+esc(turn.text)+'</p>'+(suggestions?'<div class="ai-links">'+suggestions+'</div>':'')+'</div>'
   }).join('')+(S.aiBusy?'<div class="ai-bubble assistant"><strong>BLOFY AI</strong><p>جار تحليل طلبك…</p></div>':'');
+  var send=document.getElementById('ai-send');if(send){send.disabled=S.aiBusy;send.textContent=S.aiBusy?'جار الرد…':'إرسال'}
   box.scrollTop=box.scrollHeight
  }
- if(!S.aiTurns.length)S.aiTurns.push({user:false,text:'أهلًا بك في مساعد BLOFY. أخبرني بنوع الأفلام أو المسلسلات التي تحبها، وسأقترح عناوين للبحث عنها في مكتبتك.'});
+ if(!S.aiTurns.length)S.aiTurns.push({user:false,text:'أهلًا! اسألني عن الأفلام والمسلسلات أو أي سؤال آخر. كيف أقدر أساعدك؟'});
  render();
  function ask(text){
-  var query=String(text||'').trim().slice(0,160);
-  if(query.length<3||S.aiBusy)return;
+  var query=String(text||'').trim().slice(0,1600);
+  if(!query||S.aiBusy)return;
   S.aiBusy=true;var token=++S.aiToken;
   S.aiTurns.push({user:true,text:query});
   document.getElementById('ai-text').value='';
   render();
-  api('POST','/api/ai/interpret',{text:query,locale:document.documentElement.lang==='en'?'en':'ar'},function(st,data){
+  var messages=S.aiTurns.filter(function(turn){return turn.user||turn.model===true}).slice(-9).map(function(turn){return {role:turn.user?'user':'assistant',content:String(turn.text||'').slice(0,1600)}});
+  api('POST','/api/ai/chat',{messages:messages,locale:document.documentElement.lang==='en'?'en':'ar'},function(st,data){
    if(token!==S.aiToken)return;
    S.aiBusy=false;
    if(st===200&&data&&data.ok){
     var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
     if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
-    S.aiTurns.push({user:false,text:String(data.reply||'اضغط على أحد العناوين للبحث عنه في مكتبة BLOFY.').slice(0,240),suggestions:suggestions})
+    S.aiTurns.push({user:false,model:true,text:String(data.reply||'لم يصل رد كامل، حاول مرة أخرى.').slice(0,3000),suggestions:suggestions})
    }else{
     var message=st===429?'تم الوصول إلى حد الطلبات مؤقتًا. جرب بعد قليل.':
      st===401||st===403?'انتهت جلسة الاشتراك. افتح الإعدادات وتحقق من التفعيل.':
@@ -1603,7 +1605,8 @@ function aiScreen(){
   })
  }
  document.getElementById('ai-send').onclick=function(){ask(document.getElementById('ai-text').value)};
- document.getElementById('ai-text').onkeydown=function(e){if((e.keyCode||e.which)===13){e.preventDefault();ask(this.value)}};
+ document.getElementById('ai-text').onkeydown=function(e){if((e.keyCode||e.which)===13&&!e.shiftKey&&!e.isComposing){e.preventDefault();ask(this.value)}};
+ document.getElementById('ai-new').onclick=function(){S.aiToken++;S.aiBusy=false;S.aiTurns=[];aiScreen()};
  document.getElementById('ai-prompts').onclick=function(e){
   var t=e.target.getAttribute('data-ai-prompt');if(t)ask(t)
  };
