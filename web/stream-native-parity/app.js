@@ -540,9 +540,21 @@ function arabicCategory(raw){
  return label
 }
 function posterCategory(item,kind){
- var category=String(item&&item.category_id||''),rows=S.cats&&S.cats[kind]||[];
- for(var i=0;i<rows.length;i++)if(String(rows[i].category_id)===category)return arabicCategory(rows[i].category_name);
- return arabicCategory(item&&item.category_name||item&&item.genre||'')
+ if(!item||kind==='live')return '';
+ var raw=item.genre||item.genres||item.genre_name||(item.info&&(item.info.genre||item.info.genres))||'';
+ if(Array.isArray(raw))raw=raw.map(function(x){return typeof x==='object'&&x?x.name||'':x}).join(', ');
+ if(typeof raw!=='string')return '';
+ var rules=[
+ [/\b(?:science fiction|sci[- ]?fi)\b|خيال علمي/i,'خيال علمي'],[/\baction\b|أكشن|حركة/i,'أكشن'],[/\bcomedy\b|كوميديا|كوميدي/i,'كوميديا'],
+ [/\bdrama\b|دراما/i,'دراما'],[/\bhorror\b|رعب/i,'رعب'],[/\bthriller\b|إثارة|اثارة/i,'إثارة'],[/\bmystery\b|غموض/i,'غموض'],
+ [/\bromance\b|رومانسي/i,'رومانسي'],[/\badventure\b|مغامر/i,'مغامرات'],[/\bfantasy\b|فانتازيا|خيال(?! علمي)/i,'فانتازيا'],
+ [/\bcrime\b|جريمة|جرائم/i,'جريمة'],[/\banimation\b|رسوم متحركة|أنيميشن/i,'رسوم متحركة'],[/\bdocumentary\b|وثائقي/i,'وثائقي'],
+ [/\bfamily\b|عائلي/i,'عائلي'],[/\bhistory\b|تاريخي/i,'تاريخي'],[/\bwar\b|حربي/i,'حربي'],[/\bwestern\b|غرب أمريكي/i,'غرب أمريكي'],
+ [/\bmusic(?:al)?\b|موسيقي/i,'موسيقي'],[/\bbiograph(?:y|ical)\b|سيرة ذاتية/i,'سيرة ذاتية'],[/\bsport\b|رياضي/i,'رياضي']
+ ];
+ var found=[];
+ rules.forEach(function(rule){var match=rule[0].exec(raw);if(match)found.push({at:match.index,name:rule[1]})});
+ return found.sort(function(x,y){return x.at-y.at}).slice(0,3).map(function(x){return x.name}).join(' • ')
 }
 function refreshPosterCategories(kind){
  var cards=document.querySelectorAll('[data-details] .poster-category');
@@ -550,14 +562,14 @@ function refreshPosterCategories(kind){
   var card=cards[i].closest('[data-details]'),key=card&&card.getAttribute('data-details')||'',prefix=kind+':';
   if(key.indexOf(prefix)!==0)continue;
   var item=findItem(kind,key.slice(prefix.length)),label=item&&posterCategory(item,kind);
-  if(label)cards[i].textContent=label
+  cards[i].textContent=label||''
  }
 }
 function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
  '<span class="poster-art">'+safeImg(item)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
- '<span class="poster-caption"><strong>'+esc(name)+'</strong><span class="poster-category">'+esc(posterCategory(item,kind)||(kind==='movie'?'فيلم':kind==='series'?'مسلسل':'مباشر'))+'</span>'+(percent>3&&percent<95?'<span>متابعة • '+percent+'٪</span>':'')+'</span></button>'
+ '<span class="poster-caption"><strong>'+esc(name)+'</strong><span class="poster-category">'+esc(posterCategory(item,kind))+'</span>'+(percent>3&&percent<95?'<span>متابعة • '+percent+'٪</span>':'')+'</span></button>'
 }
 function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).map(function(x){return posterCard(x,kind)}).join('')+'</div>'}
 function home(){
