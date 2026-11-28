@@ -1075,3 +1075,29 @@ html[data-blofy-device="tv"] .native-stream-login .native-login-brand{font-size:
 html[data-blofy-device="tv"] .native-stream-login #activation-code{height:75px;font-size:27px}
 html[data-blofy-device="tv"] .native-stream-login .native-login-submit{font-size:20px}
 @media(prefers-reduced-motion:reduce){.native-stream-login button{transition:none}}
+
+
+/* Signed STREAM compact Home: 52px header/tabs and 60px navigation. */
+.native-home-header{display:flex;align-items:center;gap:4px;min-height:52px;padding:0 2px}
+.native-home-brand{display:flex;align-items:center;gap:5px;flex:1;min-width:0}
+.native-home-brand img{width:48px;height:44px;object-fit:contain;flex:none}
+.native-home-brand strong{font-size:12px;line-height:1.25;overflow-wrap:break-word}
+.native-home-icon{height:48px;width:44px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:12px;color:var(--soft);padding:0}
+.native-home-tabs{display:flex;align-items:center;gap:8px;min-height:52px;padding:2px 0}
+.native-home-tabs .btn{min-width:0;flex:1;height:48px;font-size:13px;padding:0 4px}
+.native-home-refresh{color:var(--soft);font-size:12px;line-height:1.5}
+.native-home-refresh:empty{display:none}
+html[data-blofy-device="touch"] .native-compact-home{display:flex;flex-direction:column;height:100vh;height:100dvh}
+html[data-blofy-device="touch"] .native-compact-home .workspace{order:0;flex:1 1 0;width:100%;min-height:0;padding:env(safe-area-inset-top,0px) 12px 16px}
+html[data-blofy-device="touch"] .native-compact-home .native-home-bottom{order:1;display:flex;flex-direction:row;width:100%;height:auto;min-height:60px;flex:none;gap:3px;padding:3px 8px calc(3px + env(safe-area-inset-bottom,0px));border:0;border-top:1px solid #ffffff22;background:#10303b}
+html[data-blofy-device="touch"] .native-home-bottom .rail-link{flex:1 1 0;min-width:0;max-width:none;height:54px;min-height:54px;display:flex;flex-direction:column;justify-content:center;gap:4px;font-size:10px;margin:0;padding:3px;text-align:center}
+.native-home-bottom .rail-link.active{color:#46e4d0;background:transparent;border-color:transparent}
+.native-compact-home .story-row{display:flex;flex-wrap:nowrap;overflow-x:auto}
+.native-compact-home .story{flex:0 0 132px;min-height:76px}
+.downloads-page{max-width:900px;margin:0 auto}.downloads-page h2{margin-top:0}
+.download-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #327f89;border-radius:14px;padding:14px;margin:12px 0;background:#10303b}
+.download-row strong{flex:1;min-width:100px;overflow-wrap:break-word}
+.download-row span{font-size:12px;color:var(--muted)}
+.episode-download{margin:0 0 10px;min-height:44px}
+#download-status:not(:empty){padding:10px;color:var(--soft)}
+@media(max-width:360px){.native-home-brand img{width:34px}.native-home-icon{width:38px}.native-home-brand strong{font-size:11px}}
