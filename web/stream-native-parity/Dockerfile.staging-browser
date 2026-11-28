@@ -4,10 +4,11 @@ WORKDIR /qa
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund && npx playwright install chrome
 COPY index.html app.js styles.css stream-icon.svg manifest.webmanifest profile-transfer.js playback-acceptance.js manual-preview-fix.mjs ./
-COPY qa/native-shell-browser.mjs qa/synthetic-browser-playback.mjs ./qa/
+COPY playlist-preview.html playlist-preview.js playlist-preview.css approved-m3u-loader.mjs approved-m3u-catalog.mjs ./
+COPY qa/native-shell-browser.mjs qa/synthetic-browser-playback.mjs qa/external-playlist-browser.mjs ./qa/
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN for color in red blue; do mkdir -p qa-fixtures/$color && ffmpeg -hide_banner -loglevel error -f lavfi -i "color=c=$color:s=640x360:r=25" -f lavfi -i 'sine=frequency=440:sample_rate=48000' -t 12 -c:v libx264 -pix_fmt yuv420p -g 50 -sc_threshold 0 -c:a aac -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename "qa-fixtures/$color/seg-%03d.ts" "qa-fixtures/$color/index.m3u8" || exit 1; done
-RUN node manual-preview-fix.mjs && BLOFY_QA_BUNDLED_CHROMIUM=1 BLOFY_QA_WEBKIT=1 node qa/native-shell-browser.mjs && node qa/synthetic-browser-playback.mjs qa-fixtures && touch /qa/native-browser-passed
+RUN node manual-preview-fix.mjs && BLOFY_QA_BUNDLED_CHROMIUM=1 BLOFY_QA_WEBKIT=1 node qa/native-shell-browser.mjs && node qa/synthetic-browser-playback.mjs qa-fixtures && node qa/external-playlist-browser.mjs && touch /qa/native-browser-passed
 FROM oven/bun:1-debian
 WORKDIR /app
 COPY package.json /app/package.json
