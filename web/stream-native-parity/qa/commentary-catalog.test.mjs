@@ -181,3 +181,18 @@ test('subtitle language labels reflect actual advertised tracks',()=>{
  assert.equal(label('','ara',0),'العربية');assert.equal(label('eng','en-US',1),'الإنجليزية');assert.equal(label('SDH','ar',2),'العربية • SDH');assert.equal(label('','',2),'ترجمة 3');
  assert.match(app,/لا توجد مسارات ترجمة في التشغيل الحالي/);
 });
+
+test('commentary suspends when hidden and resumes only the same live channel',()=>{
+ const app=readFileSync('app.js','utf8'),start=app.indexOf('var commentary=null,commentaryEpoch='),end=app.indexOf('var audioButton=',start);
+ const events={},docEvents={};const timers=new Map();let tick=0;
+ const video={readyState:4,paused:false,seeking:false,muted:false,addEventListener:(n,f)=>events[n]=f};
+ const state={id:'123'},S={route:'player',playerView:state};
+ const audio={play(){},pause(){},removeAttribute(){},load(){},remove(){}};
+ const doc={hidden:false,getElementById:()=>null,createElement:()=>audio,addEventListener:(n,f)=>docEvents[n]=f,removeEventListener(){}};
+ const controls=new Function('S','state','video','document','root','setTimeout','clearTimeout','enc','bufferedLiveSeekTarget',app.slice(start,end)+';return {start:startCommentary,active:()=>commentary}')(S,state,video,doc,{appendChild(){}},f=>{timers.set(++tick,f);return tick},id=>timers.delete(id),encodeURIComponent,()=>null);
+ controls.start({id:'anis-fixture',label:'Fixture'});audio.onplaying();assert.equal(video.muted,true);
+ doc.hidden=true;docEvents.visibilitychange();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+ events.pause();doc.hidden=false;docEvents.visibilitychange();assert.ok(controls.active());audio.onplaying();assert.equal(video.muted,true);
+ doc.hidden=true;docEvents.visibilitychange();state.id='456';doc.hidden=false;docEvents.visibilitychange();assert.equal(controls.active(),null);
+ controls.start({id:'anis-fixture',label:'Fixture'});audio.onplaying();doc.hidden=true;docEvents.visibilitychange();state.disposeCommentary();doc.hidden=false;docEvents.visibilitychange();assert.equal(controls.active(),null);
+});
