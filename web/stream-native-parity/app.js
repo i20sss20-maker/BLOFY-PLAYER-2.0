@@ -152,7 +152,7 @@ function useProfile(id,legacy){
  if(changed){
   if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
   S.epgToken++;S.epgCache={};
-  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
+  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.episodesSeriesId='';S.selectedSeason='';S.detailInfo=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
   S.selected=null;S.livePreview=null;S.listingInflight={};S.catsInflight={}
  }
  return true
@@ -207,7 +207,7 @@ function login(message){
  S.accountEpoch++;resetCatalogRefresh();
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];S.lastPlaybackDiag=null;S.lastLongPlaybackTest=null;
- S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
+ S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.episodesSeriesId='';S.selectedSeason='';S.detailInfo=null;S.views={};S.aiTurns=[];S.aiBusy=false;S.aiToken++;S.aiSearchTitle=null;
  S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  if(S.epgTimer){clearTimeout(S.epgTimer);S.epgTimer=null}
  S.epgToken++;S.epgCache={};
@@ -1090,11 +1090,13 @@ function saveResume(kind,id,pos,duration,ready){
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
  if(!item){navigate(k,{},true);return}
- if(k==='series'&&S.item&&S.item.id!==id)S.episodes=null;
+ if(k==='series'&&S.episodesSeriesId!==id){S.episodes=null;S.episodesSeriesId='';S.selectedSeason=''}
  S.item={kind:k,id:id,data:item};S.kind=k;S.route='detail';
  shell(title(item),'<div id="detail-root">'+loading('تفاصيل المحتوى')+'</div>');
+ var detailRoot=document.getElementById('detail-root'),detailEpoch=S.accountEpoch;
+ function detailCurrent(){return S.accountEpoch===detailEpoch&&S.route==='detail'&&S.item&&S.item.kind===k&&S.item.id===id&&document.getElementById('detail-root')===detailRoot}
  function show(extra){
-  if(S.route!=='detail'||!S.item||S.item.id!==id)return;
+  if(!detailCurrent())return;
   var info=(extra&&extra.info)||{};
   if(extra&&extra.info)S.detailInfo={kind:k,id:id,info:info};
   var artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
@@ -1122,8 +1124,8 @@ function details(o){
  show();
  var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
  api('GET','/api/catalog?action='+endpoint+enc(id),null,function(st,data){
-  if(S.route!=='detail'||!S.item||S.item.id!==id)return;
-  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
+  if(!detailCurrent())return;
+  if(st===200&&data){S.item.info=data;show(data);if(k==='series'&&data.episodes){S.episodes=data;S.episodesSeriesId=id;var p=document.getElementById('related-root');if(p)p.innerHTML='<div class="related"><h3>المواسم والحلقات</h3><button class="btn" data-episodes="'+esc(id)+'">فتح قائمة المواسم</button></div>'}}
  })
 }
 function parseEpisodes(data){
@@ -1134,17 +1136,20 @@ function parseEpisodes(data){
  return result
 }
 function episodesScreen(opts){
- var id=String(opts.id||S.item&&S.item.id||'');var item=findItem('series',id)||S.item&&S.item.data;
+ var id=String(opts.id||S.item&&S.item.id||'');var item=findItem('series',id)||(S.item&&S.item.kind==='series'&&S.item.id===id?S.item.data:null);
  if(!item){navigate('series',{},true);return}
- S.route='episodes';S.kind='series';
+ if(S.episodesSeriesId!==id){S.episodes=null;S.episodesSeriesId='';S.selectedSeason=''}
+ S.item={kind:'series',id:id,data:item};S.route='episodes';S.kind='series';
  shell(title(item)+' — الحلقات','<div id="episodes-root">'+loading('مواسم المسلسل')+'</div>');
+ var episodeRoot=document.getElementById('episodes-root'),episodeEpoch=S.accountEpoch;
+ function episodesCurrent(){return S.accountEpoch===episodeEpoch&&S.route==='episodes'&&S.item&&S.item.kind==='series'&&S.item.id===id&&document.getElementById('episodes-root')===episodeRoot}
  function finish(data){
-  if(S.route!=='episodes')return;
+  if(!episodesCurrent())return;
   var list=parseEpisodes(data),seasons={};for(var i=0;i<list.length;i++)seasons[list[i].__season]=true;
   var keys=Object.keys(seasons).sort(function(a,b){return Number(a)-Number(b)});
   if(!keys.length){document.getElementById('episodes-root').innerHTML='<div class="info">تعذر جلب الحلقات لهذا المسلسل.</div>';return}
   if(keys.indexOf(S.selectedSeason)<0)S.selectedSeason=keys[0];
-  S.episodes=data;
+  S.episodes=data;S.episodesSeriesId=id;
   var chosen=list.filter(function(x){return x.__season===S.selectedSeason}).sort(function(a,b){return Number(a.episode_num||0)-Number(b.episode_num||0)});
   var rail=keys.map(function(x){return '<button class="cat-item '+(x===S.selectedSeason?'selected':'')+'" data-season="'+esc(x)+'">الموسم '+esc(x)+'</button>'}).join('');
   var html='<div class="episode-layout"><aside class="cat-rail season-rail"><div class="pane-head"><strong>المواسم</strong></div><div class="pane-scroll">'+rail+'</div></aside>'+
@@ -1161,8 +1166,8 @@ function episodesScreen(opts){
   }).join('')+'</section></div>';
   document.getElementById('episodes-root').innerHTML=html;restoreView('episodes');
  }
- if(S.episodes&&S.episodes.episodes)finish(S.episodes);
- else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(st===200)finish(d);else document.getElementById('episodes-root').innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div>'})
+ if(S.episodesSeriesId===id&&S.episodes&&S.episodes.episodes)finish(S.episodes);
+ else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(!episodesCurrent())return;if(st===200)finish(d);else episodeRoot.innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div><button class="btn secondary" data-episodes="'+esc(id)+'">إعادة المحاولة</button>'})
 }
 /* Web downloads: file delivery is delegated to the browser's download manager.
  * A requested transfer is NOT claimed to be complete or available offline in
@@ -3863,7 +3868,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
       [result.duration_secs,'seconds'],[result.duration,'duration']];
      for(var i=0;i<opts.length;i++){var d=durationSeconds(opts[i][0],opts[i][1]);if(d>=120){state.duration=d;break}}
     }else if(kind==='series'){
-     S.episodes=result;
+     if(S.item&&S.item.kind==='series'&&S.item.id===String(episodeParent)){S.episodes=result;S.episodesSeriesId=String(episodeParent)}
      var eps=parseEpisodes(result);
      for(var j=0;j<eps.length;j++)if(String(eps[j].id)===String(id)){
       var episode=eps[j],extra=episode.info||{},options=[
