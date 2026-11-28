@@ -57,7 +57,7 @@ test('operator gateway sample uses the same source-only independent live TS rout
  assert.ok(start>=0&&end>start);
  const probe=c.slice(start,end);
  const gate=probe.indexOf('shouldUseIndependentSourceMedia(');
- const issue=probe.indexOf('issueStreamRelayGrant({sourceUrl:upstream.href,kind})');
+ const issue=probe.indexOf('issueStreamRelayGrant({routingSourceId:row.server_id,sourceUrl:upstream.href,kind})');
  const request=probe.indexOf('response=await checkedFetch(url,');
  assert.ok(gate>=0&&issue>gate&&request>issue);
  assert.match(probe,/sourceId:row.server_id,kind,extension:ext/);
