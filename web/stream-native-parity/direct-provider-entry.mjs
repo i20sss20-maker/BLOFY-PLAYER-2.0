@@ -51,3 +51,21 @@ export function classifyDirectAccount(payload,now=Date.now()){
  // Return only sanitized metadata, never username, password or server_info.
  return {ok:true,expiresAt:expires===null?null:expires*1000};
 }
+
+ // The caller must supply a restricted network transport. This module is not
+ // attached to public HTTP routes until session and media isolation are ready.
+export async function probeDirectAccount(input,{fetchImpl,now=Date.now()}={}){
+ if(typeof fetchImpl!=='function')throw error('provider_transport_unavailable');
+ let target;
+ try{target=directAccountProbeUrl(normalizeDirectEntry(input))}catch(e){return {ok:false,error:e.code||'invalid_entry'}}
+ try{
+  const response=await fetchImpl(target,{method:'GET',redirect:'manual',cache:'no-store',headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});
+  if(response.status!==200){try{await response.body?.cancel()}catch{};return {ok:false,error:response.status===401||response.status===403?'provider_account_inactive':'provider_unavailable'}}
+  const reader=response.body?.getReader();if(!reader)return {ok:false,error:'provider_unavailable'};
+  const decoder=new TextDecoder();let bytes=0,text='';
+  try{
+   while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>65536)return {ok:false,error:'provider_response_too_large'};text+=decoder.decode(part.value,{stream:true})}
+   return classifyDirectAccount(JSON.parse(text+decoder.decode()),now);
+  }finally{try{await reader.cancel()}catch{}}
+ }catch{return {ok:false,error:'provider_unavailable'}}
+}
