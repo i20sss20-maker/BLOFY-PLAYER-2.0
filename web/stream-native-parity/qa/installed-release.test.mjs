@@ -38,14 +38,16 @@ test('native phone list never starts preview; wide explicit selection still work
  assert.ok(readFileSync('styles.css','utf8').includes('.live-catalog .preview{display:none}'));
 });
 
-test('phone navigation keeps content tabs and four primary destinations',()=>{
- const a=app.indexOf('function phoneHomeNavigation('),b=app.indexOf('function navHtml(',a);
- const result=new Function('S',app.slice(a,b)+';return {bottom:phoneHomeNavigation(),tabs:phoneHomeTabs()}')({route:'home'});
+test('phone navigation mirrors signed STREAM entry destinations and controls',()=>{
+ const a=app.indexOf('function nativeNavIcon('),b=app.indexOf('function shell(',a);
+ const result=new Function('S','document',app.slice(a,b)+';return {bottom:navHtml(),header:nativeHomeHeader()}')({route:'home'},{documentElement:{getAttribute:()=> 'touch'}});
  assert.equal((result.bottom.match(/data-go=/g)||[]).length,4);
- assert.equal((result.tabs.match(/data-go=/g)||[]).length,3);
- assert.match(result.bottom,/data-go="favorites"/);
- assert.match(result.tabs,/data-go="movie"/);
- assert.match(result.tabs,/data-go="series"/);
+ assert.match(result.bottom,/data-go="downloads"/);
+ assert.match(result.header,/data-go="movie"/);
+ assert.match(result.header,/data-go="series"/);
+ assert.match(result.header,/data-go="ai"/);
+ assert.match(result.header,/data-go="search"/);
+ assert.match(result.header,/id="refresh-content"/);
  assert.match(app,/phoneLiveLayout\(\)\?document.getElementById\('workspace'\)/);
 });
 
