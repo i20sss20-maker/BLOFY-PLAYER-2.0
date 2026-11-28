@@ -16,7 +16,7 @@ test('established HLS session resumes loading without reloading the source',()=>
  assert.deepEqual(calls,['start']);
 });
 
-const lostStart=app.indexOf('function liveSessionLost(');
+const lostStart=app.indexOf('function liveHlsFailureReason(');
 const lostEnd=app.indexOf('function resumeLiveHlsNetwork(',lostStart);
 const {liveSessionLost,liveSessionRetryDelay}=new Function(app.slice(lostStart,lostEnd)+';return {liveSessionLost,liveSessionRetryDelay}')();
 test('only established fatal missing fragments or unavailable playlists require a new session',()=>{
@@ -271,4 +271,13 @@ test('HLS failure evidence records only known reasons and bounded retry hints',a
  assert.equal(evidence('live','index.m3u8',401,'authorization_missing',1),null);
  assert.equal(evidence('live','index.m3u8',503,{secret:'not-for-logs'},1).reason,'other');
  assert.equal(evidence('private-account','sid-private',429,'hls_capacity',-1).kind,'unknown');
+});
+
+test('explicit origin backoff respects existing SID while ambiguous or retired sessions recover',()=>{
+ const detail={fatal:true,details:'levelLoadError'};
+ const withReason=reason=>({...detail,networkDetails:{headers:{get:()=>reason}}});
+ assert.equal(liveSessionLost({manifestParsed:true},withReason('hls_origin_backoff'),503),false);
+ for(const reason of ['hls_live_segment_not_ready','hls_source_finished','hls_session_closed','other',null])
+  assert.equal(liveSessionLost({manifestParsed:true},withReason(reason),503),true);
+ assert.equal(liveSessionLost({manifestParsed:true},{...detail,networkDetails:{getResponseHeader(){throw Error('blocked')}}},503),true);
 });
