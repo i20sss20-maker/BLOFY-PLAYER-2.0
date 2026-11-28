@@ -118,3 +118,11 @@ test('source channel quota refusal is not an origin outage',async()=>{
  assert.equal(classify('movie',503,'2','fanout_source_channel_limit').status,502);
  assert.match(source,/denial\.error==='live_source_channel_limit'\?'source_channel_limit':'upstream_'\+status/);
 });
+
+ test('rolling live history is bounded and defaults to the established window',()=>{
+ const a=source.indexOf('function liveWindowSegments('),b=source.indexOf('const LIVE_WINDOW_SEGMENTS=',a);
+ const limit=new Function(source.slice(a,b)+';return liveWindowSegments')();
+ for(const value of [undefined,null,'',0,7,121,60.5,'invalid'])assert.equal(limit(value),8);
+ assert.equal(limit('60'),60);assert.equal(limit(120),120);
+ assert.match(source,/-hls_list_size',String\(LIVE_WINDOW_SEGMENTS\),'-hls_delete_threshold','24'/);
+ });
