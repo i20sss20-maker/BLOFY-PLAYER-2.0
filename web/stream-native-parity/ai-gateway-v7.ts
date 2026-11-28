@@ -421,17 +421,22 @@ async function chatAnswer(turns:ChatTurn[],locale:string):Promise<{reply:string,
  * Only the explicitly requested public question is sent to browser search. */
 function browserSources(message:any):{title:string,url:string}[]{
  const out:{title:string,url:string}[]=[];
- for(const annotation of Array.isArray(message?.annotations)?message.annotations:[]){
-  if(annotation?.type!=="url_citation")continue;
-  const item=annotation.url_citation||annotation;
+ function add(item:any){
   try{
-   const url=new URL(String(item.url||""));
-   if(url.protocol!=="https:"||url.username||url.password||url.port||url.href.length>500||!url.hostname.includes("."))continue;
-   if(!out.some(x=>x.url===url.href))out.push({title:String(item.title||url.hostname).slice(0,100),url:url.href});
+   const url=new URL(String(item?.url||""));
+   if(url.protocol!=="https:"||url.username||url.password||url.port||url.href.length>500||!url.hostname.includes("."))return;
+   if(!out.some(x=>x.url===url.href)&&out.length<5)out.push({title:String(item.title||url.hostname).slice(0,100),url:url.href});
   }catch{}
-  if(out.length>=5)break;
  }
- return out;
+ for(const annotation of Array.isArray(message?.annotations)?message.annotations:[]){
+  if(annotation?.type==="url_citation")add(annotation.url_citation||annotation)
+ }
+ // Actual Groq browser-search metadata: prefer pages opened/read by the tool,
+ // not links invented by the generated answer. Fall back to retrieved search results.
+ const tools=Array.isArray(message?.executed_tools)?message.executed_tools:[];
+ for(const t of tools.filter((t:any)=>t?.type==="browser.open"))for(const item of Array.isArray(t.search_results?.results)?t.search_results.results:[])add(item);
+ for(const t of tools.filter((t:any)=>t?.type==="browser_search"))for(const item of Array.isArray(t.search_results?.results)?t.search_results.results:[])add(item);
+ return out
 }
 async function publicWebAnswer(query:string):Promise<{reply:string,suggestedTitles:string[]}>{
  if(!GROQ_KEY.trim())throw Error("gateway_not_configured");
@@ -445,7 +450,6 @@ async function publicWebAnswer(query:string):Promise<{reply:string,suggestedTitl
  const data=await response.json() as any;
  const message=data?.choices?.[0]?.message,sources=browserSources(message),reply=typeof message?.content==="string"?message.content.trim():"";
  if(!reply||!sources.length){
-  if(Bun.env.BLOFY_AI_BOOT_PROBE==="web-v7")console.info("BLOFY_AI_WEB_SHAPE",JSON.stringify({messageKeys:Object.keys(message||{}),annotationTypes:(message?.annotations||[]).map((x:any)=>x?.type),toolShapes:(Array.isArray(message?.executed_tools)?message.executed_tools:[]).map((t:any)=>({keys:Object.keys(t||{}),type:t?.type,searchKeys:Object.keys(t?.search_results||{}),resultKeys:Object.keys(t?.search_results?.results?.[0]||{})})),replyLength:reply.length}));
   throw Error("web_sources_missing")
  }
  return {reply:reply.slice(0,1900)+"\n\nالمصادر:\n"+sources.slice(0,3).map((x,i)=>(i+1)+". "+x.title+" — "+x.url).join("\n"),suggestedTitles:[]};
@@ -511,7 +515,15 @@ Bun.serve({
     if(rate.n>=18 || globalQueries>=120) return json({ok:false,error:"rate_limited"},429);
     rate.n++;globalQueries++;usage.set(id,rate);sweep(now);
     try {
-      if(isChat){const answer=await chatAnswer(turns,locale);return json({ok:true,...answer});}
+      if(isChat){
+        const question=turns.at(-1)?.content||"";
+        if(/^(?:ابحث(?: لي)?(?: في الإنترنت| في الانترنت| في الويب)?|تحقق من الإنترنت|بحث ويب|search the web|search online)[:：\s]/i.test(question)){
+          if(Bun.env.BLOFY_AI_WEB_SEARCH!=="1")return json({ok:true,reply:locale==="en"?"Web search is not available yet.":"البحث المباشر غير متاح حاليًا؛ لا أستطيع التحقق من المعلومات الحديثة.",suggestedTitles:[]});
+          try{return json({ok:true,...await publicWebAnswer(question)})}
+          catch{return json({ok:true,reply:locale==="en"?"I could not verify this using reliable web sources. Please try a public question without private information.":"لم أتمكن من التحقق من السؤال بمصادر الإنترنت. جرّب سؤالًا عامًا دون بيانات خاصة.",suggestedTitles:[]})}
+        }
+        const answer=await chatAnswer(turns,locale);return json({ok:true,...answer});
+      }
       if (isTranslate) {
         const result = await translateDetails(title,overview);
         translationMemo.set(translationKey,{exp:now+6*60*60*1000,value:result});
