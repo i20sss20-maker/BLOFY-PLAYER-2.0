@@ -1653,7 +1653,9 @@ function aiScreen(){
     verifyAiTitles(suggestions,token,function(matches){
      if(token!==S.aiToken)return;
      S.aiBusy=false;
-     S.aiTurns.push({user:false,model:true,text:answer+(suggestions.length?'\n\n'+(matches.length?'العناوين المطابقة في مكتبتك موضحة أدناه.':'لم أجد تطابقًا مؤكدًا لهذه الترشيحات في مكتبتك.') :''),suggestions:matches});
+     var recommendation=/رشح|ترشيح|اقترح|تنصح|recommend|suggest/i.test(query);
+     var verifiedText=suggestions.length?(matches.length?'هذه العناوين التي تحققت من وجودها في مكتبتك:':'لم أجد تطابقًا مؤكدًا لهذه الترشيحات في مكتبتك. جرّب طلب نوع آخر أو اسم محدد.'):(recommendation?'لم أجد ترشيحات مؤكدة في مكتبتك لهذا الطلب. جرّب تحديد النوع أو اسم ممثل.':answer);
+     S.aiTurns.push({user:false,model:true,text:verifiedText,suggestions:matches});
      if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);render()
     });return
    }else{
