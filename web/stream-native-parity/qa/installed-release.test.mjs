@@ -8,7 +8,12 @@ test('background retirement excludes browser, VOD and picture-in-picture',()=>{
  assert.equal(decide(true,false,r,{},false),false);assert.equal(decide(true,true,r,{},true),false);
  assert.equal(decide(true,true,{kind:'movie'},{},false),false);
  assert.ok(app.includes("if(pending.stopKey){confirmInstalledStop(pending);return}"));
- assert.ok(app.includes("failure.error==='hls_session_retired'"));
+ const start=app.indexOf('function liveSessionTerminalReason('),end=app.indexOf('function liveSessionLost(',start);
+ const terminal=new Function(app.slice(start,end)+';return liveSessionTerminalReason')();
+ assert.equal(terminal('hls_session_retired'),true);
+ assert.equal(terminal('hls_source_finished'),true);
+ assert.equal(terminal('hls_origin_backoff'),false);
+ assert.ok(app.includes('liveSessionTerminalReason(failure.error)'));
 });
 test('stop confirmation does not restart an installed player while hidden or before acknowledgment',async()=>{
  const a=app.indexOf('function confirmInstalledStop('),b=app.indexOf('function installedLiveResumeDecision(',a);
