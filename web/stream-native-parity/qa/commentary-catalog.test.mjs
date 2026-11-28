@@ -144,3 +144,14 @@ test('live retained range reports only playable seconds and never crosses holes'
  assert.equal(target(video,record,'earliest'),14.25);
  assert.equal(range(video,{...record,reconnecting:true}),null);
 });
+
+test('local Arabic subtitle files convert to safe WebVTT without external resources',()=>{
+ const app=readFileSync('app.js','utf8'),a=app.indexOf('function localSubtitleVtt('),b=app.indexOf('function simpleLiveStatus(',a);
+ const convert=new Function(app.slice(a,b)+';return localSubtitleVtt')();
+ const source='\uFEFF1\r\n00:00:01,200 --> 00:00:03,400\r\nمرحبا بالعالم\r\n\r\n2\r\n00:00:04,000 --> 00:00:06,000\r\n<script> & hello';
+ assert.equal(convert(source),'WEBVTT\n\n00:00:01.200 --> 00:00:03.400\nمرحبا بالعالم\n\n00:00:04.000 --> 00:00:06.000\n&lt;script&gt; &amp; hello\n');
+ assert.equal(convert('WEBVTT\n\n00:01.000 --> 00:02.000\nاختبار'),'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nاختبار\n');
+ assert.equal(convert('1\n00:00:08,000 --> 00:00:01,000\nbad'),null);
+ assert.equal(convert('x'.repeat(2*1024*1024+1)),null);
+ assert.match(app,/disposeSubtitles=clearLocalSubtitle/);assert.match(app,/URL.revokeObjectURL\(localSubtitle.url\)/);
+});
