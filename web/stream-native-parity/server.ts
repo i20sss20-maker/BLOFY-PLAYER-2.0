@@ -119,7 +119,7 @@ if(p==='/internal/ops'){
 
 // Staging may exercise packaging and private worker readiness, but must not
 // use production subscriptions, origins, catalog requests, or media sessions.
-if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'){
+if(Bun.env.BLOFY_WEB_SYNTHETIC_ONLY==='1'||Bun.env.RAILWAY_ENVIRONMENT_NAME==='staging'){
  if(p==='/health'&&method==='GET'){
   const host=audioWorkerHost('isolated');let audioReady=false;
   try{const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(3000)});const v=await r.json();audioReady=r.ok&&v.ok===true&&v.service==='blofy-stream-web-audio'}catch{}
