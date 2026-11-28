@@ -1029,7 +1029,11 @@ async function fullVodRequest(req,url){
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  let session=hlsSessions.get(key);
  if(!session){
-  const dir=join(hlsRoot,key);mkdirSync(dir,{recursive:true});
+  if(file!=='index.m3u8')return json(410,{error:'vod_session_expired'});
+  const dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+  // A stopped encoder may still be draining while the same SID restarts.
+  // Its cleanup must never remove the replacement's segment directory.
+  try{mkdirSync(dir,{recursive:true})}catch{return hlsError(503,'vod_storage_unavailable',2)}
   session={key,vod:true,fullVod:true,kind,id,ext,track,duration,bearer,dir,abort:new AbortController(),
    proc:null,chunkStart:-1,stopped:false,released:true,finished:true,exitCode:0,lastAccess:Date.now()};
   hlsSessions.set(key,session);
