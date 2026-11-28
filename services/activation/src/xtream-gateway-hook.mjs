@@ -191,6 +191,9 @@ const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 // Bound all public redemption attempts as well as each client IP.
 let unifiedConnectPairing=null;
 const streamCodeGlobalLimiter=createFixedWindowLimiter({limit:120,windowMs:60*60_000});
+// Credential sign-in has its own budget: it must never consume existing code redemption capacity.
+const webCredentialGlobalLimiter=createFixedWindowLimiter({limit:120,windowMs:60*60_000});
+const webCredentialAccountLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 let readyPromise;
 const unavailableWriteGuard=createRegistryWriteGuard();
 let unavailableRecoveryTimerStarted=false,unavailableRecoveryBusy=false;
@@ -2958,14 +2961,17 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const headers={'cache-control':'no-store, private','referrer-policy':'no-referrer','pragma':'no-cache'};
         if(process.env.BLOFY_STREAM_WEB_BOUND_LOGIN_QA!=='1')return json(res,503,{ok:false,error:'direct_login_unavailable'},headers);
         if(req.method!=='POST'||url.search||!/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))return json(res,400,{ok:false,error:'direct_login_unavailable'},headers);
-        const rate=streamCodeLimiter.consume(requestClientKey(req)),global=streamCodeGlobalLimiter.consume('all_redemptions');
-        if(!rate.allowed||!global.allowed)return json(res,429,{ok:false,error:'direct_login_rate_limited'},{...headers,'retry-after':String(Math.max(rate.retryAfterSeconds||1,global.retryAfterSeconds||1))});
+        const global=webCredentialGlobalLimiter.consume('web_credentials');
+        if(!global.allowed)return json(res,429,{ok:false,error:'direct_login_rate_limited'},{...headers,'retry-after':String(global.retryAfterSeconds||1)});
         try{
           if(Number(req.headers['content-length']||0)>4096){req.resume();return json(res,413,{ok:false,error:'direct_login_unavailable'},headers)}
           const chunks=[];let size=0;
           for await(const chunk of req){const bytes=Buffer.from(chunk);size+=bytes.length;if(size>4096)return json(res,413,{ok:false,error:'direct_login_unavailable'},headers);chunks.push(bytes)}
           const input=JSON.parse(Buffer.concat(chunks).toString('utf8'));
           if(!input||typeof input!=='object'||Array.isArray(input))return json(res,400,{ok:false,error:'direct_login_unavailable'},headers);
+          let userKey;try{userKey=normalizeGatewayUsername(input.username)}catch{return json(res,400,{ok:false,error:'direct_login_unavailable'},headers)}
+          const rate=webCredentialAccountLimiter.consume(userKey);
+          if(!rate.allowed)return json(res,429,{ok:false,error:'direct_login_rate_limited'},{...headers,'retry-after':String(rate.retryAfterSeconds||1)});
           let result=await loginBoundStreamAccount(input,{
             keyHex:KEY_HEX,authenticate:(username,password)=>authenticate(username,password,{touch:false}),
             findVoucher:async(accountId,proof)=>{
