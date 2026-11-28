@@ -21,8 +21,11 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
    if(!state?.ok||!['legacy','draining'].includes(state.mode))return hold('owner_state_unavailable');
    const health=await readHealth();
    const now=clock();
-   const fresh=h=>Number.isSafeInteger(h?.observedAt)&&h.observedAt>=now-10000&&h.observedAt<=now+2000;
-   const stable=(id,ok,ms)=>{const h=health?.[id];return fresh(h)&&h.ok===ok&&Number.isSafeInteger(h.since)&&h.since<=h.observedAt&&h.observedAt-h.since>=ms};
+   const stable=(id,ok,ms,snapshot=health,at=now)=>{
+    const h=snapshot?.[id];
+    return Number.isSafeInteger(h?.observedAt)&&h.observedAt>=at-10000&&h.observedAt<=at+2000&&
+      h.ok===ok&&Number.isSafeInteger(h.since)&&h.since<=h.observedAt&&h.observedAt-h.since>=ms;
+   };
    let transition=state;
    if(state.mode==='legacy'){
     // Bootstrap is deliberately operator-controlled, not an automatic outage.
@@ -39,7 +42,7 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
      return hold('transition_unconfirmed');
    const identity=Object.freeze({sourceId,previousOwner:transition.owner,
      nextOwner:transition.nextOwner,drainStartedAt:transition.epoch});
-   if(!stable(identity.nextOwner,true,failoverAfterMs))return hold('destination_unavailable');
+   if(!stable(identity.nextOwner,true,failoverAfterMs,health,clock()))return hold('destination_unavailable');
    // Repeated calls must be safe: adapter stops only the recorded prior owner
    // for this exact epoch, never the proposed destination.
    if(await stopPreviousOwner(identity)!==true)return hold('stop_unconfirmed');
@@ -54,6 +57,14 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
      proof.drainStartedAt!==identity.drainStartedAt||proof.authoritative!==true||
      proof.scope!=='all_paths'||proof.activeConnections!==0||proof.maxConnections!==1||
      !Number.isSafeInteger(proof.observedAt)||proof.observedAt<identity.drainStartedAt)
+      return hold('provider_release_unconfirmed');
+   // Stopping the old owner and observing provider release can take time.
+   // Do not commit a destination using the pre-drain health snapshot.
+   const finalHealth=await readHealth();
+   const commitAt=clock();
+   if(!stable(identity.nextOwner,true,failoverAfterMs,finalHealth,commitAt))
+      return hold('destination_unavailable');
+   if(proof.observedAt<commitAt-10000||proof.observedAt>commitAt+2000)
       return hold('provider_release_unconfirmed');
    // The gate revalidates freshness, holds, intent and the worker ledger
    // atomically. An ambiguous commit must be re-read, never forced.
