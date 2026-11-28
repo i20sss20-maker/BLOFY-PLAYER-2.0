@@ -1104,6 +1104,6 @@ html[data-blofy-device="touch"] .native-home-bottom .rail-link{flex:1 1 0;min-wi
 
 /* Exact local Arabic typeface used by native STREAM, no third-party CDN. */
 @font-face{font-family:"BLOFY Plex Arabic";src:url("/fonts/IBMPlexSansArabic-Regular.ttf") format("truetype");font-style:normal;font-weight:400;font-display:swap}
-@font-face{font-family:"BLOFY Plex Arabic";src:url("/fonts/IBMPlexSansArabic-SemiBold.ttf") format("truetype");font-style:normal;font-weight:600 900;font-display:swap}
+@font-face{font-family:"BLOFY Plex Arabic";src:url("/fonts/IBMPlexSansArabic-SemiBold.ttf") format("truetype");font-style:normal;font-weight:700;font-display:swap}
 html,body,button,input,select,textarea{font-family:"BLOFY Plex Arabic","Geeza Pro",Tahoma,Arial,sans-serif}
 .native-home-brand strong,.native-login-brand,.brand{font-family:system-ui,"Segoe UI",Arial,sans-serif}
