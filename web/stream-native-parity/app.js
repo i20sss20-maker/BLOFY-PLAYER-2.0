@@ -817,9 +817,9 @@ function enrichPosters(kind,source,force){
   posterRecovery={epoch:S.accountEpoch,queue:[],pending:{},cache:{},order:[],active:0};
  var state=posterRecovery;
  function current(){return S.accountEpoch===state.epoch&&posterRecovery===state}
- function apply(item,key,cover,genre){
+ function apply(item,key,cover,genre,force){
   if(!current())return;
-  if(cover&&!art(item))item.movie_image=cover;
+  if(cover&&(force||!art(item)))item.movie_image=cover;
   if(genre&&!posterCategory(item,kind))item.genre=genre;
   var buttons=document.querySelectorAll('[data-details]');
   for(var j=0;j<buttons.length;j++){
@@ -858,7 +858,7 @@ function enrichPosters(kind,source,force){
      // Failed metadata reads are retryable instead of permanently hiding
      // artwork. Successful covers are reused only inside this account.
      remember(task.key,cover,genre,cover||genre?300000:30000);
-     if(cover||genre)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover,genre);
+     if(cover||genre)for(var i=0;i<task.items.length;i++)apply(task.items[i],task.key,cover,genre,task.force);
      pump();
     });
    })(job)
@@ -869,13 +869,14 @@ function enrichPosters(kind,source,force){
   var item=candidates[i],id=itemId(item,kind);
   if(!id||id.length>128)continue;
   var key=kind+':'+id,hit=state.cache[key];
-  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover,hit.genre);continue}
+  if(hit&&hit.until>Date.now()){apply(item,key,hit.cover,hit.genre,force);continue}
   if(state.pending[key]){
    if(state.pending[key].items.length<16)state.pending[key].items.push(item);
+   if(force)state.pending[key].force=true;
    continue
   }
   if(state.queue.length>=32)break;
-  var job={kind:kind,id:id,key:key,items:[item]};
+  var job={kind:kind,id:id,key:key,items:[item],force:!!force};
   state.pending[key]=job;state.queue.push(job)
  }
  pump()
