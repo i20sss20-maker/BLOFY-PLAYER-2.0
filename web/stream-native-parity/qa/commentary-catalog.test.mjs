@@ -131,6 +131,9 @@ test('manual commentary picture timing preserves one active audio stream only fo
  video.buffered=ranges([[8,8.5]]);assert.equal(controls.adjust('back-one'),false);assert.ok(controls.active());
  video.buffered=ranges([[5,25]]);assert.equal(controls.adjust('forward-one'),true);
  const timeout=[...timers.values()].at(-1);timeout();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+ controls.start({id:'anis-fixture',label:'Fixture'});fakeAudio.onplaying();
+ fakeAudio.onerror();assert.equal(controls.active(),null);assert.equal(video.muted,false);
+ controls.start({id:'anis-fixture',label:'Fixture'});assert.equal(controls.active(),null,'immediate retry must not reopen audio');
 });
 
 test('live retained range reports only playable seconds and never crosses holes',()=>{
