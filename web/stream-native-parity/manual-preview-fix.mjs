@@ -965,4 +965,25 @@ change("   if(state.externalPending)return;\n   var record=S.play,selected=Strin
 change("    if(st===200||st===404){state.externalRetiringStop=null;issue()}", "    if(st===200||st===404){state.externalRetiringStop=null;state.directStopKey=null;issue()}");
 change("   state.externalRetiringStop=null;stopExternal()", "   state.externalRetiringStop=null;state.directStopKey=null;stopExternal()");
 
+change("function shouldUseNativeHls(video){\n if(S.preferMseHls", "function appleMobileNativeHls(ua,touchPoints,video){return !!(appleTouchBrowser(ua,touchPoints)&&video&&video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl'))}\nfunction shouldUseNativeHls(video){\n if(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video))return true;\n if(S.preferMseHls");
+change("if(!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice", "if(!appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)&&!installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&preferDirectLiveForDevice");
+change("if(record.nativeHls&&installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&", "if(record.nativeHls&&(appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&");
+change("target.searchParams.set('shell','2026.11.26.12');", "target.searchParams.set('shell','2026.11.28.56.0.3');");
+
+
+change("return preview?{sync:4,maxLatency:10,buffer:35}:{sync:5,maxLatency:12,buffer:45}", "return preview?{sync:3,maxLatency:8,buffer:18}:{sync:3,maxLatency:10,buffer:25}");
+change("var profile=[{buffer:45,sync:5,maxLatency:12},{buffer:52,sync:6,maxLatency:14},{buffer:60,sync:7,maxLatency:16}][next];", "var profile=[{buffer:25,sync:3,maxLatency:10},{buffer:35,sync:4,maxLatency:12},{buffer:45,sync:5,maxLatency:14}][next];");
+change("maxMaxBufferLength:preview?45:60,backBufferLength:preview?12:30", "maxMaxBufferLength:preview?25:45,backBufferLength:preview?8:15");
+change("if(state.mode==='mpegts')playDirectMpegts(video,String(state.id),statusElement);", "if(state.mode==='mpegts'&&!state.liveHlsHandoff)playDirectMpegts(video,String(state.id),statusElement);");
+change("xhr.timeout=40000;", "xhr.timeout=mediaStop?6500:40000;");
+
+
+
+change("function liveRetryHint(detail){", "function liveSourceQuotaRejected(detail){\n try{\n  var n=detail&&detail.networkDetails;\n  return (n&&typeof n.getResponseHeader==='function'?n.getResponseHeader('X-Blofy-Live-Status'):n&&n.headers&&n.headers.get?n.headers.get('X-Blofy-Live-Status'):null)==='source_channel_limit'\n }catch(e){return false}\n}\nfunction liveRetryHint(detail){");
+change(" if(shouldUseNativeHls(video)){\n  record.nativeHls=true;", " function showSourceQuota(){\n  if(!alive())return;\n  record.reconnecting=true;\n  for(var i=0,timers=['startupTimer','stallTimer','stableTimer','retryTimer','capacityTimer','originTimer','progressWatchdog'];i<timers.length;i++){\n   if(record[timers[i]]){clearTimeout(record[timers[i]]);clearInterval(record[timers[i]]);record[timers[i]]=null}\n  }\n  try{if(record.engine)record.engine.stopLoad()}catch(e){}\n  var message='مصدر البث ممتلئ حاليًا. اختر قناة متاحة أو أعد المحاولة لاحقًا.';\n  if(preview)status(message);else playerStatus(message,true)\n }\n if(shouldUseNativeHls(video)){\n  record.nativeHls=true;");
+change("if(installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video)&&typeof fetch==='function'){", "if((appleMobileNativeHls(navigator.userAgent,navigator.maxTouchPoints,video)||installedNativeHlsPreferred(installedWebApp(),navigator.userAgent,video))&&typeof fetch==='function'){");
+change("     if(response.status===401||response.status===403||response.status===400){", "     if(response.status===503&&failure&&failure.error==='live_source_channel_limit'){showSourceQuota();return}\n     if(response.status===401||response.status===403||response.status===400){");
+change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);", "    if(code===503&&liveSourceQuotaRejected(detail)){showSourceQuota();return}\n    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);");
+
+
 new Function(app);writeFileSync('app.js',app);
