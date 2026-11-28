@@ -206,7 +206,7 @@ const server = Bun.serve({port:PORT, idleTimeout: 255, async fetch(req) {
     out.set('referrer-policy','no-referrer');
     finishMetric(upstream.status,Date.now()-metricStartedAt);
     const body=req.method==='HEAD'?null:upstream.body;
-    const observeLive=type==='live'&&req.method==='GET'&&upstream.status===200&&
+    const observeLive=type==='live'&&req.method==='GET'&&upstream.status===200&&!out.has('content-length')&&!out.has('content-range')&&!out.has('content-encoding')&&
       /^(?:video\/mp2t|application\/octet-stream)(?:\s*;|$)/i.test(out.get('content-type')||'');
     return new Response(observeLive&&body?observeEdgeBody(body,{signal:req.signal,onFinish:recordEdgeLiveBody}):body,{status:upstream.status,headers:out});
   } catch {
