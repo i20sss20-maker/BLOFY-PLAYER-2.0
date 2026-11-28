@@ -66,9 +66,12 @@ try{
      const rail=document.querySelector('.native-home-bottom'),workspace=document.querySelector('.workspace');
      if(!rail||!workspace)return null;
      const a=rail.getBoundingClientRect(),b=workspace.getBoundingClientRect();
-     return {railRight:a.right,railLeft:a.left,workspaceRight:b.right,workspaceWidth:b.width,viewport:innerWidth};
+     return {railRight:a.right,railLeft:a.left,railTop:a.top,railBottom:a.bottom,railHeight:a.height,workspaceRight:b.right,workspaceBottom:b.bottom,workspaceWidth:b.width,viewport:innerWidth,viewportHeight:innerHeight};
     });
-    assert.ok(layout&&layout.workspaceWidth>150&&layout.railRight<=layout.viewport+2&&layout.railLeft>=layout.workspaceRight-2,JSON.stringify(layout));
+    assert.ok(layout&&layout.workspaceWidth>150&&layout.railRight<=layout.viewport+2,JSON.stringify(layout));
+    if(size.width<=600&&size.height>size.width){
+     assert.ok(layout.workspaceWidth>=layout.viewport-3&&layout.railTop>=layout.workspaceBottom-2&&layout.railBottom<=layout.viewportHeight+2&&layout.railHeight<=90,JSON.stringify(layout));
+    }else assert.ok(layout.railLeft>=layout.workspaceRight-2,JSON.stringify(layout));
    }
    await page.setViewportSize(original);
   }
