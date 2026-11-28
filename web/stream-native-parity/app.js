@@ -1248,6 +1248,8 @@ async function offlineFolder(profile){
  return base.getDirectoryHandle(profile,{create:true})
 }
 function offlineMessage(text){
+ var progress=document.getElementById('offline-progress');if(progress){progress.hidden=!offlineTransfer;progress.value=offlineTransfer?offlineTransfer.pct||0:0}
+ var cancel=document.getElementById('offline-cancel');if(cancel)cancel.hidden=!offlineTransfer;
  var el=document.getElementById('offline-status')||document.getElementById('web-download-message');
  if(!el){el=document.createElement('div');el.id='web-download-message';el.className='info';var target=document.querySelector('#detail-root .detail-actions,.episode-list,#screen');if(target)target.appendChild(el)}
  if(el)el.textContent=text
@@ -1296,7 +1298,7 @@ async function saveOfflineDownload(kind,id,ext,name){
  if(!S.userVerified||!offlineSupported()){offlineMessage('التنزيل داخل التطبيق غير مدعوم في هذا المتصفح.');return}
  if(String(ext).toLowerCase()!=='mp4'||!webDownloadPath(kind,id,ext)){offlineMessage('المشاهدة دون إنترنت تدعم ملفات MP4 المتوافقة مع جهازك حاليًا.');return}
  if(offlineTransfer){offlineMessage('يوجد تنزيل جارٍ.');return}
- var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl};offlineTransfer=task;
+ var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl,name:String(name||'فيديو').slice(0,160),pct:0};offlineTransfer=task;
  var folder=null,fileName='',writer=null,reader=null,committed=false;
  function current(){return S.userVerified&&S.accountEpoch===epoch&&S.profileKey===profile&&!ctrl.signal.aborted}
  function check(){if(!current())throw Error('cancelled')}
@@ -1318,7 +1320,7 @@ async function saveOfflineDownload(kind,id,ext,name){
   var handle=await folder.getFileHandle(fileName,{create:true});
   writer=await handle.createWritable();reader=response.body.getReader();
   var written=0,last=-1;
-  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;offlineMessage('جار التنزيل داخل BLOFY STREAM • '+pct+'٪')}}
+  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار التنزيل داخل BLOFY STREAM • '+pct+'٪')}}
   check();if(written!==total)throw Error('size');await writer.close();writer=null;
   var saved=await handle.getFile();check();if(saved.size!==total)throw Error('size');
   var rows=offlineRows(profile);rows.unshift({file:fileName,size:total,name:String(name||'فيديو').slice(0,160)});
@@ -1326,10 +1328,16 @@ async function saveOfflineDownload(kind,id,ext,name){
   offlineMessage('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.');
   if(S.route==='downloads')drawOfflineDownloads(profile,false)
  }catch(e){offlineMessage(e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
- finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null}
+ finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}
 }
 function downloadsScreen(){
- shell('التنزيلات','<section class="downloads-page"><h2>التنزيلات</h2><p class="small muted">الملفات المحفوظة بالكامل للمشاهدة دون إنترنت. يتطلب تجديد صلاحية المشاهدة اتصالًا مرة كل 24 ساعة.</p><div id="offline-status" role="status" aria-live="polite"></div><div id="offline-player"></div><div id="offline-library"></div><button class="btn secondary" id="offline-cancel">إلغاء التنزيل الجاري</button></section>');
+ shell('التنزيلات','<section class="downloads-page"><p class="small muted">الملفات المحفوظة بالكامل للمشاهدة دون إنترنت.</p><div id="offline-space" class="small muted"></div><div class="row offline-filters"><button class="btn secondary" id="offline-all">الكل</button><button class="btn secondary" id="offline-active">قيد التنزيل</button><button class="btn secondary" id="offline-ready">جاهزة</button></div><div id="offline-status" role="status" aria-live="polite"></div><progress id="offline-progress" max="100" value="0" hidden></progress><button class="btn secondary" id="offline-cancel" hidden>إلغاء التنزيل الجاري</button><div id="offline-player"></div><div id="offline-library"></div><p class="small muted">تجديد صلاحية المشاهدة بالاتصال مرة كل 24 ساعة.</p></section>');
+ var profile=S.profileKey,filter='all',library=document.getElementById('offline-library'),space=document.getElementById('offline-space');
+ var saved=offlineRows(profile).reduce(function(sum,row){return sum+row.size},0);space.textContent='المساحة المستخدمة: '+Math.round(saved/1048576)+' ميغابايت';
+ if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(function(info){if(space.isConnected&&Number.isFinite(info.quota)&&Number.isFinite(info.usage))space.textContent+=' • المتاحة تقريبًا: '+Math.max(0,Math.floor((info.quota-info.usage)/1048576))+' ميغابايت'}).catch(function(){});
+ function setFilter(next){filter=next;library.hidden=filter==='active';['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).classList.toggle('active',key===filter)});if(next==='active')offlineMessage(offlineTransfer?'جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪':'لا يوجد تنزيل جارٍ.')}
+ ['all','active','ready'].forEach(function(key){document.getElementById('offline-'+key).onclick=function(){setFilter(key)}});
+ setFilter('all');if(offlineTransfer)offlineMessage('جار تنزيل '+offlineTransfer.name+' • '+offlineTransfer.pct+'٪');
  document.getElementById('offline-cancel').onclick=function(){if(offlineTransfer)offlineTransfer.ctrl.abort()};
  drawOfflineDownloads(S.profileKey,false);restoreView('downloads')
 }
