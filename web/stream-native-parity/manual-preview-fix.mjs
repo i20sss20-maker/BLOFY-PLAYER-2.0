@@ -718,7 +718,7 @@ change("if(ch){selectChannel(ch,true,true);return}",`if(ch){
   return
  }`);
 change("function beginPreview(item){\n if(S.autoPreviewTimer)", "function beginPreview(item){\n if(phoneLiveLayout())return;\n if(S.autoPreviewTimer)");
-change("'<div class=\"catalog\">'+categoryRail(kind)+","'<div class=\"catalog live-catalog\">'+categoryRail(kind)+");
+// The live catalog class is now present in the source app.js.
 
 
  // Native Home navigation now lives in app.js; avoid overwriting it during build.
