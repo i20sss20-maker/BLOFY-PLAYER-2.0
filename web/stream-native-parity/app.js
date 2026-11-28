@@ -1121,6 +1121,10 @@ function saveResume(kind,id,pos,duration,ready){
 function needsPlotTranslation(value){
  var text=typeof value==='string'?value.trim():'';
  if(text.length<4||text.length>3900)return false;
+ // Persian/Urdu share Arabic script; repeated non-Arabic letters or Persian words distinguish them.
+ var persianLetters=(text.match(/[\u067e\u0686\u0698\u06af\u06a9\u06cc]/g)||[]).length;
+ var persianWords=(text.match(/(?:^|[\s،؛.!؟])(?:این|برای|است|می‌شود|میشود|خواهد|که|را|در)(?=$|[\s،؛.!؟])/g)||[]).length;
+ if(persianLetters>=3||persianLetters>=1&&persianWords>=2||persianWords>=4)return true;
  var arabic=(text.match(/[\u0621-\u064a\u066e-\u06d3]/g)||[]).length;
  var latin=(text.match(/[a-zA-Z]/g)||[]).length;
  return arabic<Math.max(3,latin/2)&&(/[a-zA-Z\u00c0-\u052f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text))
