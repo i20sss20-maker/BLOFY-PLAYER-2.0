@@ -294,3 +294,17 @@ test('delayed HLS retry discards obsolete viewer and defers offline, hidden or p
  }
  assert.equal((app.match(/deferHlsRetry\('/g)||[]).length,4);
 });
+
+test('expired live segment does not jump a healthy playhead or seek during recovery',()=>{
+ const a=app.indexOf('function liveExpiredSegmentRecovery('),b=app.indexOf('\nfunction ',a+10);
+ const recover=new Function(app.slice(a,b)+';return liveExpiredSegmentRecovery')();
+ const video={currentTime:100,paused:false,seeking:false};
+ const engine={liveSyncPosition:140,startLoad(){throw Error('unexpected load')},stopLoad(){throw Error('unexpected stop')}};
+ assert.equal(recover({ready:true,lastProgressAt:9000},engine,video,10000),'waiting');
+ assert.equal(recover({ready:true,lastProgressAt:1000},engine,video,10000),'restart');
+ assert.equal(recover({ready:true,lastProgressAt:1000,lastExpiredSegmentAt:9000},engine,video,10000),'cooling');
+ assert.equal(recover({reconnecting:true},engine,video,10000),'waiting');
+ video.paused=true;assert.equal(recover({},engine,video,10000),'waiting');
+ video.paused=false;video.seeking=true;assert.equal(recover({},engine,video,10000),'waiting');
+ assert.equal(video.currentTime,100);
+});
