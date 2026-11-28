@@ -3001,6 +3001,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button></div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
+ (isLive?playerControl('player-commentary','audio','المعلقين'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -3013,7 +3014,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4129,7 +4130,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true
+   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true;
+   commentaryNotice('المعلق: '+String(track.label||'').slice(0,80))
   };
   audio.onerror=audio.onended=fail;
   audio.onwaiting=audio.onstalled=function(){
@@ -4159,31 +4161,38 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    })(list[j],j)
   }
   if(!isLive){showPlayerChoices('المسارات الصوتية',options,this);return}
-  if(commentary&&commentary.audible){
-   var active=commentary;
-   function adjustCommentary(delta){
-    if(commentary!==active||!active.audible)return;
-    var target=commentarySeekTarget(active.audio,delta);
-    if(target===null){playerStatus('ضبط التزامن غير متاح لهذا الصوت.');return}
-    try{active.audio.currentTime=target}catch(e){playerStatus('تعذر ضبط توقيت الصوت.')}
-   }
-   if(commentarySeekTarget(active.audio,-1)!==null)options.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjustCommentary(-1)}});
-   if(commentarySeekTarget(active.audio,1)!==null)options.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjustCommentary(1)}});
-  }
-  var epoch=++commentaryEpoch,channel=String(state.id);
-  options.push({name:'المعلقون • BLOFY',selected:false,select:function(){
-   api('GET','/api/commentary?channel='+enc(channel),null,function(st,data){
-    if(S.route!=='player'||S.playerView!==state||String(state.id)!==channel||epoch!==commentaryEpoch||document.hidden)return;
-    var list=[{name:'الصوت الأصلي',selected:!commentary,select:stopCommentary}];
-    if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
-     if(track&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
-    });
-    if(list.length===1){commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');return}
-    showPlayerChoices('المعلقون',list,audioButton)
-   })
-  }});
-  showPlayerChoices('الصوت والمعلقون',options,this)
+  showPlayerChoices('المسارات الصوتية',options,this)
  };
+ function openCommentaryChoices(origin){
+  if(!isLive||S.route!=='player'||S.playerView!==state||document.hidden)return;
+  var epoch=++commentaryEpoch,channel=String(state.id);
+  commentaryNotice('جار تحميل المعلقين…');
+  api('GET','/api/commentary?channel='+enc(channel),null,function(st,data){
+   if(S.route!=='player'||S.playerView!==state||String(state.id)!==channel||epoch!==commentaryEpoch||document.hidden)return;
+   var list=[{name:'الصوت الأصلي للقناة',selected:!commentary,select:stopCommentary}];
+   if(st===200&&data&&Array.isArray(data.tracks))data.tracks.slice(0,64).forEach(function(track){
+    if(track&&typeof track.label==='string'&&/^anis-[a-z0-9-]{1,54}$/.test(track.id))list.push({name:track.label,selected:!!commentary&&commentary.id===track.id,select:function(){startCommentary(track)}})
+   });
+   if(commentary&&commentary.audible){
+    var active=commentary;
+    function adjust(delta){
+     if(commentary!==active||!active.audible)return;
+     var target=commentarySeekTarget(active.audio,delta);
+     if(target===null){commentaryNotice('ضبط التوقيت غير متاح لهذا الصوت.');return}
+     try{active.audio.currentTime=target;commentaryNotice(delta<0?'تم تأخير الصوت ثانية':'تم تقديم الصوت ثانية')}catch(e){commentaryNotice('تعذر ضبط توقيت الصوت.')}
+    }
+    if(commentarySeekTarget(active.audio,-1)!==null)list.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjust(-1)}});
+    if(commentarySeekTarget(active.audio,1)!==null)list.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjust(1)}});
+   }
+   if(st!==200)commentaryNotice('تعذر جلب المعلقين الآن؛ الصوت الأصلي متاح.');
+   else if(list.length===1)commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');
+   else{var notice=document.getElementById('player-audio-notice');if(notice)notice.hidden=true}
+   showPlayerChoices('المعلقين',list,origin)
+  })
+ }
+ var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
+ if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
+ if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
  var subtitleButton=document.getElementById('player-subtitles');
  if(subtitleButton)subtitleButton.onclick=function(){
   var engine=S.play&&S.play.engine,list=[],native=video.textTracks;
