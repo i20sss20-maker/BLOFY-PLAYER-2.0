@@ -106,7 +106,7 @@ test('live timing only seeks actual retained bytes within one continuous playabl
  assert.equal(seek({...video,seeking:true},record,'back'),null);
  assert.equal(seek(video,record,'invalid'),null);
  assert.match(app,/now<\(record.localBufferSeekUntil\|\|0\)/);
- assert.match(app,/stopCommentary\(\);record.userTimeshift=entry\[0\]!=='latest'/);
+ assert.match(app,/stopCommentary\(\);setLiveTimeshiftMode\(record,entry\[0\]!=='latest'\)/);
  assert.match(app,/record.localBufferSeekUntil=Date.now\(\)\+20000;video.currentTime=target/);
 });
 
