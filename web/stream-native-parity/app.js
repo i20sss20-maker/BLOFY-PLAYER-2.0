@@ -4499,13 +4499,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null,commentaryResume=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
   commentaryNoticeTimer=setTimeout(function(){el.hidden=true;el.textContent=''},3500)
  }
  function stopCommentary(){
+  commentaryResume=null;
   commentaryEpoch++;
   if(commentaryRetryTimer){clearTimeout(commentaryRetryTimer);commentaryRetryTimer=null}
   if(commentaryPictureSeek){clearTimeout(commentaryPictureSeek.timer);commentaryPictureSeek=null}
@@ -4517,11 +4518,21 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   try{old.audio.pause();old.audio.removeAttribute('src');old.audio.load();old.audio.remove()}catch(e){}
   video.muted=old.originalMuted
  }
- function commentaryVisibility(){if(document.hidden)stopCommentary()}
+ function suspendCommentary(){
+  var saved=commentary&&commentary.track?{track:commentary.track,channel:String(state.id)}:commentaryResume;
+  stopCommentary();commentaryResume=saved
+ }
+ function resumeCommentary(){
+  var saved=commentaryResume;
+  if(!saved||document.hidden||video.paused||video.seeking||video.readyState<3||S.playerView!==state||S.route!=='player')return;
+  commentaryResume=null;if(saved.channel!==String(state.id))return;
+  startCommentary(saved.track,1)
+ }
+ function commentaryVisibility(){if(document.hidden)suspendCommentary();else resumeCommentary()}
  document.addEventListener('visibilitychange',commentaryVisibility);
  state.stopCommentary=stopCommentary;
  state.disposeCommentary=function(){document.removeEventListener('visibilitychange',commentaryVisibility);clearTimeout(commentaryNoticeTimer);stopCommentary()};
- video.addEventListener('pause',stopCommentary);
+ video.addEventListener('pause',function(){if(document.hidden)suspendCommentary();else stopCommentary()});
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
  video.addEventListener('seeking',function(){
@@ -4543,18 +4554,18 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   intentional.timer=setTimeout(function(){if(commentaryPictureSeek===intentional)stopCommentary()},3000);
   try{transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}catch(e){stopCommentary();return false}
  }
- video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}});
+ video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}resumeCommentary()});
  video.addEventListener('waiting',function(){
   if(!commentary||commentaryVideoWait||video.readyState>=3)return;
   var active=commentary;
-  commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
+  commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)suspendCommentary()},3000)
  });
  function startCommentary(track,retryAttempt){
   retryAttempt=Number(retryAttempt)||0;
   if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
   if(Date.now()<commentaryRetryAfter){commentaryNotice('انتظر قليلاً ثم أعد المحاولة.');return}
   stopCommentary();commentaryNotice('جار تشغيل المعلق…');
-  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
+  var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,track:track,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
   function fail(){if(commentary!==record)return;var retry=record.hasPlayed&&retryAttempt<1;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice(retry?'جار استعادة المعلق…':'تعذر تشغيل المعلق؛ الصوت الأصلي مستمر. أعد المحاولة بعد 5 ثوانٍ.');if(retry){var epoch=commentaryEpoch;commentaryRetryTimer=setTimeout(function(){commentaryRetryTimer=null;if(commentaryEpoch===epoch&&S.playerView===state&&S.route==='player'&&!document.hidden&&!video.paused&&!video.seeking&&video.readyState>=2)startCommentary(track,retryAttempt+1)},5500)}}
   audio.onplaying=function(){
