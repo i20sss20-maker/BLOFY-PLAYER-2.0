@@ -18,6 +18,7 @@ export async function ensureLinodeFeedLedger(db){
  )`);
  await db.query("ALTER TABLE blofy_linode_feed_ledger ADD COLUMN IF NOT EXISTS engine_id text NOT NULL DEFAULT 'linode' CHECK (engine_id IN ('linode','hostbrr'))");
  await db.query('ALTER TABLE blofy_linode_feed_ledger ADD COLUMN IF NOT EXISTS worker_lease_sequence bigint NOT NULL DEFAULT 0');
+ await db.query('ALTER TABLE blofy_linode_feed_ledger ADD COLUMN IF NOT EXISTS worker_lease_upper_bound timestamptz');
  await db.query(`CREATE TABLE IF NOT EXISTS blofy_linode_feed_requests (
  request_id uuid PRIMARY KEY, source_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
  )`);
@@ -68,7 +69,11 @@ export function createLinodeFeedLedger(pool,env=process.env){
     const claims={version:1,sourceId,reservationId,channelId,engineId,sequence,
       issuedAt:now,expiresAt:Math.min(now+60000,fence.expiresAt)};
     const lease=encode(claims,now);
-    await c.query('UPDATE blofy_linode_feed_ledger SET worker_lease_sequence=$2 WHERE source_id=$1',[sourceId,sequence]);
+    // Persist the maximum lifetime before any signed lease can leave the DB
+    // transaction. For a previously issued lease from the old schema, retain
+    // a conservative 90s upper bound instead of assuming its expiry.
+    const migratedBound=Number(row.worker_lease_sequence)>0&&row.worker_lease_upper_bound==null?now+90000:claims.expiresAt;
+    await c.query('UPDATE blofy_linode_feed_ledger SET worker_lease_sequence=$2, worker_lease_upper_bound=GREATEST(worker_lease_upper_bound,$3::timestamptz) WHERE source_id=$1',[sourceId,sequence,new Date(Math.max(migratedBound,claims.expiresAt))]);
     return {ok:true,...lease};
    });
  }
@@ -203,7 +208,7 @@ export function createLinodeFeedLedger(pool,env=process.env){
      VALUES($1,$2,$3,$4,'pending',$5)
      ON CONFLICT(source_id) DO UPDATE SET channel_id=EXCLUDED.channel_id,
      request_id=EXCLUDED.request_id,reservation_id=EXCLUDED.reservation_id,
-     state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,worker_lease_sequence=0,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
+     state='pending',generation=NULL,engine_id=EXCLUDED.engine_id,worker_lease_sequence=0,worker_lease_upper_bound=NULL,updated_at=now()`,[sourceId,channelId,requestId,reservationId,engineId]);
     if(initialDrain){
      const closed=await c.query('UPDATE blofy_engine_legacy_holds SET closed=true,closed_at=clock_timestamp() WHERE source_id=$1 AND NOT closed AND hold_id=ANY($2::uuid[])',[sourceId,reconcileIds]);
      if(closed.rowCount!==reconcileIds.length)throw Error('initial_drain_hold_snapshot_changed');
@@ -303,6 +308,27 @@ export function createLinodeFeedLedger(pool,env=process.env){
       WHERE session_id=$1 AND source_id=$2 AND reservation_id=$3 AND account_id=$4`,
       [sessionId,sourceId,reservationId,accountId]);
     return r.rowCount===1?{ok:true}:blocked('viewer_session_mismatch');
+   });
+  },
+  // Stop further renewals atomically with reading the last possible expiry.
+  // This is evidence about lease issuance ONLY, never proof of source release.
+  // Pending/ready->unknown blocks renewals, viewers and other reservations.
+  async fenceLeaseRenewal({sourceId,reservationId,engineId,channelId}={}){
+   if(env.BLOFY_ENGINE_RENEWABLE_LEASE!=='1'||!enabled(sourceId)||!engineAllowed(engineId)||!uuid.test(reservationId??'')||!channel.test(channelId??''))return blocked('lease_fence_disabled_or_invalid');
+   return tx(sourceId,async(c,row)=>{
+    if(!row||!['pending','ready','unknown'].includes(row.state)||row.reservation_id!==reservationId||row.engine_id!==engineId||row.channel_id!==channelId)return blocked('lease_fence_identity_mismatch');
+    const {rows:[gate]}=await c.query('SELECT mode,reservation_id,engine_id FROM blofy_engine_ingress_gate WHERE source_id=$1',[sourceId]);
+    if(gate?.mode!=='engine'||gate.reservation_id!==reservationId||gate.engine_id!==engineId)return blocked('lease_fence_gate_mismatch');
+    const {rows:[clock]}=await c.query('SELECT clock_timestamp() AS now');
+    const now=new Date(clock.now).getTime(), sequence=Number(row.worker_lease_sequence);
+    if(!Number.isSafeInteger(now)||!Number.isSafeInteger(sequence)||sequence<0)return blocked('lease_fence_clock_or_sequence_invalid');
+    // Older reservations have no stored deadline. Persist a conservative
+    // upper bound while fencing; never replace a known longer deadline.
+    const stored=row.worker_lease_upper_bound==null?null:new Date(row.worker_lease_upper_bound).getTime();
+    if(stored!==null&&!Number.isSafeInteger(stored))return blocked('lease_fence_deadline_invalid');
+    const upperBound=stored??(sequence===0?null:now+90000);
+    await c.query("UPDATE blofy_linode_feed_ledger SET state='unknown',worker_lease_upper_bound=$2,updated_at=now() WHERE source_id=$1",[sourceId,upperBound===null?null:new Date(upperBound)]);
+    return {ok:true,state:'unknown',sourceId,reservationId,engineId,channelId,sequence,renewalsBlocked:true,lastLeaseMayExpireAt:upperBound,observedAt:now,providerReleaseConfirmed:false};
    });
   },
   async transition({sourceId,reservationId,next,generation,releaseConfirmed,engineId='linode'}={}){
