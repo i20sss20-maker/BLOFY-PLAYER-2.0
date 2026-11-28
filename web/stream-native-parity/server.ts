@@ -643,7 +643,7 @@ if(p.startsWith('/api/commentary/')&&method==='GET'){
    if(!host||!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'audio_converter_unavailable'});
    // Default remains the deployed shared worker. Isolation is an explicit staging opt-in; no fallback opens a second source.
    const converted=await fetch(host+'/audio-compat/'+id,{headers:{Authorization:h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
-   if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:'audio_conversion_unavailable'})}
+   if(!converted.ok||!converted.body||converted.headers.get('content-type')!=='audio/mpeg'){console.warn('commentary_converter_rejected',{status:converted.status,hasBody:!!converted.body,worker:mode==='isolated'?'isolated':'shared'});try{await converted.body?.cancel()}catch{};return json([401,403,429].includes(converted.status)?converted.status:503,{error:converted.status===429?'commentary_capacity_busy':'audio_conversion_unavailable'},converted.status===429?{'Retry-After':'5'}:{})}
    return new Response(converted.body,{headers:noCache({'Content-Type':'audio/mpeg','Accept-Ranges':'none'})});
   }
   if(r.status!==200||!r.body||!['audio/mpeg','audio/aac','audio/mp4'].includes(mime)){
