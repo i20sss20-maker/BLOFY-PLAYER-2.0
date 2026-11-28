@@ -4787,7 +4787,7 @@ function directional(e){
  var nodes=document.querySelectorAll('button:not([disabled]),input:not([disabled]),a[href],select:not([disabled]),[tabindex]:not([tabindex="-1"])'),arr=[];
  for(var i=0;i<nodes.length;i++){
   var node=nodes[i],r=node.getBoundingClientRect();
-  if(r.width>0&&r.height>0&&node.tabIndex>=0&&!node.closest('[hidden],[aria-hidden="true"],[inert]')&&getComputedStyle(node).visibility!=='hidden')arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
+  if(r.width>0&&r.height>0&&node.tabIndex>=0&&(!node.closest||!node.closest('[hidden],[aria-hidden="true"],[inert]'))&&getComputedStyle(node).visibility!=='hidden')arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
  }
  var active=document.activeElement,from=null;
  for(var j=0;j<arr.length;j++)if(arr[j].node===active){from=arr[j];break}
