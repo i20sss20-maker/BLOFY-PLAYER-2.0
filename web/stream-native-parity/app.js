@@ -2013,6 +2013,21 @@ function liveTimeshiftRange(video,record){
  }catch(e){}
  return null
 }
+// Preserve the actual latency profile chosen by the live engine. Manual
+// picture/audio timing must not be silently undone by automatic catch-up.
+function setLiveTimeshiftMode(record,enabled){
+ if(!record)return;
+ var config=record.engine&&record.engine.config;
+ if(config){
+  if(!Number.isFinite(record.normalLiveMaxLatency)){
+   var current=Number(config.liveMaxLatencyDurationCount);
+   record.normalLiveMaxLatency=Number.isFinite(current)&&current>0?current:10
+  }
+  config.liveMaxLatencyDurationCount=enabled?Infinity:record.normalLiveMaxLatency
+ }
+ record.userTimeshift=enabled===true;
+ record.liveLagSince=0
+}
 function liveTimeshiftTarget(video,record,action){
  var range=liveTimeshiftRange(video,record);if(!range)return null;
  var step={'back-one':-1,back:-5,'back-ten':-10,'back-thirty':-30,'forward-one':1,forward:5,'forward-ten':10,'forward-thirty':30};
@@ -2167,7 +2182,7 @@ function countVisualOutage(record,video,now){
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
 function liveExpiredSegmentRecovery(record,engine,video,now){
- record.userTimeshift=false;if(engine&&engine.config)engine.config.liveMaxLatencyDurationCount=10;
+ setLiveTimeshiftMode(record,false);
  // HLS occasionally requests a sequence that has fallen off the live
  // playlist while the viewer catches up. Prefer an in-place live-edge
  // jump before tearing down a healthy source and FFmpeg decoder.
@@ -4541,7 +4556,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var intentional={audio:commentary,transport:transport,target:target,timer:null};
   commentaryPictureSeek=intentional;
   intentional.timer=setTimeout(function(){if(commentaryPictureSeek===intentional)stopCommentary()},3000);
-  try{transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}catch(e){stopCommentary();return false}
+  var wasDelayed=transport.userTimeshift===true;
+  try{setLiveTimeshiftMode(transport,true);transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}
+  catch(e){setLiveTimeshiftMode(transport,wasDelayed);stopCommentary();return false}
  }
  video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}});
  video.addEventListener('waiting',function(){
@@ -4638,12 +4655,17 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(record&&record.video===video){
    range=liveTimeshiftRange(video,record);
    [['earliest','أقدم نقطة محفوظة'],['back-thirty','رجوع 30 ثانية'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['forward-thirty','تقديم 30 ثانية'],['latest','العودة للبث المباشر']].forEach(function(entry){
-    if(liveTimeshiftTarget(video,record,entry[0])===null)return;
+    // Even at the live edge, allow the viewer to release manual timing.
+    if(liveTimeshiftTarget(video,record,entry[0])===null&&!(entry[0]==='latest'&&record.userTimeshift))return;
     options.push({name:entry[1],selected:false,select:function(){
      if(S.play!==record||S.playerView!==state||S.route!=='player')return;
      var target=liveTimeshiftTarget(video,record,entry[0]);
-     if(target===null){playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return}
-     try{stopCommentary();record.userTimeshift=entry[0]!=='latest';if(record.engine&&record.engine.config)record.engine.config.liveMaxLatencyDurationCount=record.userTimeshift?Infinity:10;record.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;playerStatus('')}catch(e){record.userTimeshift=false;if(record.engine&&record.engine.config)record.engine.config.liveMaxLatencyDurationCount=10;playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
+     if(target===null){
+      if(entry[0]==='latest'&&record.userTimeshift){setLiveTimeshiftMode(record,false);playerStatus('');return}
+      playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return
+     }
+     try{stopCommentary();setLiveTimeshiftMode(record,entry[0]!=='latest');record.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;playerStatus('')}
+     catch(e){setLiveTimeshiftMode(record,false);playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
     }})
    });
   }
