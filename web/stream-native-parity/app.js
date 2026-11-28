@@ -3347,7 +3347,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'القناة التالية':nextEpisode?'الحلقة التالية':'تقديم عشر ثوانٍ')+'">'+
  '<span aria-hidden="true">⏭</span><small>'+(isLive?'قناة تالية':nextEpisode?'الحلقة التالية':'+10 ثوانٍ')+'</small></button>'+
  '<button class="mobile-player-action" type="button" id="mobile-player-fullscreen" aria-label="ملء الشاشة">'+
- '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button></div>'+
+ '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button>'+
+ (isLive?'<button class="mobile-player-action" type="button" id="mobile-player-timing" aria-label="تقديم وتأخير البث"><span aria-hidden="true">↶</span><small>توقيت البث</small></button>':'')+'</div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
  (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
@@ -4593,6 +4594,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  if(bufferButton)bufferButton.onclick=openLiveTiming;
  if(timeshiftButton)timeshiftButton.onclick=openLiveTiming;
+ var mobileTiming=document.getElementById('mobile-player-timing');if(mobileTiming)mobileTiming.onclick=openLiveTiming;
  var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
  function clearLocalSubtitle(){
   subtitleGeneration++;
