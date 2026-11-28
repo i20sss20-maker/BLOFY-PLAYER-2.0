@@ -124,3 +124,11 @@ test('saved login slots preserve the preceding account, switch only with verific
  assert.match(route,/redirect:'manual'/);
  assert.match(route,/slice\(0,3000\)/);
 });
+
+test('direct MP4 decoder must stop before another title starts even without a transport record',()=>{
+ const a=app.indexOf('function releaseDetachedPlayerVideo('),b=app.indexOf('function cleanupPlayer(',a),release=new Function(app.slice(a,b)+';return releaseDetachedPlayerVideo')();
+ const events=[],video={pause(){events.push('pause')},removeAttribute(key){events.push(key)},load(){events.push('load')},onended:()=>{}};
+ release({video},null);assert.deepEqual(events,['pause','src','load']);assert.equal(video.muted,true);assert.equal(video.onended,null);
+ events.length=0;release({video},{video});assert.equal(events.length,0);
+ assert.match(app,/releaseDetachedPlayerVideo\(S.playerView,S.play\)/);
+});
