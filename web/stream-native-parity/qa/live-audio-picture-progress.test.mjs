@@ -84,10 +84,21 @@ test('manual timing restores the actual live latency profile',()=>{
 
 
 test('healthy live picture never invokes automatic catch-up seek',()=>{
- assert.match(app,/if\(progress\.advanced\)record\.liveLagSince=0/);
- assert.match(app,/if\(!progress\.advanced&&progress\.idleMs>=6500&&liveLatencyCatchup\(/);
+ assert.doesNotMatch(app,/function liveLatencyCatchup\(/);
+ assert.match(app,/if\(progress\.idleMs>=16000\)/);
  const begin=app.indexOf('function setLiveTimeshiftMode('),end=app.indexOf('function liveTimeshiftTarget(',begin);
  const setMode=vm.runInNewContext(app.slice(begin,end)+';setLiveTimeshiftMode',{Number,Infinity});
  const record={engine:{config:{liveMaxLatencyDurationCount:Infinity}}};
  setMode(record,true);setMode(record,false);assert.equal(record.engine.config.liveMaxLatencyDurationCount,Infinity);
+});
+
+
+test('expired live fragment recovery never seeks backward or to an unverified edge',()=>{
+ const a=app.indexOf('function liveExpiredSegmentRecovery('),b=app.indexOf('function liveTransientRetryMs(',a);
+ const recover=vm.runInNewContext(app.slice(a,b)+';liveExpiredSegmentRecovery',{Number,Math,setLiveTimeshiftMode(){}});
+ const calls=[],video={readyState:3,currentTime:50,seekable:{length:1,start:()=>40,end:()=>70}};
+ const engine={liveSyncPosition:45,startLoad:n=>calls.push(n),stopLoad:()=>calls.push('stop')};
+ assert.equal(recover({},engine,video,100000),'restart');assert.equal(video.currentTime,50);assert.deepEqual(calls,[]);
+ engine.liveSyncPosition=80;assert.equal(recover({},engine,video,100000),'restart');assert.deepEqual(calls,[]);
+ engine.liveSyncPosition=65;assert.equal(recover({},engine,video,100000),'resync');assert.equal(video.currentTime,65);assert.deepEqual(calls,['stop',65]);
 });
