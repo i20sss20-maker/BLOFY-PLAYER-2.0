@@ -120,7 +120,7 @@ test('live customer routes, subscription, and response authentication remain unc
  assert.match(c,/\/api\/v1\/admin\/xtream-gateway\/unavailable-media/);
  assert.match(c,/const original=mediaUpstreamUrl\(row,key\.kind,key\.itemId,ext\)/);
  assert.match(c,/shouldUseIndependentSourceMedia\(\{/);
- assert.match(c,/issueStreamRelayGrant\(\{sourceUrl:original\.href,kind:key\.kind\}\)/);
+ assert.match(c,/issueStreamRelayGrant\(\{routingSourceId:row\.server_id,sourceUrl:original\.href,kind:key\.kind\}\)/);
  assert.match(c,/range:'bytes=0-1023'/);
  assert.doesNotMatch(c.slice(c.indexOf('async function probeUnavailableMediaOnSameSource('),
    c.indexOf('async function proxyMedia(')),/proxyMedia\(|\b(?:INSERT|UPDATE|DELETE)\b/);
