@@ -1,10 +1,10 @@
-import {loadApprovedM3u} from './approved-m3u-loader.mjs';
+import {loadApprovedM3u,approvedXtreamPlaylistUrl} from './approved-m3u-loader.mjs';
 const $=id=>document.getElementById(id);
 const form=$('playlist-form'),video=$('playlist-video'),status=$('playlist-status'),group=$('playlist-group'),query=$('playlist-query'),items=$('playlist-items'),more=$('playlist-more');
-let catalog=[],shown=0,engine=null,request=null,epoch=0,playEpoch=0,policy=[];
+let catalog=[],shown=0,engine=null,request=null,epoch=0,playEpoch=0,policy=[],mode='m3u';
 function notice(text){status.textContent=text}
 function stop(){playEpoch++;video.onerror=video.onplaying=null;if(engine){try{engine.destroy()}catch{}engine=null}video.pause();video.removeAttribute('src');video.load();video.hidden=true}
-function clear(){epoch++;if(request)request.abort();request=null;stop();catalog=[];shown=0;items.replaceChildren();group.replaceChildren();query.value='';$('playlist-url').value='';$('playlist-controls').hidden=true;more.hidden=true;$('playlist-load').disabled=false}
+function clear(){epoch++;if(request)request.abort();request=null;stop();catalog=[];shown=0;items.replaceChildren();group.replaceChildren();query.value='';$('playlist-url').value='';$('external-password').value='';$('external-username').value='';$('playlist-controls').hidden=true;more.hidden=true;$('playlist-load').disabled=false}
 function options(){group.replaceChildren();group.add(new Option('الكل',''));const names=Array.from(new Set(catalog.map(x=>x.group).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'ar'));for(const name of names)group.add(new Option(name,name))}
 function render(reset){
  if(reset){shown=0;items.replaceChildren()}
@@ -33,8 +33,26 @@ function play(item){
   engine.loadSource(item.url);engine.attachMedia(video);
  }else{video.src=item.url;video.play().catch(()=>{if(current())notice('اضغط تشغيل لبدء المشاهدة.')})}
 }
+function selectMode(next){
+ if(next===mode)return;
+ clear();mode=next;
+ const xtream=mode==='xtream';
+ $('external-m3u-fields').hidden=xtream;$('external-xtream-fields').hidden=!xtream;
+ $('playlist-url').disabled=xtream;
+ for(const id of ['external-host','external-username','external-password']){$(id).disabled=!xtream;$(id).required=xtream}
+ for(const name of ['m3u','xtream']){const button=$('external-mode-'+name);button.setAttribute('aria-pressed',String(mode===name));button.classList.toggle('secondary',mode!==name)}
+ $('playlist-load').disabled=!policy.length;
+ notice(policy.length?'أدخل بيانات المصدر المعتمد.':'المصادر الخارجية غير مفعلة حاليًا.');
+}
+$('external-mode-m3u').onclick=()=>selectMode('m3u');
+$('external-mode-xtream').onclick=()=>selectMode('xtream');
 form.addEventListener('submit',async e=>{
- e.preventDefault();const raw=$('playlist-url').value.trim();if(!raw||!policy.length)return;
+ e.preventDefault();if(!policy.length)return;
+ let raw;
+ try{
+  raw=mode==='xtream'?approvedXtreamPlaylistUrl({host:$('external-host').value.trim(),username:$('external-username').value,password:$('external-password').value},policy):$('playlist-url').value.trim();
+ }catch{$('external-password').value='';notice('تحقق من الهوست المعتمد وبيانات الاشتراك.');return}
+ if(!raw)return;
  clear();const generation=epoch;request=new AbortController();$('playlist-load').disabled=true;notice('جار تحميل القائمة…');
  try{const result=await loadApprovedM3u(raw,{approvedOrigins:policy,fetchImpl:window.fetch.bind(window),signal:request.signal});if(generation!==epoch)return;catalog=result.items;options();$('playlist-controls').hidden=false;render(true);notice('تم تحميل '+catalog.length+' عنصر'+(result.rejected?'؛ تم استبعاد '+result.rejected+' مدخل غير صالح':'')+'. اختر عنصرًا للتشغيل.')}
  catch{if(generation===epoch)notice('تعذر تحميل القائمة. تحقق من اعتماد المزود وHTTPS وCORS.')}
