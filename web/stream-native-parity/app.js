@@ -329,6 +329,9 @@ function nativeNavIcon(kind){
 function compactNativeHome(){
  return S.route==='home'&&document.documentElement.getAttribute('data-blofy-device')==='touch'
 }
+function compactNativeNavigation(){
+ return document.documentElement.getAttribute('data-blofy-device')==='touch'&&['home','downloads','collections'].indexOf(S.route)>=0
+}
 function nativeHomeHeader(){
  return '<header class="native-home-header"><div class="native-home-brand"><img src="/stream-icon.svg" alt=""><strong>BLOFY STREAM</strong></div>'+
  '<button type="button" class="native-home-icon" id="refresh-content" aria-label="تحديث المحتوى">'+nativeNavIcon('refresh')+'</button>'+
@@ -337,7 +340,7 @@ function nativeHomeHeader(){
  '<div class="native-home-refresh" id="refresh-progress" role="status" aria-live="polite"></div>'
 }
 function navHtml(){
- if(compactNativeHome())return '<nav class="rail native-home-bottom" aria-label="التنقل">'+[['home','الرئيسية'],['live','البث المباشر'],['downloads','التنزيلات'],['collections','التصنيفات']].map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'">'+nativeNavIcon(v[0])+'<span>'+v[1]+'</span></button>'}).join('')+'</nav>';
+ if(compactNativeNavigation())return '<nav class="rail native-home-bottom" aria-label="التنقل">'+[['home','الرئيسية'],['live','البث المباشر'],['downloads','التنزيلات'],['collections','التصنيفات']].map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'">'+nativeNavIcon(v[0])+'<span>'+v[1]+'</span></button>'}).join('')+'</nav>';
  return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
  NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
  '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
@@ -345,11 +348,11 @@ function navHtml(){
 function shell(pageTitle,markup){
  var catalogPage=S.route==='live'||S.route==='movie'||S.route==='series';
  S.heading=pageTitle;
- var nativeHome=compactNativeHome();
+ var nativeHome=compactNativeHome(),nativeNav=compactNativeNavigation(),touchDetail=!catalogPage&&!nativeNav&&document.documentElement.getAttribute('data-blofy-device')==='touch';
  // Each catalog is its own wide TV screen. The global app sidebar belongs
  // to Home, not to the Live/Movies/Series list, as in the native TV workflow.
- app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+(nativeHome?' native-compact-home':'')+'">'+
- (catalogPage?'':navHtml())+'<main class="workspace" id="workspace">'+
+ app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+(nativeHome?' native-compact-home':'')+(nativeNav?' native-compact-navigation':'')+(touchDetail?' native-touch-detail':'')+'">'+
+ (catalogPage||touchDetail?'':navHtml())+'<main class="workspace" id="workspace">'+
  (nativeHome?nativeHomeHeader():'<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
  (S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+
  (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
@@ -4671,7 +4674,7 @@ function clickHandler(event){
  if(node.hasAttribute('data-reload')){delete S.loaded[keyOf(node.getAttribute('data-reload'),S.cat[node.getAttribute('data-reload')])];catalog(node.getAttribute('data-reload'))}
 }
 function directional(e){
- var code=e.keyCode||e.which;
+ var code=e.keyCode||e.which||({ArrowLeft:37,ArrowUp:38,ArrowRight:39,ArrowDown:40,Enter:13,Escape:27,Backspace:8,GoBack:461,Back:461}[e.key]||0);
  var editable=e.target&&((e.target.tagName==='INPUT'&&e.target.type!=='range')||
   /^(TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable);
  if(code===37||code===38||code===39||code===40||code===13||code===27||
@@ -4777,11 +4780,14 @@ function directional(e){
   e.preventDefault();navigate('search');return
  }
  if(code!==37&&code!==38&&code!==39&&code!==40)return;
- if(editable)return;
- var nodes=document.querySelectorAll('button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])'),arr=[];
+ if(editable){
+  // On a television leave the field with Up/Down, keeping left/right for text editing.
+  if(document.documentElement.getAttribute('data-blofy-device')!=='tv'||(code!==38&&code!==40)||e.target.tagName==='SELECT')return;
+ }
+ var nodes=document.querySelectorAll('button:not([disabled]),input:not([disabled]),a[href],select:not([disabled]),[tabindex]:not([tabindex="-1"])'),arr=[];
  for(var i=0;i<nodes.length;i++){
   var node=nodes[i],r=node.getBoundingClientRect();
-  if(r.width>0&&r.height>0)arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
+  if(r.width>0&&r.height>0&&node.tabIndex>=0&&!node.closest('[hidden],[aria-hidden="true"],[inert]')&&getComputedStyle(node).visibility!=='hidden')arr.push({node:node,x:r.left+r.width/2,y:r.top+r.height/2})
  }
  var active=document.activeElement,from=null;
  for(var j=0;j<arr.length;j++)if(arr[j].node===active){from=arr[j];break}
