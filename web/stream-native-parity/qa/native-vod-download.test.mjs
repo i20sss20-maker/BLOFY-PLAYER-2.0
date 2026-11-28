@@ -20,3 +20,13 @@ test('downloads remain disabled by default and are not cached or claimed complet
  assert.ok(app.includes("method:'HEAD'"));
  assert.ok(sw.includes("SHELL.indexOf(url.pathname)<0"));
 });
+
+test('download cancellation, per-account guard and file size validation are enforced',()=>{
+ const server=readFileSync('server.ts','utf8');
+ assert.ok(server.includes('activeVodDownloadAccounts.has(accountKey)'));
+ assert.ok(server.includes("ctrl.signal.addEventListener('abort',cancelReader"));
+ assert.ok(server.includes('headerTimer=setTimeout(cancel,20000)'));
+ assert.ok(server.includes('received!==expected'));
+ assert.ok(server.includes("upstream.headers.has('content-range')"));
+ assert.ok(server.includes("if(download)download.abort()"));
+});
