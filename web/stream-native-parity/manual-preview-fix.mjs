@@ -1029,3 +1029,36 @@ function liveSessionLost(record,detail,code){`);
 change(" return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))",` if(code===503&&liveHlsFailureReason(detail)==='hls_origin_backoff')return false;
  return code===503&&/manifestLoad|levelLoad/i.test(String(detail.details||''))`);
 new Function(app);writeFileSync('app.js',app);
+
+
+ // Delayed HLS retries check the current viewer intent.
+change("function resumeLiveHlsNetwork(engine,manifest,record){",`function hlsDelayedRetryDecision(active,connected,paused,hidden,offline,external){
+ if(!active||!connected)return 'discard';
+ return liveRecoveryAllowed(paused,hidden,offline,external)?'resume':'defer'
+}
+function resumeLiveHlsNetwork(engine,manifest,record){`);
+change("   engine.on(window.Hls.Events.ERROR,function(event,detail){\n    if(!alive()||!detail)return;\n    var code=Number(detail.response&&detail.response.code||detail.networkDetails&&detail.networkDetails.status)||0;",`   function deferHlsRetry(timerName,delay,callback){
+    function run(){
+     record[timerName]=null;
+     var owner=!preview&&S.playerView;
+     var current=alive()&&(preview?S.route==='live'&&String(S.selected)===String(id):
+      S.route==='player'&&owner&&owner.video===video&&String(owner.id)===String(id));
+     var decision=hlsDelayedRetryDecision(current,video.isConnected,owner&&owner.userPaused,
+      document.hidden,navigator.onLine===false,owner&&owner.externalMode);
+     if(decision==='discard')return;
+     if(decision==='defer'){record[timerName]=setTimeout(run,3000);return}
+     callback()
+    }
+    record[timerName]=setTimeout(run,delay)
+   }
+   engine.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail)return;
+    var code=Number(detail.response&&detail.response.code||detail.networkDetails&&detail.networkDetails.status)||0;`);
+change("     record.originTimer=setTimeout(function(){\n      record.originTimer=null;\n      if(!alive()||!video.isConnected)return;\n      if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;\n      if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)||S.playerView.userPaused))return;\n      playHls(video,kind,id,extension,track,statusElement,preview,attempt>=4?0:attempt+1)\n     },delay);",`     deferHlsRetry('originTimer',delay,function(){
+      playHls(video,kind,id,extension,track,statusElement,preview,attempt>=4?0:attempt+1)
+     });`);
+for(const [timer,delay] of [['capacityTimer','delay'],['originTimer','delay'],['retryTimer','pause']]){
+ change("     record."+timer+"=setTimeout(function(){\n      record."+timer+"=null;\n      if(!alive())return;\n      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     },"+delay+");",
+  "     deferHlsRetry('"+timer+"',"+delay+",function(){\n      try{resumeLiveHlsNetwork(engine,manifest,record)}catch(e){recoverConnection()}\n     });");
+}
+new Function(app);writeFileSync('app.js',app);
