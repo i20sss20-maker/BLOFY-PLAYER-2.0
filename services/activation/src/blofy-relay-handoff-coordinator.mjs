@@ -6,12 +6,13 @@ const hold=reason=>({ok:false,action:'hold',reason});
 const validOwner=x=>x==='hostbrr'||x==='linode';
 export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
  readHealth,verifyCoverage,stopPreviousOwner,observeProviderRelease,clock=Date.now,
- failoverAfterMs=30000,failbackAfterMs=300000,trackHealthContinuity=false}={}){
+ failoverAfterMs=30000,failbackAfterMs=300000,trackHealthContinuity=false,expectedRelayMaxConnections=1}={}){
  const tracker=trackHealthContinuity?createRelayHealthTracker({clock}):null;
  const sampleHealth=async()=>{const snapshot=await readHealth();return tracker?tracker.observe(snapshot):snapshot};
  let busy=false;
  return async function tick(){
   if(!enabled)return hold('disabled');
+  if(!Number.isSafeInteger(expectedRelayMaxConnections)||expectedRelayMaxConnections<1)return hold('source_capacity_unconfirmed');
   if(!gate||typeof readHealth!=='function'||typeof verifyCoverage!=='function'||
     typeof stopPreviousOwner!=='function'||typeof observeProviderRelease!=='function')return hold('adapters_missing');
   if(busy)return hold('tick_busy');
@@ -58,7 +59,7 @@ export function createRelayHandoffCoordinator({enabled=false,gate,sourceId,
    const proof=await observeProviderRelease(identity);
    if(proof?.sourceId!==sourceId||proof.previousOwner!==identity.previousOwner||
      proof.drainStartedAt!==identity.drainStartedAt||proof.authoritative!==true||
-     proof.scope!=='all_paths'||proof.activeConnections!==0||proof.maxConnections!==1||
+     proof.scope!=='all_paths'||proof.activeConnections!==0||proof.maxConnections!==expectedRelayMaxConnections||
      !Number.isSafeInteger(proof.observedAt)||proof.observedAt<identity.drainStartedAt)
       return hold('provider_release_unconfirmed');
    // Stopping the old owner and observing provider release can take time.
