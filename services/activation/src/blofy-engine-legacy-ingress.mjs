@@ -42,8 +42,9 @@ export function createLegacyIngress(pool,env=process.env,lifetime=gatewayHoldLif
  const retryQueue=createLegacyCleanupQueue();
  if(enabled)lifetime.register(retryQueue);
  const allow=()=>({ok:true,close:async()=>true});
- return async function enter(source,{unknownSource=false}={}){
-  if(!enabled)return allow();
+ return async function enter(source,{unknownSource=false,background=false}={}){
+  const idleOnly=background&&env.BLOFY_ENGINE_IDLE_BACKGROUND_PROBES==='1';
+  if(!enabled)return idleOnly?{ok:false,reason:'background_gate_disabled'}:allow();
   const finish=lifetime.begin();
   if(!finish)return {ok:false,reason:'gateway_retiring'};
   const holdId=randomUUID();
@@ -56,11 +57,11 @@ export function createLegacyIngress(pool,env=process.env,lifetime=gatewayHoldLif
    if(!unknownSource&&source!==sourceId)return allow();
    const gate=createEngineIngressGate(pool,{sourceId,enabled});
    let r;
-   try{r=await gate.enterLegacy(holdId)}catch{
+   try{r=await gate.enterLegacy(holdId,{background:idleOnly})}catch{
     void retryQueue.submit(holdId,()=>gate.abandonLegacy(holdId));
     return {ok:false,reason:'source_ingress_unknown'};
    }
-   if(!r?.ok)return {ok:false,reason:'source_ingress_fenced'};
+   if(!r?.ok)return {ok:false,reason:r?.reason==='background_source_busy'?'background_source_busy':'source_ingress_fenced'};
    let closing;
    handedOff=true;
    return {ok:true,close(){
