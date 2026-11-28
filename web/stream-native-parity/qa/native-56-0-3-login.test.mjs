@@ -67,3 +67,30 @@ test('native subscription screen uses verified session and picture fit persists 
  assert.match(settings,/profileSave\('pictureFit'/);
  assert.match(app,/video\.style\.objectFit=pictureFitMode\(readJson\(profileStorageKey\('pictureFit'\)/);
 });
+
+test('saved login slots preserve the preceding account, switch only with verification, and clear on logout',()=>{
+ const server=readFileSync(new URL('../server.ts',import.meta.url),'utf8');
+ const start=server.indexOf('const SAVED_LOGIN='),end=server.indexOf('function closeAccountMedia(',start);
+ const source=server.slice(start,end);
+ const seal=v=>'sealed_'+v,unseal=v=>v.startsWith('sealed_')?v.slice(7):null;
+ const json=(status,body,extra={})=>({status,body,cookies:extra['Set-Cookie']?[extra['Set-Cookie']]:[],headers:{append(){}}});
+ const fakeJson=(status,body,extra={})=>{const r=json(status,body,extra);r.headers.append=(k,v)=>r.cookies.push(v);return r};
+ const helper=new Function('Bun','seal','unseal','json',source+';return {loginResponse,savedToken,token,activeMode}')({env:{BLOFY_WEB_SAVED_LOGIN_QA:'1'}},seal,unseal,fakeJson);
+ const jar={bv_session:seal('codeToken')};
+ const req=()=>({headers:{get:()=>Object.entries(jar).map(([k,v])=>k+'='+v).join('; ')}});
+ const apply=r=>r.cookies.forEach(c=>{const pair=c.split(';')[0],i=pair.indexOf('=');jar[pair.slice(0,i)]=pair.slice(i+1);assert.match(c,/HttpOnly; Secure; SameSite=Strict/)});
+ apply(helper.loginResponse(req(),{ok:true},'xtreamToken','xtream'));
+ assert.equal(helper.savedToken(req(),'code'),'codeToken');
+ assert.equal(helper.token(req()),'xtreamToken');
+ assert.equal(helper.activeMode(req()),'xtream');
+ apply(helper.loginResponse(req(),{ok:true},'codeToken','code'));
+ assert.equal(helper.savedToken(req(),'xtream'),'xtreamToken');
+ assert.equal(helper.token(req()),'codeToken');
+ assert.equal(helper.savedToken(req(),'invalid'),null);
+ const switchRoute=server.slice(server.indexOf("if(p==='/api/saved-logins/switch'"),server.indexOf("if(p==='/api/external/stop'"));
+ assert.match(switchRoute,/if\(!session.active\|\|!profileKey\)return json\(401/);
+ assert.match(switchRoute,/api\/v1\/stream\/app\/session/);
+ assert.match(server,/\['bv_session','bv_active_mode',\.\.\.LOGIN_MODES\.map/);
+ assert.match(app,/reloadSavedLogin\(\)/);
+ assert.match(app,/id="switch-saved-login"/);
+});
