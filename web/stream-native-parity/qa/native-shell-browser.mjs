@@ -55,6 +55,23 @@ try{
   }
   await page.locator('#redeem').click();
   await page.locator('.native-home-header').waitFor();
+  // Verify that the primary app container and right rail stay within the
+  // viewport even on a narrow handset and tablet landscape. No real accounts.
+  if(mode==='code'){
+   const original=page.viewportSize();
+   for(const size of [original,{width:320,height:568},{width:844,height:390},{width:1024,height:768}]){
+    await page.setViewportSize(size);
+    await page.waitForFunction(()=>{const el=document.querySelector('.app');if(!el)return false;const r=el.getBoundingClientRect();return r.left>=-2&&r.right<=innerWidth+2});
+    const layout=await page.evaluate(()=>{
+     const rail=document.querySelector('.native-home-bottom'),workspace=document.querySelector('.workspace');
+     if(!rail||!workspace)return null;
+     const a=rail.getBoundingClientRect(),b=workspace.getBoundingClientRect();
+     return {railRight:a.right,railLeft:a.left,workspaceRight:b.right,workspaceWidth:b.width,viewport:innerWidth};
+    });
+    assert.ok(layout&&layout.workspaceWidth>150&&layout.railRight<=layout.viewport+2&&layout.railLeft>=layout.workspaceRight-2,JSON.stringify(layout));
+   }
+   await page.setViewportSize(original);
+  }
   assert.equal(requests.length,1);assert.match(requests[0].input.deviceKey,/^[a-f0-9]{64}$/);
   assert.equal(requests[0].p,mode==='code'?'/api/redeem':'/api/direct-login');
   if(mode==='code')assert.equal(requests[0].input.code,'12345678');else assert.equal(requests[0].input.mode,mode);
