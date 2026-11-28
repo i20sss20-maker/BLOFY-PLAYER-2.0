@@ -3,6 +3,7 @@ import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
+import {waitSharedLiveHandoff} from './xtream-shared-live-handoff-retry.mjs';
 import {writeGatewayMapWithGuard} from './xtream-gateway-map-serialized.mjs';
 import {authorizedMediaRecoveryRelease} from './xtream-media-recovery-release.mjs';
 import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,
@@ -1310,7 +1311,8 @@ async function proxySharedLiveTicket(req,res,destination,observe){
     const target=new URL(destination);
     if(!isConfiguredRelayTicket(target))throw Error('shared_live_ticket_invalid');
     if(req.aborted||res.destroyed)return;
-    timer=setTimeout(cancel,20000);timer.unref?.();
+    for(let attempt=0;attempt<2;attempt++){
+    timer=setTimeout(cancel,attempt===0?20000:8000);timer.unref?.();
     response=await fetch(target,{method:'GET',redirect:'manual',
       signal:controller.signal,headers:{accept:'video/mp2t','accept-encoding':'identity'}});
     clearTimeout(timer);timer=null;
@@ -1342,6 +1344,14 @@ async function proxySharedLiveTicket(req,res,destination,observe){
         }catch{}finally{try{await reader.cancel()}catch{};reader.releaseLock()}
         clearTimeout(timer);timer=null;
       }else await response.body?.cancel().catch(()=>{});
+      // The relay explicitly refused admission while the previous source
+      // connection is being released. One same-ticket retry lets a zapping
+      // client wait for that guard without launching another source route.
+      if(!req.aborted&&!res.destroyed&&!res.headersSent&&
+         await waitSharedLiveHandoff({status:response.status,reason,retryAfter:retry,attempt,signal:controller.signal})){
+        response=null;
+        continue;
+      }
       observe('failed',{reason,upstreamStatus:response.status});
       console.info('BLOFY_SHARED_LIVE_ADMISSION',JSON.stringify({reason,status:code}));
       return text(res,code,reason==='fanout_source_channel_limit'?
@@ -1353,6 +1363,8 @@ async function proxySharedLiveTicket(req,res,destination,observe){
     res.writeHead(200,{'content-type':'video/mp2t','cache-control':'no-store, no-transform',
       'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
     await pipeline(Readable.fromWeb(response.body),res);
+    return;
+    }
   }catch{
     if(!res.destroyed&&!req.aborted){
       observe(res.headersSent?'interrupted':'failed',{reason:'licensed_fanout_unavailable'});
