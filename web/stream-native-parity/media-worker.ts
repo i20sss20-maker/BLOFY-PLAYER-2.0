@@ -379,14 +379,15 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
  if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped)){
   noteEncoderCapacityDenied();return {error:'ultra_capacity',status:429}
  }
- active++;
  // One unique directory per decoder instance; a retired FFmpeg process
  // cannot overwrite a fresh channel playlist while it is shutting down.
  const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+ // A failed directory allocation must not consume an encoder slot.
+ try{mkdirSync(dir,{recursive:true})}catch{return {error:'hls_storage_unavailable',status:503}}
+ active++;
  const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true,
   sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});
  touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
  session.hardTimer.unref?.();
@@ -405,7 +406,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    try{await upstream.body?.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
-  if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
+  if(!upstream.ok||!upstream.body){const status=upstream.status;try{await upstream.body?.cancel()}catch{};stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
   // Experimental continuity for ONE preapproved channel + bearer access ID.
   // All subsequent requests use the exact same first-party authorized URL.
   // Disabled in normal previews; strict guard prevents a single env flag
@@ -771,11 +772,13 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
    stopHls(s,'legacy_position_changed')
  }
  if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {status:429,error:'vod_capacity'}}
+ const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+ // A retired encoder must never delete files belonging to its replacement.
+ try{mkdirSync(dir,{recursive:true})}catch{return {error:'vod_storage_unavailable',status:503}}
  active++;
- const abort=new AbortController(),dir=join(hlsRoot,key);
  const session={key,vod:true,kind,id,ext,track,start,bearer,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});touchHls(session);
+ touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);
  session.hardTimer.unref?.();
  try{
