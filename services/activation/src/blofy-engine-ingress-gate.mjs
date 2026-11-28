@@ -38,8 +38,16 @@ export function createEngineIngressGate(pool,{sourceId,enabled=false}={}){
    await c.query("INSERT INTO blofy_engine_ingress_gate(source_id,mode) VALUES($1,'legacy')",[sourceId]);
    return {ok:true,mode:'legacy'};
   })},
-  async enterLegacy(holdId){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
+  async enterLegacy(holdId,{background=false}={}){if(!valid(holdId))return denied('invalid_hold');return tx(async(c,row)=>{
    if(row?.mode!=='legacy')return denied('legacy_fenced');
+   // Conservative idle-only background admission under the existing source lock.
+   // Holds are not proof of provider sockets. This protects already admitted
+   // work, but does not prevent a foreground arrival after a probe starts.
+   if(background){
+    const {rows:[n]}=await c.query('SELECT count(*)::int n FROM blofy_engine_legacy_holds WHERE source_id=$1 AND NOT closed',[sourceId]);
+    const {rows:[feed]}=await c.query('SELECT state FROM blofy_linode_feed_ledger WHERE source_id=$1',[sourceId]);
+    if(n?.n!==0||(feed&&feed.state!=='released'))return denied('background_source_busy');
+   }
    const r=await c.query('INSERT INTO blofy_engine_legacy_holds(source_id,hold_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING hold_id',[sourceId,holdId]);
    return r.rowCount===1?{ok:true,holdId}:denied('hold_replayed');
   })},
