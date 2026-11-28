@@ -63,9 +63,11 @@ try{
   assert.ok(!stored.includes('fixture-secret')&&!stored.includes('fixture-user')&&!stored.includes('12345678'));
   await page.locator('.native-home-bottom [data-go="downloads"]').click();
   await page.locator('.downloads-page').waitFor();
-  await page.locator('[data-back]').first().click();
+  assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
+  await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
   await page.locator('.native-home-header [data-go="ai"]').click();
+  assert.equal(await page.locator('.rail').count(),0);
   await page.locator('#ai-text').fill('اختبار');
   await page.locator('#ai-send').click();
   await page.getByText('نتيجة اختبار محلية',{exact:true}).waitFor();
@@ -75,4 +77,37 @@ try{
  }
  await browser.close();browser=null;
  }
+ // TV-style user agent and 720p viewport; use only directional keys and Enter.
+ browser=await chromium.launch({headless:true,...(process.env.BLOFY_QA_BUNDLED_CHROMIUM==='1'?{}:{channel:'chrome'})});
+ const tv=await browser.newContext({viewport:{width:1280,height:720},userAgent:'Mozilla/5.0 (Linux; VIDAA; Toshiba SmartTV) AppleWebKit/537.36 Chrome/90.0.4430.0 Safari/537.36',serviceWorkers:'block'});
+ const page=await tv.newPage();
+ const failures=[];
+ page.on('pageerror',e=>failures.push(e.message));
+ await tv.route('**/*',async route=>{
+  const u=new URL(route.request().url());
+  if(u.origin!==origin)return route.abort();
+  if(!u.pathname.startsWith('/api/'))return route.continue();
+  const values={'/api/session':{active:false},'/api/login-modes':{direct:false},'/api/redeem':{ok:true,profileKey:'b'.repeat(24),expiresAt:Date.now()+3600000},'/api/page':{items:[],total:0,hasMore:false,nextOffset:null}};
+  return route.fulfill({status:u.pathname==='/api/session'?401:200,contentType:'application/json',body:JSON.stringify(values[u.pathname]||[])});
+ });
+ await page.goto(origin);
+ await page.waitForFunction(()=>document.documentElement.getAttribute('data-blofy-device')==='tv');
+ await page.locator('#activation-code').waitFor();
+ await page.waitForFunction(()=>document.activeElement.id==='activation-code');
+ await page.keyboard.type('12345678');
+ await page.keyboard.press('ArrowDown');
+ assert.equal(await page.evaluate(()=>document.activeElement.id),'redeem');
+ await page.keyboard.press('Enter');
+ await page.locator('.rail-link[data-go="home"]').waitFor();
+ await page.locator('.rail-link[data-go="home"]').focus();
+ await page.keyboard.press('ArrowDown');
+ const next=await page.evaluate(()=>document.activeElement.getAttribute('data-go'));
+ assert.ok(next&&next!=='home');
+ await page.keyboard.press('Enter');
+ await page.locator('[data-back]').first().waitFor();
+ await page.keyboard.press('Escape');
+ await page.locator('.rail-link[data-go="home"].active').waitFor();
+ assert.deepEqual(failures,[]);
+ console.log('BLOFY_TV_REMOTE_SYNTHETIC_PASS 720p directional keys, login, navigation and back');
+ await tv.close();
 }finally{await browser?.close();await new Promise(r=>server.close(r))}
