@@ -673,9 +673,11 @@ function buildCatalog(kind,listing){
   '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>جار تشغيل معاينة القناة…</div><video id="live-video" playsinline webkit-playsinline autoplay muted preload="auto" aria-label="معاينة البث المباشر"></video></div>'+
   '<div class="preview-controls"><div class="chip primary">LIVE</div><h3 id="live-title">المعاينة المباشرة</h3><p id="live-desc">المعاينة تبدأ تلقائيًا عند تحديد القناة.</p>'+
   '<p class="live-preview-quality" id="live-preview-quality" aria-live="polite">الدقة المعروضة: جار قراءة معلومات الفيديو…</p>'+
-  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
+  '<div class="row preview-action-row"><button class="btn" data-preview-play>▶ المعاينة</button><button class="btn secondary" id="preview-audio-toggle" type="button" aria-label="صوت المعاينة">🔊 الصوت</button><button class="btn secondary" data-preview-full>⛶ ملء الشاشة</button><button class="btn secondary" id="live-favorite" data-favorite="">♡ المفضلة</button></div><div class="preview-status" id="live-status"></div>'+
    '<section class="epg-panel" aria-label="دليل برامج القناة"><strong class="epg-heading">دليل البرامج</strong><div id="live-epg" class="epg-content" role="status" aria-live="polite">اختر قناة لعرض البرامج المتوفرة</div></section></div></section>'+
   '</div>';
+  var previewAudio=document.getElementById('preview-audio-toggle');
+  if(previewAudio)previewAudio.onclick=function(){var v=document.getElementById('live-video');if(!v)return;S.previewSound=v.muted;v.muted=!S.previewSound;v.defaultMuted=v.muted;this.textContent=v.muted?'🔇 الصوت':'🔊 الصوت';if(S.previewSound&&v.paused)try{var p=v.play();if(p&&p.catch)p.catch(function(){})}catch(e){}};
   var selected=findItem('live',S.selected)||source[0];
   if(selected)selectChannel(itemId(selected,'live'),true);
   // Arrow navigation on a TV changes the highlighted channel as it settles.
@@ -1000,8 +1002,8 @@ function beginPreview(item){
  }
  S.livePreview=id;
  if(box)box.textContent='جار تشغيل معاينة '+title(item)+' تلقائيًا…';
- video.muted=true;video.defaultMuted=true;
- video.setAttribute('muted','');
+ video.muted=S.previewSound===false;video.defaultMuted=video.muted;
+ if(video.muted)video.setAttribute('muted','');else video.removeAttribute('muted');
  video.autoplay=true;video.setAttribute('autoplay','');
  video.playsInline=true;video.controls=false;
  playHls(video,'live',id,'ts',0,box,true)
@@ -1977,6 +1979,14 @@ function stopPlayback(sendStop){
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
  if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
 }
+function releaseDetachedPlayerVideo(player,transport){
+ var video=player&&player.video;
+ if(!video||transport&&transport.video===video)return;
+ // Direct MP4 has no S.play record. Removing its DOM node alone does not
+ // guarantee decoding/audio stops, especially when advancing to another title.
+ video.onplaying=video.onwaiting=video.onstalled=video.onerror=video.onloadedmetadata=video.onended=null;
+ try{video.muted=true;video.pause();video.removeAttribute('src');video.load()}catch(e){}
+}
 function cleanupPlayer(){
  if(S.playerView){
   S.playerView.liveHlsHandoff=null;
@@ -1991,6 +2001,7 @@ function cleanupPlayer(){
   if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
   if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
   if(S.playerView.channelSwitchTimer){clearTimeout(S.playerView.channelSwitchTimer);S.playerView.channelSwitchTimer=null}
+  if(S.playerView.channelFocusTimer){clearTimeout(S.playerView.channelFocusTimer);S.playerView.channelFocusTimer=null}
   if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
   if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
   if(S.playerView.seekFrameId!==null&&S.playerView.seekFrameId!==undefined&&
@@ -2009,7 +2020,8 @@ function cleanupPlayer(){
   S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
-  if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen()
+  if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen();
+  releaseDetachedPlayerVideo(S.playerView,S.play)
  }
  stopPlayback(true)
 }
@@ -2648,7 +2660,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   if('preservesPitch' in video)video.preservesPitch=true;
   if('webkitPreservesPitch' in video)video.webkitPreservesPitch=true
  }
- video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
+ video.muted=!!preview&&S.previewSound===false;video.defaultMuted=video.muted;video.autoplay=true;video.playsInline=true;video.controls=false;
+ if(preview&&video.removeAttribute&&!video.muted)video.removeAttribute('muted');
  function alive(){return S.play===record}
  function setCompatibility(force,automatic,forceUltra){
   var nextUltra=!!(force&&forceUltra);
@@ -3362,6 +3375,8 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
 function playerIcon(name){
  var p={
   audio:'<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 9a5 5 0 0 1 0 6M18 6a9 9 0 0 1 0 12"/>',
+  commentary:'<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',
+  timeshift:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2M3 4v5h5"/>',
   subtitles:'<rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M10 10H7.5a2 2 0 0 0 0 4H10m7-4h-2.5a2 2 0 0 0 0 4H17"/>',
   rewind:'<path d="m11 6-8 6 8 6V6Zm10 0-8 6 8 6V6Z"/>',
   forward:'<path d="m3 6 8 6-8 6V6Zm10 0 8 6-8 6V6Z"/>',
@@ -3376,7 +3391,7 @@ function playerIcon(name){
  return '<svg class="native-player-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">'+(p[name]||p.play)+'</svg>'
 }
 function playerControl(id,icon,label,primary){
- return '<button class="native-player-control'+(primary?' native-player-primary':'')+'" id="'+id+'" type="button" aria-label="'+label+'" title="'+label+'">'+playerIcon(icon)+'</button>'
+ return '<button class="native-player-control'+(primary?' native-player-primary':'')+((icon==='commentary'||icon==='timeshift')?' native-player-labeled':'')+'" id="'+id+'" type="button" aria-label="'+label+'" title="'+label+'">'+playerIcon(icon)+(icon==='commentary'?'<small>المعلقين</small>':icon==='timeshift'?'<small>TimeShift</small>':'')+'</button>'
 }
 
 function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
@@ -3465,7 +3480,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'<button class="mobile-player-action" type="button" id="mobile-player-timing" aria-label="تقديم وتأخير البث"><span aria-hidden="true">↶</span><small>توقيت البث</small></button>':'')+'</div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
- (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
+ (isLive?playerControl('player-commentary','commentary','المعلقين')+playerControl('player-timeshift','timeshift','TimeShift • تقديم وتأخير البث'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -5012,6 +5027,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    selectFullscreenChannel(itemId(items[(current+step+items.length)%items.length],'live'))
   }
   function closeLiveChannels(){
+   if(state.channelFocusTimer){clearTimeout(state.channelFocusTimer);state.channelFocusTimer=null}
    var panel=document.getElementById('player-channel-panel');
    if(panel)panel.hidden=true;
    var toggle=document.getElementById('player-channels-toggle');
@@ -5036,12 +5052,21 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var root=document.getElementById('player-root');if(root)root.classList.remove('controls-hidden');
    var close=document.getElementById('player-channel-close');
    if(close)close.onclick=function(){closeLiveChannels();if(video)video.focus()};
+   function chooseRow(button){
+    if(!button||panel.hidden||S.playerView!==state||S.route!=='player')return;
+    var cid=button.getAttribute('data-player-channel');if(!cid||String(cid)===String(state.id))return;
+    selectFullscreenChannel(cid);
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-player-channel]'),function(row){
+     var active=row.getAttribute('data-player-channel')===cid;
+     row.classList.toggle('selected',active);var now=row.querySelector('.native-channel-now');if(now)now.remove();if(active){var mark=document.createElement('span');mark.className='native-channel-now';mark.textContent='يعمل الآن';row.appendChild(mark)}
+    })
+   }
    Array.prototype.forEach.call(panel.querySelectorAll('[data-player-channel]'),function(button){
-    button.onclick=function(){
-     selectFullscreenChannel(button.getAttribute('data-player-channel'));
-     closeLiveChannels();
-     if(video)video.focus()
-    }
+    button.onfocus=function(){
+     if(state.channelFocusTimer)clearTimeout(state.channelFocusTimer);
+     state.channelFocusTimer=setTimeout(function(){state.channelFocusTimer=null;if(document.activeElement===button)chooseRow(button)},350)
+    };
+    button.onclick=function(){if(state.channelFocusTimer)clearTimeout(state.channelFocusTimer);state.channelFocusTimer=null;chooseRow(button)}
    });
    var selectedButton=panel.querySelector('.native-channel-item.selected')||panel.querySelector('.native-channel-item');
    if(selectedButton){selectedButton.focus();selectedButton.scrollIntoView({block:'nearest'})}
