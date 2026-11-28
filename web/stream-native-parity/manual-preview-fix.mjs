@@ -89,7 +89,7 @@ change("function resumeLiveHlsNetwork(",`function liveBufferProfile(preview){
  return preview?{sync:4,maxLatency:10,buffer:35}:{sync:5,maxLatency:12,buffer:45}
 }
 function resumeLiveHlsNetwork(`);
-change("   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,","   var bufferProfile=liveBufferProfile(preview);\n   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:bufferProfile.sync,liveMaxLatencyDurationCount:bufferProfile.maxLatency,maxBufferLength:bufferProfile.buffer,maxBufferHole:1.5,");
+change("   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:4,liveMaxLatencyDurationCount:10,maxBufferLength:35,maxBufferHole:1.5,","   var bufferProfile=liveBufferProfile(preview);\n   var engine=new window.Hls({enableWorker:hlsRemuxWorkerSupported(),lowLatencyMode:false,liveSyncDurationCount:bufferProfile.sync,liveMaxLatencyDurationCount:Infinity,maxBufferLength:bufferProfile.buffer,maxBufferHole:1.5,");
  // A watchdog must never cancel an intentional delayed source recovery.
 change(" if(!alive()||record.ready||video.paused)return;\n  recoverConnection()"," if(!alive()||record.ready||record.reconnecting||video.paused)return;\n  recoverConnection()");
 change("   if(!alive()||!record.ready||!video.isConnected)return;\n   if(preview&&","   if(!alive()||!record.ready||record.reconnecting||!video.isConnected)return;\n   if(preview&&");
@@ -880,8 +880,9 @@ function adaptLiveBuffer(record,engine,now,waiting,preview){
  // Update the existing engine's buffer and latency policy; do not seek or
  // mutate the source. HLS.js may apply some settings on later reloads.
  engine.config.maxBufferLength=profile.buffer;
- record.normalLiveMaxLatency=profile.maxLatency;
- engine.config.liveMaxLatencyDurationCount=record.userTimeshift===true?Infinity:profile.maxLatency;
+ // Adapt buffering without forcing a seek on an otherwise healthy stream.
+ record.normalLiveMaxLatency=Infinity;
+ engine.config.liveMaxLatencyDurationCount=Infinity;
  engine.config.liveSyncDurationCount=profile.sync;
  return next
 }
