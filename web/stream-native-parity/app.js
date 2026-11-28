@@ -2870,12 +2870,13 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
-   if(liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
+   // Never jump the clock while the picture is progressing. HLS handles its normal live target.
+   if(progress.advanced){record.liveLagSince=0;clearRecoveredLiveLoading();return}
+   if(!preview&&liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
     if(!preview)recordLiveIncident('live_catchup',now);
     status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
     return
    }
-   if(progress.advanced){clearRecoveredLiveLoading();return}
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
     if(!preview)recordLiveIncident(Number(video.videoWidth)>0&&Number(video.videoHeight)>0?
@@ -2912,6 +2913,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.capacityRetries=0;record.originRetries=0;record.transientRetries=0;
      if(record.retryTimer){clearTimeout(record.retryTimer);record.retryTimer=null}
      if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}
+     if(record.capacityTimer){clearTimeout(record.capacityTimer);record.capacityTimer=null}
     }
    });
    engine.on(window.Hls.Events.ERROR,function(event,detail){
@@ -2926,8 +2928,9 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     }
     if(!detail.fatal)return;
     diagnose('live','hls_error','video',0);
-    if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
+    // Capacity and origin status do not prove a codec problem. Retry the current profile.
     if(code===429){
+     if(record.capacityTimer)return;
      if(!preview)recordLiveIncident('encoder_capacity');
      // Only two worker slots exist on the pilot. Back off instead of
      // burning connection attempts, which could cut off healthy viewers.
@@ -2944,6 +2947,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      return
     }
     if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     if(record.originTimer)return;
      if(!preview)recordLiveIncident('source_error');
      record.originRetries=(record.originRetries||0)+1;
      if(record.originRetries>5){recoverConnection();return}
@@ -2958,6 +2962,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      return
     }
     if((record.transientRetries||0)<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     if(record.retryTimer)return;
      record.transientRetries=(record.transientRetries||0)+1;
      var pause=liveTransientRetryMs(record.transientRetries);
      status('انقطاع شبكة مؤقت؛ إعادة الاتصال خلال '+Math.ceil(pause/1000)+' ثانية…');
