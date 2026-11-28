@@ -2027,74 +2027,6 @@ function commentarySeekTarget(audio,delta){
  }catch(e){}
  return null
 }
-// Local HLS buffer only. This does not advertise server-side DVR or
-// TimeShift: the source may remove old segments at any moment.
-function bufferedLiveRange(video,record){
- if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
- var at=Number(video.currentTime),seekable=video.seekable,buffered=video.buffered;
- if(!Number.isFinite(at)||!seekable||!buffered)return null;
- try{
-  for(var i=0;i<Math.min(seekable.length,32);i++){
-   var ss=seekable.start(i),se=seekable.end(i);
-   if(at<ss||at>se)continue;
-   for(var j=0;j<Math.min(buffered.length,32);j++){
-    var start=Math.max(ss,buffered.start(j)),end=Math.min(se,buffered.end(j));
-    if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
-    return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
-   }
-  }
- }catch(e){}
- return null
-}
-function bufferedLiveSeekTarget(video,record,action){
- var range=bufferedLiveRange(video,record);if(!range)return null;
- var start=range.start,end=range.end,at=range.at;
- var target=action==='back'?at-5:action==='forward'?at+5:action==='back-one'?at-1:action==='forward-one'?at+1:action==='back-ten'?at-10:action==='forward-ten'?at+10:action==='earliest'?start+0.25:action==='latest'?end-0.75:NaN;
- if(action==='forward'||action==='forward-ten')target=Math.min(target,end-0.75);
- if(Number.isFinite(target)&&target>=start+0.1&&target<=end-0.5&&Math.abs(target-at)>=0.5)return target;
- return null
-}
-// TimeShift can request retained server segments outside the local decoded buffer.
-function liveTimeshiftRange(video,record){
- if(!video||!record||!record.hlsKey||record.preview||record.reconnecting||!record.ready||video.seeking||video.ended||video.readyState<2)return null;
- var at=Number(video.currentTime),ranges=video.seekable,engine=record.engine,details=engine&&engine.latestLevelDetails;
- if(!Number.isFinite(at)||!ranges)return null;
- try{
-  for(var i=0;i<Math.min(ranges.length,32);i++){
-   var start=Number(ranges.start(i)),end=Number(ranges.end(i));
-   if(details&&details.live&&Number.isFinite(details.fragmentStart)&&Number.isFinite(details.edge)){
-    start=Math.max(start,details.fragmentStart);end=Math.min(end,details.edge)
-   }
-   if(!Number.isFinite(start)||!Number.isFinite(end)||at<start||at>end||end-start<3)continue;
-   return {start:start,end:end,at:at,behind:Math.max(0,Math.floor(at-start-0.1)),ahead:Math.max(0,Math.floor(end-at-0.75))}
-  }
- }catch(e){}
- return null
-}
-// Preserve the actual latency profile chosen by the live engine. Manual
-// picture/audio timing must not be silently undone by automatic catch-up.
-function setLiveTimeshiftMode(record,enabled){
- if(!record)return;
- var config=record.engine&&record.engine.config;
- if(config){
-  if(record.normalLiveMaxLatency!==Infinity&&!Number.isFinite(record.normalLiveMaxLatency)){
-   var current=Number(config.liveMaxLatencyDurationCount);
-   record.normalLiveMaxLatency=current>0?current:Infinity
-  }
-  config.liveMaxLatencyDurationCount=enabled?Infinity:record.normalLiveMaxLatency
- }
- record.userTimeshift=enabled===true;
- record.liveLagSince=0
-}
-function liveTimeshiftTarget(video,record,action){
- var range=liveTimeshiftRange(video,record);if(!range)return null;
- var step={'back-one':-1,back:-5,'back-ten':-10,'back-thirty':-30,'forward-one':1,forward:5,'forward-ten':10,'forward-thirty':30};
- var edge=Number(record.engine&&record.engine.liveSyncPosition);
- var target=action==='earliest'?range.start+0.25:action==='latest'?Math.max(range.start+0.1,Math.min(range.end-0.75,Number.isFinite(edge)&&edge>0?edge:range.end-0.75)):range.at+step[action];
- if(!Number.isFinite(target))return null;
- target=Math.max(range.start+0.1,Math.min(range.end-0.75,target));
- return Math.abs(target-range.at)>=0.5?target:null
-}
 function subtitleTrackLabel(label,language,index){
  var code=String(language||'').toLowerCase().split(/[-_]/)[0],names={ar:'العربية',ara:'العربية',en:'الإنجليزية',eng:'الإنجليزية',fr:'الفرنسية',fra:'الفرنسية',fre:'الفرنسية',es:'الإسبانية',spa:'الإسبانية',fa:'الفارسية',fas:'الفارسية',per:'الفارسية',tr:'التركية',tur:'التركية',de:'الألمانية',deu:'الألمانية',ger:'الألمانية',hi:'الهندية',hin:'الهندية',ur:'الأردية',urd:'الأردية',ru:'الروسية',rus:'الروسية'};
  var name=String(label||'').trim(),localized=names[code]||names[name.toLowerCase()]||'';
@@ -2240,7 +2172,6 @@ function countVisualOutage(record,video,now){
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
 function liveExpiredSegmentRecovery(record,engine,video,now){
- setLiveTimeshiftMode(record,false);
  // HLS occasionally requests a sequence that has fallen off the live
  // playlist while the viewer catches up. Prefer an in-place live-edge
  // jump before tearing down a healthy source and FFmpeg decoder.
@@ -2264,40 +2195,6 @@ function liveExpiredSegmentRecovery(record,engine,video,now){
   engine.startLoad(-1);
   return 'resync'
  }catch(e){return 'restart'}
-}
-/* A viewer can fall far behind even while the audio/video clocks continue.
- * With MSE Hls.js (not the native TV HLS engine), return to a validated live
- * edge after sustained lag, without restarting its shared source/encoder.
- * The 90-second cool-down protects decoders and slower Wi-Fi connections.
- */
-function liveLatencyCatchup(record,engine,video,now,userPaused,hidden){
- if(!engine||userPaused||hidden||video.paused||video.ended||video.seeking||
-    record.reconnecting||Number(video.readyState)<2||record.userTimeshift===true||now<(record.localBufferSeekUntil||0)){
-  record.liveLagSince=0;return false
- }
- var edge=Number(engine.liveSyncPosition),at=Number(video.currentTime);
- var gap=edge-at;
- if(!Number.isFinite(edge)||!Number.isFinite(at)||edge<=0||at<0||
-    !Number.isFinite(gap)||gap<16||gap>180){
-  record.liveLagSince=0;return false
- }
- var ranges=video.seekable;
- if(ranges&&ranges.length){
-  try{
-   var last=ranges.length-1,first=Number(ranges.start(last)),end=Number(ranges.end(last));
-   if(!Number.isFinite(first)||!Number.isFinite(end)||edge<first||edge>end+1){
-    record.liveLagSince=0;return false
-   }
-  }catch(e){record.liveLagSince=0;return false}
- }
- if(!record.liveLagSince){record.liveLagSince=now;return false}
- if(now-record.liveLagSince<8000)return false;
- if(record.lastLiveCatchupAt&&now-record.lastLiveCatchupAt<90000)return false;
- try{
-  video.currentTime=edge;
-  record.lastLiveCatchupAt=now;record.liveLagSince=0;
-  return true
- }catch(e){record.liveLagSince=0;return false}
 }
 function liveTransientRetryMs(attempt){
  // Fatal HLS network errors must not spin at 0 ms. A bounded pause allows
@@ -2870,13 +2767,6 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     record.visualProgressSeen=false;return
    }
    var progress=livePlaybackProgress(record,video,now);
-   // A healthy advancing picture must never skip content to catch up.
-   if(progress.advanced)record.liveLagSince=0;
-   if(!progress.advanced&&progress.idleMs>=6500&&liveLatencyCatchup(record,record.engine,video,now,!!intentionalPause,document.hidden)){
-    if(!preview)recordLiveIncident('live_catchup',now);
-    status('تأخر التشغيل عن البث المباشر؛ تم الانتقال لأحدث نقطة متاحة.');
-    return
-   }
    if(progress.advanced){clearRecoveredLiveLoading();return}
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
@@ -3479,10 +3369,10 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⏭</span><small>'+(isLive?'قناة تالية':nextEpisode?'الحلقة التالية':'+10 ثوانٍ')+'</small></button>'+
  '<button class="mobile-player-action" type="button" id="mobile-player-fullscreen" aria-label="ملء الشاشة">'+
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button>'+
- (isLive?'<button class="mobile-player-action" type="button" id="mobile-player-timing" aria-label="تقديم وتأخير البث"><span aria-hidden="true">↶</span><small>توقيت البث</small></button>':'')+'</div>'+
+ '</div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
- (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
+ (isLive?playerControl('player-commentary','audio','المعلقين'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -3495,7 +3385,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
- (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-live-buffer" type="button">توقيت البث</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
+ (isLive?'<button class="btn secondary" id="player-commentary-more" type="button">المعلقين</button><button class="btn secondary" id="player-external" type="button">تشغيل خارجي</button><button class="btn secondary" id="player-guide-toggle" type="button" aria-expanded="false">دليل البرامج</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
  (attributes?'<div class="player-info-meta">'+esc(attributes)+'</div>':'')+'<p>'+esc(overview||'لا يتوفر وصف تفصيلي من مصدر المحتوى حاليًا.')+'</p></section>')+
@@ -4574,7 +4464,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0,commentaryRetryTimer=null,commentaryResume=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryRetryAfter=0,commentaryRetryTimer=null,commentaryResume=null;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -4584,7 +4474,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   commentaryResume=null;
   commentaryEpoch++;
   if(commentaryRetryTimer){clearTimeout(commentaryRetryTimer);commentaryRetryTimer=null}
-  if(commentaryPictureSeek){clearTimeout(commentaryPictureSeek.timer);commentaryPictureSeek=null}
   if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}
   var old=commentary;commentary=null;
   if(!old)return;
@@ -4610,27 +4499,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('pause',function(){if(document.hidden)suspendCommentary();else stopCommentary()});
  video.addEventListener('emptied',stopCommentary);
  // Independent live audio cannot safely keep running through a frozen picture.
- video.addEventListener('seeking',function(){
-  var intentional=commentaryPictureSeek;
-  if(intentional&&commentary===intentional.audio&&S.play===intentional.transport&&Math.abs(Number(video.currentTime)-intentional.target)<0.5)return;
-  stopCommentary()
- });
- video.addEventListener('seeked',function(){
-  var intentional=commentaryPictureSeek;if(!intentional)return;
-  clearTimeout(intentional.timer);commentaryPictureSeek=null;
-  if(commentary!==intentional.audio||S.play!==intentional.transport||video.readyState<2||Math.abs(Number(video.currentTime)-intentional.target)>0.5)stopCommentary()
- });
- function adjustCommentaryPicture(action){
-  if(!commentary||!commentary.audible||commentaryPictureSeek||video.paused||document.hidden||S.playerView!==state||S.route!=='player')return false;
-  var transport=S.play,target=bufferedLiveSeekTarget(video,transport,action);
-  if(!transport||transport.video!==video||target===null)return false;
-  var intentional={audio:commentary,transport:transport,target:target,timer:null};
-  commentaryPictureSeek=intentional;
-  intentional.timer=setTimeout(function(){if(commentaryPictureSeek===intentional)stopCommentary()},3000);
-  var wasDelayed=transport.userTimeshift===true;
-  try{setLiveTimeshiftMode(transport,true);transport.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;return true}
-  catch(e){setLiveTimeshiftMode(transport,wasDelayed);stopCommentary();return false}
- }
+ video.addEventListener('seeking',stopCommentary);
  video.addEventListener('playing',function(){if(commentaryVideoWait){clearTimeout(commentaryVideoWait);commentaryVideoWait=null}resumeCommentary()});
  video.addEventListener('waiting',function(){
   if(!commentary||commentaryVideoWait||video.readyState>=3)return;
@@ -4700,15 +4569,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     }
     if(commentarySeekTarget(active.audio,-1)!==null)list.push({name:'تأخير المعلق ثانية',selected:false,select:function(){adjust(-1)}});
     if(commentarySeekTarget(active.audio,1)!==null)list.push({name:'تقديم المعلق ثانية',selected:false,select:function(){adjust(1)}});
-    // Progressive live audio may not expose a seek range. Instead allow a
-    // deliberate one-second picture adjustment inside actual retained HLS bytes.
-    ['back-one','forward-one'].forEach(function(action){
-     if(bufferedLiveSeekTarget(video,S.play,action)===null)return;
-     list.push({name:action==='back-one'?'تأخير الصورة ثانية':'تقديم الصورة ثانية',selected:false,select:function(){
-      if(commentary!==active)return;
-      commentaryNotice(adjustCommentaryPicture(action)?'تم طلب ضبط توقيت الصورة':'ضبط التوقيت غير متاح الآن.')
-     }})
-    });
    }
    if(st!==200)commentaryNotice('تعذر جلب المعلقين الآن؛ الصوت الأصلي متاح.');
    else if(list.length===1)commentaryNotice('لا يتوفر معلق إضافي لهذه القناة الآن.');
@@ -4719,33 +4579,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
  if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
  if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
- var bufferButton=document.getElementById('player-live-buffer'),timeshiftButton=document.getElementById('player-timeshift');
- function openLiveTiming(){
-  if(!isLive||S.playerView!==state||S.route!=='player')return;
-  var record=S.play,origin=this,options=[],range=null;
-  if(record&&record.video===video){
-   range=liveTimeshiftRange(video,record);
-   [['earliest','أقدم نقطة محفوظة'],['back-thirty','رجوع 30 ثانية'],['back-ten','رجوع 10 ثوانٍ'],['back','رجوع 5 ثوانٍ'],['back-one','رجوع ثانية'],['forward-one','تقديم ثانية'],['forward','تقديم 5 ثوانٍ'],['forward-ten','تقديم 10 ثوانٍ'],['forward-thirty','تقديم 30 ثانية'],['latest','العودة للبث المباشر']].forEach(function(entry){
-    // Even at the live edge, allow the viewer to release manual timing.
-    if(liveTimeshiftTarget(video,record,entry[0])===null&&!(entry[0]==='latest'&&record.userTimeshift))return;
-    options.push({name:entry[1],selected:false,select:function(){
-     if(S.play!==record||S.playerView!==state||S.route!=='player')return;
-     var target=liveTimeshiftTarget(video,record,entry[0]);
-     if(target===null){
-      if(entry[0]==='latest'&&record.userTimeshift){setLiveTimeshiftMode(record,false);playerStatus('');return}
-      playerStatus('انتهت صلاحية الجزء المحفوظ؛ تابع البث المباشر.');return
-     }
-     try{stopCommentary();setLiveTimeshiftMode(record,entry[0]!=='latest');record.localBufferSeekUntil=Date.now()+20000;video.currentTime=target;playerStatus('')}
-     catch(e){setLiveTimeshiftMode(record,false);playerStatus('تعذر تغيير التوقيت لهذا المصدر.')}
-    }})
-   });
-  }
-  if(!options.length){playerStatus('انتظر حتى تتوفر ثوانٍ محفوظة من البث.');return}
-  showPlayerChoices('تقديم وتأخير البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
- }
- if(bufferButton)bufferButton.onclick=openLiveTiming;
- if(timeshiftButton)timeshiftButton.onclick=openLiveTiming;
- var mobileTiming=document.getElementById('mobile-player-timing');if(mobileTiming)mobileTiming.onclick=openLiveTiming;
  var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
  function clearLocalSubtitle(){
   subtitleGeneration++;
