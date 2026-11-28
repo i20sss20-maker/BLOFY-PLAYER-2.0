@@ -73,3 +73,16 @@ test('destination health recovers and persisted drain can safely resume',async()
  assert.equal(f.calls.filter(x=>x==='begin').length,1);
  assert.equal(f.calls.filter(x=>x==='commit').length,1);
 });
+
+test('tracked health requires 30 seconds of continuous observations before drain',async()=>{
+ const f=fixture();let at=now;
+ f.opts.trackHealthContinuity=true;f.opts.clock=()=>at;
+ f.opts.readHealth=async()=>({hostbrr:{ok:false,observedAt:at},linode:{ok:true,observedAt:at}});
+ f.opts.observeProviderRelease=async i=>({...i,authoritative:true,scope:'all_paths',activeConnections:0,maxConnections:1,observedAt:at});
+ const run=createRelayHandoffCoordinator(f.opts);
+ for(let i=0;i<6;i++){
+  assert.equal((await run()).reason,'no_stable_transition');at+=5000;
+ }
+ assert.equal((await run()).owner,'linode');
+ assert.equal(f.calls.filter(x=>x==='begin').length,1);
+});
