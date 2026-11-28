@@ -11,9 +11,14 @@ const FFMPEG='/usr/bin/ffmpeg';
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
 let active=0;
-// Never raise this from a synthetic CI benchmark. Only a measured Railway
-// resource profile + real subscribed-source long-play can justify scaling.
-const MAX_JOBS=2;
+// Keep a conservative default and bound any explicitly enabled increase.
+// Three independent web sessions were observed hitting the old two-job cap.
+// This is a worker limit only; upstream admission and the single-UHD guard
+// remain unchanged. Larger limits need measured long-play validation.
+function mediaJobLimit(raw){
+ const n=Number(raw);return Number.isSafeInteger(n)&&n>=2&&n<=3?n:2
+}
+const MAX_JOBS=mediaJobLimit(Bun.env.BLOFY_WEB_MEDIA_MAX_JOBS);
 // Optional bounded rolling DVR window on compatibility HLS only.
 // Preserve the existing eight-segment behavior unless explicitly configured.
 function liveWindowSegments(raw){
@@ -388,7 +393,7 @@ function streamInputVideoDimensions(log){
 async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=false}){
  if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {error:'hls_capacity',status:429}}
  // A 4K software encoder can exhaust CPU and harm other preview viewers.
- // The full server has only two encoding slots; allow one UHD job at a time.
+ // Keep UHD conversion limited to one job regardless of total worker slots.
  if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped)){
   noteEncoderCapacityDenied();return {error:'ultra_capacity',status:429}
  }
