@@ -70,3 +70,15 @@ test('live player reports audio-without-picture separately and recovers within a
  assert.match(hls,/if\(video.paused\|\|video.ended\|\|video.seeking\|\|document.hidden\)/,
   'never restart a user-paused or hidden TV player');
 });
+
+
+test('manual timing restores the actual live latency profile',()=>{
+ const begin=app.indexOf('function setLiveTimeshiftMode('),end=app.indexOf('function liveTimeshiftTarget(',begin);
+ assert.ok(begin>=0&&end>begin);
+ const setMode=vm.runInNewContext(app.slice(begin,end)+';setLiveTimeshiftMode',{Number,Infinity});
+ const record={engine:{config:{liveMaxLatencyDurationCount:12}},liveLagSince:100};
+ setMode(record,true);assert.equal(record.userTimeshift,true);assert.equal(record.engine.config.liveMaxLatencyDurationCount,Infinity);
+ record.normalLiveMaxLatency=16;
+ setMode(record,false);assert.equal(record.engine.config.liveMaxLatencyDurationCount,16);assert.equal(record.userTimeshift,false);assert.equal(record.liveLagSince,0);
+ const native={};setMode(native,true);assert.equal(native.userTimeshift,true);setMode(native,false);assert.equal(native.userTimeshift,false);
+});
