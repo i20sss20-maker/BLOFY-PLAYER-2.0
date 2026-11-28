@@ -162,7 +162,7 @@ if(p==='/vendor/mpegts.js'&&method==='GET'){
 }
 
 if(!KEY)return json(503,{ok:false,error:'service_not_configured'});
-if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const bearer='Bearer '+t;const download=activeVodDownloadAccounts.get(externalAccountKey(bearer));if(download)download.abort();revokeExternal('Bearer '+t);}return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
+if(p==='/api/logout'&&method==='POST'){const t=token(req);if(t){const download=activeVodDownloadAccounts.get(externalAccountKey('Bearer '+t));if(download)download.abort();}if(t)revokeExternal('Bearer '+t);return json(200,{ok:true},{'Set-Cookie':'bv_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});}
 if(p==='/api/external/stop'&&method==='POST'){
  const h=auth(req);if(!h)return json(401,{error:'activation_required'});
  revokeExternal(h.Authorization);
