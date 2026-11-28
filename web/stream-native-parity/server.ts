@@ -348,6 +348,22 @@ if(p==='/api/ai/translate'&&method==='POST'){
   return json(200,{ok:true,translatedOverview:translated})
  }catch{return json(503,{ok:false,error:'translation_unavailable'})}
 }
+if(p==='/api/ai/chat'&&method==='POST'){
+ const input=await readBoundedJson(req,22000);if(!input.ok)return json(input.status,{ok:false,error:'invalid_request'});
+ const turns=input.value?.messages;
+ if(!Array.isArray(turns)||!turns.length||turns.length>9||turns.at(-1)?.role!=='user'||turns.some(x=>!x||!['user','assistant'].includes(x.role)||typeof x.content!=='string'||!x.content.trim()||x.content.length>1600))return json(400,{ok:false,error:'invalid_chat'});
+ try{
+  const response=await fetch('https://blofy-ai-gateway-production.up.railway.app/v1/chat',{
+   method:'POST',redirect:'manual',headers:{'Content-Type':CT,'Authorization':h.Authorization,'Accept':'application/json','Cache-Control':'no-store'},
+   body:JSON.stringify({messages:turns.map(x=>({role:x.role,content:x.content})),locale:input.value.locale==='en'?'en':'ar'}),signal:AbortSignal.timeout(30000)
+  });
+  if(!response.ok){await response.body?.cancel();return json([401,403,429].includes(response.status)?response.status:503,{ok:false,error:'chat_unavailable'})}
+  const data=await readBoundedJson(response,24000);
+  const reply=data.ok&&data.value?.ok===true&&typeof data.value.reply==='string'?data.value.reply.trim().slice(0,3000):'';
+  if(!reply)return json(502,{ok:false,error:'invalid_chat_reply'});
+  return json(200,{ok:true,reply,suggestedTitles:(Array.isArray(data.value.suggestedTitles)?data.value.suggestedTitles:[]).filter(x=>typeof x==='string'&&x.trim().length>=2).slice(0,8).map(x=>x.trim().slice(0,105))})
+ }catch{return json(503,{ok:false,error:'chat_unavailable'})}
+}
 if(p==='/api/ai/interpret'&&method==='POST'){
  // Same authenticated first-party gateway used by native STREAM Android.
  // Credentials remain server-side in the encrypted HttpOnly session cookie.
