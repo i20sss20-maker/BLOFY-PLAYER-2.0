@@ -1209,3 +1209,16 @@ html[data-blofy-device="tv"] .poster-grid .poster-caption,html[data-blofy-device
 .native-stream-hud .native-player-dock{max-width:100%;overflow-x:auto;flex-wrap:nowrap}
 .detail-metadata summary{cursor:pointer;font-weight:600;padding:6px 0;color:var(--soft)}
 .poster-caption .poster-category{white-space:normal;overflow-wrap:anywhere;line-height:1.5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+
+/* Same compact chrome for movies, episodes and live on all screen sizes. */
+.player-hud.native-stream-hud{gap:6px;padding:12px clamp(10px,2vw,25px) max(12px,env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(4,10,15,.88),rgba(4,10,15,.48) 68%,transparent)}
+.native-stream-hud .player-mode-badge,.native-stream-hud .player-resolution-badge{display:none!important}
+.native-stream-hud .player-title{font-size:clamp(13px,1.4vw,18px);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.native-stream-hud .native-player-topline{justify-content:flex-start;gap:8px;min-height:36px;flex-wrap:nowrap}
+.native-stream-hud .native-player-topline #player-back{margin-inline-end:auto}
+.native-stream-hud .native-player-topline button{min-height:36px;padding:5px 10px;font-size:12px;border-radius:10px}
+.native-stream-hud .native-player-timeline{min-height:26px;gap:8px}
+.native-stream-hud .native-player-timeline .seek-line{min-height:24px}
+.native-stream-hud .native-player-dock{gap:5px;padding:5px 7px;border-radius:16px}
+.native-stream-hud .native-player-control{width:44px;height:44px;min-height:44px;flex:0 0 44px;border-radius:11px;padding:9px}
+.native-stream-hud .native-player-control.native-player-primary{flex:0 0 60px;width:60px}
