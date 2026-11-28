@@ -46,6 +46,8 @@ test('movie and series descriptions use Arabic AI translation without replacing 
  assert.equal(needs('A detective searches for his missing brother.'),true);
  assert.equal(needs('探偵が行方不明の兄を探す'),true);
  assert.equal(needs('يبحث المحقق عن أخيه المفقود في المدينة.'),false);
+ assert.equal(needs('این فیلم افسانه یک قهرمان را روایت میکند که برای نجات مردمش تلاش میکند.'),true);
+ assert.equal(needs('في هذه القصة يحاول البطل حماية مدينته من الخطر.'),false);
  assert.equal(needs('x'.repeat(3901)),false);
  const detail=app.slice(b,app.indexOf('function parseEpisodes(',b));
  assert.match(detail,/generation!==plotGeneration\|\|plotSource!==source/);
