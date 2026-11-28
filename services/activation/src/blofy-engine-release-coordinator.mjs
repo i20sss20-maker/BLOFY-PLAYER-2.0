@@ -23,14 +23,30 @@ export function createEngineReleaseCoordinator({ledger,workers,capacity,env=proc
   const ids={sourceId,reservationId,engineId};
   const ms=Math.min(30000,Math.max(1,timeoutMs));
   // Mark uncertain before stopping so no additional viewer grants can attach.
-  // A ledger already in unknown is intentionally not auto-released by this
-  // routine; reconciliation requires a separate trusted operator procedure.
-  try{const r=await ledger.transition({...ids,next:'unknown'});
-   if(!r?.ok||r.state!=='unknown')return hold('fence_not_committed');
+  // A renewable lease fence is idempotent for the same reservation; without
+  // that protocol an unknown state still requires separate reconciliation.
+  let leaseFence;
+  try{
+   if(env.BLOFY_ENGINE_RENEWABLE_LEASE==='1'){
+    if(typeof ledger?.fenceLeaseRenewal!=='function')return hold('lease_fence_unavailable');
+    const r=await ledger.fenceLeaseRenewal({...ids,channelId});
+    if(r?.ok!==true||r.state!=='unknown'||r.renewalsBlocked!==true||
+       r.providerReleaseConfirmed!==false||
+       !Object.keys(ids).every(k=>r[k]===ids[k])||r.channelId!==channelId||
+       !Number.isSafeInteger(r.sequence)||r.sequence<0||
+       (r.sequence===0?r.lastLeaseMayExpireAt!==null:!Number.isSafeInteger(r.lastLeaseMayExpireAt)))
+      return hold('lease_fence_unconfirmed');
+    leaseFence=r;
+   }else{
+    const r=await ledger.transition({...ids,next:'unknown'});
+    if(!r?.ok||r.state!=='unknown')return hold('fence_not_committed');
+   }
   }catch{return hold('fence_outcome_unknown')}
   let proof,observed;
   const started=clock();
-  try{proof=await bounded(signal=>worker.stopAndFence({...ids,channelId,signal}),ms)}
+  // The trusted worker adapter must use this bound to fence delayed signed
+  // leases as well as the live process. Expiration alone is not stop proof.
+  try{proof=await bounded(signal=>worker.stopAndFence({...ids,channelId,...leaseFence&&{leaseFence},signal}),ms)}
   catch{return hold('stop_outcome_unknown')}
   const matches=p=>p?.sourceId===sourceId&&p?.reservationId===reservationId&&p?.engineId===engineId;
   const fresh=(p,after)=>{const t=Date.parse(p?.observedAt);return Number.isFinite(t)&&t>=after&&t>=clock()-10000&&t<=clock()+5000};
