@@ -18,7 +18,50 @@ let active=0;
 function mediaJobLimit(raw){
  const n=Number(raw);return Number.isSafeInteger(n)&&n>=2&&n<=3?n:2
 }
-const MAX_JOBS=mediaJobLimit(Bun.env.BLOFY_WEB_MEDIA_MAX_JOBS);
+// Auto admission grows slowly only under measured container headroom.
+// This is not a subscriber cap and never changes provider authorization.
+const AUTO_MEDIA_JOBS=Bun.env.BLOFY_WEB_MEDIA_MAX_JOBS==='auto';
+const BASE_MEDIA_JOBS=AUTO_MEDIA_JOBS?3:mediaJobLimit(Bun.env.BLOFY_WEB_MEDIA_MAX_JOBS);
+let MAX_JOBS=BASE_MEDIA_JOBS;
+function resourceJobLimit(current,used,cpuRatio,memoryRatio,cpuCores,memoryBytes){
+ const base=3;
+ if(![cpuRatio,memoryRatio,cpuCores,memoryBytes].every(Number.isFinite)||
+  cpuRatio<0||memoryRatio<0||cpuCores<=0||memoryBytes<=0)return base;
+ // Reserve resources for the web service, OS, and high-cost codecs.
+ const ceiling=Math.max(base,Math.min(12,Math.floor(cpuCores/2),Math.floor(memoryBytes/(1024*1024*1024))));
+ if(cpuRatio>=0.80||memoryRatio>=0.80)return Math.max(base,Math.min(ceiling,current-1));
+ if(current>ceiling)return ceiling;
+ if(used>=current-1&&cpuRatio<0.45&&memoryRatio<0.55)return Math.min(ceiling,current+1);
+ return current
+}
+function containerResources(){
+ try{
+  const root='/sys/fs/cgroup/';
+  const quota=readFileSync(root+'cpu.max','utf8').trim().split(/\s+/).map(Number);
+  const mem=Number(readFileSync(root+'memory.max','utf8').trim());
+  const used=Number(readFileSync(root+'memory.current','utf8').trim());
+  const cpu=Number(/^usage_usec\s+(\d+)$/m.exec(readFileSync(root+'cpu.stat','utf8'))?.[1]);
+  if(![quota[0],quota[1],mem,used,cpu].every(Number.isFinite)||quota[0]<=0||quota[1]<=0||mem<=0||used<0||cpu<0)return null;
+  return {at:performance.now(),cpu,cores:quota[0]/quota[1],mem,used}
+ }catch{return null}
+}
+if(AUTO_MEDIA_JOBS){
+ let previous=containerResources();
+ const interval=setInterval(()=>{
+  const sample=containerResources();
+  if(!sample||!previous||sample.at<=previous.at||sample.cpu<previous.cpu){
+   previous=sample;MAX_JOBS=BASE_MEDIA_JOBS;return
+  }
+  const utilization=(sample.cpu-previous.cpu)/((sample.at-previous.at)*1000*sample.cores);
+  previous=sample;
+  const next=resourceJobLimit(MAX_JOBS,active,utilization,sample.used/sample.mem,sample.cores,sample.mem);
+  if(next!==MAX_JOBS){
+   // Reducing admission never kills or interrupts an already active job.
+   MAX_JOBS=next;console.info('BLOFY_WEB_AUTO_CAPACITY',{limit:next,active})
+  }
+ },15000);
+ interval.unref?.()
+}
 // Optional bounded rolling DVR window on compatibility HLS only.
 // Preserve the existing eight-segment behavior unless explicitly configured.
 function liveWindowSegments(raw){
