@@ -1323,9 +1323,16 @@ function offlineOnlyScreen(){
  document.getElementById('offline-reconnect').onclick=function(){closeOfflineVideo();S.route='boot';bootSession(0)};
  drawOfflineDownloads(grant.profile,true);return true
 }
+function offerDeviceDownload(kind,id,ext,name){
+ offlineMessage('المشاهدة داخل التطبيق غير متاحة لهذه الصيغة أو الجهاز. يمكنك حفظ الملف في تنزيلات جهازك.');
+ var el=document.getElementById('offline-status')||document.getElementById('web-download-message');
+ if(!el)return;var button=document.createElement('button');button.type='button';button.className='btn secondary';button.textContent='حفظ على الجهاز';button.onclick=function(){button.disabled=true;requestWebDownload(kind,id,ext,name)};el.appendChild(button)
+}
 async function saveOfflineDownload(kind,id,ext,name){
- if(!S.userVerified||!offlineSupported()){offlineMessage('التنزيل داخل التطبيق غير مدعوم في هذا المتصفح.');return}
- if(String(ext).toLowerCase()!=='mp4'||!webDownloadPath(kind,id,ext)){offlineMessage('المشاهدة دون إنترنت تدعم ملفات MP4 المتوافقة مع جهازك حاليًا.');return}
+ if(!S.userVerified){offlineMessage('فعّل اشتراكك أولًا.');return}
+ if(!webDownloadPath(kind,id,ext)){offlineMessage('صيغة الملف غير مدعومة.');return}
+ if(!offlineSupported()||String(ext).toLowerCase()!=='mp4'){offerDeviceDownload(kind,id,ext,name);return}
+ if(offlineRows(S.profileKey).some(function(row){return row.file.indexOf(kind+'-'+id+'-')===0})){offlineMessage('هذا الملف محفوظ بالفعل في التنزيلات.');return}
  if(offlineTransfer){offlineMessage('يوجد تنزيل جارٍ.');return}
  var profile=S.profileKey,epoch=S.accountEpoch,ctrl=new AbortController(),task={ctrl:ctrl,name:String(name||'فيديو').slice(0,160),pct:0};offlineTransfer=task;
  var folder=null,fileName='',writer=null,reader=null,committed=false;
@@ -1347,16 +1354,17 @@ async function saveOfflineDownload(kind,id,ext,name){
   if(!Number.isSafeInteger(total)||total<1||total>OFFLINE_MAX_BYTES)throw Error('size');
   if(navigator.storage.estimate){var estimate=await navigator.storage.estimate();if(Number.isFinite(estimate.quota)&&Number.isFinite(estimate.usage)&&estimate.quota-estimate.usage<total+1048576)throw Error('quota')}
   var handle=await folder.getFileHandle(fileName,{create:true});
+  if(typeof handle.createWritable!=='function'){offerDeviceDownload(kind,id,ext,name);return}
   writer=await handle.createWritable();reader=response.body.getReader();
   var written=0,last=-1;
-  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار التنزيل داخل BLOFY STREAM • '+pct+'٪')}}
+  while(true){check();var chunk=await reader.read();if(chunk.done)break;written+=chunk.value.byteLength;if(written>total)throw Error('size');await writer.write(chunk.value);var pct=Math.floor(written/total*100);if(pct!==last){last=pct;task.pct=pct;offlineMessage('جار تنزيل '+task.name+' • '+pct+'٪ • '+Math.floor(written/1048576)+' / '+Math.ceil(total/1048576)+' MB')}}
   check();if(written!==total)throw Error('size');await writer.close();writer=null;
   var saved=await handle.getFile();check();if(saved.size!==total)throw Error('size');
   var rows=offlineRows(profile);rows.unshift({file:fileName,size:total,name:String(name||'فيديو').slice(0,160)});
   localStorage.setItem('blofy_web_offline_v1:'+profile,JSON.stringify(rows.slice(0,20)));committed=true;
   offlineMessage('اكتمل التنزيل. افتح التنزيلات للمشاهدة دون إنترنت.');
   if(S.route==='downloads')drawOfflineDownloads(profile,false)
- }catch(e){offlineMessage(e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
+ }catch(e){offlineMessage(ctrl.signal.aborted?'تم إلغاء التنزيل.':e.message==='quota'||e.name==='QuotaExceededError'?'مساحة التخزين غير كافية. احذف بعض التنزيلات.':e.message==='size'?'حجم الملف غير مدعوم أو التنزيل غير مكتمل.':e.message==='auth'?'تعذر التحقق من الاشتراك.':'تعذر حفظ الفيلم كاملًا. حاول مجددًا عند توفر الاتصال.')}
  finally{try{if(reader)await reader.cancel()}catch(e){}try{if(writer)await writer.abort()}catch(e){}if(!committed&&folder&&fileName)try{await folder.removeEntry(fileName)}catch(e){}ctrl.abort();if(offlineTransfer===task)offlineTransfer=null;var progress=document.getElementById('offline-progress'),cancel=document.getElementById('offline-cancel');if(progress)progress.hidden=true;if(cancel)cancel.hidden=true}
 }
 function downloadsScreen(){
@@ -1372,7 +1380,7 @@ function downloadsScreen(){
 }
 function requestWebDownload(kind,id,ext,name){
  var url=webDownloadPath(kind,id,ext);
- var message=document.getElementById('download-status')||document.getElementById('web-download-message');
+ var message=document.getElementById('download-status')||document.getElementById('offline-status')||document.getElementById('web-download-message');
  if(!message){message=document.createElement('div');message.id='web-download-message';message.className='info';message.setAttribute('role','status');
   var target=document.querySelector('#detail-root .detail-actions,.downloads-page,.episode-list');
   if(target)target.insertAdjacentElement('afterend',message);
@@ -3318,7 +3326,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<span aria-hidden="true">⛶</span><small>ملء الشاشة</small></button></div>'+
  '<div class="player-actions native-player-dock" dir="ltr" role="toolbar" aria-label="أزرار مشغّل BLOFY STREAM">'+
  playerControl('player-audio','audio','المسارات الصوتية')+
- (isLive?playerControl('player-commentary','audio','المعلقين'):'')+
+ (isLive?playerControl('player-commentary','audio','المعلقين')+playerControl('player-timeshift','rewind','تقديم وتأخير البث'):'')+
  playerControl('player-subtitles','subtitles','الترجمة')+
  (previousEpisode?playerControl('player-previous-episode','previous','الحلقة السابقة'):'')+
  (isLive?playerControl('player-channel-prev','previous','القناة السابقة'):playerControl('player-skip-back','rewind','رجوع 10 ثوانٍ'))+
@@ -4410,7 +4418,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   if(chosen)chosen.focus()
  }
  // Independent, first-party audio; never restart or replace the channel video.
- var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null;
+ var commentary=null,commentaryEpoch=0,commentaryNoticeTimer=null,commentaryVideoWait=null,commentaryPictureSeek=null,commentaryRetryAfter=0;
  function commentaryNotice(message){
   var el=document.getElementById('player-audio-notice');if(!el||S.playerView!==state)return;
   clearTimeout(commentaryNoticeTimer);el.textContent=message;el.hidden=false;
@@ -4460,14 +4468,15 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   commentaryVideoWait=setTimeout(function(){commentaryVideoWait=null;if(commentary===active&&video.readyState<3)stopCommentary()},3000)
  });
  function startCommentary(track){
-  stopCommentary();
   if(S.route!=='player'||S.playerView!==state||video.paused||video.seeking||document.hidden||!track||!/^anis-[a-z0-9-]{1,54}$/.test(track.id))return;
+  if(Date.now()<commentaryRetryAfter){commentaryNotice('انتظر قليلاً ثم أعد المحاولة.');return}
+  stopCommentary();commentaryNotice('جار تشغيل المعلق…');
   var audio=document.createElement('audio'),record={audio:audio,originalMuted:video.muted,id:track.id,timer:null,audible:false};
   commentary=record;audio.hidden=true;audio.preload='none';root.appendChild(audio);
-  function fail(){if(commentary!==record)return;stopCommentary();commentaryNotice('المعلق غير متاح الآن؛ الصوت الأصلي يعمل.')}
+  function fail(){if(commentary!==record)return;stopCommentary();commentaryRetryAfter=Date.now()+5000;commentaryNotice('تعذر تشغيل المعلق؛ الصوت الأصلي مستمر. أعد المحاولة بعد 5 ثوانٍ.')}
   audio.onplaying=function(){
    if(commentary!==record||S.playerView!==state||video.paused||document.hidden){if(commentary===record)stopCommentary();return}
-   clearTimeout(record.timer);record.timer=null;record.audible=true;record.hasPlayed=true;video.muted=true;
+   clearTimeout(record.timer);record.timer=null;commentaryRetryAfter=0;record.audible=true;record.hasPlayed=true;video.muted=true;
    commentaryNotice('المعلق: '+String(track.label||'').slice(0,80))
   };
   audio.onerror=audio.onended=fail;
@@ -4539,8 +4548,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var commentaryButton=document.getElementById('player-commentary'),commentaryMore=document.getElementById('player-commentary-more');
  if(commentaryButton)commentaryButton.onclick=function(){openCommentaryChoices(this)};
  if(commentaryMore)commentaryMore.onclick=function(){openCommentaryChoices(this)};
- var bufferButton=document.getElementById('player-live-buffer');
- if(bufferButton)bufferButton.onclick=function(){
+ var bufferButton=document.getElementById('player-live-buffer'),timeshiftButton=document.getElementById('player-timeshift');
+ function openLiveTiming(){
   if(!isLive||S.playerView!==state||S.route!=='player')return;
   var record=S.play,origin=this,options=[],range=null;
   if(record&&record.video===video){
@@ -4555,9 +4564,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     }})
    });
   }
-  if(!options.length){playerStatus('لا يتوفر جزء قابل للرجوع داخل ذاكرة المشغل الآن.');return}
-  showPlayerChoices('ذاكرة البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
- };
+  if(!options.length){playerStatus('انتظر حتى تتوفر ثوانٍ محفوظة من البث.');return}
+  showPlayerChoices('تقديم وتأخير البث • رجوع '+range.behind+' ث • تقديم '+range.ahead+' ث',options,origin)
+ }
+ if(bufferButton)bufferButton.onclick=openLiveTiming;
+ if(timeshiftButton)timeshiftButton.onclick=openLiveTiming;
  var subtitleButton=document.getElementById('player-subtitles'),localSubtitle=null,subtitleGeneration=0;
  function clearLocalSubtitle(){
   subtitleGeneration++;
