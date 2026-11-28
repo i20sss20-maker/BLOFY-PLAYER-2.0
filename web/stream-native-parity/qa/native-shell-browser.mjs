@@ -60,7 +60,7 @@ try{
   if(mode==='code')assert.equal(requests[0].input.code,'12345678');else assert.equal(requests[0].input.mode,mode);
   assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&(navBox.y>=workspaceBox.y+workspaceBox.height-2),'phone navigation belongs below the content');}
+  const narrow=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);assert.ok(navBox&&workspaceBox&&(narrow?navBox.y>=workspaceBox.y+workspaceBox.height-2:navBox.x>=workspaceBox.x+workspaceBox.width-2),'responsive navigation must stay outside the content');}
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'phone layout must not overflow horizontally');
   assert.equal(await page.locator('.native-home-bottom').locator('[data-go="downloads"] svg').count(),1);
   const stored=await page.evaluate(()=>JSON.stringify(localStorage));
@@ -69,7 +69,7 @@ try{
   await page.locator('.downloads-page').waitFor();
   assert.equal(await page.locator('.native-home-bottom [data-go]').count(),4);
   {const navBox=await page.locator('.native-home-bottom').boundingBox(),workspaceBox=await page.locator('.workspace').boundingBox();
-  assert.ok(navBox&&workspaceBox&&(navBox.y>=workspaceBox.y+workspaceBox.height-2),'phone navigation belongs below the content');}
+  const narrow=await page.evaluate(()=>matchMedia('(max-width:600px) and (orientation:portrait)').matches);assert.ok(navBox&&workspaceBox&&(narrow?navBox.y>=workspaceBox.y+workspaceBox.height-2:navBox.x>=workspaceBox.x+workspaceBox.width-2),'responsive navigation must stay outside the content');}
   await page.locator('.native-home-bottom [data-go="home"]').click();
   await page.locator('.native-home-header').waitFor();
   await page.locator('.native-home-header [data-go="settings"]').click();
