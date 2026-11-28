@@ -106,8 +106,11 @@ test('live timing only seeks actual retained bytes within one continuous playabl
  assert.equal(seek({...video,seeking:true},record,'back'),null);
  assert.equal(seek(video,record,'invalid'),null);
  assert.match(app,/now<\(record.localBufferSeekUntil\|\|0\)/);
- assert.match(app,/stopCommentary\(\);setLiveTimeshiftMode\(record,entry\[0\]!=='latest'\)/);
- assert.match(app,/record.localBufferSeekUntil=Date.now\(\)\+20000;video.currentTime=target/);
+ // The internal buffered range helper is retained for compatibility, but
+ // manual live picture seeking must not be exposed in the player.
+ assert.doesNotMatch(app,/player-timeshift|player-live-buffer|mobile-player-timing|function openLiveTiming/);
+ assert.doesNotMatch(app,/تأخير الصورة ثانية|تقديم الصورة ثانية/);
+ assert.match(app,/player-skip-forward/);
 });
 
 test('manual commentary picture timing preserves one active audio stream only for a confirmed buffered seek',()=>{
