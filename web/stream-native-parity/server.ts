@@ -570,6 +570,12 @@ if(p.startsWith('/api/hls/')&&method==='GET'){
    let error='hls_worker_failure';try{error=(await response.json())?.error||error}catch(e){}
    const retrySeconds=Number(response.headers.get('retry-after')||0);
    const headers=noCache({'Content-Type':'application/json'});
+   // Fixed vocabulary only: never record worker-provided text, URLs or IDs.
+   const safeReasons=new Set(['hls_worker_failure','live_source_channel_limit','hls_storage_unavailable','hls_source_probe_timeout','shared_source_unavailable','sharing_disabled','shared_source_stopped','shared_source_failed','hls_origin_backoff','hls_session_closed','hls_source_finished','hls_live_segment_not_ready','hls_source_stalled','hls_segment_unavailable','hls_file_empty','hls_capacity','ultra_capacity','shared_viewers_capacity','hls_start_cancelled','hls_start_failed','forbidden','authorization_missing','hls_invalid_resource','hls_session_missing','hls_segment_evicted','hls_request_cancelled','hls_read_failed','hls_segment_timeout','source_session_expired','upstream_source_unavailable','upstream_redirect_rejected']);
+   if(response.status===503||response.status===429||response.status===502||response.status===504){
+    console.info('BLOFY_HLS_WORKER_REJECTION',{kind:match[1],resource:match[7]==='index.m3u8'?'manifest':'segment',status:response.status,reason:safeReasons.has(error)?error:'other',retrySeconds:Number.isInteger(retrySeconds)&&retrySeconds>=1&&retrySeconds<=30?retrySeconds:0});
+   }
+
    if(response.status===503&&error==='live_source_channel_limit')headers['X-Blofy-Live-Status']='source_channel_limit';
    // Forward only numeric 1–30 second wait hints, never upstream URLs,
    // subscription data, source headers or untrusted arbitrary retry values.
