@@ -13,6 +13,11 @@ let active=0;
 // Never raise this from a synthetic CI benchmark. Only a measured Railway
 // resource profile + real subscribed-source long-play can justify scaling.
 const MAX_JOBS=2;
+// Optional rolling DVR window. Default remains unchanged.
+function liveWindowSegments(raw){
+ const n=Number(raw);return Number.isSafeInteger(n)&&n>=8&&n<=120?n:8
+}
+const LIVE_WINDOW_SEGMENTS=liveWindowSegments(Bun.env.BLOFY_WEB_LIVE_WINDOW_SEGMENTS);
 /* Pilot quality profiles: never enlarge a low-resolution source.
  * The previous forced 854x480 / 900 kbit/s severely degraded every HD film
  * and channel. Live compatibility defaults to 720p; movies/series on the
@@ -374,14 +379,15 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
  if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped)){
   noteEncoderCapacityDenied();return {error:'ultra_capacity',status:429}
  }
- active++;
  // One unique directory per decoder instance; a retired FFmpeg process
  // cannot overwrite a fresh channel playlist while it is shutting down.
  const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+ // A failed directory allocation must not consume an encoder slot.
+ try{mkdirSync(dir,{recursive:true})}catch{return {error:'hls_storage_unavailable',status:503}}
+ active++;
  const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true,
   sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});
  touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
  session.hardTimer.unref?.();
@@ -400,7 +406,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    try{await upstream.body?.cancel()}catch{}
    return {error:'hls_start_cancelled',status:409}
   }
-  if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
+  if(!upstream.ok||!upstream.body){const status=upstream.status;try{await upstream.body?.cancel()}catch{};stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
   // Experimental continuity for ONE preapproved channel + bearer access ID.
   // All subsequent requests use the exact same first-party authorized URL.
   // Disabled in normal previews; strict guard prevents a single env flag
@@ -453,7 +459,7 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
    '-af','aresample=async=1:min_hard_comp=0.100:first_pts=0',
    '-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
-  if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
+  if(kind==='live')args.push('-hls_list_size',String(LIVE_WINDOW_SEGMENTS),'-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
   else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
   args.push(join(dir,'index.m3u8'));
   if(session.stopped||hlsSessions.get(key)!==session){
@@ -766,11 +772,13 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
    stopHls(s,'legacy_position_changed')
  }
  if(active>=MAX_JOBS){noteEncoderCapacityDenied();return {status:429,error:'vod_capacity'}}
+ const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+ // A retired encoder must never delete files belonging to its replacement.
+ try{mkdirSync(dir,{recursive:true})}catch{return {error:'vod_storage_unavailable',status:503}}
  active++;
- const abort=new AbortController(),dir=join(hlsRoot,key);
  const session={key,vod:true,kind,id,ext,track,start,bearer,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
  hlsSessions.set(key,session);
- mkdirSync(dir,{recursive:true});touchHls(session);
+ touchHls(session);
  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);
  session.hardTimer.unref?.();
  try{
@@ -1021,7 +1029,10 @@ async function fullVodRequest(req,url){
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  let session=hlsSessions.get(key);
  if(!session){
-  const dir=join(hlsRoot,key);mkdirSync(dir,{recursive:true});
+  const dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
+  // A stopped encoder may still be draining while the same SID restarts.
+  // Its cleanup must never remove the replacement's segment directory.
+  try{mkdirSync(dir,{recursive:true})}catch{return hlsError(503,'vod_storage_unavailable',2)}
   session={key,vod:true,fullVod:true,kind,id,ext,track,duration,bearer,dir,abort:new AbortController(),
    proc:null,chunkStart:-1,stopped:false,released:true,finished:true,exitCode:0,lastAccess:Date.now()};
   hlsSessions.set(key,session);
@@ -1271,7 +1282,7 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
   const coolingSources=Array.from(liveSourceFailureWindows.values())
    .filter(event=>event.retryAt>now).length;
   return json(ok?200:503,{ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,
-   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
+   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveWindowSegments:LIVE_WINDOW_SEGMENTS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
    sharedLive:{enabled:String(Bun.env.VIDAA_LIVE_SHARE_SAME_BEARER||'')==='1',
     groups:sharedLiveGroups.size,viewers:Array.from(sharedLiveGroups.values())
      .reduce((sum,group)=>sum+group.viewers.size,0),
