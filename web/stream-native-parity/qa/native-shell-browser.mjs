@@ -36,7 +36,7 @@ try{
    }
    if(p==='/api/page')return respond(200,{items:[],total:0,hasMore:false,nextOffset:null});
    if(p==='/api/catalog')return respond(200,[]);
-   if(p==='/api/ai/interpret')return respond(200,{ok:true,reply:'نتيجة اختبار محلية',suggestedTitles:['Fixture']});
+   if(p==='/api/ai/chat'){const input=request.postDataJSON();assert.ok(input.messages.length>=1);assert.equal(input.messages.at(-1).role,'user');return respond(200,{ok:true,reply:input.messages.length>1?'تم فهم السؤال السابق':'نتيجة اختبار محلية',suggestedTitles:['Fixture']})}
    return respond(404,{error:'synthetic_route_not_configured'});
   });
   await page.goto(origin);
@@ -85,6 +85,9 @@ try{
   await page.locator('#ai-text').fill('اختبار');
   await page.locator('#ai-send').click();
   await page.getByText('نتيجة اختبار محلية',{exact:true}).waitFor();
+  await page.locator('#ai-text').fill('وضح أكثر');await page.locator('#ai-send').click();
+  await page.getByText('تم فهم السؤال السابق',{exact:true}).waitFor();
+  await page.locator('#ai-new').click();assert.equal(await page.getByText('تم فهم السؤال السابق',{exact:true}).count(),0);
   assert.equal(errors.length,0,errors.join('\n'));
   console.log('BLOFY_NATIVE_SHELL_SYNTHETIC_PASS',name,device,mode);
   await ctx.close();
