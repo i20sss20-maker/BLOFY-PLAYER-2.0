@@ -1070,9 +1070,19 @@ new Function(app);writeFileSync('app.js',app);
 // startup failed before MANIFEST_PARSED. Keep quota and ordinary backoff on
 // the existing path; use the existing deferred, acknowledged STOP handoff.
 change(" if(!record.manifestParsed||!detail||!detail.fatal)return false;",` if(!detail)return false;
- if(code===503&&['hls_source_finished','hls_session_closed','hls_source_stalled'].indexOf(liveHlsFailureReason(detail))>=0)return true;
+ if(code===503&&liveSessionTerminalReason(liveHlsFailureReason(detail)))return true;
  if(!record.manifestParsed||!detail.fatal)return false;`);
 change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);",`    if(record.reconnecting)return;
     if(!detail.fatal&&!liveSessionLost(record,detail,code))return;
     diagnose('live','hls_error','video',0);`);
+new Function(app);writeFileSync('app.js',app);
+
+ // The media worker explicitly retires SIDs. Forward that bounded reason
+ // and renew the same viewer through the existing STOP handoff on both
+ // native Safari and MSE HLS. Ordinary quota and origin backoff are excluded.
+change("function liveSessionLost(record,detail,code){",`function liveSessionTerminalReason(reason){
+ return ['hls_source_finished','hls_session_closed','hls_source_stalled','hls_session_retired'].indexOf(reason)>=0
+}
+function liveSessionLost(record,detail,code){`);
+change("response.status===404||failure&&failure.error==='hls_session_retired'","response.status===404||response.status===503&&failure&&liveSessionTerminalReason(failure.error)");
 new Function(app);writeFileSync('app.js',app);
