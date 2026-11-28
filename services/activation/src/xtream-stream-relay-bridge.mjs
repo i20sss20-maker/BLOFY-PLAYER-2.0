@@ -206,3 +206,35 @@ if(process.env.BLOFY_STREAM_RELAY_PROBE_ON_BOOT==='1'){
   },9000);
   timer.unref?.();
 }
+
+// Both installed media relays use the existing authenticated health contract.
+// This links the standby to production monitoring, not to source admission.
+// Never promote on an HTTP outage: a partitioned primary can still own media.
+export async function checkProductionRelayPair({env=process.env,fetchImpl=fetch}={}){
+ const selected=relayConfiguration(env).origin;
+ const engines={hostbrr:'https://media2.blofyplayer.com',linode:'https://media.blofyplayer.com'};
+ const activeEngine=Object.keys(engines).find(k=>engines[k]===selected)||null;
+ const out={activeEngine,hostbrr:{ok:false},linode:{ok:false},
+  automaticFailoverEnabled:false,sourceReleaseVerified:false};
+ if(env.BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER!=='1'||!activeEngine)return out;
+ await Promise.all(Object.entries(engines).map(async ([id,origin])=>{
+  const e={...env,BLOFY_STREAM_RELAY_MEDIA_ORIGIN:origin};
+  const result=await checkStreamRelayBridge({env:e,fetchImpl});
+  out[id]={ok:result.ok===true};
+ }));
+ return out;
+}
+// Reuse the explicit existing operator health flag. No media grants, provider
+// requests, routing mutation or customer data in the periodic signal.
+if(process.env.BLOFY_STREAM_RELAY_PROBE_ON_BOOT==='1'&&
+   process.env.BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER==='1'){
+ let busy=false;
+ const pairProbe=async()=>{
+  if(busy)return;
+  busy=true;
+  try{console.info('BLOFY_STREAM_RELAY_PAIR '+JSON.stringify(await checkProductionRelayPair()));}
+  finally{busy=false;}
+ };
+ const first=setTimeout(()=>void pairProbe(),18000);first.unref?.();
+ const periodic=setInterval(()=>void pairProbe(),60000);periodic.unref?.();
+}

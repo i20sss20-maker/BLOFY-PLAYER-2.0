@@ -221,3 +221,27 @@ test('maintenance refuses every new media grant before network access but keeps 
  assert.equal((await checkStreamRelayBridge({env,fetchImpl})).ok,true);
  assert.equal(calls,1);
 });
+
+test('production pair checks both pinned relays without switching customer route',async()=>{
+ const {checkProductionRelayPair}=await import('../src/xtream-stream-relay-bridge.mjs');
+ const host='https://media2.blofyplayer.com',backup='https://media.blofyplayer.com';
+ const env={...enabled,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'1',BLOFY_STREAM_RELAY_MEDIA_ORIGIN:host};
+ const calls=[];
+ const fetchImpl=async(url,opts)=>{
+  calls.push(url);
+  assert.equal(opts.method,'GET');
+  assert.equal(opts.redirect,'manual');
+  assert.equal(opts.headers.authorization,'Bearer '+key);
+  return url.startsWith(host)?new Response('Unavailable',{status:503}):
+   new Response(JSON.stringify({ok:true,relayReady:true,service:'BLOFY-STREAM',role:'media_plane'}));
+ };
+ assert.deepEqual(await checkProductionRelayPair({env,fetchImpl}),{
+  activeEngine:'hostbrr',hostbrr:{ok:false},linode:{ok:true},
+  automaticFailoverEnabled:false,sourceReleaseVerified:false
+ });
+ assert.deepEqual(calls.sort(),[host+'/internal/relay-health',backup+'/internal/relay-health'].sort());
+ assert.equal(relayConfiguration(env).origin,host);
+ calls.length=0;
+ assert.equal((await checkProductionRelayPair({env:{...env,BLOFY_STREAM_RELAY_EXTERNAL_CUTOVER:'0'},fetchImpl})).activeEngine,null);
+ assert.deepEqual(calls,[]);
+});
