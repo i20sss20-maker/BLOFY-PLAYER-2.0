@@ -1,7 +1,15 @@
 // Stream just the requested page, but never accept an incomplete or invalid
 // upstream document as an authoritative empty/partial catalog.
-export async function readCatalogPage(reader,{offset,limit,match=()=>true,maxBytes=100*1024*1024}){
+export async function readCatalogPage(reader,{offset,limit,match=()=>true,rank=null,maxBytes=100*1024*1024}){
  const decoder=new TextDecoder('utf-8',{fatal:true}),items=[];
+ const ranked=typeof rank==='function',buckets=ranked?Array.from({length:6},()=>[]):null;
+ const keep=offset+limit;
+ if(ranked&&(!Number.isSafeInteger(keep)||keep<1||keep>1050))throw Error('catalog_rank_limit');
+ function result(){
+  if(!ranked)return {items,hasMore:false,nextOffset:offset+items.length};
+  const ordered=[];for(let i=5;i>=1;i--)ordered.push(...buckets[i]);
+  const page=ordered.slice(offset,keep);return {items:page,hasMore:matched>offset+page.length,nextOffset:offset+page.length};
+ }
  let state='start',text='',depth=0,inString=false,escapeNext=false,matched=0,bytes=0;
  function consume(piece){
   for(let i=0;i<piece.length;i++){
@@ -16,11 +24,14 @@ export async function readCatalogPage(reader,{offset,limit,match=()=>true,maxByt
     if(depth!==0)continue;
     const item=JSON.parse(text);
     if(match(item)){
+     if(ranked){const n=rank(item);if(Number.isInteger(n)&&n>=1&&n<=5){matched++;if(buckets[n].length<keep)buckets[n].push(item)}}
+     else {
      if(matched>=offset){
       if(items.length>=limit)return true;
       items.push(item);
      }
      matched++;
+     }
     }
     text='';state='delimiter';continue;
    }
@@ -40,7 +51,7 @@ export async function readCatalogPage(reader,{offset,limit,match=()=>true,maxByt
   if(part.done){
    if(consume(decoder.decode()))return {items,hasMore:true,nextOffset:offset+items.length};
    if(state!=='closed')throw Error('catalog_truncated');
-   return {items,hasMore:false,nextOffset:offset+items.length};
+   return result();
   }
   bytes+=part.value.byteLength;
   if(bytes>maxBytes)throw Error('catalog_byte_limit');
