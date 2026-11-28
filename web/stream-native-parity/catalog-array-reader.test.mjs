@@ -22,3 +22,13 @@ test('accepts genuine empty arrays and complete final pages',async()=>{
 test('fails closed when byte limit is exceeded instead of claiming a final page',async()=>{
  await assert.rejects(readCatalogPage(reader('[{"id":1},{"id":2}]'),{offset:0,limit:36,maxBytes:10}),/catalog_byte_limit/);
 });
+
+test('ranked search finds late exact matches before early partial matches and paginates consistently',async()=>{
+ const rows=[{id:1,r:1},{id:2,r:2},{id:3,r:0},{id:4,r:5},{id:5,r:3},{id:6,r:5}];
+ const opts={limit:2,rank:x=>x.r};
+ const first=await readCatalogPage(reader(JSON.stringify(rows),1),{...opts,offset:0});
+ const second=await readCatalogPage(reader(JSON.stringify(rows),3),{...opts,offset:2});
+ assert.deepEqual(first,{items:[rows[3],rows[5]],hasMore:true,nextOffset:2});
+ assert.deepEqual(second,{items:[rows[4],rows[1]],hasMore:true,nextOffset:4});
+ await assert.rejects(readCatalogPage(reader('[{"r":5},{"r":5}'),{...opts,offset:0}),/catalog_truncated/);
+});
