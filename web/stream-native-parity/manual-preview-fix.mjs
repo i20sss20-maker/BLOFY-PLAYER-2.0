@@ -988,4 +988,12 @@ change("     if(response.status===401||response.status===403||response.status===
 change("    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);", "    if(code===503&&liveSourceQuotaRejected(detail)){showSourceQuota();return}\n    if(!detail.fatal||record.reconnecting)return;\n    diagnose('live','hls_error','video',0);");
 
 
+change("function deviceKey(){\n var key='';","var webDeviceKeyInMemory='';\nfunction deviceKey(){\n if(/^[0-9a-f]{64}$/.test(webDeviceKeyInMemory))return webDeviceKeyInMemory;\n var key='';");
+change(" if(/^[0-9a-f]{64}$/.test(key))return key;\n var bytes="," if(/^[0-9a-f]{64}$/.test(key)){webDeviceKeyInMemory=key;return key}\n key='';\n var bytes=");
+change(" try{localStorage.setItem('blofy_stream_web_device_v1',key)}catch(e){}\n return key"," webDeviceKeyInMemory=key;\n try{localStorage.setItem('blofy_stream_web_device_v1',key)}catch(e){}\n return key");
+change("else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)","else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':st===401||st===403?'لم يسمح خادم الاشتراك بالتفعيل. تحقق من حالة الاشتراك.':st>=500||st===0?'تعذر الاتصال بخادم التفعيل مؤقتًا. أعد المحاولة دون تغيير الكود.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)");
+change("     if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}\n    }\n   });","     if(record.originTimer){clearTimeout(record.originTimer);record.originTimer=null}\n     if(record.capacityTimer){clearTimeout(record.capacityTimer);record.capacityTimer=null}\n    }\n   });");
+change("    if(code===429){\n     if(!preview)","    if(code===429){\n     if(record.capacityTimer||record.originTimer||record.retryTimer)return;\n     if(!preview)");
+change("    if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){\n     if(!preview)","    if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){\n     if(record.capacityTimer||record.originTimer||record.retryTimer)return;\n     if(!preview)");
+change("    if((record.transientRetries||0)<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){\n     record.transientRetries","    if((record.transientRetries||0)<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){\n     if(record.capacityTimer||record.originTimer||record.retryTimer)return;\n     record.transientRetries");
 new Function(app);writeFileSync('app.js',app);
