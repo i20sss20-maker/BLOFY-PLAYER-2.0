@@ -16,7 +16,7 @@ test('established HLS session resumes loading without reloading the source',()=>
  assert.deepEqual(calls,['start']);
 });
 
-const lostStart=app.indexOf('function liveSessionLost(');
+const lostStart=app.indexOf('function liveHlsFailureReason(');
 const lostEnd=app.indexOf('function resumeLiveHlsNetwork(',lostStart);
 const {liveSessionLost,liveSessionRetryDelay}=new Function(app.slice(lostStart,lostEnd)+';return {liveSessionLost,liveSessionRetryDelay}')();
 test('only established fatal missing fragments or unavailable playlists require a new session',()=>{
@@ -256,4 +256,55 @@ test('legacy SRAF television browser receives TV mode rather than desktop',()=>{
  assert.equal(detect('Toshiba VIDAA',0,false),'tv');
  assert.equal(detect('iPhone',5,true),'touch');
  assert.equal(detect('Chrome desktop',0,false),'desktop');
+});
+
+test('HLS failure evidence records only known reasons and bounded retry hints',async()=>{
+ const server=await readFile(new URL('./server.ts',import.meta.url),'utf8');
+ const start=server.indexOf('const HLS_FAILURE_REASONS='),end=server.indexOf("import {normalizeDirectEntry}",start);
+ const source=server.slice(start,end).replace(/:(string|number|unknown)\b/g,'');
+ const evidence=new Function(source+';return hlsFailureEvidence')();
+ assert.deepEqual(evidence('live','index.m3u8',503,'hls_origin_backoff',2),
+  {kind:'live',resource:'manifest',status:503,reason:'hls_origin_backoff',retrySeconds:2});
+ const safe=evidence('live','seg-000001.ts',503,'https://example.invalid/private-token',999);
+ assert.equal(safe.reason,'other');assert.equal(safe.retrySeconds,0);
+ assert.doesNotMatch(JSON.stringify(safe),/private-token|000001/);
+ assert.equal(evidence('live','index.m3u8',401,'authorization_missing',1),null);
+ assert.equal(evidence('live','index.m3u8',503,{secret:'not-for-logs'},1).reason,'other');
+ assert.equal(evidence('private-account','sid-private',429,'hls_capacity',-1).kind,'unknown');
+});
+
+test('explicit origin backoff respects existing SID while ambiguous or retired sessions recover',()=>{
+ const detail={fatal:true,details:'levelLoadError'};
+ const withReason=reason=>({...detail,networkDetails:{headers:{get:()=>reason}}});
+ assert.equal(liveSessionLost({manifestParsed:true},withReason('hls_origin_backoff'),503),false);
+ for(const reason of ['hls_live_segment_not_ready','hls_source_finished','hls_session_closed','other',null])
+  assert.equal(liveSessionLost({manifestParsed:true},withReason(reason),503),true);
+ assert.equal(liveSessionLost({manifestParsed:true},{...detail,networkDetails:{getResponseHeader(){throw Error('blocked')}}},503),true);
+});
+
+test('delayed HLS retry discards obsolete viewer and defers offline, hidden or paused viewer',()=>{
+ const start=app.indexOf('function liveRecoveryAllowed('),end=app.indexOf('function resumeLiveHlsNetwork(',start);
+ const decide=new Function(app.slice(start,end)+';return hlsDelayedRetryDecision')();
+ assert.equal(decide(true,true,false,false,false,false),'resume');
+ assert.equal(decide(false,true,false,false,false,false),'discard');
+ assert.equal(decide(true,false,false,false,false,false),'discard');
+ for(let i=2;i<6;i++){
+  const flags=[true,true,false,false,false,false];flags[i]=true;
+  assert.equal(decide(...flags),'defer');
+ }
+ assert.equal((app.match(/deferHlsRetry\('/g)||[]).length,4);
+});
+
+test('expired live segment does not jump a healthy playhead or seek during recovery',()=>{
+ const a=app.indexOf('function liveExpiredSegmentRecovery('),b=app.indexOf('\nfunction ',a+10);
+ const recover=new Function(app.slice(a,b)+';return liveExpiredSegmentRecovery')();
+ const video={currentTime:100,paused:false,seeking:false};
+ const engine={liveSyncPosition:140,startLoad(){throw Error('unexpected load')},stopLoad(){throw Error('unexpected stop')}};
+ assert.equal(recover({ready:true,lastProgressAt:9000},engine,video,10000),'waiting');
+ assert.equal(recover({ready:true,lastProgressAt:1000},engine,video,10000),'restart');
+ assert.equal(recover({ready:true,lastProgressAt:1000,lastExpiredSegmentAt:9000},engine,video,10000),'cooling');
+ assert.equal(recover({reconnecting:true},engine,video,10000),'waiting');
+ video.paused=true;assert.equal(recover({},engine,video,10000),'waiting');
+ video.paused=false;video.seeking=true;assert.equal(recover({},engine,video,10000),'waiting');
+ assert.equal(video.currentTime,100);
 });
